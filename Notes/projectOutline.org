@@ -1,0 +1,63 @@
+#+AUTHOR: Jeffrey Young
+#+TITLE: VSat Project Sketch
+#+DATE: September 29, 2017
+
+# Fix the margins
+#+LATEX_HEADER: \usepackage[margin=1in]{geometry}
+#+LATEX_HEADER: \usepackage{amssymb}
+
+# Remove section numbers, no table of contents
+#+OPTIONS: toc:nil
+#+options: num:nil
+
+# Set the article class
+#+LaTeX_CLASS: article
+#+LaTeX_CLASS_OPTIONS: [10pt, letterpaper]
+
+* Document Context
+  This document is a formative document for a new research project. The goals
+  for this document are to provide a project outline or skeleton, list some
+  useful papers and why they are useful, and serve as a one stop shop for
+  information on considerations, decisions, and motivation for the project.
+
+* Project Definition
+** Motivation
+   - Currently there is no good way to solve counterfactual typing.
+   - If we had a variational Sat solver than we could reduce counterfactual
+     typing to a logic problem a
+   - This could be used to build a more advanced type system
+   
+** Research Questions
+   - Will a variational SAT solver be faster than a brute forced approach
+   - 
+** General Considerations
+   - We need an _incremental SAT Solver_
+   - We want this to be pretty language agnostic
+   - We want to treat the SAT solver as a "black box"
+   - We want to return a variational result
+   - Could use bdd minimization
+  
+** Method
+   - The prototype method for this work is something like this:
+     1. We have a variational tag tree
+     2. The variational tag tree can be reduced to logical propositions
+     3. We can form those logical propositions into DIMACS CNF
+     4. We can then feed these into an incremental SAT solver disjunction by disjunction
+     5. When one fails we back up to the previous result and try its alternative
+     6. If they all succeed then we know we have a satisfiable variational tag tree
+
+* Useful Papers
+  - Paper that describes DIMACS CNF Format: http://www.domagoj-babic.com/uploads/ResearchProjects/Spear/dimacs-cnf.pdf
+  - Chapter on SAT solvers from the handbook of Knowledge Representation: http://www.cs.cornell.edu/gomes/papers/SATSolvers-KR-Handbook.pdf
+
+* Design Decisions
+  - The first prototype will be in haskell for a few reasons:
+    1. I'll need to make a Variational tag tree to DIMACS CNF parser and this is
+       easy in haskell
+    2. There are many variational implementations in haskell already
+    3. For the first iteration, just calling os subprocesses will be sufficient
+       for a proof of concept. Thus, I do not need a good FFI or API bindings. I
+       have looked around and there is a lot of good SAT solvers on the jvm.
+       This implies clojure, scala or java may also be good choices. Other than
+       that a lot of sat solvers have C or C++ APIs, Racket has great C/C++ FFI
+       and may also be another promising option.
