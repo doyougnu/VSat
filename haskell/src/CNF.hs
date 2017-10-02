@@ -35,7 +35,8 @@ format [x] = show x ++ "\n"
 format xs = mconcat $ hed : mid ++ [lst, "\n"]
   where hed = affixSp $ head xs
         mid = fmap affixSp . init . tail $ xs
-        lst = show $ last xs
+        lst = (show $ last xs) ++ " 0" -- Ending in a 0 required by CNF form
+
 
 -- | Show typeclasses for CNF and SAT formats
 instance Show CNF where
