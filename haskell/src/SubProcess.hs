@@ -7,15 +7,12 @@ import System.Posix.Process (getProcessID)
 
 import CNF
 
-toLine :: CNF -> T.Shell Line
+toLine :: (Show a) => a -> T.Shell Line
 toLine = T.select . textToLines . pack . show
 
-tmpFileName :: T.FilePath
-tmpFileName = ".tmp"
-
-runMinisat :: T.FilePath -> CNF -> IO T.ExitCode
-runMinisat f cnf = do
-  T.output f (toLine cnf)
-  exit <- T.proc "minisat" [T.format T.fp f] T.empty
-  T.rm f
-  return exit
+-- runMinisat :: T.FilePath -> CNF -> IO Bool
+runMinisat :: CNF -> IO (T.Shell Line)
+runMinisat cnf = do
+  let output = T.inproc "minisat" [] (toLine cnf)
+      res = T.grep (T.has "restarts") output
+  return res
