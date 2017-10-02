@@ -7,8 +7,8 @@ import System.Posix.Process (getProcessID)
 
 import CNF
 
-toFile :: CNF -> IO ExitCode
-toFile cnf = undefined
+toLine :: CNF -> Shell Line
+toLine = select . textToLines . pack . show
 
 mkTmpFileName :: Shell Line
 mkTmpFileName = undefined
