@@ -1,14 +1,17 @@
 module CNF where
 
+import qualified Data.Set as S
+import Debug.Trace
+
 -- | Syntax
 data CNF = CNF { comment :: String       -- ^ A Comment
-               , vars :: Integer         -- ^ Number of Variables
+               , vars :: S.Set Integer   -- ^ Unique Variables
                , clauses :: [[Integer]]  -- ^ Clauses
                }
 
 
 data SAT = SAT { sComment :: String            -- ^ A Comment
-               , sVars :: Integer              -- ^ Number of Variables
+               , sVars :: S.Set Integer        -- ^ Unique Variables
                , formula :: [Formula Integer]  -- ^ One or more Formulas
                }
 
@@ -17,7 +20,6 @@ data Formula a = Neg (Formula a)  -- ^ a negation
                | And [Formula a]  -- ^ a conjunction
                | Or [Formula a]   -- ^ a disjunction
                | Nil              -- ^ Null terminator
-               deriving Monoid
 
 -- | smart constructor for comments
 smtComment :: (Show a) => a -> String
@@ -29,14 +31,14 @@ smtComment stmt = mconcat [ "c "
 -- | An empty CNF
 emptyCNF :: CNF
 emptyCNF = CNF { comment = ""
-               , vars = 0
+               , vars = S.empty
                , clauses = [[]]
                }
 
 -- | An empty SAT
 emptySAT :: SAT
 emptySAT = SAT { sComment = ""
-               , sVars = 0
+               , sVars = S.empty
                , formula = []
                }
 
@@ -51,7 +53,6 @@ format [x] = show x
 format (x:xs) = mconcat $ hed : mid ++ [lst]
   where hed = affixSp x
         mid = fmap affixSp . init $ xs
-        -- lst = (show $ last xs) ++ " 0" -- Ending in a 0 required by CNF form
         lst = (show $ last xs)
 
 -- | Show typeclasses for CNF and SAT formats
@@ -59,10 +60,10 @@ instance Show CNF where
   show CNF{comment, vars, clauses} =
     mconcat [ smtComment comment
             , "p cnf " -- required concrete syntax
-            , affixSp vars
+            , affixSp $ S.size vars
             , affixSp . toInteger $ length clauses
-            , "\n"     -- end problem line
-            , mconcat $ format <$> clauses
+            , "\n" --end problem statement
+            , mconcat $ ((flip (++) " 0\n") . format) <$> clauses
             ]
 
 instance Show a => Show (Formula a) where
@@ -88,9 +89,10 @@ instance Monoid CNF where
     CNF{comment=lcomment, vars=lvars, clauses=lclauses}
     CNF{comment=rcomment, vars=rvars, clauses=rclauses} = 
     CNF { comment = lcomment `mappend` rcomment
-        , vars = lvars + rvars
+        , vars = lvars `mappend` rvars
         , clauses = lclauses `mappend` rclauses
         }
+  mconcat xs = Prelude.foldr1 mappend xs
 
 instance Monoid SAT where
   mempty = emptySAT
@@ -98,14 +100,14 @@ instance Monoid SAT where
     SAT{sComment=lcomment, sVars=lvars, formula=lformula}
     SAT{sComment=rcomment, sVars=rvars, formula=rformula} = 
     SAT { sComment = lcomment `mappend` rcomment
-        , sVars = lvars + rvars
+        , sVars = lvars `mappend` rvars
         , formula = pure . And $ lformula ++ rformula
         }
 
 -- | Examples
 x :: CNF
 x = CNF { comment = "I'm a comment"
-        , vars = 2
+        , vars = S.fromList [1, 2]
         , clauses = [ [1, 2]
                     , [-1, 2]
                     ]
@@ -113,7 +115,7 @@ x = CNF { comment = "I'm a comment"
 
 y :: SAT
 y = SAT { sComment = "Im a comment"
-        , sVars = 4
+        , sVars = S.fromList [1..4]
         , formula = [(And
                       [ Or [Lit 1, Lit 3, Neg $ Lit 4]
                       , Or [Lit 4]
