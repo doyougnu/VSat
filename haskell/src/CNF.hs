@@ -3,7 +3,7 @@ module CNF where
 -- | Syntax
 data CNF = CNF { comment :: String       -- ^ A Comment
                , vars :: Integer         -- ^ Number of Variables
-               , clauses :: [[Integer]]  -- ^ Clauses 
+               , clauses :: [[Integer]]  -- ^ Clauses
                }
 
 
@@ -12,11 +12,12 @@ data SAT = SAT { sComment :: String            -- ^ A Comment
                , formula :: [Formula Integer]  -- ^ One or more Formulas
                }
 
-data Formula a = Neg (Formula a)  -- ^ a negation 
+data Formula a = Neg (Formula a)  -- ^ a negation
                | Lit a            -- ^ a literal term
                | And [Formula a]  -- ^ a conjunction
                | Or [Formula a]   -- ^ a disjunction
                | Nil              -- ^ Null terminator
+               deriving Monoid
 
 -- | smart constructor for comments
 smtComment :: (Show a) => a -> String
@@ -25,18 +26,33 @@ smtComment stmt = mconcat [ "c "
                           , "\n"
                           ]
 
+-- | An empty CNF
+emptyCNF :: CNF
+emptyCNF = CNF { comment = ""
+               , vars = 0
+               , clauses = [[]]
+               }
+
+-- | An empty SAT
+emptySAT :: SAT
+emptySAT = SAT { sComment = ""
+               , sVars = 0
+               , formula = []
+               }
+
 -- | affix a space to anything that can be shown
 affixSp :: (Show a) => a -> String
 affixSp = (++ " ") . show
 
 -- | Given list of anything that can be shown, pretty format it
 format :: (Show a) => [a] -> String
-format [x] = show x ++ "\n"
-format xs = mconcat $ hed : mid ++ [lst, "\n"]
-  where hed = affixSp $ head xs
-        mid = fmap affixSp . init . tail $ xs
-        lst = (show $ last xs) ++ " 0" -- Ending in a 0 required by CNF form
-
+format [] = ""
+format [x] = show x
+format (x:xs) = mconcat $ hed : mid ++ [lst]
+  where hed = affixSp x
+        mid = fmap affixSp . init $ xs
+        -- lst = (show $ last xs) ++ " 0" -- Ending in a 0 required by CNF form
+        lst = (show $ last xs)
 
 -- | Show typeclasses for CNF and SAT formats
 instance Show CNF where
@@ -52,18 +68,39 @@ instance Show CNF where
 instance Show a => Show (Formula a) where
   show (Neg e) = "-" ++ show e
   show (Lit e) = show e
-  show (And es) = mconcat ["*(", init $ format es, ")"]
-  show (Or es)  = mconcat ["+(", init $ format es, ")"]
+  show (And es) = mconcat ["*(", format es, ")"]
+  show (Or es)  = mconcat ["+(", format es, ")"]
   show Nil     = ""
 
 instance Show SAT where
-  show SAT{sComment, sVars, formula} = 
+  show SAT{sComment, sVars, formula} =
     mconcat [ smtComment sComment
             , "p sat"
             , affixSp sVars
             , "\n" -- end of problem line
-            , concatMap show formula 
+            , concatMap show formula
             ]
+
+-- | Monoid CNF and SAT are based on monoids, and are therefore monoids
+instance Monoid CNF where
+  mempty = emptyCNF
+  mappend
+    CNF{comment=lcomment, vars=lvars, clauses=lclauses}
+    CNF{comment=rcomment, vars=rvars, clauses=rclauses} = 
+    CNF { comment = lcomment `mappend` rcomment
+        , vars = lvars + rvars
+        , clauses = lclauses `mappend` rclauses
+        }
+
+instance Monoid SAT where
+  mempty = emptySAT
+  mappend
+    SAT{sComment=lcomment, sVars=lvars, formula=lformula}
+    SAT{sComment=rcomment, sVars=rvars, formula=rformula} = 
+    SAT { sComment = lcomment `mappend` rcomment
+        , sVars = lvars + rvars
+        , formula = pure . And $ lformula ++ rformula
+        }
 
 -- | Examples
 x :: CNF
