@@ -101,8 +101,9 @@ instance Monoid SAT where
     SAT{sComment=rcomment, sVars=rvars, formula=rformula} = 
     SAT { sComment = lcomment `mappend` rcomment
         , sVars = lvars `mappend` rvars
-        , formula = pure . And $ lformula ++ rformula
+        , formula = pure . And $ lformula `mappend` rformula
         }
+  mconcat xs = Prelude.foldr1 mappend xs
 
 -- | Examples
 x :: CNF
