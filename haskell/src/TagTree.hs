@@ -5,8 +5,10 @@ import Data.List (transpose)
 import qualified Data.Map as M
 import Data.Set (Set)
 import qualified Data.Set as S
-
 import Control.Monad
+
+import CNF
+
 
 type Tag = String
 
@@ -62,7 +64,7 @@ instance Applicative V where
   (Chc t fl fr) <*> (Chc t' el er) = (Chc t
                                       (Chc t' (fl <*> el) (fl <*> er))
                                       (Chc t' (fr <*> el) (fr <*> er)))
-  
+
 instance Monad V where
   return  = Obj
   Obj a >>= f = f a
@@ -70,5 +72,5 @@ instance Monad V where
 
 instance Show a => Show (V a) where
   show (Obj a)      = show a
-  show (Chc t y n)   = (tail.init) (show t) ++
+  show (Chc t y n)   = (tail . init) (show t) ++
                        "<" ++ show y ++ ", " ++ show n ++ ">"
