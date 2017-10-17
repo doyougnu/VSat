@@ -9,7 +9,6 @@ import Control.Monad
 
 import CNF
 
-
 type Tag = String
 
 type Config = [(Tag, Bool)]
@@ -74,3 +73,6 @@ instance Show a => Show (V a) where
   show (Obj a)      = show a
   show (Chc t y n)   = (tail . init) (show t) ++
                        "<" ++ show y ++ ", " ++ show n ++ ">"
+
+toCNF :: V a -> CNF
+toCNF (Obj a) = undefined
