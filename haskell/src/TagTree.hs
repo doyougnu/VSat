@@ -6,7 +6,7 @@ import qualified Data.Map as M
 import qualified Data.Set as S
 import Control.Monad
 
-type Tag = String
+type Tag = Integer
 
 type Config = [(Tag, Bool)]
 
@@ -21,6 +21,11 @@ one = Obj
 -- | smart constructor for chc
 chc :: Tag -> V a -> V a -> V a
 chc t y n = Chc t y n
+
+-- | Pull the tag out of a Variational term
+tag :: (Integral a) => V a -> Integer
+tag (Obj a) = toInteger a
+tag (Chc t _ _) = toInteger t
 
 isObj :: V a -> Maybe a
 isObj (Obj a) = Just a
@@ -69,5 +74,4 @@ instance Monad V where
 
 instance Show a => Show (V a) where
   show (Obj a)      = show a
-  show (Chc t y n)   = (tail . init) (show t) ++
-                       "<" ++ show y ++ ", " ++ show n ++ ">"
+  show (Chc t y n)   = (show t) ++ "<" ++ show y ++ ", " ++ show n ++ ">"
