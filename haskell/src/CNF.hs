@@ -9,14 +9,14 @@ data Plain
 data Variational
 
 -- | Syntax
-data CNF a = CNF { comment :: String               -- ^ A Comment
-                 , vars :: S.Set Integer           -- ^ Unique Variables
-                 , clauses :: [[V Integer]]  -- ^ Clauses
-                 }
+data CNF a b = CNF { comment :: String        -- ^ A Comment
+                   , vars :: S.Set Integer    -- ^ Unique Variables
+                   , clauses :: [[b Integer]] -- ^ Clauses
+                   }
 
 
-data SAT = SAT { sComment :: String                      -- ^ A Comment
-               , sVars :: S.Set Integer                  -- ^ Unique Variables
+data SAT = SAT { sComment :: String                -- ^ A Comment
+               , sVars :: S.Set Integer            -- ^ Unique Variables
                , formula :: [Formula (V Integer)]  -- ^ One or more Formula
                }
 
@@ -38,7 +38,7 @@ smtVars :: (Integral a) => [a] -> S.Set Integer
 smtVars = S.fromList . fmap toInteger
 
 -- | An empty CNF
-emptyCNF :: CNF a
+emptyCNF :: CNF a b
 emptyCNF = CNF { comment = ""
                , vars = S.empty
                , clauses = [[]]
@@ -65,7 +65,7 @@ format (x:xs) = mconcat $ hed : mid ++ [lst]
         lst = (show $ last xs)
 
 -- | Show typeclasses for CNF and SAT formats
-instance Show (CNF a) where
+instance (Show (b Integer)) => Show (CNF a b) where
   show CNF{comment, vars, clauses} =
     mconcat [ smtComment comment
             , "p cnf " -- required concrete syntax
@@ -92,7 +92,7 @@ instance Show SAT where
             ]
 
 -- | Monoid CNF and SAT are based on monoids, and are therefore monoids
-instance Monoid (CNF a) where
+instance Monoid (CNF a b) where
   mempty = emptyCNF
   mappend
     CNF{comment=lcomment, vars=lvars, clauses=lclauses}
@@ -115,7 +115,7 @@ instance Monoid SAT where
   mconcat xs = Prelude.foldr1 mappend xs
 
 -- | Given a config and a Variational CNF, transform to a Plain CNF
-toPlain :: Config -> CNF Variational -> CNF Plain
+toPlain :: Config -> CNF Variational V -> CNF Plain V
 toPlain cs CNF{comment,vars,clauses} =
   CNF { comment=comment
       , vars=vars
@@ -123,7 +123,7 @@ toPlain cs CNF{comment,vars,clauses} =
       }
 
 -- | Plain Examples
-plainEx1 :: CNF Plain
+plainEx1 :: CNF Plain V
 plainEx1 = CNF { comment = "I'm a comment"
                , vars = S.fromList [1, 2]
                , clauses = [ [(one 1), (one 2)]
@@ -143,7 +143,7 @@ plainEx2 = SAT { sComment = "Im a comment"
                }
 
 -- | Some Variational Examples
-vEx1 :: CNF Variational
+vEx1 :: CNF Variational V
 vEx1 = CNF { comment = "I'm a comment"
            , vars = S.fromList . concatMap (fmap tag) $ clauses vEx1
            , clauses = [ [(one 1), (one 2)]
@@ -151,7 +151,7 @@ vEx1 = CNF { comment = "I'm a comment"
                        ]
            }
 
-vEx2 :: CNF Variational
+vEx2 :: CNF Variational V
 vEx2 = CNF { comment = "This one has two choice expressions"
            , vars = S.fromList . concatMap (fmap $ abs . tag) $ clauses vEx2
            , clauses = [ [chc 1 (one 1) (one (-1)), one 2, one 3]
