@@ -145,8 +145,17 @@ plainEx2 = SAT { sComment = "Im a comment"
 -- | Some Variational Examples
 vEx1 :: CNF Variational
 vEx1 = CNF { comment = "I'm a comment"
-           , vars = S.fromList (concatMap (fmap tag) $ clauses vEx1)
+           , vars = S.fromList . concatMap (fmap tag) $ clauses vEx1
            , clauses = [ [(one 1), (one 2)]
                        , [(chc 3 (one 3) (one (-1))), (one 2)]
+                       ]
+           }
+
+vEx2 :: CNF Variational
+vEx2 = CNF { comment = "This one has two choice expressions"
+           , vars = S.fromList . concatMap (fmap $ abs . tag) $ clauses vEx2
+           , clauses = [ [chc 1 (one 1) (one (-1)), one 2, one 3]
+                       , [chc 2 (one 2) (one 3), one 1, one (-1)]
+                       , one <$> [1, (-2), 3]
                        ]
            }
