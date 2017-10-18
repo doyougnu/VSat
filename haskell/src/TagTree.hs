@@ -3,11 +3,8 @@ module TagTree where
 import Data.Map (Map)
 import Data.List (transpose)
 import qualified Data.Map as M
-import Data.Set (Set)
 import qualified Data.Set as S
 import Control.Monad
-
-import CNF
 
 type Tag = String
 
@@ -15,6 +12,7 @@ type Config = [(Tag, Bool)]
 
 data V a = Obj a
          | Chc Tag (V a) (V a)
+         deriving (Eq, Ord)
 
 -- | smart constructor for obj
 one :: a -> V a
@@ -73,6 +71,3 @@ instance Show a => Show (V a) where
   show (Obj a)      = show a
   show (Chc t y n)   = (tail . init) (show t) ++
                        "<" ++ show y ++ ", " ++ show n ++ ">"
-
-toCNF :: V a -> CNF
-toCNF (Obj a) = undefined

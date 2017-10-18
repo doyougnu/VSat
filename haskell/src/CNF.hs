@@ -1,18 +1,19 @@
 module CNF where
 
 import qualified Data.Set as S
-import Debug.Trace
+
+import TagTree
 
 -- | Syntax
-data CNF = CNF { comment :: String       -- ^ A Comment
-               , vars :: S.Set Integer   -- ^ Unique Variables
-               , clauses :: [[Integer]]  -- ^ Clauses
+data CNF = CNF { comment :: String         -- ^ A Comment
+               , vars :: S.Set (V Integer) -- ^ Unique Variables
+               , clauses :: [[V Integer]]    -- ^ Clauses
                }
 
 
-data SAT = SAT { sComment :: String            -- ^ A Comment
-               , sVars :: S.Set Integer        -- ^ Unique Variables
-               , formula :: [Formula Integer]  -- ^ One or more Formulas
+data SAT = SAT { sComment :: String                -- ^ A Comment
+               , sVars :: S.Set (V Integer)        -- ^ Unique Variables
+               , formula :: [Formula (V Integer)]  -- ^ One or more Formulas
                }
 
 data Formula a = Neg (Formula a)  -- ^ a negation
@@ -27,6 +28,10 @@ smtComment stmt = mconcat [ "c "
                           , show stmt
                           , "\n"
                           ]
+
+-- | smart constructor for Variables
+smtVars :: (Integral a) => [a] -> S.Set Integer
+smtVars = S.fromList . fmap toInteger
 
 -- | An empty CNF
 emptyCNF :: CNF
@@ -76,8 +81,8 @@ instance Show a => Show (Formula a) where
 instance Show SAT where
   show SAT{sComment, sVars, formula} =
     mconcat [ smtComment sComment
-            , "p sat"
-            , affixSp sVars
+            , "p sat "
+            , affixSp $ S.size sVars
             , "\n" -- end of problem line
             , concatMap show formula
             ]
@@ -108,19 +113,19 @@ instance Monoid SAT where
 -- | Examples
 x :: CNF
 x = CNF { comment = "I'm a comment"
-        , vars = S.fromList [1, 2]
-        , clauses = [ [1, 2]
-                    , [-1, 2]
+        , vars = S.fromList . fmap return $ [1, 2]
+        , clauses = [ [(one 1), (one 2)]
+                    , [(one (-1)), (one 2)]
                     ]
         }
 
 y :: SAT
 y = SAT { sComment = "Im a comment"
-        , sVars = S.fromList [1..4]
+        , sVars = S.fromList . fmap return $ [1..4]
         , formula = [(And
-                      [ Or [Lit 1, Lit 3, Neg $ Lit 4]
-                      , Or [Lit 4]
-                      , Or [Lit 2, Lit 3]
+                      [ Or [Lit (one 1), Lit (one 3), Neg $ Lit (one 4)]
+                      , Or [Lit (one 4)]
+                      , Or [Lit (one 2), Lit (one 3)]
                       ])
                     ]
         }
