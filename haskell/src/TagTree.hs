@@ -1,10 +1,5 @@
 module TagTree where
 
-import Data.Map (Map)
-import Data.List (transpose)
-import qualified Data.Map as M
-import qualified Data.Set as S
-import Control.Monad
 import Data.Maybe (isJust)
 
 type Tag = Integer
@@ -21,7 +16,7 @@ one = Obj
 
 -- | smart constructor for chc
 chc :: Tag -> V a -> V a -> V a
-chc t y n = Chc t y n
+chc = Chc
 
 -- | Pull the tag out of a Variational term
 tag :: V a -> Maybe Tag
@@ -76,11 +71,11 @@ instance Functor V where
 instance Applicative V where
   pure = one
   (Obj f) <*> (Obj e) = Obj $ f e
-  f@(Obj f') <*> (Chc t l r) = (Chc t (f <*> l) (f <*> r))
-  (Chc t fl fr) <*> a@(Obj e) = Chc t (fl <*> a) (fr <*> a)
-  (Chc t fl fr) <*> (Chc t' el er) = (Chc t
-                                      (Chc t' (fl <*> el) (fl <*> er))
-                                      (Chc t' (fr <*> el) (fr <*> er)))
+  f@(Obj _) <*> (Chc t l r) = Chc t (f <*> l) (f <*> r)
+  (Chc t fl fr) <*> a@(Obj _) = Chc t (fl <*> a) (fr <*> a)
+  (Chc t fl fr) <*> (Chc t' el er) = Chc t
+                                     (Chc t' (fl <*> el) (fl <*> er))
+                                     (Chc t' (fr <*> el) (fr <*> er))
 
 instance Monad V where
   return  = Obj
@@ -89,4 +84,4 @@ instance Monad V where
 
 instance Show a => Show (V a) where
   show (Obj a)      = show a
-  show (Chc t y n)   = (show t) ++ "<" ++ show y ++ ", " ++ show n ++ ">"
+  show (Chc t y n)   = show t ++ "<" ++ show y ++ ", " ++ show n ++ ">"
