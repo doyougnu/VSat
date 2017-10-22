@@ -7,7 +7,6 @@ import Data.Maybe (fromJust)
 import qualified Control.Foldl as F
 import Data.List (groupBy)
 import Data.Function (on)
-import Data.Set (size)
 
 import CNF
 import TagTree
@@ -20,11 +19,9 @@ toLine = T.select . textToLines . D.pack . show
 
 -- | Given a Variational CNF generate a config for all choices
 genConfig :: CNF Variational V -> [Config]
--- genConfig = fmap (\x -> [(x, True), (x, False)]) . catMaybes . fmap tag
---             . concatMap (filter isChc) . clauses
-genConfig cnf = sequence $ groupBy ((==) `on` fst) tags
-  where numVars = toInteger . size . toVars $ cnf
-        tags = (,) <$> [1..numVars] <*> [True, False]
+genConfig cnf = sequence $ groupBy ((==) `on` fst) configs
+  where tags' = concatMap tags . concat $ filter (any isChc) $ clauses cnf
+        configs = (,) <$> tags' <*> [True, False]
 
 -- | Given a config and a Variational CNF, transform to a Plain CNF
 toPlain :: Config -> CNF Variational V -> CNF Plain V
@@ -40,15 +37,18 @@ run :: T.Text -> CNF a V -> IO Satisfiable
 run sat cnf = do
   let output = T.inproc sat [] (toLine cnf)
       res = T.grep (T.has "SATISFIABLE") output
-  res' <- T.fold res (F.length)
+  res' <- T.fold res F.length
   return $ (==1) res'
 
 
--- runV :: T.Text -> CNF Variational V -> IO Satisfiable
--- runV cnf = runPMinisat plains
---   where
---     configs = genConfig cnf
---     plains = toPlain configs cnf
+runV :: T.Text -> CNF Variational V -> IO [Satisfiable]
+runV solver cnf = sequence $ run solver <$> plains
+  where
+    configs :: [Config]
+    configs = genConfig cnf
+
+    plains :: [CNF Plain V]
+    plains = flip toPlain cnf <$> configs
 
 
 -- | Take any plain CNF term and run it through the SAT solver
@@ -57,5 +57,5 @@ runPMinisat :: CNF Plain V -> IO Bool
 runPMinisat = run "minisat"
 
 -- | Take any variational CNF term and run it through the SAT solver
--- runVMinisat :: CNF Plain V -> IO ()
--- runVMinisat = run "minisat"
+runVMinisat :: CNF Variational V -> IO [Satisfiable]
+runVMinisat = runV "minisat"
