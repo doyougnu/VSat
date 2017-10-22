@@ -1,7 +1,6 @@
 module CNF where
 
 import qualified Data.Set as S
-import Data.Maybe (fromJust)
 
 import TagTree
 
@@ -50,6 +49,10 @@ emptySAT = SAT { sComment = ""
                , sVars = S.empty
                , formula = []
                }
+
+-- | Given a CNF generate the variable set from the clauses
+toVars :: CNF a V -> S.Set Integer
+toVars = S.fromList . concatMap (fmap abs . concatMap getAllObjs) . clauses -- fix this later
 
 -- | affix a space to anything that can be shown
 affixSp :: (Show a) => a -> String
@@ -114,14 +117,6 @@ instance Monoid SAT where
         }
   mconcat xs = Prelude.foldr1 mappend xs
 
--- | Given a config and a Variational CNF, transform to a Plain CNF
-toPlain :: Config -> CNF Variational V -> CNF Plain V
-toPlain cs CNF{comment,vars,clauses} =
-  CNF { comment=comment
-      , vars=vars
-      , clauses = fmap (fmap $ one . fromJust . select cs) clauses
-      }
-
 -- | Plain Examples
 plainEx1 :: CNF Plain V
 plainEx1 = CNF { comment = "I'm a comment"
@@ -145,7 +140,7 @@ plainEx2 = SAT { sComment = "Im a comment"
 -- | Some Variational Examples
 vEx1 :: CNF Variational V
 vEx1 = CNF { comment = "I'm a comment"
-           , vars = S.fromList . concatMap (fmap tag) $ clauses vEx1
+           , vars = toVars vEx1
            , clauses = [ [(one 1), (one 2)]
                        , [(chc 3 (one 3) (one (-1))), (one 2)]
                        ]
@@ -153,9 +148,23 @@ vEx1 = CNF { comment = "I'm a comment"
 
 vEx2 :: CNF Variational V
 vEx2 = CNF { comment = "This one has two choice expressions"
-           , vars = S.fromList . concatMap (fmap $ abs . tag) $ clauses vEx2
+           , vars = toVars vEx2
            , clauses = [ [chc 1 (one 1) (one (-1)), one 2, one 3]
                        , [chc 2 (one 2) (one 3), one 1, one (-1)]
+                       , one <$> [1, (-2), 3]
+                       ]
+           }
+
+vEx3 :: CNF Variational V
+vEx3 = CNF { comment = "This one has two choice expressions, one nested"
+           , vars = toVars vEx3
+           , clauses = [ [ chc 1 (one 1) (one (-1))
+                         , one 2
+                         , one 3
+                         ]
+                       , [ chc 2 (one 2) (chc 3 (one 2) (one (-3)))
+                         , one 1, one (-1)
+                         ]
                        , one <$> [1, (-2), 3]
                        ]
            }
