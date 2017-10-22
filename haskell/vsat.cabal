@@ -26,6 +26,7 @@ library
                      , turtle >= 1.3
                      , text 
                      , unix
+                     , foldl
 
   default-language:    Haskell2010
 
