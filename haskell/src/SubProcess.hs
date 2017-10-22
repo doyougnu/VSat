@@ -2,10 +2,13 @@ module SubProcess where
 
 import qualified Turtle as T
 import Turtle.Line
-import qualified Data.Text as D (pack, null)
+import qualified Data.Text as D (pack)
 import System.Posix.Process (getProcessID)
 import Data.Maybe (catMaybes, fromJust)
 import qualified Control.Foldl as F
+import Data.List (groupBy)
+import Data.Function (on)
+import Data.Set (size)
 
 import CNF
 import TagTree
@@ -17,9 +20,12 @@ toLine :: (Show a) => a -> T.Shell Line
 toLine = T.select . textToLines . D.pack . show
 
 -- | Given a Variational CNF generate a config for all choices
-genConfig :: CNF Variational V -> Config
-genConfig = concatMap (\x -> [(x, True), (x, False)]) . catMaybes . fmap tag
-            . concatMap (filter isChc) . clauses
+genConfig :: CNF Variational V -> [Config]
+-- genConfig = fmap (\x -> [(x, True), (x, False)]) . catMaybes . fmap tag
+--             . concatMap (filter isChc) . clauses
+genConfig cnf = sequence $ groupBy ((==) `on` fst) tags
+  where numVars = toInteger . size . toVars $ cnf
+        tags = (,) <$> [1..numVars] <*> [True, False]
 
 -- | Given a config and a Variational CNF, transform to a Plain CNF
 toPlain :: Config -> CNF Variational V -> CNF Plain V
@@ -39,8 +45,11 @@ run sat cnf = do
   return $ (==1) res'
 
 
--- runV :: T.Text -> CNF Variational V -> V Satisfiable
--- runV = run
+-- runV :: T.Text -> CNF Variational V -> IO Satisfiable
+-- runV cnf = runPMinisat plains
+--   where
+--     configs = genConfig cnf
+--     plains = toPlain configs cnf
 
 
 -- | Take any plain CNF term and run it through the SAT solver
