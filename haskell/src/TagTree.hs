@@ -24,9 +24,9 @@ chc :: Tag -> V a -> V a -> V a
 chc t y n = Chc t y n
 
 -- | Pull the tag out of a Variational term
-tag :: (Integral a) => V a -> Integer
-tag (Obj a) = toInteger a
-tag (Chc t _ _) = toInteger t
+tag :: (Integral a) => V a -> Maybe Tag
+tag (Chc t _ _) = Just t
+tag _           = Nothing
 
 -- | Given a variation term, if it is an object, get the object
 getObj :: V a -> Maybe a
