@@ -5,6 +5,7 @@ import Data.List (transpose)
 import qualified Data.Map as M
 import qualified Data.Set as S
 import Control.Monad
+import Data.Maybe (isJust, isNothing)
 
 type Tag = Integer
 
@@ -27,9 +28,12 @@ tag :: (Integral a) => V a -> Integer
 tag (Obj a) = toInteger a
 tag (Chc t _ _) = toInteger t
 
-isObj :: V a -> Maybe a
-isObj (Obj a) = Just a
-isObj _ = Nothing
+getObj :: V a -> Maybe a
+getObj (Obj a) = Just a
+getObj _ = Nothing
+
+isObj :: V a -> Bool
+isObj = isJust . getObj
 
 -- | Wrapper around engine
 prune :: V a -> V a
