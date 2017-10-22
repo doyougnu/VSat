@@ -28,13 +28,16 @@ tag :: (Integral a) => V a -> Integer
 tag (Obj a) = toInteger a
 tag (Chc t _ _) = toInteger t
 
+-- | Given a variation term, if it is an object, get the object
 getObj :: V a -> Maybe a
 getObj (Obj a) = Just a
 getObj _ = Nothing
 
+-- | Given a variational expression, return true if its an object
 isObj :: V a -> Bool
 isObj = isJust . getObj
 
+-- | Given a variational expression, return true if its an choice
 isChc :: V a -> Bool
 isChc = not . isObj
 
