@@ -18,10 +18,15 @@ one = Obj
 chc :: Tag -> V a -> V a -> V a
 chc = Chc
 
--- | Pull the tag out of a Variational term
+-- | Pull the topmost tag out of a Variational term
 tag :: V a -> Maybe Tag
 tag (Chc t _ _) = Just t
 tag _           = Nothing
+
+-- | Pull all the tags out of a Variational term
+tags :: V a -> [Tag]
+tags (Chc t y n) = t : tags y ++ tags n
+tags _           = []
 
 -- | Given a variational term, return all objects in it
 getAllObjs :: (Integral a) => V a -> [Integer]
