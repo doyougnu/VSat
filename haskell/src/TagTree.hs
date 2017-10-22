@@ -35,6 +35,9 @@ getObj _ = Nothing
 isObj :: V a -> Bool
 isObj = isJust . getObj
 
+isChc :: V a -> Bool
+isChc = not . isObj
+
 -- | Wrapper around engine
 prune :: V a -> V a
 prune = prune_tagtree []
