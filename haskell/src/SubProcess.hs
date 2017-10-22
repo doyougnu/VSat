@@ -3,8 +3,7 @@ module SubProcess where
 import qualified Turtle as T
 import Turtle.Line
 import qualified Data.Text as D (pack)
-import System.Posix.Process (getProcessID)
-import Data.Maybe (catMaybes, fromJust)
+import Data.Maybe (fromJust)
 import qualified Control.Foldl as F
 import Data.List (groupBy)
 import Data.Function (on)
