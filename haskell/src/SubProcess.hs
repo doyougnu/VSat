@@ -25,11 +25,13 @@ genConfig cnf = sequence $ groupBy ((==) `on` fst) configs
 
 -- | Given a config and a Variational CNF, transform to a Plain CNF
 toPlain :: Config -> CNF Variational V -> CNF Plain V
-toPlain cs CNF{comment,vars,clauses} =
-  CNF { comment=comment
-      , vars=vars
-      , clauses = fmap (fmap $ one . fromJust . select cs) clauses
-      }
+toPlain cs CNF{comment = c
+              , vars = _
+              ,clauses = cl} = new
+  where new = CNF { comment = c
+                  , vars = toVars new
+                  , clauses = fmap (fmap $ one . fromJust . select cs) cl
+                  }
 
 -- | Take any Sat solver that can be called from shell, and a plain CNF term
 -- and run the CNF through the specified SAT solver
