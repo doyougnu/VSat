@@ -5,7 +5,7 @@ import Data.List (transpose)
 import qualified Data.Map as M
 import qualified Data.Set as S
 import Control.Monad
-import Data.Maybe (isJust, isNothing)
+import Data.Maybe (isJust)
 
 type Tag = Integer
 
@@ -24,9 +24,14 @@ chc :: Tag -> V a -> V a -> V a
 chc t y n = Chc t y n
 
 -- | Pull the tag out of a Variational term
-tag :: (Integral a) => V a -> Maybe Tag
+tag :: V a -> Maybe Tag
 tag (Chc t _ _) = Just t
 tag _           = Nothing
+
+-- | Given a variational term, return all objects in it
+getAllObjs :: (Integral a) => V a -> [Integer]
+getAllObjs (Chc _ y n) = concatMap getAllObjs [y, n]
+getAllObjs (Obj a)     = return $ toInteger a
 
 -- | Given a variation term, if it is an object, get the object
 getObj :: V a -> Maybe a
