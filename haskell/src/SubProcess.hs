@@ -25,9 +25,10 @@ genConfig cnf = sequence $ groupBy ((==) `on` fst) configs
 
 -- | Given a config and a Variational CNF, transform to a Plain CNF
 toPlain :: Config -> CNF Variational V -> CNF Plain V
-toPlain cs CNF{comment = c
-              , vars = _
-              ,clauses = cl} = new
+toPlain cs CNF{ comment = c
+              , vars    = _
+              ,clauses = cl
+              } = new
   where new = CNF { comment = c
                   , vars = toVars new
                   , clauses = fmap (fmap $ one . fromJust . select cs) cl
