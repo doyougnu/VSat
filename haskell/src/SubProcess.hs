@@ -20,7 +20,7 @@ toLine = T.select . textToLines . D.pack . show
 -- | Given a Variational CNF generate a config for all choices
 genConfig :: CNF Variational V -> [Config]
 genConfig cnf = sequence $ groupBy ((==) `on` fst) configs
-  where tags' = concatMap tags . concat $ filter (any isChc) $ clauses cnf
+  where tags' = concatMap tags . concat . filter (any isChc) $ clauses cnf
         configs = (,) <$> tags' <*> [True, False]
 
 -- | Given a config and a Variational CNF, transform to a Plain CNF
@@ -38,13 +38,17 @@ toPlain cs CNF{comment = c
 run :: T.Text -> CNF a V -> IO Satisfiable
 run sat cnf = do
   let output = T.inproc sat [] (toLine cnf)
-      res = T.grep (T.has "SATISFIABLE") output
+      res = T.grep (T.has "UNSATISFIABLE") output
   res' <- T.fold res F.length
-  return $ (==1) res'
+  return $ (/=1) res'
 
-
-runV :: T.Text -> CNF Variational V -> IO [Satisfiable]
-runV solver cnf = sequence $ run solver <$> plains
+-- | take any Sat solver that can be called from shell, and any variational CNF
+-- term, and run all combinations of the CNF through the SAT solver
+runV :: T.Text -> CNF Variational V -> IO [(Config, Satisfiable)]
+runV solver cnf = do
+  results <- sequence $ run solver <$> plains
+  let returnVals = zip configs results
+  return returnVals
   where
     configs :: [Config]
     configs = genConfig cnf
@@ -54,10 +58,9 @@ runV solver cnf = sequence $ run solver <$> plains
 
 
 -- | Take any plain CNF term and run it through the SAT solver
--- Run like: runMinisat $ toPlain [(3, True)] vEx1
-runPMinisat :: CNF Plain V -> IO Bool
+runPMinisat :: CNF Plain V -> IO Satisfiable
 runPMinisat = run "minisat"
 
 -- | Take any variational CNF term and run it through the SAT solver
-runVMinisat :: CNF Variational V -> IO [Satisfiable]
+runVMinisat :: CNF Variational V -> IO [(Config, Satisfiable)]
 runVMinisat = runV "minisat"

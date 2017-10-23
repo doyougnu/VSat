@@ -168,3 +168,11 @@ vEx3 = CNF { comment = "This one has two choice expressions, one nested"
                        , one <$> [1, (-2), 3]
                        ]
            }
+
+vEx4 :: CNF Variational V
+vEx4 = CNF { comment = "This one is not solvable!"
+           , vars = toVars vEx4
+           , clauses = [ [one 1] 
+                       , [one (-1)]
+                       ]
+           }
