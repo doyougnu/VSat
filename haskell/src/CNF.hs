@@ -176,3 +176,11 @@ vEx4 = CNF { comment = "This one is not solvable!"
                        , [one (-1)]
                        ]
            }
+
+vEx5 :: CNF Variational V
+vEx5 = CNF { comment = "Unsatisfiable based on Choices"
+           , vars = toVars vEx5
+           , clauses = [ [ chc 1 (one 1) (one (-1))]
+                       , [chc 2 (one 1) (one (-1))]
+                       ]
+           }
