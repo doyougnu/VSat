@@ -37,6 +37,10 @@ toPlain cs CNF{ comment = c
                   , clauses = fmap (fmap $ one . fromJust . select cs) cl
                   }
 
+-- | Function for presentation live coding
+_plains :: CNF Variational V -> [CNF Plain V]
+_plains c = flip toPlain c <$> genConfig c
+
 -- | Take any Sat solver that can be called from shell, and a plain CNF term
 -- and run the CNF through the specified SAT solver
 run :: T.Text -> CNF a V -> IO Satisfiable
