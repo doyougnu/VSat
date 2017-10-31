@@ -57,6 +57,10 @@ emptySAT = SAT { sComment = ""
 toVars :: CNF V -> S.Set Integer
 toVars = S.fromList . concatMap (fmap abs . concatMap getAllObjs) . clauses -- fix this later
 
+toVars' :: CNF Plain -> S.Set Integer
+toVars' cnf = S.fromList . concatMap (fmap $ abs . yank) $ clauses cnf -- fix this later
+  where yank (Plain a) = a
+
 -- | affix a space to anything that can be shown
 affixSp :: (Show a) => a -> String
 affixSp = (++ " ") . show
