@@ -7,7 +7,6 @@ import Data.Maybe (fromJust)
 import qualified Control.Foldl as F
 import Data.List (groupBy, nub)
 import Data.Function (on)
-import Debug.Trace (trace)
 
 import CNF
 import TagTree
@@ -34,8 +33,7 @@ toPlain cs CNF{ comment = c
               ,clauses = cl
               } = new
   where new = CNF { comment = c
-                  -- , vars = toVars new
-                  , vars = undefined
+                  , vars = toVars' new
                   , clauses = test cs cl
                   }
 
@@ -43,8 +41,8 @@ test :: Config -> [[V a]] -> [[Plain a]]
 test cs = fmap (fmap $ plain . fromJust . select cs)
 
 -- | Function for presentation live coding
--- _plains :: CNF V -> [CNF Plain]
--- _plains c = flip toPlain c <$> genConfig c
+_plains :: CNF V -> [CNF Plain]
+_plains c = flip toPlain c <$> genConfig c
 
 -- | Take any Sat solver that can be called from shell, and a plain CNF term
 -- and run the CNF through the specified SAT solver
@@ -58,16 +56,16 @@ run sat cnf = do
 -- | take any Sat solver that can be called from shell, and any variational CNF
 -- term, and run all combinations of the CNF through the SAT solver
 runV :: T.Text -> CNF V -> IO [Result]
-runV solver cnf = undefined -- do
-  -- results <- sequence $ run solver <$> plains
-  -- let returnVals = zip configs results
-  -- return returnVals
-  -- where
-  --   configs :: [Config]
-  --   configs = genConfig cnf
+runV solver cnf = do
+  results <- sequence $ run solver <$> plains
+  let returnVals = zip configs results
+  return returnVals
+  where
+    configs :: [Config]
+    configs = genConfig cnf
 
-    -- plains :: [CNF Plain]
-    -- plains = flip toPlain cnf <$> configs
+    plains :: [CNF Plain]
+    plains = flip toPlain cnf <$> configs
 
 
 -- | Take any plain CNF term and run it through the SAT solver

@@ -85,7 +85,7 @@ instance (Show (a Integer)) => Show (CNF a) where
             , affixSp $ S.size vars
             , affixSp . toInteger $ length clauses
             , "\n" --end problem statement
-            , mconcat $ ((++) "0\n" . format) <$> clauses
+            , mconcat $ (flip (++) " 0\n" . format) <$> clauses
             ]
 
 instance Show a => Show (Formula a) where
