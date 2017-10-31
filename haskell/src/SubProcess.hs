@@ -10,14 +10,15 @@ import Data.Function (on)
 
 import CNF
 import TagTree
+import Utils
 
 type Satisfiable = Bool
 
 -- | A result is a particular configuration, and its satisfiability result
 type Result = (Config, Satisfiable)
 
--- | Take anything that can be shown and pack it into a shell line
-toLine :: (Show a) => a -> T.Shell Line
+-- | Take anything that can be shown and pack it into a shell line toLine :: (Show a) => a -> T.Shell Line
+toLine :: Show a => a -> T.Shell Line
 toLine = T.select . textToLines . D.pack . show
 
 -- | Given a Variational CNF generate a config for all choices
