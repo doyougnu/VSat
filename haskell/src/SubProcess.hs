@@ -7,6 +7,7 @@ import Data.Maybe (fromJust)
 import qualified Control.Foldl as F
 import Data.List (groupBy, nub)
 import Data.Function (on)
+import Debug.Trace (trace)
 
 import CNF
 import TagTree
@@ -21,29 +22,33 @@ toLine :: (Show a) => a -> T.Shell Line
 toLine = T.select . textToLines . D.pack . show
 
 -- | Given a Variational CNF generate a config for all choices
-genConfig :: CNF Variational V -> [Config]
+genConfig :: CNF V -> [Config]
 genConfig cnf = sequence $ groupBy ((==) `on` fst) configs
   where tags' = nub . concatMap tags . concat . filter (any isChc) $ clauses cnf
         configs = (,) <$> tags' <*> [True, False]
 
 -- | Given a config and a Variational CNF, transform to a Plain CNF
-toPlain :: Config -> CNF Variational V -> CNF Plain V
+toPlain :: Config -> CNF V -> CNF Plain
 toPlain cs CNF{ comment = c
               , vars    = _
               ,clauses = cl
               } = new
   where new = CNF { comment = c
-                  , vars = toVars new
-                  , clauses = fmap (fmap $ one . fromJust . select cs) cl
+                  -- , vars = toVars new
+                  , vars = undefined
+                  , clauses = test cs cl
                   }
 
+test :: Config -> [[V a]] -> [[Plain a]]
+test cs = fmap (fmap $ plain . fromJust . select cs)
+
 -- | Function for presentation live coding
-_plains :: CNF Variational V -> [CNF Plain V]
-_plains c = flip toPlain c <$> genConfig c
+-- _plains :: CNF V -> [CNF Plain]
+-- _plains c = flip toPlain c <$> genConfig c
 
 -- | Take any Sat solver that can be called from shell, and a plain CNF term
 -- and run the CNF through the specified SAT solver
-run :: T.Text -> CNF a V -> IO Satisfiable
+run :: (Show (a Integer)) => T.Text -> CNF a -> IO Satisfiable
 run sat cnf = do
   let output = T.inproc sat [] (toLine cnf)
       res = T.grep (T.has "UNSATISFIABLE") output
@@ -52,25 +57,25 @@ run sat cnf = do
 
 -- | take any Sat solver that can be called from shell, and any variational CNF
 -- term, and run all combinations of the CNF through the SAT solver
-runV :: T.Text -> CNF Variational V -> IO [Result]
-runV solver cnf = do
-  results <- sequence $ run solver <$> plains
-  let returnVals = zip configs results
-  return returnVals
-  where
-    configs :: [Config]
-    configs = genConfig cnf
+runV :: T.Text -> CNF V -> IO [Result]
+runV solver cnf = undefined -- do
+  -- results <- sequence $ run solver <$> plains
+  -- let returnVals = zip configs results
+  -- return returnVals
+  -- where
+  --   configs :: [Config]
+  --   configs = genConfig cnf
 
-    plains :: [CNF Plain V]
-    plains = flip toPlain cnf <$> configs
+    -- plains :: [CNF Plain]
+    -- plains = flip toPlain cnf <$> configs
 
 
 -- | Take any plain CNF term and run it through the SAT solver
-runPMinisat :: CNF Plain V -> IO Satisfiable
+runPMinisat :: CNF Plain -> IO Satisfiable
 runPMinisat = run "minisat"
 
 -- | Take any variational CNF term and run it through the SAT solver
-runVMinisat :: CNF Variational V -> IO [Result]
+runVMinisat :: CNF V -> IO [Result]
 runVMinisat = runV "minisat"
 
 -- | Given a list of results, only return the failures
