@@ -2,7 +2,7 @@ module TagTree where
 
 import Data.Maybe (isJust)
 
-type Tag = Integer
+type Tag = String
 
 type Config = [(Tag, Bool)]
 
@@ -48,17 +48,17 @@ isChc = not . isObj
 
 -- | Wrapper around engine
 prune :: V a -> V a
-prune = prune_tagtree []
+prune = pruneTagtree []
 
 -- | Given a config and variational expression remove redundant choices
-prune_tagtree :: Config -> V a -> V a
-prune_tagtree _ (Obj a) = Obj a
-prune_tagtree tb (Chc t y n) = case lookup t tb of
+pruneTagtree :: Config -> V a -> V a
+pruneTagtree _ (Obj a) = Obj a
+pruneTagtree tb (Chc t y n) = case lookup t tb of
                              Nothing -> Chc t
-                                        (prune_tagtree ((t,True):tb) y)
-                                        (prune_tagtree ((t,False):tb) n)
-                             Just True -> prune_tagtree tb y
-                             Just False -> prune_tagtree tb n
+                                        (pruneTagtree ((t,True):tb) y)
+                                        (pruneTagtree ((t,False):tb) n)
+                             Just True -> pruneTagtree tb y
+                             Just False -> pruneTagtree tb n
 
 -- | Given a configuration and a variational expression perform a selection
 select :: Config -> V a -> Maybe a
@@ -72,6 +72,7 @@ select tbs (Chc t y n) =
 instance Functor V where
   fmap f (Obj a) = Obj (f a)
   fmap f (Chc t y n) = Chc t (fmap f y) (fmap f n)
+
 
 instance Applicative V where
   pure = one
