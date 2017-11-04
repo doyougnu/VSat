@@ -1,7 +1,6 @@
 module TagTree where
 
 import Data.Maybe (isJust)
-import Control.Monad.State
 
 type Tag = String
 
@@ -92,18 +91,3 @@ instance Monad (V a) where
 instance (Show a, Show b) => Show (V a b) where
   show (Obj a)      = show a
   show (Chc t y n)   = show t ++ "<" ++ show y ++ ", " ++ show n ++ ">"
-
--- | increment the simple counter state
-inc :: State Int ()
-inc = get >>= put . succ
-
--- | crawl a tag tree and label each choice node with the current count
-_count :: V a b -> State Int (V (Int, a) b)
-_count (Obj a) = return (Obj a)
-_count (Chc d l r) = do
-  inc
-  n <- get
-  l' <- _count l
-  r' <- _count r
-  return $ (Chc (n, d) l' r')
-

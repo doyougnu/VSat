@@ -18,7 +18,7 @@ type Satisfiable = Bool
 -- | A result is a particular configuration, and its satisfiability result
 type Result a = (Config a, Satisfiable)
 
--- | Take anything that can be shown and pack it into a shell line toLine :: (Show a) => a -> T.Shell Line
+-- | Take anything that can be shown and pack it into a shell line 
 toLine :: Show a => a -> T.Shell Line
 toLine = T.select . textToLines . D.pack . show
 
@@ -78,3 +78,28 @@ runVMinisat = runV "minisat"
 -- | Given a list of results, only return the failures
 failures :: [Result a] -> [Result a]
 failures = filter ((==False) . snd)
+
+
+-- | increment the simple counter state
+inc :: State Int ()
+inc = get >>= put . succ
+
+-- | crawl a tag tree and label each choice node with the current count
+_count :: V a b -> State Int (V (Int, a) b)
+_count (Obj a) = return (Obj a)
+_count (Chc d l r) = do
+  inc
+  n <- get
+  l' <- _count l
+  r' <- _count r
+  return $ (Chc (n, d) l' r')
+
+-- | crawl a tag tree and label each choice with a unique integer
+label :: V a b -> State Int (V Int b)
+label (Obj a) = return (Obj a)
+label (Chc _ l r) = do
+  inc
+  n <- get
+  l' <- label l
+  r' <- label r
+  return $ (Chc n l' r')
