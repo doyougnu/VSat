@@ -19,7 +19,7 @@ emptyCNF = CNF { comment = ""
                }
 
 -- | Given a CNF generate the variable set from the clauses
-toVars :: CNF V -> S.Set Integer
+toVars :: CNF (V Tag) -> S.Set Integer
 toVars = S.fromList . concatMap (fmap abs . concatMap getAllObjs) . clauses -- fix this later
 
 toVars' :: CNF Plain -> S.Set Integer
@@ -58,7 +58,7 @@ plainEx1 = CNF { comment = "I'm a comment"
                }
 
 -- | Some Variational Examples
-vEx1 :: CNF V
+vEx1 :: CNF (V Tag)
 vEx1 = CNF { comment = "I'm a comment"
            , vars = toVars vEx1
            , clauses = [ [one 1, one 2]
@@ -66,7 +66,7 @@ vEx1 = CNF { comment = "I'm a comment"
                        ]
            }
 
-vEx2 :: CNF V
+vEx2 :: CNF (V Tag)
 vEx2 = CNF { comment = "This one has two choice expressions"
            , vars = toVars vEx2
            , clauses = [ [chc "a" (one 1) (one (-1)), one 2, one 3]
@@ -75,7 +75,7 @@ vEx2 = CNF { comment = "This one has two choice expressions"
                        ]
            }
 
-vEx3 :: CNF V
+vEx3 :: CNF (V Tag)
 vEx3 = CNF { comment = "This one has two choice expressions, one nested"
            , vars = toVars vEx3
            , clauses = [ [ chc "a" (one 1) (one (-1))
@@ -85,11 +85,11 @@ vEx3 = CNF { comment = "This one has two choice expressions, one nested"
                        , [ chc "b" (one 2) (chc "c" (one 2) (one (-3)))
                          , one 1, one (-1)
                          ]
-                       , one <$> [1, (-2), 3]
+                       , one <$> [1, -2, 3]
                        ]
            }
 
-vEx4 :: CNF V
+vEx4 :: CNF (V Tag)
 vEx4 = CNF { comment = "This one is not solvable!"
            , vars = toVars vEx4
            , clauses = [ [one 1]
@@ -97,7 +97,7 @@ vEx4 = CNF { comment = "This one is not solvable!"
                        ]
            }
 
-vEx5 :: CNF V
+vEx5 :: CNF (V Tag)
 vEx5 = CNF { comment = "Unsatisfiable based on Choices"
            , vars = toVars vEx5
            , clauses = [ [ chc "z" (one 1) (one (-1))]

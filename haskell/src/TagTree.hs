@@ -98,12 +98,12 @@ inc :: State Int ()
 inc = get >>= put . succ
 
 -- | crawl a tag tree and label each choice node with the current count
-count :: V a b -> State Int (V (Int, a) b)
-count (Obj a) = return (Obj a)
-count (Chc d l r) = do
+_count :: V a b -> State Int (V (Int, a) b)
+_count (Obj a) = return (Obj a)
+_count (Chc d l r) = do
   inc
   n <- get
-  l' <- count l
-  r' <- count r
+  l' <- _count l
+  r' <- _count r
   return $ (Chc (n, d) l' r')
 
