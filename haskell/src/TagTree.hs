@@ -1,57 +1,58 @@
 module TagTree where
 
 import Data.Maybe (isJust)
+import Control.Monad.State
 
 type Tag = String
 
-type Config = [(Tag, Bool)]
+type Config a = [(a, Bool)]
 
-data V a = Obj a
-         | Chc Tag (V a) (V a)
+data V a b = Obj b
+         | Chc a (V a b) (V a b)
          deriving (Eq, Ord)
 
 -- | smart constructor for obj
-one :: a -> V a
+one :: b -> V a b
 one = Obj
 
 -- | smart constructor for chc
-chc :: Tag -> V a -> V a -> V a
+chc :: a -> V a b -> V a b -> V a b
 chc = Chc
 
 -- | Pull the topmost tag out of a Variational term
-tag :: V a -> Maybe Tag
+tag :: V a b -> Maybe a
 tag (Chc t _ _) = Just t
 tag _           = Nothing
 
 -- | Pull all the tags out of a Variational term
-tags :: V a -> [Tag]
+tags :: V a b -> [a]
 tags (Chc t y n) = t : tags y ++ tags n
 tags _           = []
 
 -- | Given a variational term, return all objects in it
-getAllObjs :: (Integral a) => V a -> [Integer]
+getAllObjs :: (Integral b) => V a b -> [Integer]
 getAllObjs (Chc _ y n) = concatMap getAllObjs [y, n]
 getAllObjs (Obj a)     = return $ toInteger a
 
 -- | Given a variation term, if it is an object, get the object
-getObj :: V a -> Maybe a
+getObj :: V a b -> Maybe b
 getObj (Obj a) = Just a
 getObj _ = Nothing
 
 -- | Given a variational expression, return true if its an object
-isObj :: V a -> Bool
+isObj :: V a b -> Bool
 isObj = isJust . getObj
 
 -- | Given a variational expression, return true if its an choice
-isChc :: V a -> Bool
+isChc :: V a b -> Bool
 isChc = not . isObj
 
 -- | Wrapper around engine
-prune :: V a -> V a
+prune :: (Eq a) => V a b -> V a b
 prune = pruneTagtree []
 
 -- | Given a config and variational expression remove redundant choices
-pruneTagtree :: Config -> V a -> V a
+pruneTagtree :: (Eq a) => Config a -> V a b -> V a b
 pruneTagtree _ (Obj a) = Obj a
 pruneTagtree tb (Chc t y n) = case lookup t tb of
                              Nothing -> Chc t
@@ -61,7 +62,7 @@ pruneTagtree tb (Chc t y n) = case lookup t tb of
                              Just False -> pruneTagtree tb n
 
 -- | Given a configuration and a variational expression perform a selection
-select :: Config -> V a -> Maybe a
+select :: (Eq a) => Config a -> V a b -> Maybe b
 select _ (Obj a) = Just a
 select tbs (Chc t y n) =
   case lookup t tbs of
@@ -69,12 +70,12 @@ select tbs (Chc t y n) =
     Just True -> select tbs y
     Just False -> select tbs n
 
-instance Functor V where
+instance Functor (V a) where
   fmap f (Obj a) = Obj (f a)
   fmap f (Chc t y n) = Chc t (fmap f y) (fmap f n)
 
 
-instance Applicative V where
+instance Applicative (V a) where
   pure = one
   (Obj f) <*> (Obj e) = Obj $ f e
   f@(Obj _) <*> (Chc t l r) = Chc t (f <*> l) (f <*> r)
@@ -83,11 +84,26 @@ instance Applicative V where
                                      (Chc t' (fl <*> el) (fl <*> er))
                                      (Chc t' (fr <*> el) (fr <*> er))
 
-instance Monad V where
+instance Monad (V a) where
   return  = Obj
   Obj a >>= f = f a
   Chc t y n >>= f = Chc t (y >>= f)(n >>= f)
 
-instance Show a => Show (V a) where
+instance (Show a, Show b) => Show (V a b) where
   show (Obj a)      = show a
   show (Chc t y n)   = show t ++ "<" ++ show y ++ ", " ++ show n ++ ">"
+
+-- | increment the simple counter state
+inc :: State Int ()
+inc = get >>= put . succ
+
+-- | crawl a tag tree and label each choice node with the current count
+count :: V a b -> State Int (V (Int, a) b)
+count (Obj a) = return (Obj a)
+count (Chc d l r) = do
+  inc
+  n <- get
+  l' <- count l
+  r' <- count r
+  return $ (Chc (n, d) l' r')
+
