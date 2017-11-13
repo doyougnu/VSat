@@ -9,6 +9,10 @@ newtype Plain a = Plain a  -- ^ a plain, non-variational value
 plain :: a -> Plain a
 plain = Plain
 
+-- | Wrap parenthesis around any string
+parens :: String -> String
+parens str = "(" ++ str ++ ")"
+
 -- | affix a space to anything that can be shown
 affixSp :: (Show a) => a -> String
 affixSp = (++ " ") . show
