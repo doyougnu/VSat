@@ -4,9 +4,11 @@ import qualified Turtle as T
 import Turtle.Line
 import qualified Data.Text as D (pack)
 import Data.Maybe (fromJust)
-import qualified Control.Foldl as F
 import Data.List (groupBy, nub)
 import Data.Function (on)
+import Data.Set as S (Set, member, insert) 
+  
+import qualified Control.Foldl as F
 import Control.Monad.State
 
 import CNF
@@ -39,7 +41,7 @@ toPlain cs CNF{ comment = c
                   , clauses = _genPlainFormula cs cl
                   }
 
--- given a configuration and formulas generate the plain formulas
+-- | given a configuration and formulas generate the plain formulas
 _genPlainFormula :: (Eq a) => Config a -> [[V a b]] -> [[Plain b]]
 _genPlainFormula cs = fmap (fmap $ plain . fromJust . select cs)
 
@@ -79,26 +81,34 @@ runVMinisat = runV "minisat"
 failures :: [Result a] -> [Result a]
 failures = filter ((==False) . snd)
 
+-- hold an Int to apply labels, hold a set of chars to track which dimension
+-- have been seen already
+type Counter a = (Int, S.Set a) 
+
 -- | increment the simple counter state
-inc :: State Int ()
-inc = get >>= put . succ
+inc :: (Ord a) => a -> State (Counter a) ()
+inc t = do
+  (i, ts) <- get
+  if S.member t ts
+    then return ()
+    else put (succ i, S.insert t ts)
 
 -- | crawl a tag tree and label each choice node with the current count
-_count :: V a b -> State Int (V (Int, a) b)
+_count :: (Ord a) => V a b -> State (Counter a) (V (Int, a) b)
 _count (Obj a) = return (Obj a)
 _count (Chc d l r) = do
-  inc
-  n <- get
+  inc d
+  (i, _) <- get
   l' <- _count l
   r' <- _count r
-  return $ (Chc (n, d) l' r')
+  return $ Chc (i, d) l' r'
 
 -- | crawl a tag tree and label each choice with a unique integer
-label :: V a b -> State Int (V Int b)
-label (Obj a) = return (Obj a)
-label (Chc _ l r) = do
-  inc
-  n <- get
-  l' <- label l
-  r' <- label r
-  return $ (Chc n l' r')
+-- label :: V a b -> State Int (V Int b)
+-- label (Obj a) = return (Obj a)
+-- label (Chc _ l r) = do
+--   inc
+--   n <- get
+--   l' <- label l
+--   r' <- label r
+--   return $ Chc n l' r'
