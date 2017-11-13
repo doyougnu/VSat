@@ -11,7 +11,7 @@ plain = Plain
 
 -- | affix a space to anything that can be shown
 affixSp :: (Show a) => a -> String
-affixSp = (++ " ") . show
+affixSp = (++ " ") . show 
 
 -- | Given list of anything that can be shown, pretty format it
 format :: (Show a) => [a] -> String

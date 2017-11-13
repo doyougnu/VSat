@@ -78,7 +78,7 @@ vEx2 = CNF { comment = "This one has two choice expressions"
 vEx3 :: CNF (V Tag)
 vEx3 = CNF { comment = "This one has two choice expressions, one nested"
            , vars = toVars vEx3
-           , clauses = [ [ chc "a" (one 1) (one (-1))
+           , clauses = [ [ chc "a" (one 1) (chc "a" (one 1) (one (-1)))
                          , one 2
                          , one 3
                          ]
