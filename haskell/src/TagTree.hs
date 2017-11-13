@@ -1,6 +1,7 @@
 module TagTree where
 
 import Data.Maybe (isJust)
+import Data.Bifunctor
 
 type Tag = String
 
@@ -91,3 +92,7 @@ instance Monad (V a) where
 instance (Show a, Show b) => Show (V a b) where
   show (Obj a)      = show a
   show (Chc t y n)   = show t ++ "<" ++ show y ++ ", " ++ show n ++ ">"
+
+instance Bifunctor V where
+  bimap _ g (Obj a) = Obj $ g a
+  bimap f g (Chc t l r) = Chc (f t) (bimap f g l) (bimap f g r)
