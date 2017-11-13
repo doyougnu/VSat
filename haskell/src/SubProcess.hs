@@ -1,12 +1,11 @@
 module SubProcess where
 
 import qualified Turtle as T
-import Turtle.Line
 import qualified Data.Text as D (pack)
 import Data.Maybe (fromJust)
 import Data.List (groupBy, nub)
 import Data.Function (on)
-import Data.Set as S (Set, member, insert) 
+import Data.Set as S (Set, member, insert, empty) 
   
 import qualified Control.Foldl as F
 import Control.Monad.State
@@ -21,8 +20,8 @@ type Satisfiable = Bool
 type Result a = (Config a, Satisfiable)
 
 -- | Take anything that can be shown and pack it into a shell line
-toLine :: Show a => a -> T.Shell Line
-toLine = T.select . textToLines . D.pack . show
+toLine :: Show a => a -> T.Shell T.Line
+toLine = T.select . T.textToLines . D.pack . show
 
 -- | Given a Variational CNF generate a config for all choices
 genConfigs :: (Eq a) => CNF (V a) -> [Config a]
@@ -85,6 +84,9 @@ failures = filter ((==False) . snd)
 -- have been seen already
 type Counter a = (Int, S.Set a) 
 
+emptySt :: Counter Tag
+emptySt = (0, S.empty) 
+
 -- | increment the simple counter state
 inc :: (Ord a) => a -> State (Counter a) ()
 inc t = do
@@ -102,13 +104,3 @@ _count (Chc d l r) = do
   l' <- _count l
   r' <- _count r
   return $ Chc (i, d) l' r'
-
--- | crawl a tag tree and label each choice with a unique integer
--- label :: V a b -> State Int (V Int b)
--- label (Obj a) = return (Obj a)
--- label (Chc _ l r) = do
---   inc
---   n <- get
---   l' <- label l
---   r' <- label r
---   return $ Chc n l' r'
