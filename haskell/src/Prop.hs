@@ -25,6 +25,30 @@ instance Functor Prop where
   fmap f (Impl a c)   = Impl   (f <$> a) (f <$> c)
   fmap f (BiImpl a c) = BiImpl (f <$> a) (f <$> c)
 
+instance Foldable Prop where
+  foldMap f (Lit a)      = f a
+  foldMap f (Neg a)      = foldMap f a
+  foldMap f (And l r)    = mconcat [foldMap f l, foldMap f r]
+  foldMap f (Or l r)     = mconcat [foldMap f l, foldMap f r]
+  foldMap f (Impl l r)   = mconcat [foldMap f l, foldMap f r]
+  foldMap f (BiImpl l r) = mconcat [foldMap f l, foldMap f r]
+
+  foldr f z (Lit a)      = f a z
+  foldr f z (Neg a)      = foldr f (foldr f z a) a
+  foldr f z (And l r)    = foldr f (foldr f z l) r
+  foldr f z (Or l r)     = foldr f (foldr f z l) r
+  foldr f z (Impl l r)   = foldr f (foldr f z l) r
+  foldr f z (BiImpl l r) = foldr f (foldr f z l) r
+
+instance Traversable Prop where
+  traverse f (Lit a)      = Lit <$> f a
+  traverse f (Neg a)      = Neg <$> traverse f a
+  traverse f (And l r)    = And <$> traverse f l <*> traverse f r
+  traverse f (Or l r)     = Or <$> traverse f l <*> traverse f r
+  traverse f (Impl l r)   = Impl <$> traverse f l <*> traverse f r
+  traverse f (BiImpl l r) = BiImpl <$> traverse f l <*> traverse f r
+
+
 -- | Given a propositional formulae convert it into conjunctive normal form
 -- one expression at a time
 _toCNF :: (Show a) => Prop a -> Prop a
