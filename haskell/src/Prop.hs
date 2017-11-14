@@ -43,21 +43,56 @@ instance Foldable Prop where
 instance Traversable Prop where
   traverse f (Lit a)      = Lit <$> f a
   traverse f (Neg a)      = Neg <$> traverse f a
-  traverse f (And l r)    = And <$> traverse f l <*> traverse f r
-  traverse f (Or l r)     = Or <$> traverse f l <*> traverse f r
-  traverse f (Impl l r)   = Impl <$> traverse f l <*> traverse f r
+  traverse f (And l r)    = And    <$> traverse f l <*> traverse f r
+  traverse f (Or l r)     = Or     <$> traverse f l <*> traverse f r
+  traverse f (Impl l r)   = Impl   <$> traverse f l <*> traverse f r
   traverse f (BiImpl l r) = BiImpl <$> traverse f l <*> traverse f r
 
+
+-- | Eliminate an biconditionals
+elimBi :: Prop a -> Prop a
+elimBi (BiImpl a c) = And (Impl a c) (Impl c a)
+elimBi x            = x
+
+-- | Eliminate Implications
+elimImp :: Prop a -> Prop a
+elimImp (Impl a c) = Or (Neg a) c
+elimImp x          = x
+
+-- | Demorgans law
+deMorgs :: Prop a -> Prop a
+deMorgs (Neg (And l r)) = Or (Neg l) (Neg r)
+deMorgs (Neg (Or l r))  = And (Neg l) (Neg r)
+deMorgs x               = x
+
+-- | Double Negation law
+dubNeg :: Prop a -> Prop a
+dubNeg (Neg (Neg a)) = a
+dubNeg a             = a
+
+-- | Distributive laws
+distrib :: Prop a -> Prop a
+distrib (And p (Or q r)) = Or (And p q) (And p r)
+distrib (And (Or q r) p) = Or (And p q) (And p r)
+distrib (Or p (And q r)) = And (Or p q) (Or p r)
+distrib (Or (And q r) p) = And (Or p q) (Or p r)
+distrib x                = x
+
+-- | Absorption
+absorb :: Prop a -> Prop a
+absorb (Or p (And p q)) = p
+absorb (And p (Or p q)) = p
 
 -- | Given a propositional formulae convert it into conjunctive normal form
 -- one expression at a time
 _toCNF :: (Show a) => Prop a -> Prop a
-_toCNF (Impl a c)   = Or (Neg a) c
-_toCNF (BiImpl a c) = And (Impl a c) (Impl c a)
-_toCNF (And l r)    = And (toCNF l) (toCNF r)
-_toCNF (Neg x)      = Neg (toCNF x)
-_toCNF (Or l r)     = Or (toCNF l) (toCNF r)
+_toCNF x@(Impl _ _)   = elimImp x
+_toCNF x@(BiImpl _ _) = elimBi x
+_toCNF (And l r)    = distrib $ And (_toCNF l) (_toCNF r)
+_toCNF (Neg x)      = dubNeg $ Neg (toCNF x)
+_toCNF (Or l r)     = distrib $ Or (toCNF l) (toCNF r)
 _toCNF x            = x
+
 
 -- | True iff a propositional term contains only literals, ands, ors or negations
 isGround :: Prop a -> Bool
@@ -71,6 +106,11 @@ isGround _         = False
 toCNF :: (Show a) => Prop a -> Prop a
 toCNF = head . filter isGround . iterate _toCNF
 
+-- | traverse a propositional term and pack a list with new elements at each and
+toList :: Prop a -> [[a]]
+toList term
+  | not $ isGround term = []
+  | otherwise = undefined
 
 ex :: Prop Integer
 ex = And
