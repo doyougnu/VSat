@@ -52,12 +52,24 @@ instance Traversable Prop where
 
 -- | Eliminate an biconditionals
 elimBi :: Prop a -> Prop a
-elimBi (BiImpl a c) = And (Impl a c) (Impl c a)
-elimBi x            = x
+elimBi (BiImpl a c) = And
+  (Impl (elimBi a) (elimBi c))
+  (Impl (elimBi c) (elimBi a))
+elimBi (Impl a c) = Impl (elimBi a) (elimBi c)
+elimBi (And a c)  = And  (elimBi a) (elimBi c)
+elimBi (Or a c)   = Or   (elimBi a) (elimBi c)
+elimBi (Neg a)    = Neg  (elimBi a)
+elimBi x          = x
 
 -- | Eliminate Implications
 elimImp :: Prop a -> Prop a
-elimImp (Impl a c) = Or (Neg a) c
+elimImp (Impl a c) = Or (Neg (elimImp a)) (elimImp c)
+elimImp (BiImpl a c) = And
+  (Impl (elimImp a) (elimImp c))
+  (Impl (elimImp c) (elimImp a))
+elimImp (And a c)  = And  (elimImp a) (elimImp c)
+elimImp (Or a c)   = Or   (elimImp a) (elimImp c)
+elimImp (Neg a)    = Neg  (elimImp a)
 elimImp x          = x
 
 -- | Demorgans law
@@ -72,24 +84,24 @@ dubNeg (Neg (Neg a)) = a
 dubNeg a             = a
 
 -- | Distributive laws
-distribAnd :: Prop a -> Prop a
-distribAnd (And p (Or q r)) = Or
-  (And (distribAnd p) (distribAnd q))
-  (And (distribAnd p) (distribAnd r))
-distribAnd (And (Or q r) p) = Or
-  (And (distribAnd p) (distribAnd q))
-  (And (distribAnd p) (distribAnd r))
-distribAnd x                = x
-
-distribAnd' :: Prop a -> Prop a
-distribAnd' (And p (Or q r)) = Or (And p q) (And p r)
-distribAnd' (And (Or q r) p) = Or (And p q) (And p r)
-distribAnd' x                = x
-
-distribOr :: Prop a -> Prop a
-distribOr (Or p (And q r)) = And (Or p q) (Or p r)
-distribOr (Or (And q r) p) = And (Or p q) (Or p r)
-distribOr x                = x
+distrib :: Prop a -> Prop a
+-- distrib (And p (Or q r)) = Or
+--   (And (distrib p) (distrib q))
+--   (And (distrib p) (distrib r))
+-- distrib (And (Or q r) p) = Or
+--   (And (distrib p) (distrib q))
+--   (And (distrib p) (distrib r))
+distrib (Or p (And q r)) = And
+  (Or (distrib p) (distrib q))
+  (Or (distrib p) (distrib r))
+distrib (Or (And q r) p) = And
+  (Or (distrib p) (distrib q))
+  (Or (distrib p) (distrib r))
+distrib (And a c)    = And    (distrib a) (distrib c)
+distrib (Impl p q)   = Impl   (distrib p) (distrib q)
+distrib (BiImpl p q) = BiImpl (distrib p) (distrib q)
+distrib (Neg q)      = Neg    (distrib q)
+distrib x            = x
 
 -- | Absorption
 absorb :: (Eq (Prop a)) => Prop a -> Prop a
@@ -114,14 +126,15 @@ _toCNF x            = x
 
 -- | True iff a propositional term contains only literals, ands, ors or negations
 isCNF :: Prop a -> Bool
-isCNF (And l r) = isCNF l && isOr l && isCNF r && isOr r
-  where isOr (Or ll rr) = isOr ll && isOr rr
-        isOr (Lit _)  = True
-        isOr _        = False
-isCNF (Or l r)  = isCNF l && isCNF r
+isCNF (And l r) = (isAnd l && isAnd r) || (isCNF l && isCNF r)
+isCNF (Or l r)  = isCNF l && isCNF r && (not $ isAnd l) && (not $ isAnd r)
 isCNF (Neg n)   = isCNF n
 isCNF (Lit _)   = True
 isCNF _         = False
+
+isAnd :: Prop a -> Bool
+isAnd (And _ _) = True
+isAnd _         = False
 
 
 -- | For any Propositional term, reduce it to CNF and return the CNF form
