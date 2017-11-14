@@ -8,6 +8,7 @@ data Prop a = Lit a                     -- ^ A Literal term
             | Or (Prop a) (Prop a)      -- ^ A Logical Or
             | Impl (Prop a) (Prop a)    -- ^ A Logical Implication
             | BiImpl (Prop a) (Prop a)  -- ^ A Logical Biconditional
+            deriving Eq
 
 instance (Show a) => Show (Prop a) where
   show (Lit a)          = show a
@@ -71,45 +72,66 @@ dubNeg (Neg (Neg a)) = a
 dubNeg a             = a
 
 -- | Distributive laws
-distrib :: Prop a -> Prop a
-distrib (And p (Or q r)) = Or (And p q) (And p r)
-distrib (And (Or q r) p) = Or (And p q) (And p r)
-distrib (Or p (And q r)) = And (Or p q) (Or p r)
-distrib (Or (And q r) p) = And (Or p q) (Or p r)
-distrib x                = x
+distribAnd :: Prop a -> Prop a
+distribAnd (And p (Or q r)) = Or
+  (And (distribAnd p) (distribAnd q))
+  (And (distribAnd p) (distribAnd r))
+distribAnd (And (Or q r) p) = Or
+  (And (distribAnd p) (distribAnd q))
+  (And (distribAnd p) (distribAnd r))
+distribAnd x                = x
+
+distribAnd' :: Prop a -> Prop a
+distribAnd' (And p (Or q r)) = Or (And p q) (And p r)
+distribAnd' (And (Or q r) p) = Or (And p q) (And p r)
+distribAnd' x                = x
+
+distribOr :: Prop a -> Prop a
+distribOr (Or p (And q r)) = And (Or p q) (Or p r)
+distribOr (Or (And q r) p) = And (Or p q) (Or p r)
+distribOr x                = x
 
 -- | Absorption
-absorb :: Prop a -> Prop a
-absorb (Or p (And p q)) = p
-absorb (And p (Or p q)) = p
+absorb :: (Eq (Prop a)) => Prop a -> Prop a
+absorb x@(Or p (And p1 _))
+  | p == p1 = p
+  | otherwise = x
+absorb x@(And p (Or p1 _))
+  | p == p1 = p
+  | otherwise = x
+absorb x = x
 
 -- | Given a propositional formulae convert it into conjunctive normal form
 -- one expression at a time
 _toCNF :: (Show a) => Prop a -> Prop a
 _toCNF x@(Impl _ _)   = elimImp x
 _toCNF x@(BiImpl _ _) = elimBi x
-_toCNF (And l r)    = distrib $ And (_toCNF l) (_toCNF r)
+_toCNF (And l r)    = And (_toCNF l) (_toCNF r)
 _toCNF (Neg x)      = dubNeg $ Neg (toCNF x)
-_toCNF (Or l r)     = distrib $ Or (toCNF l) (toCNF r)
+_toCNF (Or l r)     = Or (toCNF l) (toCNF r)
 _toCNF x            = x
 
 
 -- | True iff a propositional term contains only literals, ands, ors or negations
-isGround :: Prop a -> Bool
-isGround (And l r) = isGround l && isGround r
-isGround (Or l r)  = isGround l && isGround r
-isGround (Neg n)   = isGround n
-isGround (Lit _)   = True
-isGround _         = False
+isCNF :: Prop a -> Bool
+isCNF (And l r) = isCNF l && isOr l && isCNF r && isOr r
+  where isOr (Or ll rr) = isOr ll && isOr rr
+        isOr (Lit _)  = True
+        isOr _        = False
+isCNF (Or l r)  = isCNF l && isCNF r
+isCNF (Neg n)   = isCNF n
+isCNF (Lit _)   = True
+isCNF _         = False
+
 
 -- | For any Propositional term, reduce it to CNF and return the CNF form
 toCNF :: (Show a) => Prop a -> Prop a
-toCNF = head . filter isGround . iterate _toCNF
+toCNF = head . filter isCNF . iterate _toCNF
 
 -- | traverse a propositional term and pack a list with new elements at each and
 toList :: Prop a -> [[a]]
 toList term
-  | not $ isGround term = []
+  | not $ isCNF term = []
   | otherwise = undefined
 
 ex :: Prop Integer
@@ -118,3 +140,8 @@ ex = And
   (Or
    (Impl (Lit 1) (Lit 2))
    (And (Lit 8) (Lit 6)))
+
+ex1 :: Prop Integer
+ex1 = And
+      (Lit 1)
+      (Or (Lit 2) (Lit 3))
