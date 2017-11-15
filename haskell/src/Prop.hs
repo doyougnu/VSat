@@ -136,10 +136,12 @@ toCNF = head . filter isCNF . iterate funcs
   where funcs = dubNeg . distrib . deMorgs . elimImp . elimBi
 
 -- | traverse a propositional term and pack a list with new elements at each and
-toList :: Prop a -> [[a]]
-toList term
-  | not $ isCNF term = []
-  | otherwise = undefined
+toList :: (Show a) => Prop a -> [Prop a]
+toList term = go terms []
+  where
+    terms = toCNF term
+    go (And l r) acc = go l acc ++ go r acc
+    go x acc = x : acc
 
 ex :: Prop String
 ex = And
