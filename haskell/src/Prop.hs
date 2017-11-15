@@ -74,29 +74,33 @@ elimImp x          = x
 
 -- | Demorgans law
 deMorgs :: Prop a -> Prop a
-deMorgs (Neg (And l r)) = Or (Neg l) (Neg r)
+deMorgs (Neg (And l r)) = Or  (Neg l) (Neg r)
 deMorgs (Neg (Or l r))  = And (Neg l) (Neg r)
+deMorgs (And l r)       = And    (deMorgs l) (deMorgs r)
+deMorgs (Or l r)        = Or     (deMorgs l) (deMorgs r)
+deMorgs (Impl p q)      = Impl   (deMorgs p) (deMorgs q)
+deMorgs (BiImpl p q)    = BiImpl (deMorgs p) (deMorgs q)
+deMorgs (Neg q)         = Neg    (deMorgs q)
 deMorgs x               = x
 
 -- | Double Negation law
 dubNeg :: Prop a -> Prop a
 dubNeg (Neg (Neg a)) = a
-dubNeg a             = a
+dubNeg (And l r)    = And    (dubNeg l) (dubNeg r)
+dubNeg (Or l r)     = Or     (dubNeg l) (dubNeg r)
+dubNeg (Impl p q)   = Impl   (dubNeg p) (dubNeg q)
+dubNeg (BiImpl p q) = BiImpl (dubNeg p) (dubNeg q)
+dubNeg x            = x
 
 -- | Distributive laws
 distrib :: Prop a -> Prop a
--- distrib (And p (Or q r)) = Or
---   (And (distrib p) (distrib q))
---   (And (distrib p) (distrib r))
--- distrib (And (Or q r) p) = Or
---   (And (distrib p) (distrib q))
---   (And (distrib p) (distrib r))
 distrib (Or p (And q r)) = And
   (Or (distrib p) (distrib q))
   (Or (distrib p) (distrib r))
 distrib (Or (And q r) p) = And
   (Or (distrib p) (distrib q))
   (Or (distrib p) (distrib r))
+distrib (Or l r)     = Or     (distrib l) (distrib r)
 distrib (And a c)    = And    (distrib a) (distrib c)
 distrib (Impl p q)   = Impl   (distrib p) (distrib q)
 distrib (BiImpl p q) = BiImpl (distrib p) (distrib q)
@@ -113,33 +117,23 @@ absorb x@(And p (Or p1 _))
   | otherwise = x
 absorb x = x
 
--- | Given a propositional formulae convert it into conjunctive normal form
--- one expression at a time
-_toCNF :: (Show a) => Prop a -> Prop a
-_toCNF x@(Impl _ _)   = elimImp x
-_toCNF x@(BiImpl _ _) = elimBi x
-_toCNF (And l r)    = And (_toCNF l) (_toCNF r)
-_toCNF (Neg x)      = dubNeg $ Neg (toCNF x)
-_toCNF (Or l r)     = Or (toCNF l) (toCNF r)
-_toCNF x            = x
-
-
 -- | True iff a propositional term contains only literals, ands, ors or negations
 isCNF :: Prop a -> Bool
 isCNF (And l r) = (isAnd l && isAnd r) || (isCNF l && isCNF r)
-isCNF (Or l r)  = isCNF l && isCNF r && (not $ isAnd l) && (not $ isAnd r)
+isCNF (Or l r)  = isCNF l && isCNF r && not (isAnd l) && not (isAnd r)
 isCNF (Neg n)   = isCNF n
 isCNF (Lit _)   = True
 isCNF _         = False
 
 isAnd :: Prop a -> Bool
-isAnd (And _ _) = True
-isAnd _         = False
+isAnd (And _ _)       = True
+isAnd (Neg (And _ _)) = True
+isAnd _               = False
 
-
--- | For any Propositional term, reduce it to CNF and return the CNF form
+-- | For any Propositional term, reduce it to CNF via logical equivalences
 toCNF :: (Show a) => Prop a -> Prop a
-toCNF = head . filter isCNF . iterate _toCNF
+toCNF = head . filter isCNF . iterate funcs 
+  where funcs = dubNeg . distrib . deMorgs . elimImp . elimBi
 
 -- | traverse a propositional term and pack a list with new elements at each and
 toList :: Prop a -> [[a]]
@@ -147,14 +141,33 @@ toList term
   | not $ isCNF term = []
   | otherwise = undefined
 
-ex :: Prop Integer
+ex :: Prop String
 ex = And
-  (BiImpl (Lit 4) (Lit 1))
+  (BiImpl (Lit "a") (Lit "b"))
   (Or
-   (Impl (Lit 1) (Lit 2))
-   (And (Lit 8) (Lit 6)))
+   (Impl (Lit "b") (Lit "c"))
+   (And (Lit "d") (Lit "e")))
 
 ex1 :: Prop Integer
 ex1 = And
       (Lit 1)
       (Or (Lit 2) (Lit 3))
+
+ex2 :: Prop String
+ex2 = Neg
+      (And
+       (Neg (Lit "p"))
+       (Or
+         (Lit "q")
+         (Neg
+           (And
+            (Lit "r")
+            (Lit "s")))))
+
+ex3 :: Prop String
+ex3 = Or
+      (Lit "q")
+      (Neg
+        (And
+          (Lit "r")
+          (Lit "s")))
