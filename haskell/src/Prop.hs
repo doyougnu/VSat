@@ -125,6 +125,7 @@ isCNF (Neg n)   = isCNF n
 isCNF (Lit _)   = True
 isCNF _         = False
 
+-- | True if the propositional term is an And or the negation of an And
 isAnd :: Prop a -> Bool
 isAnd (And _ _)       = True
 isAnd (Neg (And _ _)) = True
@@ -143,6 +144,7 @@ toList term = go terms []
     go (And l r) acc = go l acc ++ go r acc
     go x acc = x : acc
 
+-- Test Examples
 ex :: Prop String
 ex = And
   (BiImpl (Lit "a") (Lit "b"))
