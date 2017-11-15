@@ -166,8 +166,5 @@ ex2 = Neg
 
 ex3 :: Prop String
 ex3 = Or
-      (Lit "q")
-      (Neg
-        (And
-          (Lit "r")
-          (Lit "s")))
+      (And (Lit "p") (Lit "q"))
+      (And (Lit "p") (Neg (Lit "q")))
