@@ -5,14 +5,15 @@ import qualified Data.Text as D (pack)
 import Data.Maybe (fromJust)
 import Data.List (groupBy, nub)
 import Data.Function (on)
-import Data.Set as S (Set, member, insert, empty) 
-  
+import Data.Set as S (Set, member, insert, empty)
+
 import qualified Control.Foldl as F
 import Control.Monad.State
 
 import CNF
 import TagTree
 import Utils
+import Prop
 
 type Satisfiable = Bool
 
@@ -82,10 +83,10 @@ failures = filter ((==False) . snd)
 
 -- hold an Int to apply labels, hold a set of chars to track which dimension
 -- have been seen already
-type Counter a = (Int, S.Set a) 
+type Counter a = (Int, S.Set a)
 
 emptySt :: Counter Tag
-emptySt = (0, S.empty) 
+emptySt = (0, S.empty)
 
 -- | increment the simple counter state
 inc :: (Ord a) => a -> State (Counter a) ()
@@ -104,3 +105,23 @@ _count (Chc d l r) = do
   l' <- _count l
   r' <- _count r
   return $ Chc (i, d) l' r'
+
+
+-- | And decomposition for a variational prop to plain prop term
+data Elem a b = A a | B b deriving (Show)
+varDim :: a -> Prop (Elem a b)
+varDim = Lit . A
+
+varVal :: b -> Prop (Elem a b)
+varVal = Lit . B
+
+andDecomp :: (Show a, Show b) => V a b -> Prop (Elem a b)
+andDecomp (Chc t l r) = Or
+                        (And (varDim t) (andDecomp l))
+                        (And (Neg $ varDim t) (andDecomp r))
+andDecomp (Obj a)     = varVal a
+
+
+-- | convert a Prop (V a) to a Prop a
+toProp :: Prop (V a b) -> Prop (Elem a b)
+toProp = fmap andDecomp

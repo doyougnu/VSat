@@ -133,16 +133,17 @@ isAnd _               = False
 
 -- | For any Propositional term, reduce it to CNF via logical equivalences
 toCNF :: (Show a) => Prop a -> Prop a
-toCNF = head . filter isCNF . iterate funcs 
+toCNF = head . filter isCNF . iterate funcs
   where funcs = dubNeg . distrib . deMorgs . elimImp . elimBi
 
 -- | traverse a propositional term and pack a list with new elements at each and
-toList :: (Show a) => Prop a -> [Prop a]
-toList term = go terms []
+toListAndSplit :: (Show a) => Prop a -> [Prop a]
+toListAndSplit term = go terms []
   where
     terms = toCNF term
     go (And l r) acc = go l acc ++ go r acc
     go x acc = x : acc
+
 
 -- Test Examples
 ex :: Prop String
