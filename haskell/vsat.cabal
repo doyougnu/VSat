@@ -15,7 +15,7 @@ cabal-version:       >=1.10
 
 library
   hs-source-dirs:      src
-  exposed-modules:     
+  exposed-modules:
   extensions:          NamedFieldPuns
                        , OverloadedStrings
                        , DeriveAnyClass
@@ -26,9 +26,10 @@ library
                      , containers >= 0.5
                      , mtl
                      , turtle >= 1.3
-                     , text 
+                     , text
                      , unix
                      , foldl
+                     , hashable >= 1.2
 
   default-language:    Haskell2010
 

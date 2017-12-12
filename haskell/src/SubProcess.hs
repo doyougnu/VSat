@@ -6,6 +6,7 @@ import Data.Maybe (fromJust)
 import Data.List (groupBy, nub)
 import Data.Function (on)
 import Data.Set as S (Set, member, insert, empty)
+import Data.Hashable (hash)
 
 import qualified Control.Foldl as F
 import Control.Monad.State
