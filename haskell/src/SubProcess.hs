@@ -108,7 +108,12 @@ _count (Chc d l r) = do
 
 
 -- | And decomposition for a variational prop to plain prop term
-data Elem a b = A a | B b deriving (Show)
+data Elem a b = A a | B b
+
+instance (Show a, Show b) => Show (Elem a b) where
+  show (A a) = show a
+  show (B b) = show b
+
 varDim :: a -> Prop (Elem a b)
 varDim = Lit . A
 
@@ -119,9 +124,15 @@ andDecomp :: (Show a, Show b) => V a b -> Prop (Elem a b)
 andDecomp (Chc t l r) = Or
                         (And (varDim t) (andDecomp l))
                         (And (Neg $ varDim t) (andDecomp r))
-andDecomp (Obj a)     = varVal a
+andDecomp (Obj x)     = varVal x
 
 
 -- | convert a Prop (V a) to a Prop a
-toProp :: Prop (V a b) -> Prop (Elem a b)
+toProp :: (Show a, Show b) => Prop (V a b) -> Prop (Prop (Elem a b))
 toProp = fmap andDecomp
+
+-- A test case
+p1 :: Prop (V String Integer)
+p1 = (And
+      (Lit (chc "a" (one 1) (one 2)))
+      (Lit (chc "a" (one 1) (chc "b" (one 2) (one 3)))))

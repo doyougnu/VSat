@@ -3,10 +3,10 @@ module Prop where
 import Utils (parens)
 
 data Prop a = Lit a                     -- ^ A Literal term
-            | Neg (Prop a)              -- ^ Negation of a term
-            | And (Prop a) (Prop a)     -- ^ A Logical And
-            | Or (Prop a) (Prop a)      -- ^ A Logical Or
-            | Impl (Prop a) (Prop a)    -- ^ A Logical Implication
+            | Neg    (Prop a)           -- ^ Negation of a term
+            | And    (Prop a) (Prop a)  -- ^ A Logical And
+            | Or     (Prop a) (Prop a)  -- ^ A Logical Or
+            | Impl   (Prop a) (Prop a)  -- ^ A Logical Implication
             | BiImpl (Prop a) (Prop a)  -- ^ A Logical Biconditional
             deriving Eq
 
