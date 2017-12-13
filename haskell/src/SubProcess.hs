@@ -6,6 +6,8 @@ import Data.Maybe (fromJust)
 import Data.List (groupBy, nub)
 import Data.Function (on)
 import Data.Set as S (Set, member, insert, empty)
+-- import Data.Hashable (hash)
+-- import qualified Data.IntMap as I
 
 import qualified Control.Foldl as F
 import Control.Monad.State
@@ -126,13 +128,15 @@ andDecomp (Chc t l r) = Or
                         (And (Neg $ varDim t) (andDecomp r))
 andDecomp (Obj x)     = varVal x
 
-
 -- | convert a Prop (V a) to a Prop a
-toProp :: (Show a, Show b) => Prop (V a b) -> Prop (Prop (Elem a b))
-toProp = fmap andDecomp
+toProp :: (Show a, Show b) => Prop (V a b) -> Prop (Elem a b)
+toProp = flip (>>=) andDecomp
 
--- A test case
+-- preliminary test cases
 p1 :: Prop (V String Integer)
 p1 = (And
       (Lit (chc "a" (one 1) (one 2)))
       (Lit (chc "a" (one 1) (chc "b" (one 2) (one 3)))))
+
+p2 :: Prop (V String Integer)
+p2 = (Impl (Lit (chc "a" (one 20) (one 40))) (Lit (one 1001)))

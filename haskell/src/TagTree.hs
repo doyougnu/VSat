@@ -1,6 +1,7 @@
 module TagTree where
 
 import Data.Maybe (isJust)
+import Data.String
 import Data.Bifunctor
 
 type Tag = String
@@ -88,6 +89,10 @@ instance Monad (V a) where
   return  = Obj
   Obj a >>= f = f a
   Chc t y n >>= f = Chc t (y >>= f)(n >>= f)
+
+-- instance (Monoid b, Data.String.IsString a) => Monoid (V a b) where
+--   mempty = chc "__" (one mempty) (one mempty)
+--   mappend x y = 
 
 instance (Show a, Show b) => Show (V a b) where
   show (Obj a)      = show a

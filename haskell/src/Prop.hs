@@ -1,6 +1,7 @@
 module Prop where
 
 import Utils (parens)
+import Control.Monad (ap)
 
 data Prop a = Lit a                     -- ^ A Literal term
             | Neg    (Prop a)           -- ^ Negation of a term
@@ -26,6 +27,10 @@ instance Functor Prop where
   fmap f (Impl a c)   = Impl   (f <$> a) (f <$> c)
   fmap f (BiImpl a c) = BiImpl (f <$> a) (f <$> c)
 
+instance Applicative Prop where
+  pure = Lit
+  (<*>) = ap
+
 instance Foldable Prop where
   foldMap f (Lit a)      = f a
   foldMap f (Neg a)      = foldMap f a
@@ -49,6 +54,22 @@ instance Traversable Prop where
   traverse f (Impl l r)   = Impl   <$> traverse f l <*> traverse f r
   traverse f (BiImpl l r) = BiImpl <$> traverse f l <*> traverse f r
 
+join' :: Prop (Prop a) -> Prop a
+join' (Lit x) = x
+join' (Neg x) = Neg $ join' x
+join' (And l r) = And (join' l) (join' r)
+join' (Or l r)  = Or (join' l) (join' r)
+join' (Impl l r) = Impl (join' l) (join' r)
+join' (BiImpl l r) = BiImpl (join' l) (join' r)
+
+instance Monad Prop where
+  return = Lit
+  (Lit x) >>= f = f x
+  (Neg x) >>= f = join' $ fmap f x
+  (And l r)    >>= f = And    (l >>= f) (r >>= f)
+  (Or l r)     >>= f = Or     (l >>= f) (r >>= f)
+  (Impl l r)   >>= f = Impl   (l >>= f) (r >>= f)
+  (BiImpl l r) >>= f = BiImpl (l >>= f) (r >>= f)
 
 -- | Eliminate an biconditionals
 elimBi :: Prop a -> Prop a
