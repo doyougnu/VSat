@@ -90,9 +90,14 @@ instance Monad (V a) where
   Obj a >>= f = f a
   Chc t y n >>= f = Chc t (y >>= f)(n >>= f)
 
--- instance (Monoid b, Data.String.IsString a) => Monoid (V a b) where
---   mempty = chc "__" (one mempty) (one mempty)
---   mappend x y = 
+instance (Monoid b, Data.String.IsString a) => Monoid (V a b) where
+  mempty = one mempty
+  (Obj a) `mappend` (Obj b) = Obj $ a `mappend` b
+  (Chc t l r) `mappend` x@(Obj _) = Chc t (l `mappend` x) (r `mappend` x)
+  x@(Obj _) `mappend` (Chc t l r) = Chc t (l `mappend` x) (r `mappend` x)
+  (Chc t l r) `mappend` (Chc d ll rr) = Chc t
+                                        (Chc d (l `mappend` ll) l)
+                                        (Chc d (r `mappend` rr) r)
 
 instance (Show a, Show b) => Show (V a b) where
   show (Obj a)      = show a
