@@ -118,6 +118,15 @@ andDecomp (Obj x)     = Lit x
 toProp :: (Show a) => Prop (V a a) -> Prop a
 toProp = (=<<) andDecomp
 
+-- | orient the state monad to run the sat solver
+-- TODO: Use StateT, this is a monad transformer
+prepare :: (H.Hashable d, Integral a) => V d a -> Env d (Prop a)
+prepare cs = do
+  recordVars cs
+  let x = unify cs
+  toProp y
+  return y
+
 -- preliminary test cases
 p1 :: Prop (V String Integer)
 p1 = (And
