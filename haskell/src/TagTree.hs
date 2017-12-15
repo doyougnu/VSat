@@ -6,55 +6,55 @@ import Data.Bifunctor
 
 type Tag = String
 
-type Config a = [(a, Bool)]
+type Config d = [(d, Bool)]
 
-data V a b = Obj b
-         | Chc a (V a b) (V a b)
+data V d b = Obj b
+         | Chc d (V d b) (V d b)
          deriving (Eq, Ord)
 
 -- | smart constructor for obj
-one :: b -> V a b
+one :: b -> V d b
 one = Obj
 
 -- | smart constructor for chc
-chc :: a -> V a b -> V a b -> V a b
+chc :: d -> V d b -> V d b -> V d b
 chc = Chc
 
--- | Pull the topmost tag out of a Variational term
-tag :: V a b -> Maybe a
+-- | Pull the topmost tag out of d Variational term
+tag :: V d b -> Maybe d
 tag (Chc t _ _) = Just t
 tag _           = Nothing
 
--- | Pull all the tags out of a Variational term
-tags :: V a b -> [a]
+-- | Pull all the tags out of d Variational term
+tags :: V d b -> [d]
 tags (Chc t y n) = t : tags y ++ tags n
 tags _           = []
 
--- | Given a variational term, return all objects in it
-getAllObjs :: (Integral b) => V a b -> [Integer]
+-- | Given d variational term, return all objects in it
+getAllObjs :: (Integral b) => V d b -> [Integer]
 getAllObjs (Chc _ y n) = concatMap getAllObjs [y, n]
-getAllObjs (Obj a)     = return $ toInteger a
+getAllObjs (Obj d)     = return $ toInteger d
 
--- | Given a variation term, if it is an object, get the object
-getObj :: V a b -> Maybe b
-getObj (Obj a) = Just a
+-- | Given d variation term, if it is an object, get the object
+getObj :: V d b -> Maybe b
+getObj (Obj d) = Just d
 getObj _ = Nothing
 
--- | Given a variational expression, return true if its an object
-isObj :: V a b -> Bool
+-- | Given d variational expression, return true if its an object
+isObj :: V d b -> Bool
 isObj = isJust . getObj
 
--- | Given a variational expression, return true if its an choice
-isChc :: V a b -> Bool
+-- | Given d variational expression, return true if its an choice
+isChc :: V d b -> Bool
 isChc = not . isObj
 
 -- | Wrapper around engine
-prune :: (Eq a) => V a b -> V a b
+prune :: (Eq d) => V d b -> V d b
 prune = pruneTagtree []
 
--- | Given a config and variational expression remove redundant choices
-pruneTagtree :: (Eq a) => Config a -> V a b -> V a b
-pruneTagtree _ (Obj a) = Obj a
+-- | Given d config and variational expression remove redundant choices
+pruneTagtree :: (Eq d) => Config d -> V d b -> V d b
+pruneTagtree _ (Obj d) = Obj d
 pruneTagtree tb (Chc t y n) = case lookup t tb of
                              Nothing -> Chc t
                                         (pruneTagtree ((t,True):tb) y)
@@ -62,47 +62,53 @@ pruneTagtree tb (Chc t y n) = case lookup t tb of
                              Just True -> pruneTagtree tb y
                              Just False -> pruneTagtree tb n
 
--- | Given a configuration and a variational expression perform a selection
-select :: (Eq a) => Config a -> V a b -> Maybe b
-select _ (Obj a) = Just a
+-- | Given d configuration and d variational expression perform d selection
+select :: (Eq d) => Config d -> V d b -> Maybe b
+select _ (Obj d) = Just d
 select tbs (Chc t y n) =
   case lookup t tbs of
     Nothing   -> Nothing
     Just True -> select tbs y
     Just False -> select tbs n
 
-instance Functor (V a) where
-  fmap f (Obj a) = Obj (f a)
+instance Functor (V d) where
+  fmap f (Obj d) = Obj (f d)
   fmap f (Chc t y n) = Chc t (fmap f y) (fmap f n)
 
-
-instance Applicative (V a) where
+instance Applicative (V d) where
   pure = one
   (Obj f) <*> (Obj e) = Obj $ f e
   f@(Obj _) <*> (Chc t l r) = Chc t (f <*> l) (f <*> r)
-  (Chc t fl fr) <*> a@(Obj _) = Chc t (fl <*> a) (fr <*> a)
+  (Chc t fl fr) <*> d@(Obj _) = Chc t (fl <*> d) (fr <*> d)
   (Chc t fl fr) <*> (Chc t' el er) = Chc t
                                      (Chc t' (fl <*> el) (fl <*> er))
                                      (Chc t' (fr <*> el) (fr <*> er))
 
-instance Monad (V a) where
+instance Monad (V d) where
   return  = Obj
-  Obj a >>= f = f a
+  Obj d >>= f = f d
   Chc t y n >>= f = Chc t (y >>= f)(n >>= f)
 
-instance (Monoid b, Data.String.IsString a) => Monoid (V a b) where
+instance (Monoid b, Data.String.IsString d) => Monoid (V d b) where
   mempty = one mempty
-  (Obj a) `mappend` (Obj b) = Obj $ a `mappend` b
+  (Obj d) `mappend` (Obj b) = Obj $ d `mappend` b
   (Chc t l r) `mappend` x@(Obj _) = Chc t (l `mappend` x) (r `mappend` x)
   x@(Obj _) `mappend` (Chc t l r) = Chc t (l `mappend` x) (r `mappend` x)
   (Chc t l r) `mappend` (Chc d ll rr) = Chc t
                                         (Chc d (l `mappend` ll) l)
                                         (Chc d (r `mappend` rr) r)
 
-instance (Show a, Show b) => Show (V a b) where
-  show (Obj a)      = show a
+instance (Show d, Show b) => Show (V d b) where
+  show (Obj d)      = show d
   show (Chc t y n)   = show t ++ "<" ++ show y ++ ", " ++ show n ++ ">"
 
 instance Bifunctor V where
-  bimap _ g (Obj a) = Obj $ g a
+  bimap _ g (Obj d) = Obj $ g d
   bimap f g (Chc t l r) = Chc (f t) (bimap f g l) (bimap f g r)
+
+
+-- | perform a fold over a choice tree collecting the tags
+-- TODO implement profunctor to abstract this out
+foldTags :: V d a -> (d -> b -> b) -> b -> b
+foldTags (Obj _)     _ acc = acc
+foldTags (Chc d l r) f acc = foldTags l f (foldTags r f (f d acc))
