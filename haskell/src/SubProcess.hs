@@ -5,13 +5,12 @@ import qualified Data.Text as D (pack)
 import Data.Maybe (fromJust)
 import Data.List (groupBy, nub)
 import Data.Function (on)
-import Data.Hashable (hash)
-import Data.Bifunctor (first)
+import Data.Hashable as H
+import Data.Bifunctor (bimap)
 import qualified Data.IntMap as I
 
 import qualified Control.Foldl as F
 import Control.Monad.State
-
 
 import CNF
 import TagTree
@@ -90,15 +89,21 @@ type VarDict d = I.IntMap d
 type SatDict = I.IntMap Bool
 
 -- | Global state TODO: Use ReaderT pattern instead of state monad
-type Env d a = State (VarDict d, SatDict) (V d a)
+-- Takes a dimension d, a value a, and a result r
+type Env d r = State (VarDict d, SatDict) r
 
-emptySt :: Env d a
-emptySt = put (I.empty, I.empty)
+emptySt :: (VarDict d, SatDict)
+emptySt = (I.empty, I.empty)
 
--- unify :: Env d a -> Env a a
--- unify = do
---   (vars, sats) <- get
+recordVars :: (H.Hashable d) => V d a -> Env d ()
+recordVars cs = do
+  (vars, ss) <- get
+  let newvars = foldTags cs (\dim acc ->
+                               I.insert (abs . hash $ dim) dim acc) vars
+  put (newvars, ss)
 
+unify :: (Integral a, H.Hashable d) => V d a -> V Integer Integer
+unify = bimap (toInteger . abs . hash) toInteger
 
 -- | Unify the dimension and value in d choice to the same type using bifunctor
 -- add all dimensions and their hashes to the variable dictionary
