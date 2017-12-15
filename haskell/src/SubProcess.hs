@@ -102,24 +102,21 @@ recordVars cs = do
                                I.insert (abs . hash $ dim) dim acc) vars
   put (newvars, ss)
 
+-- | Unify the dimension and value in d choice to the same type using bifunctor
+-- add all dimensions and their hashes to the variable dictionary
 unify :: (Integral a, H.Hashable d) => V d a -> V Integer Integer
 unify = bimap (toInteger . abs . hash) toInteger
 
--- | Unify the dimension and value in d choice to the same type using bifunctor
--- add all dimensions and their hashes to the variable dictionary
--- unify :: V d a -> VarDict d -> V d d
--- unify cs dict = first (\dim -> I.insert (abs . hash $ dim) dim dict) cs
-
 -- | And Decomposition, convert choices to propositional terms
--- andDecomp :: (Show d, Show a) => V d a -> Prop a
--- andDecomp (Chc t l r) = Or
---                         (And      t  (andDecomp l))
---                         (And (Neg t) (andDecomp r))
--- andDecomp (Obj x)     = varVal x
+andDecomp :: (Show a) => V a a -> Prop a
+andDecomp (Chc t l r) = Or
+                        (And (Lit t)       (andDecomp l))
+                        (And (Neg $ Lit t) (andDecomp r))
+andDecomp (Obj x)     = Lit x
 
 -- | convert d Prop (V d) to d Prop d
--- toProp :: (Show d, Show a) => Prop (V d a) -> Prop (Elem d a)
--- toProp = (=<<) andDecomp
+toProp :: (Show a) => Prop (V a a) -> Prop a
+toProp = (=<<) andDecomp
 
 -- preliminary test cases
 p1 :: Prop (V String Integer)
