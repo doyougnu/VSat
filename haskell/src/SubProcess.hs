@@ -117,16 +117,16 @@ andDecomp (Chc t l r) = Or
                         (And (Neg $ Lit t) (andDecomp r))
 andDecomp (Obj x)     = Lit x
 
--- | convert d Prop (V d) to d Prop d
-toProp :: (Show a) => Prop (V a a) -> Prop a
-toProp = (=<<) andDecomp
-
 -- | orient the state monad to run the sat solver
-prepare :: (H.Hashable d, Integral a, Monad m)
+toProp :: (H.Hashable d, Integral a, Monad m)
   => Prop (V d a) -> m (Prop Integer)
-prepare cs = do
-  _ <- return $ fmap recordVars cs -- pack the state with var info
-  cs >>= (andDecomp . unify)       -- now transform V terms to SAT solver ready
+toProp cs = return $ cs >>= (andDecomp . unify)
+
+runM :: (H.Hashable d, Show d, Integral a)
+  => Prop (V d a) -> Env d (Prop Integer)
+runM cs = do
+  forM_ cs recordVars
+  toProp cs
 
 -- preliminary test cases
 p1 :: Prop (V String Integer)
