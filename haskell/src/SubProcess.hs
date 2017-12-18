@@ -90,7 +90,10 @@ type SatDict = I.IntMap Bool
 
 -- | Global state TODO: Use ReaderT pattern instead of state monad
 -- Takes a dimension d, a value a, and a result r
-type Env d r = State (VarDict d, SatDict) r
+type Env d r = StateT (VarDict d, SatDict) Prop r
+
+runEnv :: StateT (VarDict d, SatDict) m a -> m (a, (VarDict d, SatDict))
+runEnv m = runStateT m emptySt
 
 emptySt :: (VarDict d, SatDict)
 emptySt = (I.empty, I.empty)
@@ -119,19 +122,17 @@ toProp :: (Show a) => Prop (V a a) -> Prop a
 toProp = (=<<) andDecomp
 
 -- | orient the state monad to run the sat solver
--- TODO: Use StateT, this is a monad transformer
-prepare :: (H.Hashable d, Integral a) => V d a -> Env d (Prop a)
+prepare :: (H.Hashable d, Integral a, Monad m)
+  => Prop (V d a) -> m (Prop Integer)
 prepare cs = do
-  recordVars cs
-  let x = unify cs
-  toProp y
-  return y
+  _ <- return $ fmap recordVars cs -- pack the state with var info
+  cs >>= (andDecomp . unify)       -- now transform V terms to SAT solver ready
 
 -- preliminary test cases
 p1 :: Prop (V String Integer)
-p1 = (And
+p1 = And
       (Lit (chc "d" (one 1) (one 2)))
-      (Lit (chc "d" (one 1) (chc "b" (one 2) (one 3)))))
+      (Lit (chc "d" (one 1) (chc "b" (one 2) (one 3))))
 
 p2 :: Prop (V String Integer)
-p2 = (Impl (Lit (chc "d" (one 20) (one 40))) (Lit (one 1001)))
+p2 = Impl (Lit (chc "d" (one 20) (one 40))) (Lit (one 1001))
