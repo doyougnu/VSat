@@ -103,12 +103,12 @@ emptySt = (I.empty, I.empty)
 -- | Given a variational term pack an initial state in the environment Monad
 recordVars :: (H.Hashable d) => V d a -> Env d ()
 recordVars cs = do
-  (vars, ss) <- get
-  let newvars = foldTags cs (\dim acc ->
-                               I.insert (abs . hash $ dim) dim acc) vars
-  let newss = foldTags cs (\dim acc ->
-                             I.insert (negate . hash $ dim) False $
-                             I.insert (hash dim) False acc) ss
+  st <- get
+  -- TODO: use a let binding for the hashed dimension variable
+  let (newvars, newss) = foldTags cs (\dim (_new_vars, _new_ss) ->
+                               (I.insert (abs . hash $ dim) dim _new_vars
+                               , I.insert (negate . hash $ dim) False $
+                                 I.insert (hash dim) False _new_ss)) st
   put (newvars, newss)
 
 -- | Unify the dimension and value in d choice to the same type using bifunctor
