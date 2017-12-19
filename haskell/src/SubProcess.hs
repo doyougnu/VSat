@@ -127,10 +127,16 @@ andDecomp (Obj x)     = Lit x
 toProp :: (H.Hashable d, Integral a, Monad m) => Prop (V d a) -> m (Prop Integer)
 toProp cs = return $ cs >>= (andDecomp . unify)
 
-runM :: (H.Hashable d, Integral a) => Prop (V d a) -> Env d (Prop Integer)
-runM cs = do
+-- | given a variational prop term iterate over the choices, pack the initial 
+-- environment, then convert the choices to a plain prop term using andDecomp
+initEnv :: (H.Hashable d, Integral a) => Prop (V d a) -> Env d (Prop Integer)
+initEnv cs = do
   forM_ cs recordVars
   toProp cs
+
+-- | convert  propositional term to a DIMACS CNF term
+propToCNF :: Prop a -> CNF a
+propToCNF
 
 -- preliminary test cases
 p1 :: Prop (V String Integer)

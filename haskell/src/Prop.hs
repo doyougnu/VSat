@@ -11,6 +11,8 @@ data Prop a = Lit a                     -- ^ A Literal term
             | BiImpl (Prop a) (Prop a)  -- ^ A Logical Biconditional
             deriving Eq
 
+-- TODO think about creating a Grounded Prop a type to enforce CNF form
+
 instance (Show a) => Show (Prop a) where
   show (Lit a)          = show a
   show (Neg a)          = "-" ++ show a
@@ -165,6 +167,13 @@ toListAndSplit term = go terms []
     go (And l r) acc = go l acc ++ go r acc
     go x acc = x : acc
 
+orSplit :: (Num a) => [Prop a] -> [[a]]
+orSplit = fmap helper
+  where
+    helper :: (Num a) => Prop a -> [a]
+    helper (Lit x)  = [x]
+    helper (Neg x)  = negate <$> helper x
+    helper (Or l r) = helper l ++ helper r
 
 -- Test Examples
 ex :: Prop String
