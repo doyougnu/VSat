@@ -86,7 +86,7 @@ failures = filter ((==False) . snd)
 -- hold an Int to apply labels, hold d set of chars to track which dimension
 -- have been seen already
 type VarDict d = I.IntMap d
-type SatDict = I.IntMap Bool
+type SatDict = I.IntMap Satisfiable
 
 -- | Global state TODO: Use ReaderT pattern instead of state monad
 -- Takes a dimension d, a value a, and a result r
@@ -95,15 +95,21 @@ type Env d r = StateT (VarDict d, SatDict) Prop r
 runEnv :: StateT (VarDict d, SatDict) m a -> m (a, (VarDict d, SatDict))
 runEnv m = runStateT m emptySt
 
+-- | An Empty env state is a dictionary of variable names and their hashes and
+-- a dictionary for each hash that holds the results of the sat solver
 emptySt :: (VarDict d, SatDict)
 emptySt = (I.empty, I.empty)
 
+-- | Given a variational term pack an initial state in the environment Monad
 recordVars :: (H.Hashable d) => V d a -> Env d ()
 recordVars cs = do
   (vars, ss) <- get
   let newvars = foldTags cs (\dim acc ->
                                I.insert (abs . hash $ dim) dim acc) vars
-  put (newvars, ss)
+  let newss = foldTags cs (\dim acc ->
+                             I.insert (negate . hash $ dim) False $
+                             I.insert (hash dim) False acc) ss
+  put (newvars, newss)
 
 -- | Unify the dimension and value in d choice to the same type using bifunctor
 -- add all dimensions and their hashes to the variable dictionary
@@ -118,12 +124,10 @@ andDecomp (Chc t l r) = Or
 andDecomp (Obj x)     = Lit x
 
 -- | orient the state monad to run the sat solver
-toProp :: (H.Hashable d, Integral a, Monad m)
-  => Prop (V d a) -> m (Prop Integer)
+toProp :: (H.Hashable d, Integral a, Monad m) => Prop (V d a) -> m (Prop Integer)
 toProp cs = return $ cs >>= (andDecomp . unify)
 
-runM :: (H.Hashable d, Show d, Integral a)
-  => Prop (V d a) -> Env d (Prop Integer)
+runM :: (H.Hashable d, Integral a) => Prop (V d a) -> Env d (Prop Integer)
 runM cs = do
   forM_ cs recordVars
   toProp cs
