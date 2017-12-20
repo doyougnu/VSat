@@ -1,7 +1,7 @@
 module Prop where
 
 import Utils (parens)
-import Control.Monad (ap)
+import Control.Monad (ap, join)
 
 -- | A general propositional language that has all the usual suspects
 data Prop a = Lit a                     -- ^ A Literal term
@@ -11,6 +11,8 @@ data Prop a = Lit a                     -- ^ A Literal term
             | Impl   (Prop a) (Prop a)  -- ^ A Logical Implication
             | BiImpl (Prop a) (Prop a)  -- ^ A Logical Biconditional
             deriving Eq
+
+newtype PropT m a = PropT {runPropT :: m (Prop a) }
 
 -- | A Propositional Language that only allows grounded terms
 data GProp a = GLit a                   -- ^ A grounded prop literal
@@ -39,6 +41,15 @@ instance Functor Prop where
   fmap f (Or l r)     = Or     (f <$> l) (f <$> r)
   fmap f (Impl a c)   = Impl   (f <$> a) (f <$> c)
   fmap f (BiImpl a c) = BiImpl (f <$> a) (f <$> c)
+
+instance (Monad m) => Functor (PropT m) where
+  fmap f ps = PropT $ do
+    props <- runPropT ps
+    return $ fmap f props
+
+instance (Monad m) => Applicative (PropT m) where
+  pure = return
+  (<*>) = ap
 
 instance Applicative Prop where
   pure = Lit
@@ -70,9 +81,9 @@ instance Traversable Prop where
 join' :: Prop (Prop a) -> Prop a
 join' (Lit x) = x
 join' (Neg x) = Neg $ join' x
-join' (And l r) = And (join' l) (join' r)
-join' (Or l r)  = Or (join' l) (join' r)
-join' (Impl l r) = Impl (join' l) (join' r)
+join' (And l r)    = And    (join' l) (join' r)
+join' (Or l r)     = Or     (join' l) (join' r)
+join' (Impl l r)   = Impl   (join' l) (join' r)
 join' (BiImpl l r) = BiImpl (join' l) (join' r)
 
 instance Monad Prop where
@@ -83,6 +94,16 @@ instance Monad Prop where
   (Or l r)     >>= f = Or     (l >>= f) (r >>= f)
   (Impl l r)   >>= f = Impl   (l >>= f) (r >>= f)
   (BiImpl l r) >>= f = BiImpl (l >>= f) (r >>= f)
+
+instance (Monad m) => Monad (PropT m) where
+  return = PropT . return . Lit
+  ps >>= f = do
+    props <- runPropT ps
+    case props of
+      (Lit x) -> PropT . runPropT $ f x
+      (Neg x) -> do
+        x' <- x
+        PropT . runPropT $ f x'
 
 -- | Eliminate an biconditionals
 elimBi :: Prop a -> Prop a
@@ -194,7 +215,7 @@ orSplit = fmap helper
     helper (GLit x)  = [x]
     helper (GNLit x) = [negate x]
     helper (GOr l r) = helper l ++ helper r
-    helper _         = []
+    helper _         = [] --this will only ever be an AND, fix the case later
 
 -- Test Examples
 ex :: Prop String
