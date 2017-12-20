@@ -11,7 +11,10 @@ data Prop a = Lit a                     -- ^ A Literal term
             | BiImpl (Prop a) (Prop a)  -- ^ A Logical Biconditional
             deriving Eq
 
--- TODO think about creating a Grounded Prop a type to enforce CNF form
+data GProp a = GLit a                   -- ^ A grounded prop literal
+             | GNLit a                  -- ^ A negated grounded literal
+             | GAnd (GProp a) (GProp a) -- ^ A grounded and term
+             | GOr  (GProp a) (GProp a) -- ^ a ground or term
 
 instance (Show a) => Show (Prop a) where
   show (Lit a)          = show a
@@ -20,6 +23,12 @@ instance (Show a) => Show (Prop a) where
   show (Or x y)         = parens $ show x ++ " || " ++ show y
   show (Impl ant con)   = parens $ show ant ++ " -> " ++ show con
   show (BiImpl ant con) = parens $ show ant ++ " <-> " ++ show con
+
+instance (Show a) => Show (GProp a) where
+  show (GLit a)          = show a
+  show (GNLit a)          = "-" ++ show a
+  show (GAnd x y)        = parens $ show x ++ " && " ++ show y
+  show (GOr x y)         = parens $ show x ++ " || " ++ show y
 
 instance Functor Prop where
   fmap f (Lit a)      = Lit $ f a
@@ -159,21 +168,29 @@ toCNF :: (Show a) => Prop a -> Prop a
 toCNF = head . filter isCNF . iterate funcs
   where funcs = dubNeg . distrib . deMorgs . elimImp . elimBi
 
+-- | Convert a propositional term to a grounded term
+ground :: (Show a) => Prop a -> GProp a
+ground (Lit x)       = GLit x
+ground (Neg (Lit x)) = GNLit x
+ground (Or l r)      = GOr  (ground l) (ground r)
+ground (And l r)     = GAnd (ground l) (ground r)
+ground x             = ground $ toCNF x
+
 -- | traverse a propositional term and pack a list with new elements at each and
-toListAndSplit :: (Show a) => Prop a -> [Prop a]
-toListAndSplit term = go terms []
+toListAndSplit :: (Show a) => GProp a -> [GProp a]
+toListAndSplit term = go term []
   where
-    terms = toCNF term
-    go (And l r) acc = go l acc ++ go r acc
+    go (GAnd l r) acc = go l acc ++ go r acc
     go x acc = x : acc
 
-orSplit :: (Num a) => [Prop a] -> [[a]]
+orSplit :: (Num a) => [GProp a] -> [[a]]
 orSplit = fmap helper
   where
-    helper :: (Num a) => Prop a -> [a]
-    helper (Lit x)  = [x]
-    helper (Neg x)  = negate <$> helper x
-    helper (Or l r) = helper l ++ helper r
+    helper :: (Num a) => GProp a -> [a]
+    helper (GLit x)  = [x]
+    helper (GNLit x) = [negate x]
+    helper (GOr l r) = helper l ++ helper r
+    helper _         = []
 
 -- Test Examples
 ex :: Prop String
