@@ -2,31 +2,30 @@ module CNF where
 
 import qualified Data.Set as S
 
-import TagTree
 import Utils
 
 -- | Syntax
-data CNF a = CNF { comment :: String        -- ^ A Comment
-                 , vars :: S.Set Integer    -- ^ Unique Variables
-                 , clauses :: [[a Integer]] -- ^ Clauses
-                 }
+data CNF = CNF { comment :: String        -- ^ A Comment
+               , vars :: S.Set Integer    -- ^ Unique Variables
+               , clauses :: [[Integer]] -- ^ Clauses
+               }
 
 -- | An empty CNF
-emptyCNF :: CNF a
+emptyCNF :: CNF
 emptyCNF = CNF { comment = ""
                , vars = S.empty
                , clauses = [[]]
                }
 
 -- | Given a CNF generate the variable set from the clauses
-numVars :: CNF (V Tag) -> S.Set Integer
-numVars = S.fromList . concatMap (fmap abs . concatMap getAllObjs) . clauses -- fix this later
+genVars :: CNF -> CNF
+genVars CNF{comment=cs, vars=_, clauses=cls} = CNF { comment = cs
+                                                    , vars    = genVars' cls
+                                                    , clauses = cls
+                                                    }
+  where genVars' = S.fromList . concatMap (fmap abs)
 
-toVars' :: CNF Plain -> S.Set Integer
-toVars' cnf = S.fromList . concatMap (fmap $ abs . yank) $ clauses cnf -- fix this later
-  where yank (Plain a) = a
-
-instance (Show (a Integer)) => Show (CNF a) where
+instance Show CNF where
   show CNF{comment, vars, clauses} =
     mconcat [ smtComment comment
             , "p cnf " -- required concrete syntax
@@ -37,7 +36,7 @@ instance (Show (a Integer)) => Show (CNF a) where
             ]
 
 -- | Monoid CNF and SAT are based on monoids, and are therefore monoids
-instance Monoid (CNF b) where
+instance Monoid CNF where
   mempty = emptyCNF
   mappend
     CNF{comment=lcomment, vars=lvars, clauses=lclauses}
@@ -49,58 +48,10 @@ instance Monoid (CNF b) where
   mconcat = Prelude.foldr1 mappend
 
 -- | Plain Examples
-plainEx1 :: CNF Plain
+plainEx1 :: CNF
 plainEx1 = CNF { comment = "I'm a comment"
                , vars = S.fromList [1, 2]
-               , clauses = [ [plain 1, plain 2]
-                           , [plain (-1), plain 2]
+               , clauses = [ [1, 2]
+                           , [(-1), 2]
                            ]
                }
-
--- | Some Variational Examples
-vEx1 :: CNF (V Tag)
-vEx1 = CNF { comment = "I'm a comment"
-           , vars = numVars vEx1
-           , clauses = [ [one 1, one 2]
-                       , [chc "a" (one 3) (one (-1)), one 2]
-                       ]
-           }
-
-vEx2 :: CNF (V Tag)
-vEx2 = CNF { comment = "This one has two choice expressions"
-           , vars = numVars vEx2
-           , clauses = [ [chc "a" (one 1) (one (-1)), one 2, one 3]
-                       , [chc "b" (one 2) (one 3), one 1, one (-1)]
-                       , one <$> [1, (-2), 3]
-                       ]
-           }
-
-vEx3 :: CNF (V Tag)
-vEx3 = CNF { comment = "This one has two choice expressions, one nested"
-           , vars = numVars vEx3
-           , clauses = [ [ chc "a" (one 1) (chc "a" (one 1) (one (-1)))
-                         , one 2
-                         , one 3
-                         ]
-                       , [ chc "b" (one 2) (chc "c" (one 2) (one (-3)))
-                         , one 1, one (-1)
-                         ]
-                       , one <$> [1, -2, 3]
-                       ]
-           }
-
-vEx4 :: CNF (V Tag)
-vEx4 = CNF { comment = "This one is not solvable!"
-           , vars = numVars vEx4
-           , clauses = [ [one 1]
-                       , [one (-1)]
-                       ]
-           }
-
-vEx5 :: CNF (V Tag)
-vEx5 = CNF { comment = "Unsatisfiable based on Choices"
-           , vars = numVars vEx5
-           , clauses = [ [ chc "z" (one 1) (one (-1))]
-                       , [chc "zz" (one 1) (one (-1))]
-                       ]
-           }
