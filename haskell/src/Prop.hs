@@ -3,6 +3,7 @@ module Prop where
 import Utils (parens)
 import Control.Monad (ap)
 
+-- | A general propositional language that has all the usual suspects
 data Prop a = Lit a                     -- ^ A Literal term
             | Neg    (Prop a)           -- ^ Negation of a term
             | And    (Prop a) (Prop a)  -- ^ A Logical And
@@ -11,6 +12,7 @@ data Prop a = Lit a                     -- ^ A Literal term
             | BiImpl (Prop a) (Prop a)  -- ^ A Logical Biconditional
             deriving Eq
 
+-- | A Propositional Language that only allows grounded terms
 data GProp a = GLit a                   -- ^ A grounded prop literal
              | GNLit a                  -- ^ A negated grounded literal
              | GAnd (GProp a) (GProp a) -- ^ A grounded and term
@@ -183,6 +185,8 @@ toListAndSplit term = go term []
     go (GAnd l r) acc = go l acc ++ go r acc
     go x acc = x : acc
 
+-- | traverse a grounded term that represents Ands via a list, and replace ORs
+-- with an inner list, see DIMACs CNF form
 orSplit :: (Num a) => [GProp a] -> [[a]]
 orSplit = fmap helper
   where
