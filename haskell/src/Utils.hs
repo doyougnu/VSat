@@ -2,13 +2,6 @@ module Utils where
 
 import qualified Data.Set as S
 
-newtype Plain a = Plain a  -- ^ a plain, non-variational value
-             deriving (Eq, Ord)
-
--- | smart constructor for plain values
-plain :: a -> Plain a
-plain = Plain
-
 -- | Wrap parenthesis around any string
 parens :: String -> String
 parens str = "(" ++ str ++ ")"
