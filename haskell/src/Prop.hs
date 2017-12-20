@@ -1,7 +1,7 @@
 module Prop where
 
 import Utils (parens)
-import Control.Monad (ap, join)
+import Control.Monad (ap)
 
 -- | A general propositional language that has all the usual suspects
 data Prop a = Lit a                     -- ^ A Literal term
@@ -39,11 +39,6 @@ instance Functor Prop where
   fmap f (Or l r)     = Or     (f <$> l) (f <$> r)
   fmap f (Impl a c)   = Impl   (f <$> a) (f <$> c)
   fmap f (BiImpl a c) = BiImpl (f <$> a) (f <$> c)
-
-instance (Monad m) => Functor (PropT m) where
-  fmap f ps = PropT $ do
-    props <- runPropT ps
-    return $ fmap f props
 
 instance Applicative Prop where
   pure = Lit

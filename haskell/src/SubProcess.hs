@@ -15,7 +15,6 @@ import Control.Monad.State
 
 import CNF
 import TagTree
--- import Utils
 import Prop
 
 type Satisfiable = Bool
@@ -51,7 +50,7 @@ type SatDict = I.IntMap Satisfiable
 
 -- | Global state TODO: Use ReaderT pattern instead of state monad
 -- Takes a dimension d, a value a, and a result r
-type Env d r = StateT (VarDict d, SatDict) Prop r
+type Env d r = StateT (VarDict d, SatDict) IO r
 
 runEnv :: StateT (VarDict d, SatDict) m a -> m (a, (VarDict d, SatDict))
 runEnv m = runStateT m emptySt
@@ -88,12 +87,16 @@ andDecomp (Obj x)     = Lit x
 toProp :: (H.Hashable d, Integral a, Monad m) => Prop (V d a) -> m (Prop Integer)
 toProp cs = return $ cs >>= (andDecomp . unify)
 
--- | given a variational prop term iterate over the choices, pack the initial 
+-- | given a variational prop term iterate over the choices, pack the initial
 -- environment, then convert the choices to a plain prop term using andDecomp
 initEnv :: (H.Hashable d, Integral a) => Prop (V d a) -> Env d (Prop Integer)
 initEnv cs = do
   forM_ cs recordVars
-  toProp cs
+  cs' <- toProp cs
+  let cnf = propToCNF "does it run?" cs'
+  lift $ runPMinisat cnf >>= putStrLn . show
+  return cs'
+
 
 -- | convert  propositional term to a DIMACS CNF term
 propToCNF :: (Num a, Integral a) => String -> Prop a -> CNF
@@ -104,10 +107,9 @@ propToCNF str ps = genVars cnf
               , clauses = orSplit . toListAndSplit . ground $ toInteger <$> ps
               }
 
--- | main workhorse for running the SAT solver
-work :: Env d (Prop Integer)
-work = do
-  
+-- -- | main workhorse for running the SAT solver
+-- work :: Env d (Prop Integer)
+-- work = do
 
 -- preliminary test cases
 p1 :: Prop (V String Integer)
