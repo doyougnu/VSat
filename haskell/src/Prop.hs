@@ -17,6 +17,7 @@ data GProp a = GLit a                   -- ^ A grounded prop literal
              | GNLit a                  -- ^ A negated grounded literal
              | GAnd (GProp a) (GProp a) -- ^ A grounded and term
              | GOr  (GProp a) (GProp a) -- ^ a ground or term
+             deriving Functor
 
 instance (Show a) => Show (Prop a) where
   show (Lit a)          = show a
@@ -187,6 +188,11 @@ orSplit = fmap helper
     helper (GNLit x) = [negate x]
     helper (GOr l r) = helper l ++ helper r
     helper _         = [] --this will only ever be an AND, fix the case later
+
+-- | Take any propositional term, ground it, then massage it until it fits the
+-- DIMACS CNF clause form
+toDimacsProp :: (Num a, Show a) => Prop a -> [[a]]
+toDimacsProp = orSplit . toListAndSplit . ground
 
 -- Test Examples
 ex :: Prop String

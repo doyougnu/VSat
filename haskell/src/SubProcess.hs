@@ -93,18 +93,18 @@ initEnv :: (H.Hashable d, Integral a) => Prop (V d a) -> Env d (Prop Integer)
 initEnv cs = do
   forM_ cs recordVars
   cs' <- toProp cs
-  let cnf = propToCNF "does it run?" cs'
+  let cnf = propToCNF "does it run?" $ ground cs'
   lift $ runPMinisat cnf >>= putStrLn . show
   return cs'
 
 
 -- | convert  propositional term to a DIMACS CNF term
-propToCNF :: (Num a, Integral a) => String -> Prop a -> CNF
+propToCNF :: (Num a, Integral a) => String -> GProp a -> CNF
 propToCNF str ps = genVars cnf
   where
     cnf = CNF { comment = str
               , vars    = S.fromList [0]
-              , clauses = orSplit . toListAndSplit . ground $ toInteger <$> ps
+              , clauses = orSplit . toListAndSplit $ toInteger <$> ps
               }
 
 -- -- | main workhorse for running the SAT solver
