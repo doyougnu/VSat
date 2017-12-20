@@ -2,19 +2,20 @@ module SubProcess where
 
 import qualified Turtle as T
 import qualified Data.Text as D (pack)
-import Data.Maybe (fromJust)
-import Data.List (groupBy, nub)
-import Data.Function (on)
+-- import Data.Maybe (fromJust)
+-- import Data.List (groupBy, nub)
+-- import Data.Function (on)
 import Data.Hashable as H
 import Data.Bifunctor (bimap)
 import qualified Data.IntMap as I
+import qualified Data.Set as S (fromList)
 
 import qualified Control.Foldl as F
 import Control.Monad.State
 
 import CNF
 import TagTree
-import Utils
+-- import Utils
 import Prop
 
 type Satisfiable = Bool
@@ -26,58 +27,18 @@ type Result d = (Config d, Satisfiable)
 toLine :: Show d => d -> T.Shell T.Line
 toLine = T.select . T.textToLines . D.pack . show
 
--- | Given d Variational CNF generate d config for all choices
-genConfigs :: (Eq d) => CNF (V d) -> [Config d]
-genConfigs cnf = sequence $ groupBy ((==) `on` fst) configs
-  where tags' = nub . concatMap tags . concat . filter (any isChc) $ clauses cnf
-        configs = (,) <$> tags' <*> [True, False]
-
--- | Given d config and d Variational CNF, transform to d Plain CNF
-toPlain :: (Eq d) => Config d -> CNF (V d) -> CNF Plain
-toPlain cs CNF{ comment = c
-              , vars    = _
-              ,clauses = cl
-              } = new
-  where new = CNF { comment = c
-                  , vars = toVars' new
-                  , clauses = _genPlainFormula cs cl
-                  }
-
--- | given d configuration and formulas generate the plain formulas
-_genPlainFormula :: (Eq d) => Config d -> [[V d b]] -> [[Plain b]]
-_genPlainFormula cs = fmap (fmap $ plain . fromJust . select cs)
-
--- | Function for presentation live coding
-_plains :: (Eq d) => CNF (V d) -> [CNF Plain]
-_plains c = flip toPlain c <$> genConfigs c
-
 -- | Take any Sat solver that can be called from shell, and d plain CNF term
 -- and run the CNF through the specified SAT solver
-run :: (Show (d Integer)) => T.Text -> CNF d -> IO Satisfiable
+run :: T.Text -> CNF -> IO Satisfiable
 run sat cnf = do
   let output = T.inproc sat [] (toLine cnf)
       res = T.grep (T.has "UNSATISFIABLE") output
   res' <- T.fold res F.length
   return $ (/=1) res'
 
--- | take any Sat solver that can be called from shell, and any variational CNF
--- term, and run all combinations of the CNF through the SAT solver
-runV :: (Eq d) => T.Text -> CNF (V d) -> IO [Result d]
-runV solver cnf = do
-  results <- sequence $ run solver <$> plains
-  let returnVals = zip configs results
-  return returnVals
-  where
-    configs = genConfigs cnf
-    plains = flip toPlain cnf <$> configs
-
 -- | Take any plain CNF term and run it through the SAT solver
-runPMinisat :: CNF Plain -> IO Satisfiable
+runPMinisat :: CNF -> IO Satisfiable
 runPMinisat = run "minisat"
-
--- | Take any variational CNF term and run it through the SAT solver
-runVMinisat :: (Eq d) => CNF (V d) -> IO [Result d]
-runVMinisat = runV "minisat"
 
 -- | Given d list of results, only return the failures
 failures :: [Result d] -> [Result d]
@@ -135,8 +96,18 @@ initEnv cs = do
   toProp cs
 
 -- | convert  propositional term to a DIMACS CNF term
-propToCNF :: Prop a -> CNF a
-propToCNF
+propToCNF :: (Num a, Integral a) => String -> Prop a -> CNF
+propToCNF str ps = genVars cnf
+  where
+    cnf = CNF { comment = str
+              , vars    = S.fromList [0]
+              , clauses = orSplit . toListAndSplit . ground $ toInteger <$> ps
+              }
+
+-- | main workhorse for running the SAT solver
+work :: Env d (Prop Integer)
+work = do
+  
 
 -- preliminary test cases
 p1 :: Prop (V String Integer)
