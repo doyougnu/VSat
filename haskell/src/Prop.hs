@@ -12,8 +12,6 @@ data Prop a = Lit a                     -- ^ A Literal term
             | BiImpl (Prop a) (Prop a)  -- ^ A Logical Biconditional
             deriving Eq
 
-newtype PropT m a = PropT {runPropT :: m (Prop a) }
-
 -- | A Propositional Language that only allows grounded terms
 data GProp a = GLit a                   -- ^ A grounded prop literal
              | GNLit a                  -- ^ A negated grounded literal
@@ -47,10 +45,6 @@ instance (Monad m) => Functor (PropT m) where
     props <- runPropT ps
     return $ fmap f props
 
-instance (Monad m) => Applicative (PropT m) where
-  pure = return
-  (<*>) = ap
-
 instance Applicative Prop where
   pure = Lit
   (<*>) = ap
@@ -78,32 +72,14 @@ instance Traversable Prop where
   traverse f (Impl l r)   = Impl   <$> traverse f l <*> traverse f r
   traverse f (BiImpl l r) = BiImpl <$> traverse f l <*> traverse f r
 
-join' :: Prop (Prop a) -> Prop a
-join' (Lit x) = x
-join' (Neg x) = Neg $ join' x
-join' (And l r)    = And    (join' l) (join' r)
-join' (Or l r)     = Or     (join' l) (join' r)
-join' (Impl l r)   = Impl   (join' l) (join' r)
-join' (BiImpl l r) = BiImpl (join' l) (join' r)
-
 instance Monad Prop where
   return = Lit
   (Lit x) >>= f = f x
-  (Neg x) >>= f = join' $ fmap f x
+  (Neg x) >>= f = Neg $ x >>= f
   (And l r)    >>= f = And    (l >>= f) (r >>= f)
   (Or l r)     >>= f = Or     (l >>= f) (r >>= f)
   (Impl l r)   >>= f = Impl   (l >>= f) (r >>= f)
   (BiImpl l r) >>= f = BiImpl (l >>= f) (r >>= f)
-
-instance (Monad m) => Monad (PropT m) where
-  return = PropT . return . Lit
-  ps >>= f = do
-    props <- runPropT ps
-    case props of
-      (Lit x) -> PropT . runPropT $ f x
-      (Neg x) -> do
-        x' <- x
-        PropT . runPropT $ f x'
 
 -- | Eliminate an biconditionals
 elimBi :: Prop a -> Prop a
