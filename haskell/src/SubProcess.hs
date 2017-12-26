@@ -9,9 +9,9 @@ import Data.Hashable as H
 import Data.Bifunctor (bimap)
 import qualified Data.IntMap as I
 import qualified Data.Set as S (fromList)
-
 import qualified Control.Foldl as F
-import Control.Monad.State
+import Control.Monad.RWS.Lazy
+
 
 import CNF
 import TagTree
@@ -46,30 +46,37 @@ failures = filter ((==False) . snd)
 -- hold an Int to apply labels, hold d set of chars to track which dimension
 -- have been seen already
 type VarDict d = I.IntMap d
-type SatDict = I.IntMap Satisfiable
+data Opts a = Opts { baseline :: Bool -- ^ True for andDecomp, False for brute
+                   , others :: [Prop a -> Prop a] -- ^ a list of other optimations
+                   }
+type Log = String
 
 -- | Global state TODO: Use ReaderT pattern instead of state monad
 -- Takes a dimension d, a value a, and a result r
-type Env d r = StateT (VarDict d, SatDict) IO r
+type Env d r = RWST (Opts r) Log (VarDict d) IO r
 
-runEnv :: StateT (VarDict d, SatDict) m a -> m (a, (VarDict d, SatDict))
-runEnv m = runStateT m emptySt
+
+-- | An empty reader monad environment, in the future read these from config file
+emptyOpts :: Opts a
+emptyOpts = Opts { baseline = True -- set to use andDecomp
+                 , others = []
+                 }
+
+runEnv :: Env d r -> IO (r, VarDict d,  Log)
+runEnv m = runRWST m emptyOpts emptySt
 
 -- | An Empty env state is a dictionary of variable names and their hashes and
 -- a dictionary for each hash that holds the results of the sat solver
-emptySt :: (VarDict d, SatDict)
-emptySt = (I.empty, I.empty)
+emptySt :: VarDict d
+emptySt = I.empty
 
 -- | Given a variational term pack an initial state in the environment Monad
-recordVars :: (H.Hashable d) => V d a -> Env d ()
+recordVars :: (H.Hashable d, MonadState (VarDict d) m) => V d a -> m ()
 recordVars cs = do
   st <- get
-  -- TODO: use a let binding for the hashed dimension variable
-  let (newvars, newss) = foldTags cs (\dim (_new_vars, _new_ss) ->
-                               (I.insert (abs . hash $ dim) dim _new_vars
-                               , I.insert (negate . hash $ dim) False $
-                                 I.insert (hash dim) False _new_ss)) st
-  put (newvars, newss)
+  let newvars = foldTags cs (\dim _new_vars ->
+                               I.insert (abs . hash $ dim) dim _new_vars) st
+  put newvars
 
 -- | Unify the dimension and value in d choice to the same type using bifunctor
 -- add all dimensions and their hashes to the variable dictionary
@@ -92,11 +99,7 @@ toProp cs = return $ cs >>= (andDecomp . unify)
 initEnv :: (H.Hashable d, Integral a) => Prop (V d a) -> Env d (Prop Integer)
 initEnv cs = do
   forM_ cs recordVars
-  cs' <- toProp cs
-  let cnf = propToCNF "does it run?" $ ground cs'
-  lift $ runPMinisat cnf >>= putStrLn . show
-  return cs'
-
+  work cs
 
 -- | convert  propositional term to a DIMACS CNF term
 propToCNF :: (Num a, Integral a) => String -> GProp a -> CNF
@@ -107,9 +110,13 @@ propToCNF str ps = genVars cnf
               , clauses = orSplit . toListAndSplit $ toInteger <$> ps
               }
 
--- -- | main workhorse for running the SAT solver
--- work :: Env d (Prop Integer)
--- work = do
+-- | main workhorse for running the SAT solver
+work :: (Hashable d, Integral a) => Prop (V d a) -> Env d (Prop Integer)
+work cs = do
+  cs' <- toProp cs
+  let cnf = propToCNF "does it run?" $ ground cs'
+  lift $ runPMinisat cnf >>= putStrLn . show
+  return cs'
 
 -- preliminary test cases
 p1 :: Prop (V String Integer)
