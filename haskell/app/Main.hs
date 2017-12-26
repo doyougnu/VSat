@@ -1,6 +1,12 @@
 module Main where
 
-import Lib
+import SubProcess as S
+import Criterion.Main
 
 main :: IO ()
-main = return ()
+main = defaultMain $
+  [ bgroup "test"
+    [ bench "1" $ whnf runAll p1
+    ]
+  ]
+  where runAll = runEnv . initEnv

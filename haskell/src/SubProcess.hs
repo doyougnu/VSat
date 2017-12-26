@@ -96,6 +96,7 @@ toProp cs = return $ cs >>= (andDecomp . unify)
 
 -- | given a variational prop term iterate over the choices, pack the initial
 -- environment, then convert the choices to a plain prop term using andDecomp
+-- TODO: Disentanble this init and work coupling, want initEnv >=> work pipeline
 initEnv :: (H.Hashable d, Integral a) => Prop (V d a) -> Env d (Prop Integer)
 initEnv cs = do
   forM_ cs recordVars
@@ -118,7 +119,7 @@ work cs = do
   lift $ runPMinisat cnf >>= putStrLn . show
   return cs'
 
--- preliminary test cases
+-- preliminary test cases run with: runEnv (initEnv p1)
 p1 :: Prop (V String Integer)
 p1 = And
       (Lit (chc "d" (one 1) (one 2)))
