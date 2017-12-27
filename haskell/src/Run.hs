@@ -27,7 +27,6 @@ type Log = String
 -- Takes a dimension d, a value a, and a result r
 type Env d r = RWST (Opts r) Log (VarDict d, SatDict d) IO r
 
-
 -- | An empty reader monad environment, in the future read these from config file
 emptyOpts :: Opts a
 emptyOpts = Opts { baseline = True -- set to use andDecomp

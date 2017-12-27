@@ -4,6 +4,7 @@ import Data.Maybe (isJust)
 import Data.Bifunctor
 import Data.Bifoldable
 import Data.Bitraversable
+import Data.List (nub)
 
 type Tag = String
 
@@ -113,3 +114,34 @@ instance Bitraversable V where
 foldTags :: V d a -> (d -> b -> b) -> b -> b
 foldTags (Obj _)     _ acc = acc
 foldTags (Chc d l r) f acc = foldTags l f (foldTags r f (f d acc))
+
+t1 :: V String Integer
+t1 = chc "a" (one 1) (one 2)
+
+t2 :: V String Integer
+t2 = chc "a"
+     (chc "b"
+       (one 1)
+       (chc "a"
+         (one 2)
+         (one 3)))
+     (one 5)
+
+t3 :: V String Integer
+t3 = chc "a"
+     (one 1)
+     (chc "b"
+      (chc "c"
+        (one 4)
+        (one 5))
+       (one 3))
+
+paths :: (Eq d) => V d a -> [Config d]
+paths (Obj _) = [[]]
+paths (Chc d l r) =
+  do
+    l' <- [l]
+    r' <- [r]
+    summaryl <- paths l'
+    summaryr <- paths r'
+    [nub $ (d, True):summaryl, nub $ (d, False):summaryr] -- TODO fix the nub call
