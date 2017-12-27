@@ -1,6 +1,6 @@
 module Main where
 
-import SubProcess as S
+import Run
 import Criterion.Main
 
 main :: IO ()

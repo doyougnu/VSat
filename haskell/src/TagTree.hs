@@ -100,8 +100,8 @@ instance Bifunctor V where
 instance (Monoid b, Data.String.IsString d) => Monoid (V d b) where
   mempty = one mempty
   (Obj d) `mappend` (Obj b) = Obj $ d `mappend` b
-  (Chc t l r) `mappend` x@(Obj _) = Chc t (l `mappend` x) (r `mappend` x)
-  x@(Obj _) `mappend` (Chc t l r) = Chc t (l `mappend` x) (r `mappend` x)
+  (Chc t l r) `mappend` x@(Obj _)   = Chc t (l `mappend` x) (r `mappend` x)
+  x@(Obj _)   `mappend` (Chc t l r) = Chc t (l `mappend` x) (r `mappend` x)
   (Chc t l r) `mappend` (Chc d ll rr) = Chc t
                                         (Chc d (l `mappend` ll) l)
                                         (Chc d (r `mappend` rr) r)
@@ -113,7 +113,6 @@ instance Foldable (V d) where
 instance Traversable (V d) where
   traverse f (Obj v) = Obj <$> f v
   traverse f (Chc d l r) = Chc d <$> traverse f l <*> traverse f r
-
 
 -- | perform a fold over a choice tree collecting the tags
 -- TODO implement profunctor to abstract this out
