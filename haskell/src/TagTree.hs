@@ -89,6 +89,14 @@ instance Monad (V d) where
   Obj d >>= f = f d
   Chc t y n >>= f = Chc t (y >>= f)(n >>= f)
 
+instance (Show d, Show b) => Show (V d b) where
+  show (Obj d)      = show d
+  show (Chc t y n)   = show t ++ "<" ++ show y ++ ", " ++ show n ++ ">"
+
+instance Bifunctor V where
+  bimap _ g (Obj d) = Obj $ g d
+  bimap f g (Chc t l r) = Chc (f t) (bimap f g l) (bimap f g r)
+
 instance (Monoid b, Data.String.IsString d) => Monoid (V d b) where
   mempty = one mempty
   (Obj d) `mappend` (Obj b) = Obj $ d `mappend` b
@@ -98,13 +106,13 @@ instance (Monoid b, Data.String.IsString d) => Monoid (V d b) where
                                         (Chc d (l `mappend` ll) l)
                                         (Chc d (r `mappend` rr) r)
 
-instance (Show d, Show b) => Show (V d b) where
-  show (Obj d)      = show d
-  show (Chc t y n)   = show t ++ "<" ++ show y ++ ", " ++ show n ++ ">"
+instance Foldable (V d) where
+  foldMap f (Obj v) = f v
+  foldMap f (Chc _ l r) = foldMap f l `mappend` foldMap f r
 
-instance Bifunctor V where
-  bimap _ g (Obj d) = Obj $ g d
-  bimap f g (Chc t l r) = Chc (f t) (bimap f g l) (bimap f g r)
+instance Traversable (V d) where
+  traverse f (Obj v) = Obj <$> f v
+  traverse f (Chc d l r) = Chc d <$> traverse f l <*> traverse f r
 
 
 -- | perform a fold over a choice tree collecting the tags
