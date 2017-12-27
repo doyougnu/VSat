@@ -121,8 +121,9 @@ instance Bifoldable V where
 
 instance Bitraversable V where
   bitraverse _ g (Obj c) = Obj <$> g c
-  bitraverse f g (Chc d l r) = Chc (f d) <$> traverse g l <*> traverse g r
-
+  bitraverse f g (Chc d l r) = Chc <$>
+                               f d <*>
+                               bitraverse f g l <*> bitraverse f g r
 
 -- | perform a fold over a choice tree collecting the tags
 -- TODO implement profunctor to abstract this out
