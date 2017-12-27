@@ -98,23 +98,6 @@ instance Bifunctor V where
   bimap _ g (Obj d) = Obj $ g d
   bimap f g (Chc t l r) = Chc (f t) (bimap f g l) (bimap f g r)
 
--- instance (Monoid b, Data.String.IsString d) => Monoid (V d b) where
---   mempty = one mempty
---   (Obj d) `mappend` (Obj b) = Obj $ d `mappend` b
---   (Chc t l r) `mappend` x@(Obj _)   = Chc t (l `mappend` x) (r `mappend` x)
---   x@(Obj _)   `mappend` (Chc t l r) = Chc t (l `mappend` x) (r `mappend` x)
---   (Chc t l r) `mappend` (Chc d ll rr) = Chc t
---                                         (Chc d (l `mappend` ll) l)
---                                         (Chc d (r `mappend` rr) r)
-
--- instance Foldable (V d) where
---   foldMap f (Obj v) = f v
---   foldMap f (Chc _ l r) = foldMap f l `mappend` foldMap f r
-
--- instance Traversable (V d) where
---   traverse f (Obj v) = Obj <$> f v
---   traverse f (Chc d l r) = Chc d <$> traverse f l <*> traverse f r
-
 instance Bifoldable V where
   bifoldr _ g acc (Obj c) = g c acc
   bifoldr f g acc (Chc d l r) = bifoldr f g (bifoldr f g (f d acc) r) l

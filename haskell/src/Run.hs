@@ -44,12 +44,10 @@ emptySt :: (VarDict d, SatDict d)
 emptySt = (I.empty, M.empty)
 
 -- | Given a variational term pack an initial state in the environment Monad
-recordVars :: (H.Hashable d, MonadState (VarDict d, SatDict d) m) => V d a -> m ()
+recordVars :: (H.Hashable d, MonadState (VarDict d, SatDict d) m) =>
+  V d a -> m ()
 recordVars cs = do
   st <- get
-  -- let newvars = bifoldr cs (\dim (vars, sats) ->
-  --                              (I.insert (abs . hash $ dim) dim vars
-  --                              , fd)) st
   let newvars =
         bifoldr
         (\dim (vars, sats) -> (I.insert (abs . hash $ dim) dim vars, sats))
