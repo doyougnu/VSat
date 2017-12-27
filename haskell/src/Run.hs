@@ -3,6 +3,7 @@ module Run where
 
 import Data.Hashable as H
 import Data.Bifunctor (bimap)
+import Data.Bifoldable
 import qualified Data.IntMap as I
 import qualified Data.Map as M
 import qualified Data.Set as S (fromList)
@@ -34,21 +35,25 @@ emptyOpts = Opts { baseline = True -- set to use andDecomp
                  }
 
 -- | Run the RWS monad with defaults of empty state, reader
-runEnv :: Env d r -> IO (r, VarDict d,  Log)
+runEnv :: Env d r -> IO (r, (VarDict d, SatDict d),  Log)
 runEnv m = runRWST m emptyOpts emptySt
 
 -- | An Empty env state is a dictionary of variable names and their hashes and
 -- a dictionary for each hash that holds the results of the sat solver
-emptySt :: VarDict d
-emptySt = I.empty
+emptySt :: (VarDict d, SatDict d)
+emptySt = (I.empty, M.empty)
 
 -- | Given a variational term pack an initial state in the environment Monad
 recordVars :: (H.Hashable d, MonadState (VarDict d, SatDict d) m) => V d a -> m ()
 recordVars cs = do
   st <- get
-  let newvars = foldTags cs (\dim (vars, sats) ->
-                               (I.insert (abs . hash $ dim) dim vars
-                               , fd)) st
+  -- let newvars = bifoldr cs (\dim (vars, sats) ->
+  --                              (I.insert (abs . hash $ dim) dim vars
+  --                              , fd)) st
+  let newvars =
+        bifoldr
+        (\dim (vars, sats) -> (I.insert (abs . hash $ dim) dim vars, sats))
+        (\_ s -> s) st cs
   put newvars
 
 -- | Unify the dimension and value in d choice to the same type using bifunctor
