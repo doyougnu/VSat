@@ -109,12 +109,6 @@ instance Bitraversable V where
                                f d <*>
                                bitraverse f g l <*> bitraverse f g r
 
--- | perform a fold over a choice tree collecting the tags
--- TODO implement profunctor to abstract this out
-foldTags :: V d a -> (d -> b -> b) -> b -> b
-foldTags (Obj _)     _ acc = acc
-foldTags (Chc d l r) f acc = foldTags l f (foldTags r f (f d acc))
-
 t1 :: V String Integer
 t1 = chc "a" (one 1) (one 2)
 

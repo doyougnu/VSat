@@ -16,7 +16,7 @@ cabal-version:       >=1.10
 library
   hs-source-dirs:      src
 
-  exposed-modules:     SubProcess, CNF, Prop, TagTree, Utils
+  exposed-modules:     SubProcess, CNF, Prop, TagTree, Utils, Run
   default-extensions:          NamedFieldPuns
                              , OverloadedStrings
                              , UndecidableInstances

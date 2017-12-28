@@ -6,7 +6,7 @@ import Criterion.Main
 main :: IO ()
 main = defaultMain $
   [ bgroup "test"
-    [ bench "1" $ whnf runAll p1
+    [ bench "1" $ whnf runAll p2
     ]
   ]
   where runAll = runEnv . initEnv

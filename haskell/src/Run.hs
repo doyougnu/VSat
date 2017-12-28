@@ -17,7 +17,7 @@ import SubProcess
 -- hold an Int to apply labels, hold d set of chars to track which dimension
 -- have been seen already
 type VarDict d = I.IntMap d
-type SatDict d = M.Map [(d, Bool)] Satisfiable
+type SatDict d = M.Map [(d, Bool)] Satisfiable -- keys may incur perf penalty
 data Opts a = Opts { baseline :: Bool -- ^ True for andDecomp, False for brute
                    , others :: [Prop a -> Prop a] -- ^ a list of optimizations
                    }
@@ -29,7 +29,7 @@ type Env d r = RWST (Opts r) Log (VarDict d, SatDict d) IO r
 
 -- | An empty reader monad environment, in the future read these from config file
 emptyOpts :: Opts a
-emptyOpts = Opts { baseline = True -- set to use andDecomp
+emptyOpts = Opts { baseline = False -- set to use andDecomp
                  , others = []
                  }
 
@@ -43,15 +43,16 @@ emptySt :: (VarDict d, SatDict d)
 emptySt = (I.empty, M.empty)
 
 -- | Given a variational term pack an initial state in the environment Monad
-recordVars :: (H.Hashable d, MonadState (VarDict d, SatDict d) m) =>
+recordVars :: (Eq d, Ord d, H.Hashable d, MonadState (VarDict d, SatDict d) m) =>
   V d a -> m ()
 recordVars cs = do
-  st <- get
-  let newvars =
+  st@(_, old_sats) <- get
+  let (newvars, _)=
         bifoldr
-        (\dim (vars, sats) -> (I.insert (abs . hash $ dim) dim vars, sats))
+        (\dim (vars, sats) -> (I.insert (abs . hash $ dim) dim vars , sats))
         (\_ s -> s) st cs
-  put newvars
+  let ss' = M.union old_sats $ M.fromList $ zip (paths cs) (repeat False)
+  put (newvars, ss')
 
 -- | Unify the dimension and value in d choice to the same type using bifunctor
 -- add all dimensions and their hashes to the variable dictionary
@@ -66,13 +67,15 @@ andDecomp (Chc t l r) = Or
 andDecomp (Obj x)     = Lit x
 
 -- | orient the state monad to run the sat solver
-toProp :: (H.Hashable d, Integral a, Monad m) => Prop (V d a) -> m (Prop Integer)
-toProp cs = return $ cs >>= (andDecomp . unify)
+toPropDecomp :: (H.Hashable d, Integral a, Monad m) =>
+  Prop (V d a) -> m (Prop Integer)
+toPropDecomp cs = return $ cs >>= (andDecomp . unify)
 
 -- | given a variational prop term iterate over the choices, pack the initial
 -- environment, then convert the choices to a plain prop term using andDecomp
 -- TODO: Disentangle this init and work coupling, want initEnv >=> work pipeline
-initEnv :: (H.Hashable d, Integral a) => Prop (V d a) -> Env d (Prop Integer)
+initEnv :: (Eq d, Show a, Ord d, H.Hashable d, Integral a) =>
+  Prop (V d a) -> Env d (Prop Integer)
 initEnv cs = do
   forM_ cs recordVars
   work cs
@@ -87,12 +90,29 @@ propToCNF str ps = genVars cnf
               }
 
 -- | main workhorse for running the SAT solver
-work :: (Hashable d, Integral a) => Prop (V d a) -> Env d (Prop Integer)
+work :: (Eq d, Show a, Hashable d, Integral a) =>
+  Prop (V d a) -> Env d (Prop Integer)
 work cs = do
-  cs' <- toProp cs
+  bs <- asks baseline
+  cs' <- toPropDecomp cs
   let cnf = propToCNF "does it run?" $ ground cs'
   lift $ runPMinisat cnf >>= putStrLn . show
-  return cs'
+  if bs
+    then do
+            return cs'
+    else do
+            (_, sats) <- get
+            let keys = M.keys sats
+                cnfs = (\y -> cs >>= return . (\x -> flip select x y)) <$> keys
+            lift $ putStrLn (show cnfs)
+            return cs'
+  -- cs' <- toPropDecomp cs
+  -- let cnf = propToCNF "does it run?" $ ground cs'
+  -- lift $ runPMinisat cnf >>= putStrLn . show
+  -- return cs'
+
+
+
 
 -- preliminary test cases run with: runEnv (initEnv p1)
 p1 :: Prop (V String Integer)
