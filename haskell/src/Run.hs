@@ -5,7 +5,6 @@ import Data.Hashable as H
 import Data.Bifunctor (bimap)
 import Data.Bifoldable
 import Data.Maybe
-import Data.Monoid
 import qualified Data.IntMap as I
 import qualified Data.Map as M
 import qualified Data.Set as S (fromList)
@@ -105,14 +104,12 @@ work cs = do
             (_, sats) <- get
             let keys = M.keys sats
                 cnfs = (\y -> fmap (select y) cs) <$> keys
-            lift . print $ filter (foldr (\x acc -> isJust x && acc) True) cnfs
+                cnfs' = filter (foldr (\x acc -> isJust x && acc) True) cnfs
+            results <- return . sequence $ fmap (runPMinisat .
+                                     propToCNF "testing" .
+                                     ground . fmap fromJust) cnfs'
+            lift $ results >>= print
             return cs'
-  -- cs' <- toPropDecomp cs
-  -- let cnf = propToCNF "does it run?" $ ground cs'
-  -- lift $ runPMinisat cnf >>= putStrLn . show
-  -- return cs'
-
-
 
 
 -- preliminary test cases run with: runEnv (initEnv p1)
