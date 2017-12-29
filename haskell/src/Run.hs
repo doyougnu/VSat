@@ -4,6 +4,8 @@ module Run where
 import Data.Hashable as H
 import Data.Bifunctor (bimap)
 import Data.Bifoldable
+import Data.Maybe
+import Data.Monoid
 import qualified Data.IntMap as I
 import qualified Data.Map as M
 import qualified Data.Set as S (fromList)
@@ -51,7 +53,7 @@ recordVars cs = do
         bifoldr
         (\dim (vars, sats) -> (I.insert (abs . hash $ dim) dim vars , sats))
         (\_ s -> s) st cs
-  let ss' = M.union old_sats $ M.fromList $ zip (paths cs) (repeat False)
+      ss' = M.union old_sats . M.fromList $ zip (paths cs) (repeat False)
   put (newvars, ss')
 
 -- | Unify the dimension and value in d choice to the same type using bifunctor
@@ -96,15 +98,14 @@ work cs = do
   bs <- asks baseline
   cs' <- toPropDecomp cs
   let cnf = propToCNF "does it run?" $ ground cs'
-  lift $ runPMinisat cnf >>= putStrLn . show
+  lift $ runPMinisat cnf >>= print
   if bs
-    then do
-            return cs'
+    then return cs'
     else do
             (_, sats) <- get
             let keys = M.keys sats
-                cnfs = (\y -> cs >>= return . (\x -> flip select x y)) <$> keys
-            lift $ putStrLn (show cnfs)
+                cnfs = (\y -> fmap (select y) cs) <$> keys
+            lift . print $ filter (foldr (\x acc -> isJust x && acc) True) cnfs
             return cs'
   -- cs' <- toPropDecomp cs
   -- let cnf = propToCNF "does it run?" $ ground cs'
