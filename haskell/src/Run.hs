@@ -1,8 +1,7 @@
 module Run where
 
-
 import Data.Hashable as H
-import Data.Bifunctor (bimap)
+import Data.Bifunctor (bimap, second)
 import Data.Bifoldable
 import Data.Maybe
 import qualified Data.IntMap as I
@@ -75,7 +74,7 @@ toPropDecomp cs = return $ cs >>= (andDecomp . unify)
 -- | given a variational prop term iterate over the choices, pack the initial
 -- environment, then convert the choices to a plain prop term using andDecomp
 -- TODO: Disentangle this init and work coupling, want initEnv >=> work pipeline
-initEnv :: (Eq d, Show a, Ord d, H.Hashable d, Integral a) =>
+initEnv :: (Eq d, Show a, Show d, Ord d, H.Hashable d, Integral a) =>
   Prop (V d a) -> Env d (Prop Integer)
 initEnv cs = do
   forM_ cs recordVars
@@ -91,7 +90,7 @@ propToCNF str ps = genVars cnf
               }
 
 -- | main workhorse for running the SAT solver
-work :: (Eq d, Show a, Hashable d, Integral a) =>
+work :: (Eq d, Show a, Show d, Hashable d, Integral a) =>
   Prop (V d a) -> Env d (Prop Integer)
 work cs = do
   bs <- asks baseline
@@ -103,11 +102,16 @@ work cs = do
     else do
             (_, sats) <- get
             let keys = M.keys sats
-                cnfs = (\y -> fmap (select y) cs) <$> keys
-                cnfs' = filter (foldr (\x acc -> isJust x && acc) True) cnfs
-            results <- return . sequence $ fmap (runPMinisat .
-                                     propToCNF "testing" .
-                                     ground . fmap fromJust) cnfs'
+                cnfs = (\y -> (y, fmap (select y) cs)) <$> keys
+                cnfs' = (\(x, y) -> (x
+                                    , foldr (\_x acc -> isJust _x && acc) True y
+                                    , y
+                                    )) <$> cnfs
+                thirds = (\(_, _, z) -> z) <$> filter (\(_, y, _) -> y) cnfs'
+                results = traverse (runPMinisat .
+                                    propToCNF "testing" .
+                                    ground .
+                                    fmap fromJust) thirds
             lift $ results >>= print
             return cs'
 
