@@ -1,13 +1,14 @@
 module Run where
 
 import Data.Hashable as H
-import Data.Bifunctor (bimap, second)
+import Data.Bifunctor (bimap)
 import Data.Bifoldable
-import Data.Maybe
+import Data.Maybe (fromJust, isJust)
 import qualified Data.IntMap as I
 import qualified Data.Map as M
 import qualified Data.Set as S (fromList)
 import Control.Monad.RWS.Lazy
+import Control.Monad (when)
 
 import Prop
 import TagTree
@@ -85,12 +86,12 @@ propToCNF :: (Num a, Integral a) => String -> GProp a -> CNF
 propToCNF str ps = genVars cnf
   where
     cnf = CNF { comment = str
-              , vars    = S.fromList [0]
+              , vars    = S.fromList $ foldr ((:) . toInteger) [] ps
               , clauses = orSplit . toListAndSplit $ toInteger <$> ps
               }
 
 -- | main workhorse for running the SAT solver
-work :: (Eq d, Show a, Show d, Hashable d, Integral a) =>
+work :: (Eq d, Show a, Show d, Ord d, Hashable d, Integral a) =>
   Prop (V d a) -> Env d (Prop Integer)
 work cs = do
   bs <- asks baseline
@@ -107,14 +108,16 @@ work cs = do
                                     , foldr (\_x acc -> isJust _x && acc) True y
                                     , y
                                     )) <$> cnfs
-                thirds = (\(_, _, z) -> z) <$> filter (\(_, y, _) -> y) cnfs'
-                results = traverse (runPMinisat .
-                                    propToCNF "testing" .
-                                    ground .
-                                    fmap fromJust) thirds
-            lift $ results >>= print
+            mapM_ work' cnfs'
             return cs'
 
+work' :: (Ord k, Show a, Show k, Integral a, MonadTrans t1,
+           MonadState (t, M.Map k Satisfiable) (t1 IO)) =>
+         (k, Bool, Prop (Maybe a)) -> t1 IO ()
+work' (conf, isSat, prop) = when isSat $
+  do (vars, sats) <- get
+     result <- lift . runPMinisat . propToCNF (show conf) . ground . fmap fromJust $ prop
+     put (vars, M.insert conf result sats)
 
 -- preliminary test cases run with: runEnv (initEnv p1)
 p1 :: Prop (V String Integer)
@@ -124,3 +127,7 @@ p1 = And
 
 p2 :: Prop (V String Integer)
 p2 = Impl (Lit (chc "d" (one 20) (one 40))) (Lit (one 1001))
+
+-- this will cause a header mismatch because it doesn't start at 1
+gp1 :: GProp Integer
+gp1 = GAnd (GNLit 2) (GLit 3)

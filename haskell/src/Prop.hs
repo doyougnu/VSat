@@ -45,6 +45,12 @@ instance Applicative Prop where
   pure = Lit
   (<*>) = ap
 
+instance Foldable GProp where
+  foldMap f (GLit a)   = f a
+  foldMap f (GNLit a)  = f a
+  foldMap f (GAnd l r) = mconcat [foldMap f l, foldMap f r]
+  foldMap f (GOr l r)  = mconcat [foldMap f l, foldMap f r]
+
 instance Foldable Prop where
   foldMap f (Lit a)      = f a
   foldMap f (Neg a)      = foldMap f a

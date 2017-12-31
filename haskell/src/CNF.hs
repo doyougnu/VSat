@@ -50,7 +50,7 @@ instance Monoid CNF where
 -- | Plain Examples
 plainEx1 :: CNF
 plainEx1 = CNF { comment = "I'm a comment"
-               , vars = S.fromList [1, 2]
+               , vars = S.fromList [0]
                , clauses = [ [1, 2]
                            , [(-1), 2]
                            ]
