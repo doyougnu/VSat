@@ -115,6 +115,8 @@ work cs = do
                                     , y
                                     )) <$> cnfs
             mapM_ work' cnfs'
+            (_, newSats) <- get
+            lift $ print newSats
             return (Lit 1)
 
 -- | Given a configuration, a boolean representing satisfiability and a Prop, If

@@ -5,6 +5,8 @@ import Data.Bifunctor
 import Data.Bifoldable
 import Data.Bitraversable
 import qualified Data.Map as M
+import Data.List (nub)
+import Debug.Trace (trace)
 
 type Tag = String
 
@@ -74,7 +76,7 @@ select tbs (Chc t y n) =
     Just False -> select tbs n
 
 instance Functor (V d) where
-  fmap f (Obj d) = Obj (f d)
+  fmap f (Obj d)     = Obj (f d)
   fmap f (Chc t y n) = Chc t (fmap f y) (fmap f n)
 
 instance Applicative (V d) where
@@ -92,7 +94,7 @@ instance Monad (V d) where
   Chc t y n >>= f = Chc t (y >>= f)(n >>= f)
 
 instance (Show d, Show b) => Show (V d b) where
-  show (Obj d)      = show d
+  show (Obj d)       = show d
   show (Chc t y n)   = show t ++ "<" ++ show y ++ ", " ++ show n ++ ">"
 
 instance Bifunctor V where
@@ -108,6 +110,12 @@ instance Bitraversable V where
   bitraverse f g (Chc d l r) = Chc <$>
                                f d <*>
                                bitraverse f g l <*> bitraverse f g r
+
+instance Traversable (V d) where
+  traverse = bitraverse pure
+
+instance Foldable (V d) where
+  foldr = bifoldr (flip const)
 
 t1 :: V String Integer
 t1 = chc "a" (one 1) (one 2)
@@ -132,16 +140,15 @@ t3 = chc "a"
 
 -- | Given a variational term find all paths for the tree in a flat list
 paths :: (Ord d) => V d a -> [Config d]
-paths (Obj _) = [M.empty]
-paths (Chc d l r) =
-  do
-    summaryl <- paths l
-    summaryr <- paths r
-    [ M.insert d True summaryl, M.insert d False summaryr] -- TODO fix dups
+paths (Chc d l r) = nub $ do
+  summaryl <- paths l
+  summaryr <- paths r
+  [M.insert d True summaryl, M.insert d False summaryr] -- TODO fix dups
+paths _ = [M.empty]
 
 -- | Given a tag tree, fmap over the tree with respect to a config
 replace :: Ord d => Config d -> (a -> a) -> V d a -> V d a
-replace _    f (Obj a)     = Obj $ f a
+replace _    f (Obj a) = Obj $ f a
 replace conf f x@(Chc d l r) =
   case M.lookup d conf of
     Nothing    -> x
@@ -153,3 +160,31 @@ replace conf f x@(Chc d l r) =
 recompile :: Ord d => [(Config d, a)] -> V d a -> V d a
 recompile []               acc = acc
 recompile ((conf, val):cs) acc = recompile cs $ replace conf (const val) acc
+
+recompile' :: Ord d => Config d -> a -> V d (Maybe a)
+recompile' conf = go (M.toList conf)
+  where
+    go :: [(d, Bool)] -> a -> V d (Maybe a)
+    go [] val' = Obj . Just $ val'
+    go ((d, b):cs) val'
+          | b = Chc d (go cs val') (Obj Nothing)
+          | otherwise = Chc d (Obj Nothing) (go cs val')
+
+recompile'' :: (Ord d, Show d, Show a) => [(Config d, a)] -> Maybe (V d a)
+recompile'' [] = Nothing
+recompile'' ((conf, val):xs) = trace (show prnt) result
+  where
+    result = sequence $ go xs (recompile' conf val)
+    prnt = go xs (recompile' conf val)
+    go :: (Ord d, Show d, Show a) =>
+      [(Config d, a)] -> V d (Maybe a) -> V d (Maybe a)
+    go []          acc = acc
+    go ((c, v):cs) acc = go cs $ trace (show next) next
+      where next = replace' c v acc
+
+replace' :: Ord d => Config d -> a -> V d (Maybe a) -> V d (Maybe a)
+replace' _    f (Obj _) = Obj $ Just f
+replace' conf f x@(Chc d l r) = case M.lookup d conf of
+  Nothing -> Chc d (replace' conf f l) (replace' conf f r)
+  Just True ->  Chc d (replace' conf f l) r
+  Just False -> Chc d l (replace' conf f r)
