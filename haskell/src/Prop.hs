@@ -173,8 +173,8 @@ toCNF = head . filter isCNF . iterate funcs
 ground :: (Show a) => Prop a -> GProp a
 ground (Lit x)       = GLit x
 ground (Neg (Lit x)) = GNLit x
-ground (Or l r)      = GOr  (ground l) (ground r)
-ground (And l r)     = GAnd (ground l) (ground r)
+ground (Or l r)      = GOr  (ground . toCNF $ l) (ground . toCNF $ r)
+ground (And l r)     = GAnd (ground . toCNF $ l) (ground . toCNF $ r)
 ground x             = ground $ toCNF x
 
 -- | traverse a propositional term and pack a list with new elements at each and

@@ -30,7 +30,7 @@ type Env d r = RWST (Opts r) Log (VarDict d, SatDict d) IO r
 
 -- | An empty reader monad environment, in the future read these from config file
 emptyOpts :: Opts a
-emptyOpts = Opts { baseline = False -- set to use andDecomp
+emptyOpts = Opts { baseline = True -- set to use andDecomp
                  , others = []
                  }
 
@@ -83,23 +83,27 @@ initEnv cs = do
 
 -- | convert  propositional term to a DIMACS CNF term
 propToCNF :: (Num a, Integral a) => String -> GProp a -> CNF
-propToCNF str ps = genVars cnf
+propToCNF str ps = cnf
   where
     cnf = CNF { comment = str
               , vars    = S.fromList $ foldr ((:) . toInteger) [] ps
               , clauses = orSplit . toListAndSplit $ toInteger <$> ps
               }
 
+thd :: (a, b, c) -> c
+thd (_, _, c) = c
+
 -- | main workhorse for running the SAT solver
 work :: (Eq d, Show a, Show d, Ord d, Hashable d, Integral a) =>
   Prop (V d a) -> Env d (Prop Integer)
 work cs = do
   bs <- asks baseline
-  cs' <- toPropDecomp cs
-  let cnf = propToCNF "does it run?" $ ground cs'
-  lift $ runPMinisat cnf >>= print
   if bs
-    then return cs'
+    then do cs' <- toPropDecomp cs
+            let cnf = propToCNF "does it run?" $ ground cs'
+            lift . print $ cnf
+            lift $ runPMinisat cnf >>= print
+            return cs'
     else do
             (_, sats) <- get
             let keys = M.keys sats
@@ -109,7 +113,7 @@ work cs = do
                                     , y
                                     )) <$> cnfs
             mapM_ work' cnfs'
-            return cs'
+            return (Lit 1)
 
 work' :: (Ord k, Show a, Show k, Integral a, MonadTrans t1,
            MonadState (t, M.Map k Satisfiable) (t1 IO)) =>
@@ -129,5 +133,5 @@ p2 :: Prop (V String Integer)
 p2 = Impl (Lit (chc "d" (one 20) (one 40))) (Lit (one 1001))
 
 -- this will cause a header mismatch because it doesn't start at 1
-gp1 :: GProp Integer
-gp1 = GAnd (GNLit 2) (GLit 3)
+up1 :: V Integer Integer
+up1 = Chc 1 (one 2) (chc 3 (one 4) (one 5))

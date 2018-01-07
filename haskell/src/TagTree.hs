@@ -130,6 +130,7 @@ t3 = chc "a"
         (one 5))
        (one 3))
 
+-- | Given a variational term find all paths for the tree in a flat list
 paths :: (Eq d) => V d a -> [Config d]
 paths (Obj _) = [[]]
 paths (Chc d l r) =
@@ -139,3 +140,23 @@ paths (Chc d l r) =
     summaryl <- paths l'
     summaryr <- paths r'
     [nub $ (d, True):summaryl, nub $ (d, False):summaryr] -- TODO fix the nub call
+
+-- | Given a tag tree, fmap over the tree with respect to a config
+fmapByConf :: Eq d => Config d -> (a -> a) -> V d a -> V d a
+fmapByConf _ f (Obj a) = Obj $ f a
+fmapByConf conf f (Chc d l r) = case lookup d conf of
+                                       Nothing -> Chc d
+                                         (fmapByConf conf f l)
+                                         (fmapByConf conf f r)
+                                       Just True -> Chc d (fmapByConf conf f l) r
+                                       Just False -> Chc d l (fmapByConf conf f r)
+
+-- apply  :: Eq d => [Config d] -> (a -> b) -> V d a -> V d (Maybe b)
+-- apply [] f (Obj a) = Obj . Just $ f a
+-- apply [] _ (Chc _ _ _) = Obj Nothing
+-- apply (_:_) f (Obj a) = Obj . Just $ f a
+-- apply (c:cs) f (Chc d l r) =
+--   case lookup d c of
+--     Nothing -> Chc d (apply cs f l) (apply cs f r)
+--     Just True -> Chc d (apply [c] f l) (apply cs f r)
+--     Just False -> Chc d (apply cs f l) (apply [c] f r)
