@@ -5,10 +5,12 @@ import Data.Bifunctor
 import Data.Bifoldable
 import Data.Bitraversable
 import Data.List (nub)
+import qualified Data.Map as M
 
 type Tag = String
 
-type Config d = [(d, Bool)]
+-- type Config d = [(d, Bool)]
+type Config d = M.Map d Bool
 
 data V d b = Obj b
          | Chc d (V d b) (V d b)
@@ -51,24 +53,24 @@ isChc :: V d b -> Bool
 isChc = not . isObj
 
 -- | Wrapper around engine
-prune :: (Eq d) => V d b -> V d b
-prune = pruneTagtree []
+prune :: (Ord d) => V d b -> V d b
+prune = pruneTagtree M.empty
 
 -- | Given d config and variational expression remove redundant choices
-pruneTagtree :: (Eq d) => Config d -> V d b -> V d b
+pruneTagtree :: (Ord d) => Config d -> V d b -> V d b
 pruneTagtree _ (Obj d) = Obj d
-pruneTagtree tb (Chc t y n) = case lookup t tb of
+pruneTagtree tb (Chc t y n) = case M.lookup t tb of
                              Nothing -> Chc t
-                                        (pruneTagtree ((t,True):tb) y)
-                                        (pruneTagtree ((t,False):tb) n)
+                                        (pruneTagtree (M.insert t True tb) y)
+                                        (pruneTagtree (M.insert t False tb) n)
                              Just True -> pruneTagtree tb y
                              Just False -> pruneTagtree tb n
 
 -- | Given d configuration and d variational expression perform d selection
-select :: (Eq d) => Config d -> V d b -> Maybe b
+select :: (Ord d) => Config d -> V d b -> Maybe b
 select _ (Obj d) = Just d
 select tbs (Chc t y n) =
-  case lookup t tbs of
+  case M.lookup t tbs of
     Nothing   -> Nothing
     Just True -> select tbs y
     Just False -> select tbs n
@@ -131,25 +133,35 @@ t3 = chc "a"
        (one 3))
 
 -- | Given a variational term find all paths for the tree in a flat list
-paths :: (Eq d) => V d a -> [Config d]
-paths (Obj _) = [[]]
+paths :: (Ord d) => V d a -> [Config d]
+paths (Obj _) = [M.empty]
 paths (Chc d l r) =
   do
-    l' <- [l]
-    r' <- [r]
-    summaryl <- paths l'
-    summaryr <- paths r'
-    [nub $ (d, True):summaryl, nub $ (d, False):summaryr] -- TODO fix the nub call
+    summaryl <- paths l
+    summaryr <- paths r
+    [ M.insert d True summaryl, M.insert d False summaryr] -- TODO fix dups
 
 -- | Given a tag tree, fmap over the tree with respect to a config
-fmapByConf :: Eq d => Config d -> (a -> a) -> V d a -> V d a
-fmapByConf _ f (Obj a) = Obj $ f a
-fmapByConf conf f (Chc d l r) = case lookup d conf of
-                                       Nothing -> Chc d
-                                         (fmapByConf conf f l)
-                                         (fmapByConf conf f r)
-                                       Just True -> Chc d (fmapByConf conf f l) r
-                                       Just False -> Chc d l (fmapByConf conf f r)
+-- replace :: Eq d => Config d -> (a -> a) -> V d a -> V d a
+-- replace _    f (Obj a)     = Obj $ f a
+-- replace conf f (Chc d l r) = case lookup d conf of
+--                                        Nothing -> Chc d
+--                                          (replace conf f l)
+--                                          (replace conf f r)
+--                                        Just True -> Chc d (replace conf f l) r
+--                                        Just False -> Chc d l (replace conf f r)
+
+-- replace' :: Eq d => Config d -> (a -> a) -> V d a -> V d a
+-- replace' [] f (Obj a) = Obj $ f a
+-- replace' [] _ x       = x
+-- replace' ((_, _):_) f (Obj a) = Obj $ f a
+-- replace' ((d, b):xs) f (Chc dim l r)
+--   | d == dim = Chc dim
+
+
+-- recompile :: [(Config d, a)] -> V d (Maybe a) -> V d (Maybe a)
+-- recompile [] acc = acc
+-- recompile a@(((d, branch), val):xs) acc =
 
 -- apply  :: Eq d => [Config d] -> (a -> b) -> V d a -> V d (Maybe b)
 -- apply [] f (Obj a) = Obj . Just $ f a
