@@ -4,7 +4,6 @@ import Data.Maybe (isJust)
 import Data.Bifunctor
 import Data.Bifoldable
 import Data.Bitraversable
-import Data.List (nub)
 import qualified Data.Map as M
 
 type Tag = String

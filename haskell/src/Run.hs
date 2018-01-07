@@ -18,7 +18,7 @@ import SubProcess
 -- hold an Int to apply labels, hold d set of chars to track which dimension
 -- have been seen already
 type VarDict d = I.IntMap d
-type SatDict d = M.Map [(d, Bool)] Satisfiable -- keys may incur perf penalty
+type SatDict d = M.Map (Config d) Satisfiable -- keys may incur perf penalty
 data Opts a = Opts { baseline :: Bool -- ^ True for andDecomp, False for brute
                    , others :: [Prop a -> Prop a] -- ^ a list of optimizations
                    }
@@ -100,8 +100,10 @@ work cs = do
   bs <- asks baseline
   if bs
     then do cs' <- toPropDecomp cs
-            let cnf = propToCNF "does it run?" $ ground cs'
-            lift . print $ cnf
+            let grnd = ground cs'
+                cnf = propToCNF "does it run?" grnd
+            lift . print $ grnd
+            lift $ putStrLn ""
             lift $ runPMinisat cnf >>= print
             return cs'
     else do

@@ -3,7 +3,6 @@ module SAT where
 import qualified Data.Set as S
 
 import Utils
-import TagTree
 
 data SAT a = SAT { sComment :: String                -- ^ A Comment
                , sVars :: S.Set Integer            -- ^ Unique Variables
@@ -48,16 +47,3 @@ instance Monoid (SAT a) where
         , formula = pure . And $ lformula `mappend` rformula
         }
   mconcat = Prelude.foldr1 mappend
-
-
--- | Sat examples
-plainEx2 :: SAT V
-plainEx2 = SAT { sComment = "Im a comment"
-               , sVars = S.fromList [1..4]
-               , formula = [ And
-                             [ Or [Lit (one 1), Lit (one 3), Neg $ Lit (one 4)]
-                             , Or [Lit (one 4)]
-                             , Or [Lit (one 2), Lit (one 3)]
-                             ]
-                           ]
-               }
