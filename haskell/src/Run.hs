@@ -30,7 +30,7 @@ type Env d r = RWST (Opts r) Log (VarDict d, SatDict d) IO r
 
 -- | An empty reader monad environment, in the future read these from config file
 emptyOpts :: Opts a
-emptyOpts = Opts { baseline = True -- set to use andDecomp
+emptyOpts = Opts { baseline = False -- set to use andDecomp
                  , others = []
                  }
 
@@ -117,6 +117,10 @@ work cs = do
             mapM_ work' cnfs'
             return (Lit 1)
 
+-- | Given a configuration, a boolean representing satisfiability and a Prop, If
+-- the prop does not contain a Nothing (as denoted by the bool) then extract the
+-- values from the prop, ground then prop, convert to a CNF with descriptor of
+-- the configuration, run the sat solver and save the result to the SAT table
 work' :: (Ord k, Show a, Show k, Integral a, MonadTrans t1,
            MonadState (t, M.Map k Satisfiable) (t1 IO)) =>
          (k, Bool, Prop (Maybe a)) -> t1 IO ()
