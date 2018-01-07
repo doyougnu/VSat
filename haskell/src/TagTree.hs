@@ -8,7 +8,6 @@ import qualified Data.Map as M
 
 type Tag = String
 
--- type Config d = [(d, Bool)]
 type Config d = M.Map d Bool
 
 data V d b = Obj b
@@ -141,14 +140,13 @@ paths (Chc d l r) =
     [ M.insert d True summaryl, M.insert d False summaryr] -- TODO fix dups
 
 -- | Given a tag tree, fmap over the tree with respect to a config
--- replace :: Eq d => Config d -> (a -> a) -> V d a -> V d a
--- replace _    f (Obj a)     = Obj $ f a
--- replace conf f (Chc d l r) = case lookup d conf of
---                                        Nothing -> Chc d
---                                          (replace conf f l)
---                                          (replace conf f r)
---                                        Just True -> Chc d (replace conf f l) r
---                                        Just False -> Chc d l (replace conf f r)
+replace :: Ord d => Config d -> (a -> a) -> V d a -> V d a
+replace _    f (Obj a)     = Obj $ f a
+replace conf f x@(Chc d l r) =
+  case M.lookup d conf of
+    Nothing -> x
+    Just True -> Chc d (replace conf f l) r
+    Just False -> Chc d l (replace conf f r)
 
 -- replace' :: Eq d => Config d -> (a -> a) -> V d a -> V d a
 -- replace' [] f (Obj a) = Obj $ f a
