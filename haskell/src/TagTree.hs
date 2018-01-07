@@ -144,28 +144,12 @@ replace :: Ord d => Config d -> (a -> a) -> V d a -> V d a
 replace _    f (Obj a)     = Obj $ f a
 replace conf f x@(Chc d l r) =
   case M.lookup d conf of
-    Nothing -> x
-    Just True -> Chc d (replace conf f l) r
+    Nothing    -> x
+    Just True  -> Chc d (replace conf f l) r
     Just False -> Chc d l (replace conf f r)
 
--- replace' :: Eq d => Config d -> (a -> a) -> V d a -> V d a
--- replace' [] f (Obj a) = Obj $ f a
--- replace' [] _ x       = x
--- replace' ((_, _):_) f (Obj a) = Obj $ f a
--- replace' ((d, b):xs) f (Chc dim l r)
---   | d == dim = Chc dim
-
-
--- recompile :: [(Config d, a)] -> V d (Maybe a) -> V d (Maybe a)
--- recompile [] acc = acc
--- recompile a@(((d, branch), val):xs) acc =
-
--- apply  :: Eq d => [Config d] -> (a -> b) -> V d a -> V d (Maybe b)
--- apply [] f (Obj a) = Obj . Just $ f a
--- apply [] _ (Chc _ _ _) = Obj Nothing
--- apply (_:_) f (Obj a) = Obj . Just $ f a
--- apply (c:cs) f (Chc d l r) =
---   case lookup d c of
---     Nothing -> Chc d (apply cs f l) (apply cs f r)
---     Just True -> Chc d (apply [c] f l) (apply cs f r)
---     Just False -> Chc d (apply cs f l) (apply [c] f r)
+-- | Given a list of configs with associated values, remake the tag tree by
+-- folding over the config list
+recompile :: Ord d => [(Config d, a)] -> V d a -> V d a
+recompile []               acc = acc
+recompile ((conf, val):cs) acc = recompile cs $ replace conf (const val) acc
