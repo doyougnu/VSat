@@ -30,7 +30,7 @@ type Env d r = RWST (Opts r) Log (VarDict d, SatDict d) IO r
 
 -- | An empty reader monad environment, in the future read these from config file
 emptyOpts :: Opts a
-emptyOpts = Opts { baseline = False -- set to use andDecomp
+emptyOpts = Opts { baseline = True -- set to use andDecomp
                  , others = []
                  }
 
@@ -88,9 +88,14 @@ work cs = do
   bs <- asks baseline
   if bs
     then do cs' <- toPropDecomp cs
+            (_, sats) <- get
             let grnd = ground cs'
                 cnf = propToCNF "does it run?" grnd
-            lift $ runPMinisat cnf
+            _ <- lift $ runPMinisat cnf
+            return $ case recompile (M.toList sats) of
+              Nothing -> False
+              Just _  -> True
+
     else do
             (_, sats) <- get
             let keys = M.keys sats
