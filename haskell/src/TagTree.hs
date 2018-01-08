@@ -2,97 +2,189 @@ module TagTree where
 
 import Data.Maybe (isJust)
 import Data.Bifunctor
+import Data.Bifoldable
+import Data.Bitraversable
+import qualified Data.Map as M
+import Data.List (nub)
+import Debug.Trace (trace)
 
 type Tag = String
 
-type Config a = [(a, Bool)]
+type Config d = M.Map d Bool
 
-data V a b = Obj b
-         | Chc a (V a b) (V a b)
+data V d b = Obj b
+         | Chc d (V d b) (V d b)
          deriving (Eq, Ord)
 
 -- | smart constructor for obj
-one :: b -> V a b
+one :: b -> V d b
 one = Obj
 
 -- | smart constructor for chc
-chc :: a -> V a b -> V a b -> V a b
+chc :: d -> V d b -> V d b -> V d b
 chc = Chc
 
--- | Pull the topmost tag out of a Variational term
-tag :: V a b -> Maybe a
+-- | Pull the topmost tag out of d Variational term
+tag :: V d b -> Maybe d
 tag (Chc t _ _) = Just t
 tag _           = Nothing
 
--- | Pull all the tags out of a Variational term
-tags :: V a b -> [a]
+-- | Pull all the tags out of d Variational term
+tags :: V d b -> [d]
 tags (Chc t y n) = t : tags y ++ tags n
 tags _           = []
 
--- | Given a variational term, return all objects in it
-getAllObjs :: (Integral b) => V a b -> [Integer]
+-- | Given d variational term, return all objects in it
+getAllObjs :: (Integral b) => V d b -> [Integer]
 getAllObjs (Chc _ y n) = concatMap getAllObjs [y, n]
-getAllObjs (Obj a)     = return $ toInteger a
+getAllObjs (Obj d)     = return $ toInteger d
 
--- | Given a variation term, if it is an object, get the object
-getObj :: V a b -> Maybe b
-getObj (Obj a) = Just a
+-- | Given d variation term, if it is an object, get the object
+getObj :: V d b -> Maybe b
+getObj (Obj d) = Just d
 getObj _ = Nothing
 
--- | Given a variational expression, return true if its an object
-isObj :: V a b -> Bool
+-- | Given d variational expression, return true if its an object
+isObj :: V d b -> Bool
 isObj = isJust . getObj
 
--- | Given a variational expression, return true if its an choice
-isChc :: V a b -> Bool
+-- | Given d variational expression, return true if its an choice
+isChc :: V d b -> Bool
 isChc = not . isObj
 
 -- | Wrapper around engine
-prune :: (Eq a) => V a b -> V a b
-prune = pruneTagtree []
+prune :: (Ord d) => V d b -> V d b
+prune = pruneTagtree M.empty
 
--- | Given a config and variational expression remove redundant choices
-pruneTagtree :: (Eq a) => Config a -> V a b -> V a b
-pruneTagtree _ (Obj a) = Obj a
-pruneTagtree tb (Chc t y n) = case lookup t tb of
+-- | Given d config and variational expression remove redundant choices
+pruneTagtree :: (Ord d) => Config d -> V d b -> V d b
+pruneTagtree _ (Obj d) = Obj d
+pruneTagtree tb (Chc t y n) = case M.lookup t tb of
                              Nothing -> Chc t
-                                        (pruneTagtree ((t,True):tb) y)
-                                        (pruneTagtree ((t,False):tb) n)
+                                        (pruneTagtree (M.insert t True tb) y)
+                                        (pruneTagtree (M.insert t False tb) n)
                              Just True -> pruneTagtree tb y
                              Just False -> pruneTagtree tb n
 
--- | Given a configuration and a variational expression perform a selection
-select :: (Eq a) => Config a -> V a b -> Maybe b
-select _ (Obj a) = Just a
+-- | Given d configuration and d variational expression perform d selection
+select :: (Ord d) => Config d -> V d b -> Maybe b
+select _ (Obj d) = Just d
 select tbs (Chc t y n) =
-  case lookup t tbs of
+  case M.lookup t tbs of
     Nothing   -> Nothing
     Just True -> select tbs y
     Just False -> select tbs n
 
-instance Functor (V a) where
-  fmap f (Obj a) = Obj (f a)
+instance Functor (V d) where
+  fmap f (Obj d)     = Obj (f d)
   fmap f (Chc t y n) = Chc t (fmap f y) (fmap f n)
 
-
-instance Applicative (V a) where
+instance Applicative (V d) where
   pure = one
   (Obj f) <*> (Obj e) = Obj $ f e
   f@(Obj _) <*> (Chc t l r) = Chc t (f <*> l) (f <*> r)
-  (Chc t fl fr) <*> a@(Obj _) = Chc t (fl <*> a) (fr <*> a)
+  (Chc t fl fr) <*> d@(Obj _) = Chc t (fl <*> d) (fr <*> d)
   (Chc t fl fr) <*> (Chc t' el er) = Chc t
                                      (Chc t' (fl <*> el) (fl <*> er))
                                      (Chc t' (fr <*> el) (fr <*> er))
 
-instance Monad (V a) where
+instance Monad (V d) where
   return  = Obj
-  Obj a >>= f = f a
+  Obj d >>= f = f d
   Chc t y n >>= f = Chc t (y >>= f)(n >>= f)
 
-instance (Show a, Show b) => Show (V a b) where
-  show (Obj a)      = show a
+instance (Show d, Show b) => Show (V d b) where
+  show (Obj d)       = show d
   show (Chc t y n)   = show t ++ "<" ++ show y ++ ", " ++ show n ++ ">"
 
 instance Bifunctor V where
-  bimap _ g (Obj a) = Obj $ g a
+  bimap _ g (Obj d) = Obj $ g d
   bimap f g (Chc t l r) = Chc (f t) (bimap f g l) (bimap f g r)
+
+instance Bifoldable V where
+  bifoldr _ g acc (Obj c) = g c acc
+  bifoldr f g acc (Chc d l r) = bifoldr f g (bifoldr f g (f d acc) r) l
+
+instance Bitraversable V where
+  bitraverse _ g (Obj c) = Obj <$> g c
+  bitraverse f g (Chc d l r) = Chc <$>
+                               f d <*>
+                               bitraverse f g l <*> bitraverse f g r
+
+instance Traversable (V d) where
+  traverse = bitraverse pure
+
+instance Foldable (V d) where
+  foldr = bifoldr (flip const)
+
+t1 :: V String Integer
+t1 = chc "a" (one 1) (one 2)
+
+t2 :: V String Integer
+t2 = chc "a"
+     (chc "b"
+       (one 1)
+       (chc "a"
+         (one 2)
+         (one 3)))
+     (one 5)
+
+t3 :: V String Integer
+t3 = chc "a"
+     (one 1)
+     (chc "b"
+      (chc "c"
+        (one 4)
+        (one 5))
+       (one 3))
+
+-- | Given a variational term find all paths for the tree in a flat list
+paths :: (Ord d) => V d a -> [Config d]
+paths (Chc d l r) = nub $ do
+  summaryl <- paths l
+  summaryr <- paths r
+  [M.insert d True summaryl, M.insert d False summaryr] -- TODO fix dups
+paths _ = [M.empty]
+
+-- | Given a tag tree, fmap over the tree with respect to a config
+replace :: Ord d => Config d -> (a -> a) -> V d a -> V d a
+replace _    f (Obj a) = Obj $ f a
+replace conf f x@(Chc d l r) =
+  case M.lookup d conf of
+    Nothing    -> x
+    Just True  -> Chc d (replace conf f l) r
+    Just False -> Chc d l (replace conf f r)
+
+-- | Given a list of configs with associated values, remake the tag tree by
+-- folding over the config list
+recompile :: Ord d => [(Config d, a)] -> V d a -> V d a
+recompile []               acc = acc
+recompile ((conf, val):cs) acc = recompile cs $ replace conf (const val) acc
+
+recompile' :: Ord d => Config d -> a -> V d (Maybe a)
+recompile' conf = go (M.toList conf)
+  where
+    go :: [(d, Bool)] -> a -> V d (Maybe a)
+    go [] val' = Obj . Just $ val'
+    go ((d, b):cs) val'
+          | b = Chc d (go cs val') (Obj Nothing)
+          | otherwise = Chc d (Obj Nothing) (go cs val')
+
+recompile'' :: (Ord d, Show d, Show a) => [(Config d, a)] -> Maybe (V d a)
+recompile'' [] = Nothing
+recompile'' ((conf, val):xs) = trace (show prnt) result
+  where
+    result = sequence $ go xs (recompile' conf val)
+    prnt = go xs (recompile' conf val)
+    go :: (Ord d, Show d, Show a) =>
+      [(Config d, a)] -> V d (Maybe a) -> V d (Maybe a)
+    go []          acc = acc
+    go ((c, v):cs) acc = go cs $ trace (show next) next
+      where next = replace' c v acc
+
+replace' :: Ord d => Config d -> a -> V d (Maybe a) -> V d (Maybe a)
+replace' _    f (Obj _) = Obj $ Just f
+replace' conf f x@(Chc d l r) = case M.lookup d conf of
+  Nothing -> Chc d (replace' conf f l) (replace' conf f r)
+  Just True ->  Chc d (replace' conf f l) r
+  Just False -> Chc d l (replace' conf f r)

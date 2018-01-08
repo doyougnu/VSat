@@ -1,7 +1,9 @@
 module Prop where
 
 import Utils (parens)
+import Control.Monad (ap)
 
+-- | A general propositional language that has all the usual suspects
 data Prop a = Lit a                     -- ^ A Literal term
             | Neg    (Prop a)           -- ^ Negation of a term
             | And    (Prop a) (Prop a)  -- ^ A Logical And
@@ -9,6 +11,13 @@ data Prop a = Lit a                     -- ^ A Literal term
             | Impl   (Prop a) (Prop a)  -- ^ A Logical Implication
             | BiImpl (Prop a) (Prop a)  -- ^ A Logical Biconditional
             deriving Eq
+
+-- | A Propositional Language that only allows grounded terms
+data GProp a = GLit a                   -- ^ A grounded prop literal
+             | GNLit a                  -- ^ A negated grounded literal
+             | GAnd (GProp a) (GProp a) -- ^ A grounded and term
+             | GOr  (GProp a) (GProp a) -- ^ a ground or term
+             deriving Functor
 
 instance (Show a) => Show (Prop a) where
   show (Lit a)          = show a
@@ -18,6 +27,12 @@ instance (Show a) => Show (Prop a) where
   show (Impl ant con)   = parens $ show ant ++ " -> " ++ show con
   show (BiImpl ant con) = parens $ show ant ++ " <-> " ++ show con
 
+instance (Show a) => Show (GProp a) where
+  show (GLit a)          = show a
+  show (GNLit a)          = "-" ++ show a
+  show (GAnd x y)        = parens $ show x ++ " && " ++ show y
+  show (GOr x y)         = parens $ show x ++ " || " ++ show y
+
 instance Functor Prop where
   fmap f (Lit a)      = Lit $ f a
   fmap f (Neg a)      = Neg $ f <$> a
@@ -25,6 +40,16 @@ instance Functor Prop where
   fmap f (Or l r)     = Or     (f <$> l) (f <$> r)
   fmap f (Impl a c)   = Impl   (f <$> a) (f <$> c)
   fmap f (BiImpl a c) = BiImpl (f <$> a) (f <$> c)
+
+instance Applicative Prop where
+  pure = Lit
+  (<*>) = ap
+
+instance Foldable GProp where
+  foldMap f (GLit a)   = f a
+  foldMap f (GNLit a)  = f a
+  foldMap f (GAnd l r) = mconcat [foldMap f l, foldMap f r]
+  foldMap f (GOr l r)  = mconcat [foldMap f l, foldMap f r]
 
 instance Foldable Prop where
   foldMap f (Lit a)      = f a
@@ -49,6 +74,14 @@ instance Traversable Prop where
   traverse f (Impl l r)   = Impl   <$> traverse f l <*> traverse f r
   traverse f (BiImpl l r) = BiImpl <$> traverse f l <*> traverse f r
 
+instance Monad Prop where
+  return = Lit
+  (Lit x) >>= f = f x
+  (Neg x) >>= f = Neg $ x >>= f
+  (And l r)    >>= f = And    (l >>= f) (r >>= f)
+  (Or l r)     >>= f = Or     (l >>= f) (r >>= f)
+  (Impl l r)   >>= f = Impl   (l >>= f) (r >>= f)
+  (BiImpl l r) >>= f = BiImpl (l >>= f) (r >>= f)
 
 -- | Eliminate an biconditionals
 elimBi :: Prop a -> Prop a
@@ -136,14 +169,36 @@ toCNF :: (Show a) => Prop a -> Prop a
 toCNF = head . filter isCNF . iterate funcs
   where funcs = dubNeg . distrib . deMorgs . elimImp . elimBi
 
+-- | Convert a propositional term to a grounded term
+ground :: (Show a) => Prop a -> GProp a
+ground (Lit x)       = GLit x
+ground (Neg (Lit x)) = GNLit x
+ground (Or l r)      = GOr  (ground . toCNF $ l) (ground . toCNF $ r)
+ground (And l r)     = GAnd (ground . toCNF $ l) (ground . toCNF $ r)
+ground x             = ground $ toCNF x
+
 -- | traverse a propositional term and pack a list with new elements at each and
-toListAndSplit :: (Show a) => Prop a -> [Prop a]
-toListAndSplit term = go terms []
+toListAndSplit :: (Show a) => GProp a -> [GProp a]
+toListAndSplit term = go term []
   where
-    terms = toCNF term
-    go (And l r) acc = go l acc ++ go r acc
+    go (GAnd l r) acc = go l acc ++ go r acc
     go x acc = x : acc
 
+-- | traverse a grounded term that represents Ands via a list, and replace ORs
+-- with an inner list, see DIMACs CNF form
+orSplit :: (Num a) => [GProp a] -> [[a]]
+orSplit = fmap helper
+  where
+    helper :: (Num a) => GProp a -> [a]
+    helper (GLit x)  = [x]
+    helper (GNLit x) = [negate x]
+    helper (GOr l r) = helper l ++ helper r
+    helper _         = [] --this will only ever be an AND, fix the case later
+
+-- | Take any propositional term, ground it, then massage it until it fits the
+-- DIMACS CNF clause form
+toDimacsProp :: (Num a, Show a) => Prop a -> [[a]]
+toDimacsProp = orSplit . toListAndSplit . ground
 
 -- Test Examples
 ex :: Prop String
