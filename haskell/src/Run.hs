@@ -49,7 +49,7 @@ recordVars :: (Eq d, Ord d, H.Hashable d, MonadState (VarDict d, SatDict d) m) =
 recordVars cs = do
   st@(_, old_sats) <- get
   let (newvars, _)=
-        bifoldr
+        bifoldr'
         (\dim (vars, sats) -> (I.insert (abs . hash $ dim) dim vars , sats))
         (\_ s -> s) st cs
       ss' = M.union old_sats . M.fromList $ zip (paths cs) (repeat False)
@@ -72,15 +72,6 @@ toPropDecomp :: (H.Hashable d, Integral a, Monad m) =>
   Prop (V d a) -> m (Prop Integer)
 toPropDecomp cs = return $ cs >>= (andDecomp . unify)
 
--- | given a variational prop term iterate over the choices, pack the initial
--- environment, then convert the choices to a plain prop term using andDecomp
--- TODO: Disentangle this init and work coupling, want initEnv >=> work pipeline
-initEnv :: (Eq d, Show a, Show d, Ord d, H.Hashable d, Integral a) =>
-  Prop (V d a) -> Env d (Prop Integer)
-initEnv cs = do
-  forM_ cs recordVars
-  work cs
-
 -- | convert  propositional term to a DIMACS CNF term
 propToCNF :: (Num a, Integral a) => String -> GProp a -> CNF
 propToCNF str ps = cnf
@@ -90,22 +81,16 @@ propToCNF str ps = cnf
               , clauses = orSplit . toListAndSplit $ toInteger <$> ps
               }
 
-thd :: (a, b, c) -> c
-thd (_, _, c) = c
-
 -- | main workhorse for running the SAT solver
 work :: (Eq d, Show a, Show d, Ord d, Hashable d, Integral a) =>
-  Prop (V d a) -> Env d (Prop Integer)
+  Prop (V d a) -> Env d Satisfiable
 work cs = do
   bs <- asks baseline
   if bs
     then do cs' <- toPropDecomp cs
             let grnd = ground cs'
                 cnf = propToCNF "does it run?" grnd
-            lift . print $ grnd
-            lift $ putStrLn ""
-            lift $ runPMinisat cnf >>= print
-            return cs'
+            lift $ runPMinisat cnf
     else do
             (_, sats) <- get
             let keys = M.keys sats
@@ -116,8 +101,15 @@ work cs = do
                                     )) <$> cnfs
             mapM_ work' cnfs'
             (_, newSats) <- get
-            lift $ print newSats
-            return (Lit 1)
+            return $ case recompile (M.toList newSats) of
+                  Nothing -> False
+                  Just _  -> True
+
+initAndRun :: (Eq d, Show a, Show d, Ord d, H.Hashable d, Integral a) =>
+  Prop (V d a) -> Env d Satisfiable
+initAndRun cs = do
+  forM_ cs recordVars -- initialize the environment
+  work cs
 
 -- | Given a configuration, a boolean representing satisfiability and a Prop, If
 -- the prop does not contain a Nothing (as denoted by the bool) then extract the

@@ -2,15 +2,6 @@ module SubProcess where
 
 import qualified Turtle as T
 import qualified Data.Text as D (pack)
-<<<<<<< HEAD
-import Data.Maybe (fromJust)
-import Data.List (groupBy, nub)
-import Data.Function (on)
-import Data.Set as S (Set, member, insert, empty)
-import Data.Hashable (hash)
-
-=======
->>>>>>> 478c830f42be7c60447c4859e4ba801760e2bc06
 import qualified Control.Foldl as F
 
 import CNF

@@ -6,7 +6,6 @@ import Data.Bifoldable
 import Data.Bitraversable
 import qualified Data.Map as M
 import Data.List (nub, sortOn)
-import Debug.Trace (trace)
 
 type Tag = String
 
@@ -165,7 +164,7 @@ recompile xs = sequence $ go (tail xs') (_recompile conf val)
     go :: (Ord d, Show d, Show a) =>
       [(Config d, a)] -> V d (Maybe a) -> V d (Maybe a)
     go []          acc = acc
-    go ((c, v):cs) acc = go cs $ trace (show next) next
+    go ((c, v):cs) acc = go cs next
       where next = replace c v acc
 
 -- | helper function used to create seed value for fold just once
