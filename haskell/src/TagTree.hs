@@ -5,7 +5,7 @@ import Data.Bifunctor
 import Data.Bifoldable
 import Data.Bitraversable
 import qualified Data.Map as M
-import Data.List (nub)
+import Data.List (nub, sortOn)
 import Debug.Trace (trace)
 
 type Tag = String
@@ -140,51 +140,40 @@ t3 = chc "a"
 
 -- | Given a variational term find all paths for the tree in a flat list
 paths :: (Ord d) => V d a -> [Config d]
-paths (Chc d l r) = nub $ do
+paths (Chc d l r) = nub $ do -- TODO: remove nub
   summaryl <- paths l
   summaryr <- paths r
-  [M.insert d True summaryl, M.insert d False summaryr] -- TODO fix dups
+  [M.insert d True summaryl, M.insert d False summaryr]
 paths _ = [M.empty]
 
 -- | Given a tag tree, fmap over the tree with respect to a config
-replace :: Ord d => Config d -> (a -> a) -> V d a -> V d a
-replace _    f (Obj a) = Obj $ f a
-replace conf f x@(Chc d l r) =
-  case M.lookup d conf of
-    Nothing    -> x
-    Just True  -> Chc d (replace conf f l) r
-    Just False -> Chc d l (replace conf f r)
+replace :: Ord d => Config d -> a -> V d (Maybe a) -> V d (Maybe a)
+replace _    f (Obj _) = Obj $ Just f
+replace conf f (Chc d l r) = case M.lookup d conf of
+  Nothing -> Chc d (replace conf f l) (replace conf f r)
+  Just True ->  Chc d (replace conf f l) r
+  Just False -> Chc d l (replace conf f r)
 
 -- | Given a list of configs with associated values, remake the tag tree by
 -- folding over the config list
-recompile :: Ord d => [(Config d, a)] -> V d a -> V d a
-recompile []               acc = acc
-recompile ((conf, val):cs) acc = recompile cs $ replace conf (const val) acc
+recompile :: (Ord d, Show d, Show a) => [(Config d, a)] -> Maybe (V d a)
+recompile [] = Nothing
+recompile xs = sequence $ go (tail xs') (_recompile conf val)
+  where
+    xs' = reverse $ sortOn (M.size . fst) xs
+    (conf, val) = head xs'
+    go :: (Ord d, Show d, Show a) =>
+      [(Config d, a)] -> V d (Maybe a) -> V d (Maybe a)
+    go []          acc = acc
+    go ((c, v):cs) acc = go cs $ trace (show next) next
+      where next = replace c v acc
 
-recompile' :: Ord d => Config d -> a -> V d (Maybe a)
-recompile' conf = go (M.toList conf)
+-- | helper function used to create seed value for fold just once
+_recompile :: Ord d => Config d -> a -> V d (Maybe a)
+_recompile conf = go (M.toList conf)
   where
     go :: [(d, Bool)] -> a -> V d (Maybe a)
     go [] val' = Obj . Just $ val'
     go ((d, b):cs) val'
           | b = Chc d (go cs val') (Obj Nothing)
           | otherwise = Chc d (Obj Nothing) (go cs val')
-
-recompile'' :: (Ord d, Show d, Show a) => [(Config d, a)] -> Maybe (V d a)
-recompile'' [] = Nothing
-recompile'' ((conf, val):xs) = trace (show prnt) result
-  where
-    result = sequence $ go xs (recompile' conf val)
-    prnt = go xs (recompile' conf val)
-    go :: (Ord d, Show d, Show a) =>
-      [(Config d, a)] -> V d (Maybe a) -> V d (Maybe a)
-    go []          acc = acc
-    go ((c, v):cs) acc = go cs $ trace (show next) next
-      where next = replace' c v acc
-
-replace' :: Ord d => Config d -> a -> V d (Maybe a) -> V d (Maybe a)
-replace' _    f (Obj _) = Obj $ Just f
-replace' conf f x@(Chc d l r) = case M.lookup d conf of
-  Nothing -> Chc d (replace' conf f l) (replace' conf f r)
-  Just True ->  Chc d (replace' conf f l) r
-  Just False -> Chc d l (replace' conf f r)
