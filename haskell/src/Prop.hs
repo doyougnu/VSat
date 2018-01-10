@@ -1,16 +1,29 @@
-module Prop where
+module VProp where
 
 import Utils (parens)
+import Data.Maybe (isJust)
 import Control.Monad (ap)
+import Data.List (nub, sortOn)
+import Data.Bifunctor
+import Data.Bifoldable
+import Data.Bitraversable
+import qualified Data.Map as M
 
 -- | A general propositional language that has all the usual suspects
-data Prop a = Lit a                     -- ^ A Literal term
-            | Neg    (Prop a)           -- ^ Negation of a term
-            | And    (Prop a) (Prop a)  -- ^ A Logical And
-            | Or     (Prop a) (Prop a)  -- ^ A Logical Or
-            | Impl   (Prop a) (Prop a)  -- ^ A Logical Implication
-            | BiImpl (Prop a) (Prop a)  -- ^ A Logical Biconditional
+data VProp d a = Obj a                           -- ^ A Literal term
+               | Neg    (VProp d a)              -- ^ Negation of a term
+               | And    (VProp d a) (VProp d a)  -- ^ A Logical And
+               | Or     (VProp d a) (VProp d a)  -- ^ A Logical Or
+               | Impl   (VProp d a) (VProp d a)  -- ^ A Logical Implication
+               | BiImpl (VProp d a) (VProp d a)  -- ^ A Logical Biconditional
+               | Chc d  (VProp d a) (VProp d a)  -- ^ A Choice in Dimension d
             deriving Eq
+
+-- | a tag is just a string that represents a dimension in a Choice
+type Tag = String
+
+-- | A configuration
+type Config d = M.Map d Bool
 
 -- | A Propositional Language that only allows grounded terms
 data GProp a = GLit a                   -- ^ A grounded prop literal
@@ -19,30 +32,35 @@ data GProp a = GLit a                   -- ^ A grounded prop literal
              | GOr  (GProp a) (GProp a) -- ^ a ground or term
              deriving Functor
 
-instance (Show a) => Show (Prop a) where
-  show (Lit a)          = show a
+instance (Show d, Show a) => Show (VProp d a) where
+  show (Obj a)          = show a
   show (Neg a)          = "-" ++ show a
   show (And x y)        = parens $ show x ++ " && " ++ show y
   show (Or x y)         = parens $ show x ++ " || " ++ show y
   show (Impl ant con)   = parens $ show ant ++ " -> " ++ show con
   show (BiImpl ant con) = parens $ show ant ++ " <-> " ++ show con
+  show (Chc t y n)   = show t ++ "<" ++ show y ++ ", " ++ show n ++ ">"
 
 instance (Show a) => Show (GProp a) where
-  show (GLit a)          = show a
-  show (GNLit a)          = "-" ++ show a
-  show (GAnd x y)        = parens $ show x ++ " && " ++ show y
-  show (GOr x y)         = parens $ show x ++ " || " ++ show y
+  show (GLit a)   = show a
+  show (GNLit a)  = "-" ++ show a
+  show (GAnd x y) = parens $ show x ++ " && " ++ show y
+  show (GOr x y)  = parens $ show x ++ " || " ++ show y
 
-instance Functor Prop where
-  fmap f (Lit a)      = Lit $ f a
-  fmap f (Neg a)      = Neg $ f <$> a
-  fmap f (And l r)    = And    (f <$> l) (f <$> r)
-  fmap f (Or l r)     = Or     (f <$> l) (f <$> r)
-  fmap f (Impl a c)   = Impl   (f <$> a) (f <$> c)
-  fmap f (BiImpl a c) = BiImpl (f <$> a) (f <$> c)
+instance Bifunctor VProp where
+  bimap _ g (Obj d)      = Obj $ g d
+  bimap f g (Chc t l r)  = Chc (f t) (bimap f g l) (bimap f g r)
+  bimap f g (Neg a)      = Neg $ bimap f g a
+  bimap f g (And l r)    = And (bimap f g l) (bimap f g r)
+  bimap f g (Or l r)     = Or (bimap f g l) (bimap f g r)
+  bimap f g (Impl a c)   = Impl (bimap f g a) (bimap f g c)
+  bimap f g (BiImpl a c) = BiImpl (bimap f g a) (bimap f g c)
 
-instance Applicative Prop where
-  pure = Lit
+instance Functor (VProp d) where
+  fmap = bimap id
+
+instance Applicative (VProp d) where
+  pure = Obj
   (<*>) = ap
 
 instance Foldable GProp where
@@ -51,43 +69,50 @@ instance Foldable GProp where
   foldMap f (GAnd l r) = mconcat [foldMap f l, foldMap f r]
   foldMap f (GOr l r)  = mconcat [foldMap f l, foldMap f r]
 
-instance Foldable Prop where
-  foldMap f (Lit a)      = f a
-  foldMap f (Neg a)      = foldMap f a
-  foldMap f (And l r)    = mconcat [foldMap f l, foldMap f r]
-  foldMap f (Or l r)     = mconcat [foldMap f l, foldMap f r]
-  foldMap f (Impl l r)   = mconcat [foldMap f l, foldMap f r]
-  foldMap f (BiImpl l r) = mconcat [foldMap f l, foldMap f r]
+instance Bifoldable VProp where
+  bifoldr _ g acc (Obj c)      = g c acc
+  bifoldr f g acc (Neg a)      = bifoldr f g acc a
+  bifoldr f g acc (And l r)    = bifoldr f g (bifoldr f g acc r) l
+  bifoldr f g acc (Or l r)     = bifoldr f g (bifoldr f g acc r) l
+  bifoldr f g acc (Impl l r)   = bifoldr f g (bifoldr f g acc r) l
+  bifoldr f g acc (BiImpl l r) = bifoldr f g (bifoldr f g acc r) l
+  bifoldr f g acc (Chc d l r)  = bifoldr f g (bifoldr f g (f d acc) r) l
 
-  foldr f z (Lit a)      = f a z
-  foldr f z (Neg a)      = foldr f (foldr f z a) a
-  foldr f z (And l r)    = foldr f (foldr f z l) r
-  foldr f z (Or l r)     = foldr f (foldr f z l) r
-  foldr f z (Impl l r)   = foldr f (foldr f z l) r
-  foldr f z (BiImpl l r) = foldr f (foldr f z l) r
+instance Foldable (VProp d) where
+  foldr = bifoldr (flip const)
 
-instance Traversable Prop where
-  traverse f (Lit a)      = Lit <$> f a
-  traverse f (Neg a)      = Neg <$> traverse f a
-  traverse f (And l r)    = And    <$> traverse f l <*> traverse f r
-  traverse f (Or l r)     = Or     <$> traverse f l <*> traverse f r
-  traverse f (Impl l r)   = Impl   <$> traverse f l <*> traverse f r
-  traverse f (BiImpl l r) = BiImpl <$> traverse f l <*> traverse f r
+instance Traversable (VProp d) where
+  traverse = bitraverse pure
 
-instance Monad Prop where
-  return = Lit
-  (Lit x) >>= f = f x
+instance Bitraversable VProp where
+  bitraverse _ g (Obj a)      = Obj <$> g a
+  bitraverse f g (Neg a)      = Neg <$> bitraverse f g a
+  bitraverse f g (And l r)    = And    <$> bitraverse f g l <*> bitraverse f g r
+  bitraverse f g (Or l r)     = Or     <$> bitraverse f g l <*> bitraverse f g r
+  bitraverse f g (Impl l r)   = Impl   <$> bitraverse f g l <*> bitraverse f g r
+  bitraverse f g (BiImpl l r) = BiImpl <$> bitraverse f g l <*> bitraverse f g r
+  bitraverse f g (Chc d l r) = Chc <$>
+                               f d <*>
+                               bitraverse f g l <*> bitraverse f g r
+
+instance Monad (VProp d) where
+  return = Obj
+  (Obj x) >>= f = f x
   (Neg x) >>= f = Neg $ x >>= f
   (And l r)    >>= f = And    (l >>= f) (r >>= f)
   (Or l r)     >>= f = Or     (l >>= f) (r >>= f)
   (Impl l r)   >>= f = Impl   (l >>= f) (r >>= f)
   (BiImpl l r) >>= f = BiImpl (l >>= f) (r >>= f)
+  (Chc t y n)  >>= f = Chc t  (y >>= f)(n >>= f)
 
+------------------- Propositional Formulae Laws --------------------------------
+-- all this repetition must be able to be factored out somehow
 -- | Eliminate an biconditionals
-elimBi :: Prop a -> Prop a
+elimBi :: VProp d a -> VProp d a
 elimBi (BiImpl a c) = And
   (Impl (elimBi a) (elimBi c))
   (Impl (elimBi c) (elimBi a))
+elimBi (Chc d l r) = Chc d (elimBi l) (elimBi r)
 elimBi (Impl a c) = Impl (elimBi a) (elimBi c)
 elimBi (And a c)  = And  (elimBi a) (elimBi c)
 elimBi (Or a c)   = Or   (elimBi a) (elimBi c)
@@ -95,20 +120,22 @@ elimBi (Neg a)    = Neg  (elimBi a)
 elimBi x          = x
 
 -- | Eliminate Implications
-elimImp :: Prop a -> Prop a
+elimImp :: VProp d a -> VProp d a
 elimImp (Impl a c) = Or (Neg (elimImp a)) (elimImp c)
 elimImp (BiImpl a c) = And
   (Impl (elimImp a) (elimImp c))
   (Impl (elimImp c) (elimImp a))
-elimImp (And a c)  = And  (elimImp a) (elimImp c)
-elimImp (Or a c)   = Or   (elimImp a) (elimImp c)
-elimImp (Neg a)    = Neg  (elimImp a)
-elimImp x          = x
+elimImp (Chc d l r) = Chc d (elimImp l) (elimImp r)
+elimImp (And a c)   = And  (elimImp a) (elimImp c)
+elimImp (Or a c)    = Or   (elimImp a) (elimImp c)
+elimImp (Neg a)     = Neg  (elimImp a)
+elimImp x           = x
 
--- | Demorgans law
-deMorgs :: Prop a -> Prop a
+-- -- | Demorgans law
+deMorgs :: VProp d a -> VProp d a
 deMorgs (Neg (And l r)) = Or  (Neg l) (Neg r)
 deMorgs (Neg (Or l r))  = And (Neg l) (Neg r)
+deMorgs (Chc d l r)     = Chc d  (deMorgs l) (deMorgs r)
 deMorgs (And l r)       = And    (deMorgs l) (deMorgs r)
 deMorgs (Or l r)        = Or     (deMorgs l) (deMorgs r)
 deMorgs (Impl p q)      = Impl   (deMorgs p) (deMorgs q)
@@ -116,9 +143,10 @@ deMorgs (BiImpl p q)    = BiImpl (deMorgs p) (deMorgs q)
 deMorgs (Neg q)         = Neg    (deMorgs q)
 deMorgs x               = x
 
--- | Double Negation law
-dubNeg :: Prop a -> Prop a
+-- -- | Double Negation law
+dubNeg :: VProp d a -> VProp d a
 dubNeg (Neg (Neg a)) = a
+dubNeg (Chc d l r)  = Chc d  (dubNeg l) (dubNeg r)
 dubNeg (And l r)    = And    (dubNeg l) (dubNeg r)
 dubNeg (Or l r)     = Or     (dubNeg l) (dubNeg r)
 dubNeg (Impl p q)   = Impl   (dubNeg p) (dubNeg q)
@@ -126,13 +154,14 @@ dubNeg (BiImpl p q) = BiImpl (dubNeg p) (dubNeg q)
 dubNeg x            = x
 
 -- | Distributive laws
-distrib :: Prop a -> Prop a
+distrib :: VProp d a -> VProp d a
 distrib (Or p (And q r)) = And
   (Or (distrib p) (distrib q))
   (Or (distrib p) (distrib r))
 distrib (Or (And q r) p) = And
   (Or (distrib p) (distrib q))
   (Or (distrib p) (distrib r))
+distrib (Chc d l r)  = Chc d  (distrib l) (distrib r)
 distrib (Or l r)     = Or     (distrib l) (distrib r)
 distrib (And a c)    = And    (distrib a) (distrib c)
 distrib (Impl p q)   = Impl   (distrib p) (distrib q)
@@ -141,7 +170,7 @@ distrib (Neg q)      = Neg    (distrib q)
 distrib x            = x
 
 -- | Absorption
-absorb :: (Eq (Prop a)) => Prop a -> Prop a
+absorb :: (Eq (VProp d a)) => VProp d a -> VProp d a
 absorb x@(Or p (And p1 _))
   | p == p1 = p
   | otherwise = x
@@ -151,80 +180,193 @@ absorb x@(And p (Or p1 _))
 absorb x = x
 
 -- | True iff a propositional term contains only literals, ands, ors or negations
-isCNF :: Prop a -> Bool
+isCNF :: VProp d a -> Bool
 isCNF (And l r) = (isAnd l && isAnd r) || (isCNF l && isCNF r)
 isCNF (Or l r)  = isCNF l && isCNF r && not (isAnd l) && not (isAnd r)
 isCNF (Neg n)   = isCNF n
-isCNF (Lit _)   = True
+isCNF (Obj _)   = True
 isCNF _         = False
 
 -- | True if the propositional term is an And or the negation of an And
-isAnd :: Prop a -> Bool
+isAnd :: VProp d a -> Bool
 isAnd (And _ _)       = True
 isAnd (Neg (And _ _)) = True
 isAnd _               = False
 
 -- | For any Propositional term, reduce it to CNF via logical equivalences
-toCNF :: (Show a) => Prop a -> Prop a
+toCNF :: VProp d a -> VProp d a
 toCNF = head . filter isCNF . iterate funcs
   where funcs = dubNeg . distrib . deMorgs . elimImp . elimBi
 
+---------------------- Choice Functions ----------------------------------------
+-- | smart constructor for obj
+one :: a -> VProp d a
+one = Obj
+
+-- | smart constructor for chc
+chc :: d -> VProp d a -> VProp d a -> VProp d a
+chc = Chc
+
+-- | Given d variational term, return all objects in it
+getAllObjs :: VProp d b -> [b]
+getAllObjs (Chc _ y n) = concatMap getAllObjs [y, n]
+getAllObjs (Obj d)     = return d
+getAllObjs _           = []
+
+-- | Given d variation term, if it is an object, get the object
+getObj :: VProp d b -> Maybe b
+getObj (Obj d) = Just d
+getObj _ = Nothing
+
+-- | Given d variational expression, return true if its an object
+isObj :: VProp d b -> Bool
+isObj = isJust . getObj
+
+-- | Given d variational expression, return true if its an choice
+isChc :: VProp d b -> Bool
+isChc = not . isObj
+
+-- | Wrapper around engine
+prune :: (Ord d) => VProp d b -> VProp d b
+prune = pruneTagTree M.empty
+
+-- | Given d config and variational expression remove redundant choices
+pruneTagTree :: (Ord d) => Config d -> VProp d b -> VProp d b
+pruneTagTree _ (Obj d) = Obj d
+pruneTagTree tb (Chc t y n) = case M.lookup t tb of
+                             Nothing -> Chc t
+                                        (pruneTagTree (M.insert t True tb) y)
+                                        (pruneTagTree (M.insert t False tb) n)
+                             Just True -> pruneTagTree tb y
+                             Just False -> pruneTagTree tb n
+pruneTagTree tb (Neg x)      = Neg $ pruneTagTree tb x
+pruneTagTree tb (And l r)    = And    (pruneTagTree tb l) (pruneTagTree tb r)
+pruneTagTree tb (Or l r)     = Or     (pruneTagTree tb l) (pruneTagTree tb r)
+pruneTagTree tb (Impl l r)   = Impl   (pruneTagTree tb l) (pruneTagTree tb r)
+pruneTagTree tb (BiImpl l r) = BiImpl (pruneTagTree tb l) (pruneTagTree tb r)
+
+-- | Given a config and a Variational Prop term select the element out that the
+-- config points to
+select :: (Ord d) => Config d -> VProp d a -> VProp d (Maybe a)
+select _ (Obj a) = Obj . Just $ a
+select tbs (Chc t y n) = case M.lookup t tbs of
+                           Nothing    -> Chc t (select tbs y) (select tbs n)
+                           Just True  -> select tbs y
+                           Just False -> select tbs n
+select tb (Neg x)      = Neg $ select tb x
+select tb (And l r)    = And (select tb l) (select tb r)
+select tb (Or l r)     = Or (select tb l) (select tb r)
+select tb (Impl l r)   = Impl (select tb l) (select tb r)
+select tb (BiImpl l r) = BiImpl (select tb l) (select tb r)
+
+-- | Given a variational term find all paths for the tree in a flat list
+paths :: (Ord d) => VProp d a -> [Config d]
+paths (Chc d l r) = do -- TODO: remove nub
+  summaryl <- paths l
+  summaryr <- paths r
+  [M.insert d True summaryl, M.insert d False summaryr]
+paths (Neg x) = nub $ filter (not . M.null) $ paths x
+-- TODO cleanup nub and filter calls
+paths (And l r)    = nub $ filter (not . M.null) $ paths l ++ paths r
+paths (Or l r)     = nub $ filter (not . M.null) $ paths l ++ paths r
+paths (Impl l r)   = nub $ filter (not . M.null) $ paths l ++ paths r
+paths (BiImpl l r) = nub $ filter (not . M.null) $ paths l ++ paths r
+paths _ = [M.empty]
+
+-- | Given a tag tree, fmap over the tree with respect to a config
+replace :: Ord d => Config d -> (a -> a) -> VProp d (Maybe a) -> VProp d (Maybe a)
+replace _    f (Obj a) = Obj $ f <$> a
+replace conf f (Chc d l r) = case M.lookup d conf of
+  Nothing -> Chc d (replace conf f l) (replace conf f r)
+  Just True ->  Chc d (replace conf f l) r
+  Just False -> Chc d l (replace conf f r)
+replace conf f (Neg x) = Neg $ replace conf f x
+replace conf f (And l r)    = And    (replace conf f l) (replace conf f r)
+replace conf f (Or l r)     = Or     (replace conf f l) (replace conf f r)
+replace conf f (Impl l r)   = Impl   (replace conf f l) (replace conf f r)
+replace conf f (BiImpl l r) = BiImpl (replace conf f l) (replace conf f r)
+
+-- | helper function used to create seed value for fold just once
+_recompile :: Ord d => Config d -> a -> VProp d (Maybe a)
+_recompile conf = go (M.toList conf)
+  where
+    go :: [(d, Bool)] -> a -> VProp d (Maybe a)
+    go [] val' = Obj . Just $ val'
+    go ((d, b):cs) val'
+          | b = Chc d (go cs val') (Obj Nothing)
+          | otherwise = Chc d (Obj Nothing) (go cs val')
+
+-- | Given a list of configs with associated values, remake the tag tree by
+-- folding over the config list
+recompile :: (Ord d, Show d, Show a) => [(Config d, a)] -> Maybe (VProp d a)
+recompile [] = Nothing
+recompile xs = sequence $ go (tail xs') (_recompile conf val)
+  where
+    xs' = reverse $ sortOn (M.size . fst) xs
+    (conf, val) = head xs'
+    go :: (Ord d, Show d, Show a) =>
+      [(Config d, a)] -> VProp d (Maybe a) -> VProp d (Maybe a)
+    go []          acc = acc
+    go ((c, v):cs) acc = go cs next
+      where next = replace c (const v) acc
+---------------------- Language Reduction --------------------------------------
 -- | Convert a propositional term to a grounded term
-ground :: (Show a) => Prop a -> GProp a
-ground (Lit x)       = GLit x
-ground (Neg (Lit x)) = GNLit x
-ground (Or l r)      = GOr  (ground . toCNF $ l) (ground . toCNF $ r)
-ground (And l r)     = GAnd (ground . toCNF $ l) (ground . toCNF $ r)
-ground x             = ground $ toCNF x
+-- ground :: (Ord d, Monoid a) => Config d -> VProp d a -> GProp (Maybe a)
+-- ground _ (Obj x)       = GLit . Just $ x
+-- ground _ (Neg (Obj x)) = GNLit . Just $ x
+-- ground c (Or l r)      = GOr  (ground c . toCNF $ l) (ground c . toCNF $ r)
+-- ground c (And l r)     = GAnd (ground c . toCNF $ l) (ground c . toCNF $ r)
+-- ground c x@(Chc _ _ _) = GLit $ select c x
+-- ground c x             = ground c $ toCNF x -- if we have a choice this is bottom
 
 -- | traverse a propositional term and pack a list with new elements at each and
-toListAndSplit :: (Show a) => GProp a -> [GProp a]
-toListAndSplit term = go term []
-  where
-    go (GAnd l r) acc = go l acc ++ go r acc
-    go x acc = x : acc
+-- toListAndSplit :: GProp a -> [GProp a]
+-- toListAndSplit term = go term []
+--   where
+--     go (GAnd l r) acc = go l acc ++ go r acc
+--     go x acc = x : acc
 
--- | traverse a grounded term that represents Ands via a list, and replace ORs
--- with an inner list, see DIMACs CNF form
-orSplit :: (Num a) => [GProp a] -> [[a]]
-orSplit = fmap helper
-  where
-    helper :: (Num a) => GProp a -> [a]
-    helper (GLit x)  = [x]
-    helper (GNLit x) = [negate x]
-    helper (GOr l r) = helper l ++ helper r
-    helper _         = [] --this will only ever be an AND, fix the case later
+-- -- | traverse a grounded term that represents Ands via a list, and replace ORs
+-- -- with an inner list, see DIMACs CNF form
+-- orSplit :: (Num a) => [GProp a] -> [[a]]
+-- orSplit = fmap helper
+--   where
+--     helper :: (Num a) => GProp a -> [a]
+--     helper (GLit x)  = [x]
+--     helper (GNLit x) = [negate x]
+--     helper (GOr l r) = helper l ++ helper r
+--     helper _         = [] --this will only ever be an AND, fix the case later
 
--- | Take any propositional term, ground it, then massage it until it fits the
--- DIMACS CNF clause form
-toDimacsProp :: (Num a, Show a) => Prop a -> [[a]]
-toDimacsProp = orSplit . toListAndSplit . ground
+-- -- | Take any propositional term, ground it, then massage it until it fits the
+-- -- DIMACS CNF clause form
+-- toDimacsProp :: (Num a, Show a) => VProp d a -> [[a]]
+-- toDimacsProp = orSplit . toListAndSplit . ground
 
--- Test Examples
-ex :: Prop String
+-- -- Test Examples
+ex :: VProp String String
 ex = And
-  (BiImpl (Lit "a") (Lit "b"))
+  (BiImpl (Obj "a") (Obj "b"))
   (Or
-   (Impl (Lit "b") (Lit "c"))
-   (And (Lit "d") (Lit "e")))
+   (Impl (Obj "b") (Obj "c"))
+   (And (Obj "d") (Chc "d" (one "e") (one "e"))))
 
-ex1 :: Prop Integer
+ex1 :: VProp String Integer
 ex1 = And
-      (Lit 1)
-      (Or (Lit 2) (Lit 3))
+      (Chc "d" (one 1) (one 2))
+      (Or (Obj 2) (Obj 3))
 
-ex2 :: Prop String
-ex2 = Neg
-      (And
-       (Neg (Lit "p"))
-       (Or
-         (Lit "q")
-         (Neg
-           (And
-            (Lit "r")
-            (Lit "s")))))
+-- ex2 :: VProp String
+-- ex2 = Neg
+--       (And
+--        (Neg (Obj "p"))
+--        (Or
+--          (Obj "q")
+--          (Neg
+--            (And
+--             (Obj "r")
+--             (Obj "s")))))
 
-ex3 :: Prop String
-ex3 = Or
-      (And (Lit "p") (Lit "q"))
-      (And (Lit "p") (Neg (Lit "q")))
+-- ex3 :: VProp String
+-- ex3 = Or
+--       (And (Obj "p") (Obj "q"))
+--       (And (Obj "p") (Neg (Obj "q")))
