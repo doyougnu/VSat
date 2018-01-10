@@ -8,6 +8,7 @@ import Data.Bifunctor
 import Data.Bifoldable
 import Data.Bitraversable
 import qualified Data.Map as M
+import Debug.Trace (trace)
 
 -- | A general propositional language that has all the usual suspects
 data VProp d a = Obj a                           -- ^ A Literal term
@@ -260,18 +261,20 @@ select tb (Impl l r)   = Impl (select tb l) (select tb r)
 select tb (BiImpl l r) = BiImpl (select tb l) (select tb r)
 
 -- | Given a variational term find all paths for the tree in a flat list
-paths :: (Ord d) => VProp d a -> [Config d]
-paths (Chc d l r) = do -- TODO: remove nub
-  summaryl <- paths l
-  summaryr <- paths r
-  [M.insert d True summaryl, M.insert d False summaryr]
-paths (Neg x) = nub $ filter (not . M.null) $ paths x
--- TODO cleanup nub and filter calls
-paths (And l r)    = nub $ filter (not . M.null) $ paths l ++ paths r
-paths (Or l r)     = nub $ filter (not . M.null) $ paths l ++ paths r
-paths (Impl l r)   = nub $ filter (not . M.null) $ paths l ++ paths r
-paths (BiImpl l r) = nub $ filter (not . M.null) $ paths l ++ paths r
-paths _ = [M.empty]
+paths :: (Ord d, Show d, Show a) => VProp d a -> [Config d]
+paths = nub . filter (not . M.null) . go
+  where
+    go (Chc d l r) = do -- TODO: remove nub
+      summaryl <- go l
+      summaryr <- go r
+      [M.insert d True summaryl, M.insert d False summaryr]
+    go (Neg x) = go x
+    -- TODO cleanup nub and filter calls
+    go (And l r)    = go l ++ go r
+    go (Or l r)     = go l ++ go r
+    go (Impl l r)   = go l ++ go r
+    go (BiImpl l r) = go l ++ go r
+    go (Obj _) = [M.empty]
 
 -- | Given a tag tree, fmap over the tree with respect to a config
 replace :: Ord d => Config d -> (a -> a) -> VProp d (Maybe a) -> VProp d (Maybe a)
@@ -352,9 +355,15 @@ ex = And
 
 ex1 :: VProp String Integer
 ex1 = And
-      (Chc "d" (one 1) (one 2))
+      (Chc "d"
+       (And
+         (one 1)
+         (Or (one 5) (one 9)))
+        (Neg (one 10)))
       (Or (Obj 2) (Obj 3))
 
+ex2 :: VProp String Integer
+ex2 = Chc "a" (And (one 1) (one 3)) (Neg $ one 2)
 -- ex2 :: VProp String
 -- ex2 = Neg
 --       (And
