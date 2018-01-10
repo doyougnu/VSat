@@ -248,17 +248,17 @@ pruneTagTree tb (BiImpl l r) = BiImpl (pruneTagTree tb l) (pruneTagTree tb r)
 
 -- | Given a config and a Variational Prop term select the element out that the
 -- config points to
-select :: (Ord d) => Config d -> VProp d a -> VProp d (Maybe a)
-select _ (Obj a) = Obj . Just $ a
+select :: (Ord d) => Config d -> VProp d a -> Maybe (VProp d a)
+select _ (Obj a) = Just $ Obj a
 select tbs (Chc t y n) = case M.lookup t tbs of
-                           Nothing    -> Chc t (select tbs y) (select tbs n)
+                           Nothing    -> Nothing
                            Just True  -> select tbs y
                            Just False -> select tbs n
-select tb (Neg x)      = Neg $ select tb x
-select tb (And l r)    = And (select tb l) (select tb r)
-select tb (Or l r)     = Or (select tb l) (select tb r)
-select tb (Impl l r)   = Impl (select tb l) (select tb r)
-select tb (BiImpl l r) = BiImpl (select tb l) (select tb r)
+select tb (Neg x)      = Neg    <$> select tb x
+select tb (And l r)    = And    <$> select tb l <*> select tb r
+select tb (Or l r)     = Or     <$> select tb l <*> select tb r
+select tb (Impl l r)   = Impl   <$> select tb l <*> select tb r
+select tb (BiImpl l r) = BiImpl <$> select tb l <*> select tb r
 
 -- | Given a variational term find all paths for the tree in a flat list
 paths :: (Ord d, Show d, Show a) => VProp d a -> [Config d]
@@ -314,13 +314,15 @@ recompile xs = sequence $ go (tail xs') (_recompile conf val)
       where next = replace c (const v) acc
 ---------------------- Language Reduction --------------------------------------
 -- | Convert a propositional term to a grounded term
--- ground :: (Ord d, Monoid a) => Config d -> VProp d a -> GProp (Maybe a)
--- ground _ (Obj x)       = GLit . Just $ x
--- ground _ (Neg (Obj x)) = GNLit . Just $ x
--- ground c (Or l r)      = GOr  (ground c . toCNF $ l) (ground c . toCNF $ r)
--- ground c (And l r)     = GAnd (ground c . toCNF $ l) (ground c . toCNF $ r)
--- ground c x@(Chc _ _ _) = GLit $ select c x
--- ground c x             = ground c $ toCNF x -- if we have a choice this is bottom
+ground :: Ord d => Config d -> VProp d a -> GProp (Maybe a)
+ground _ (Obj x)       = GLit . Just $ x
+ground _ (Neg (Obj x)) = GNLit . Just $ x
+ground c (Or l r)      = GOr  (ground c . toCNF $ l) (ground c . toCNF $ r)
+ground c (And l r)     = GAnd (ground c . toCNF $ l) (ground c . toCNF $ r)
+ground c x@(Chc _ _ _) = case select c x of
+                           Nothing -> GLit Nothing
+                           Just a  -> ground c $ toCNF a
+ground c x             = ground c $ toCNF x -- if we have a choice this is bottom
 
 -- | traverse a propositional term and pack a list with new elements at each and
 -- toListAndSplit :: GProp a -> [GProp a]
