@@ -185,7 +185,8 @@ isCNF :: VProp d a -> Bool
 isCNF (And l r) = (isAnd l && isAnd r) || (isCNF l && isCNF r)
 isCNF (Or l r)  = isCNF l && isCNF r && not (isAnd l) && not (isAnd r)
 isCNF (Neg n)   = isCNF n
-isCNF (Obj _)   = True
+isCNF (Obj _)     = True
+isCNF (Chc _ _ _) = True
 isCNF _         = False
 
 -- | True if the propositional term is an And or the negation of an And
@@ -195,7 +196,7 @@ isAnd (Neg (And _ _)) = True
 isAnd _               = False
 
 -- | For any Propositional term, reduce it to CNF via logical equivalences
-toCNF :: VProp d a -> VProp d a
+toCNF :: (Show d, Show a) => VProp d a -> VProp d a
 toCNF = head . filter isCNF . iterate funcs
   where funcs = dubNeg . distrib . deMorgs . elimImp . elimBi
 
@@ -314,7 +315,7 @@ recompile xs = sequence $ go (tail xs') (_recompile conf val)
       where next = replace c (const v) acc
 ---------------------- Language Reduction --------------------------------------
 -- | Convert a propositional term to a grounded term
-ground :: Ord d => Config d -> VProp d a -> GProp (Maybe a)
+ground :: (Ord d, Show d, Show a) => Config d -> VProp d a -> GProp (Maybe a)
 ground _ (Obj x)       = GLit . Just $ x
 ground _ (Neg (Obj x)) = GNLit . Just $ x
 ground c (Or l r)      = GOr  (ground c . toCNF $ l) (ground c . toCNF $ r)
@@ -322,7 +323,7 @@ ground c (And l r)     = GAnd (ground c . toCNF $ l) (ground c . toCNF $ r)
 ground c x@(Chc _ _ _) = case select c x of
                            Nothing -> GLit Nothing
                            Just a  -> ground c $ toCNF a
-ground c x             = ground c $ toCNF x -- if we have a choice this is bottom
+ground c x             = ground c $ toCNF x
 
 -- | traverse a propositional term and pack a list with new elements at each and
 -- toListAndSplit :: GProp a -> [GProp a]
@@ -366,18 +367,9 @@ ex1 = And
 
 ex2 :: VProp String Integer
 ex2 = Chc "a" (And (one 1) (one 3)) (Neg $ one 2)
--- ex2 :: VProp String
--- ex2 = Neg
---       (And
---        (Neg (Obj "p"))
---        (Or
---          (Obj "q")
---          (Neg
---            (And
---             (Obj "r")
---             (Obj "s")))))
 
--- ex3 :: VProp String
--- ex3 = Or
---       (And (Obj "p") (Obj "q"))
---       (And (Obj "p") (Neg (Obj "q")))
+ex3 :: VProp String Integer
+ex3 = And (one 1) (Chc "d" (one 3) (one 2))
+
+ex4 :: VProp String Integer
+ex4 = Chc "a" (one 1) (one 2)
