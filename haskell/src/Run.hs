@@ -60,17 +60,9 @@ recordVars cs = do
 unify :: (Integral a, H.Hashable d) => VProp d a -> VProp Integer Integer
 unify = bimap (toInteger . abs . hash) toInteger
 
--- | And Decomposition, convert choices to propositional terms
-andDecomp :: (Show a) => VProp a a -> VProp a a
-andDecomp (Chc t l r) = Or
-                        (And (Obj t)       (andDecomp l))
-                        (And (Neg $ Obj t) (andDecomp r))
-andDecomp (Obj x)     = Obj x
-
 -- | orient the state monad to run the sat solver
-toPropDecomp :: (H.Hashable d, Integral a, Monad m) =>
-  VProp d a -> m (VProp Integer Integer)
-toPropDecomp cs = return $ cs >>= (andDecomp . unify)
+toPropDecomp :: (H.Hashable d, Integral a) => VProp d a -> VProp Integer Integer
+toPropDecomp = andDecomp . unify
 
 -- | convert  propositional term to a DIMACS CNF term
 propToCNF :: (Num a, Integral a) => String -> GProp a -> CNF
@@ -87,9 +79,9 @@ work :: (Eq d, Show a, Show d, Ord d, Hashable d, Integral a) =>
 work cs = do
   bs <- asks baseline
   if bs
-    then do cs' <- toPropDecomp cs
-            (_, sats) <- get
-            let grnd = ground cs'
+    then do (_, sats) <- get
+            let cs' = toPropDecomp cs
+                grnd = ground cs'
                 cnf = propToCNF "does it run?" grnd
             _ <- lift $ runPMinisat cnf
             return $ case recompile (M.toList sats) of
@@ -131,11 +123,11 @@ work' (conf, isSat, prop) = when isSat $
 -- preliminary test cases run with: runEnv (initEnv p1)
 p1 :: VProp String Integer
 p1 = And
-      (Lit (chc "d" (one 1) (one 2)))
-      (Lit (chc "d" (one 1) (chc "b" (one 2) (one 3))))
+      (Obj (chc "d" (one 1) (one 2)))
+      (Obj (chc "d" (one 1) (chc "b" (one 2) (one 3))))
 
 p2 :: VProp String Integer
-p2 = Impl (Lit (chc "d" (one 20) (one 40))) (Lit (one 1001))
+p2 = Impl (Obj (chc "d" (one 20) (one 40))) (Obj (one 1001))
 
 -- this will cause a header mismatch because it doesn't start at 1
 up1 :: VProp Integer Integer
