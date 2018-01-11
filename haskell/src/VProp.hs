@@ -8,7 +8,6 @@ import Data.Bifunctor
 import Data.Bifoldable
 import Data.Bitraversable
 import qualified Data.Map as M
-import Debug.Trace (trace)
 
 -- | A general propositional language that has all the usual suspects
 data VProp d a = Obj a                           -- ^ A Literal term
@@ -196,7 +195,7 @@ isAnd (Neg (And _ _)) = True
 isAnd _               = False
 
 -- | For any Propositional term, reduce it to CNF via logical equivalences
-toCNF :: (Show d, Show a) => VProp d a -> VProp d a
+toCNF :: VProp d a -> VProp d a
 toCNF = head . filter isCNF . iterate funcs
   where funcs = dubNeg . distrib . deMorgs . elimImp . elimBi
 
@@ -261,8 +260,20 @@ select tb (Or l r)     = Or     <$> select tb l <*> select tb r
 select tb (Impl l r)   = Impl   <$> select tb l <*> select tb r
 select tb (BiImpl l r) = BiImpl <$> select tb l <*> select tb r
 
+-- | And Decomposition, convert choices to propositional terms
+andDecomp :: (Show a) => VProp a a -> VProp a a
+andDecomp (Chc t l r) = Or
+                        (And (Obj t)       (andDecomp l))
+                        (And (Neg $ Obj t) (andDecomp r))
+andDecomp (Obj x)     = Obj x
+andDecomp (Neg x)     = Neg (andDecomp x)
+andDecomp (Or l r)    = Or (andDecomp l) (andDecomp r)
+andDecomp (And l r)   = And (andDecomp l) (andDecomp r)
+andDecomp (Impl a c)  = Impl (andDecomp a) (andDecomp c)
+andDecomp (BiImpl a c) = BiImpl (andDecomp a) (andDecomp c)
+
 -- | Given a variational term find all paths for the tree in a flat list
-paths :: (Ord d, Show d, Show a) => VProp d a -> [Config d]
+paths :: Ord d => VProp d a -> [Config d]
 paths = nub . filter (not . M.null) . go
   where
     go (Chc d l r) = do -- TODO: remove nub
@@ -302,20 +313,20 @@ _recompile conf = go (M.toList conf)
 
 -- | Given a list of configs with associated values, remake the tag tree by
 -- folding over the config list
-recompile :: (Ord d, Show d, Show a) => [(Config d, a)] -> Maybe (VProp d a)
+recompile :: Ord d => [(Config d, a)] -> Maybe (VProp d a)
 recompile [] = Nothing
 recompile xs = sequence $ go (tail xs') (_recompile conf val)
   where
     xs' = reverse $ sortOn (M.size . fst) xs
     (conf, val) = head xs'
-    go :: (Ord d, Show d, Show a) =>
+    go :: Ord d =>
       [(Config d, a)] -> VProp d (Maybe a) -> VProp d (Maybe a)
     go []          acc = acc
     go ((c, v):cs) acc = go cs next
       where next = replace c (const v) acc
 ---------------------- Language Reduction --------------------------------------
 -- | Convert a propositional term to a grounded term
-ground :: (Ord d, Show d, Show a) => Config d -> VProp d a -> GProp (Maybe a)
+ground :: Ord d => Config d -> VProp d a -> GProp (Maybe a)
 ground _ (Obj x)       = GLit . Just $ x
 ground _ (Neg (Obj x)) = GNLit . Just $ x
 ground c (Or l r)      = GOr  (ground c . toCNF $ l) (ground c . toCNF $ r)
@@ -326,25 +337,25 @@ ground c x@(Chc _ _ _) = case select c x of
 ground c x             = ground c $ toCNF x
 
 -- | traverse a propositional term and pack a list with new elements at each and
--- toListAndSplit :: GProp a -> [GProp a]
--- toListAndSplit term = go term []
---   where
---     go (GAnd l r) acc = go l acc ++ go r acc
---     go x acc = x : acc
+toListAndSplit :: GProp a -> [GProp a]
+toListAndSplit term = go term []
+  where
+    go (GAnd l r) acc = go l acc ++ go r acc
+    go x acc = x : acc
 
--- -- | traverse a grounded term that represents Ands via a list, and replace ORs
--- -- with an inner list, see DIMACs CNF form
--- orSplit :: (Num a) => [GProp a] -> [[a]]
--- orSplit = fmap helper
---   where
---     helper :: (Num a) => GProp a -> [a]
---     helper (GLit x)  = [x]
---     helper (GNLit x) = [negate x]
---     helper (GOr l r) = helper l ++ helper r
---     helper _         = [] --this will only ever be an AND, fix the case later
+-- | traverse a grounded term that represents Ands via a list, and replace ORs
+-- with an inner list, see DIMACs CNF form
+orSplit :: (Num a) => [GProp a] -> [[a]]
+orSplit = fmap helper
+  where
+    helper :: (Num a) => GProp a -> [a]
+    helper (GLit x)  = [x]
+    helper (GNLit x) = [negate x]
+    helper (GOr l r) = helper l ++ helper r
+    helper _         = [] --this will only ever be an AND, fix the case later
 
--- -- | Take any propositional term, ground it, then massage it until it fits the
--- -- DIMACS CNF clause form
+-- | Take any propositional term, ground it, then massage it until it fits the
+-- DIMACS CNF clause form
 -- toDimacsProp :: (Num a, Show a) => VProp d a -> [[a]]
 -- toDimacsProp = orSplit . toListAndSplit . ground
 
