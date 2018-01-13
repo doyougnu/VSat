@@ -69,6 +69,12 @@ instance Foldable GProp where
   foldMap f (GAnd l r) = mconcat [foldMap f l, foldMap f r]
   foldMap f (GOr l r)  = mconcat [foldMap f l, foldMap f r]
 
+instance Traversable GProp where
+  traverse f (GLit a) = GLit <$> f a
+  traverse f (GNLit a) = GNLit <$> f a
+  traverse f (GAnd l r) = GAnd <$> traverse f l <*> traverse f r
+  traverse f (GOr l r) = GOr <$> traverse f l <*> traverse f r
+
 instance Bifoldable VProp where
   bifoldr _ g acc (Obj c)      = g c acc
   bifoldr f g acc (Neg a)      = bifoldr f g acc a
@@ -261,7 +267,7 @@ select tb (Impl l r)   = Impl   <$> select tb l <*> select tb r
 select tb (BiImpl l r) = BiImpl <$> select tb l <*> select tb r
 
 -- | And Decomposition, convert choices to propositional terms
-andDecomp :: (Show a) => VProp a a -> VProp a a
+andDecomp :: VProp a a -> VProp a a
 andDecomp (Chc t l r) = Or
                         (And (Obj t)       (andDecomp l))
                         (And (Neg $ Obj t) (andDecomp r))
@@ -336,6 +342,15 @@ ground c x@(Chc _ _ _) = case select c x of
                            Just a  -> ground c $ toCNF a
 ground c x             = ground c $ toCNF x
 
+groundGProp :: Ord d => VProp d a -> GProp (Maybe a)
+groundGProp (Obj x) = GLit . Just $ x
+groundGProp (Neg (Obj x)) = GNLit . Just $ x
+groundGProp (Or l r) = GOr (groundGProp . toCNF $ l) (groundGProp . toCNF $ r)
+groundGProp (And l r) = GAnd (groundGProp . toCNF $ l) (groundGProp . toCNF $ r)
+groundGProp (Chc _ _ _) = GLit Nothing
+groundGProp x = groundGProp $ toCNF x
+
+
 -- | traverse a propositional term and pack a list with new elements at each and
 toListAndSplit :: GProp a -> [GProp a]
 toListAndSplit term = go term []
@@ -384,3 +399,6 @@ ex3 = And (one 1) (Chc "d" (one 3) (one 2))
 
 ex4 :: VProp String Integer
 ex4 = Chc "a" (one 1) (one 2)
+
+ex5 :: VProp a Integer
+ex5 = And (one 1) (Or (one 2) (one 4))
