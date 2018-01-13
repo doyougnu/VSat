@@ -95,11 +95,7 @@ work cs = do
                 cnfs = (\y -> (y, select y cs)) <$> keys
             -- generate a 3-tuple of config, Bool representing the existence of a
             -- nothing, and the actual prop term
-                cnfs' = (\(x, y) -> (x
-                                    , isJust y
-                                    , y
-                                    )) <$> cnfs
-            mapM_ work' cnfs'
+            mapM_ work' cnfs
             (_, newSats) <- get
             -- return $ case recompile (M.toList newSats) of
             --       Nothing -> False
@@ -120,8 +116,8 @@ initAndRun cs = do
 --            MonadState (t, M.Map (Config d) Satisfiable) (t1 IO)) =>
 --          (Config d, Bool, Maybe (VProp d a)) -> t1 IO ()
 work' :: (MonadTrans m, MonadState (St d) (m IO), Ord d, Show d, Integral a) =>
-  (Config d, Bool, Maybe (VProp d a)) -> m IO ()
-work' (conf, isSat, prop) = when isSat $
+  (Config d, Maybe (VProp d a)) -> m IO ()
+work' (conf, prop) = when (isJust prop) $
   do (vars, sats) <- get
      result <- lift . runPMinisat . propToCNF (show conf) . fmap fromJust . ground conf . fromJust $ prop
      put (vars, M.insert conf result sats)
