@@ -26,7 +26,8 @@ type Log = String
 
 -- | Global state TODO: Use ReaderT pattern instead of state monad
 -- Takes a dimension d, a value a, and a result r
-type Env d r = RWST (Opts d r) Log (VarDict d, SatDict d) IO r
+type St d = (VarDict d, SatDict d)
+type Env d r = RWST (Opts d r) Log (St d) IO r
 
 -- | An empty reader monad environment, in the future read these from config file
 emptyOpts :: Opts d a
@@ -91,9 +92,11 @@ work cs = do
     else do
             (_, sats) <- get
             let keys = M.keys sats
-                cnfs = (\y -> (y, fmap (select y) cs)) <$> keys
+                cnfs = (\y -> (y, select y cs)) <$> keys
+            -- generate a 3-tuple of config, Bool representing the existence of a
+            -- nothing, and the actual prop term
                 cnfs' = (\(x, y) -> (x
-                                    , foldr (\_x acc -> isJust _x && acc) True y
+                                    , isJust y
                                     , y
                                     )) <$> cnfs
             mapM_ work' cnfs'
@@ -106,30 +109,32 @@ work cs = do
 initAndRun :: (Eq d, Show a, Show d, Ord d, H.Hashable d, Integral a) =>
   VProp d a -> Env d Satisfiable
 initAndRun cs = do
-  forM_ cs recordVars -- initialize the environment
+  recordVars cs -- initialize the environment
   work cs
 
 -- | Given a configuration, a boolean representing satisfiability and a Prop, If
 -- the prop does not contain a Nothing (as denoted by the bool) then extract the
 -- values from the prop, ground then prop, convert to a CNF with descriptor of
 -- the configuration, run the sat solver and save the result to the SAT table
-work' :: (Ord k, Show a, Show k, Integral a, MonadTrans t1,
-           MonadState (t, M.Map k Satisfiable) (t1 IO)) =>
-         (k, Bool, VProp d (Maybe a)) -> t1 IO ()
+-- work' :: (Ord d, Show a, Show d, Integral a, MonadTrans t1,
+--            MonadState (t, M.Map (Config d) Satisfiable) (t1 IO)) =>
+--          (Config d, Bool, Maybe (VProp d a)) -> t1 IO ()
+work' :: (MonadTrans m, MonadState (St d) (m IO), Ord d, Show d, Integral a) =>
+  (Config d, Bool, Maybe (VProp d a)) -> m IO ()
 work' (conf, isSat, prop) = when isSat $
   do (vars, sats) <- get
-     result <- lift . runPMinisat . propToCNF (show conf) . ground . fmap fromJust $ prop
+     result <- lift . runPMinisat . propToCNF (show conf) . fmap fromJust . ground conf . fromJust $ prop
      put (vars, M.insert conf result sats)
 
 -- preliminary test cases run with: runEnv (initEnv p1)
 p1 :: VProp String Integer
 p1 = And
-      (Obj (chc "d" (one 1) (one 2)))
-      (Obj (chc "d" (one 1) (chc "b" (one 2) (one 3))))
+      (Chc "d" (one 1) (one 2))
+      (Chc "d" (one 1) (Chc "b" (one 2) (one 3)))
 
 p2 :: VProp String Integer
-p2 = Impl (Obj (chc "d" (one 20) (one 40))) (Obj (one 1001))
+p2 = Impl (Chc "d" (one 20) (one 40)) (one 1001)
 
 -- this will cause a header mismatch because it doesn't start at 1
 up1 :: VProp Integer Integer
-up1 = Chc 1 (one 2) (chc 3 (one 4) (one 5))
+up1 = Chc 1 (one 2) (Chc 3 (one 4) (one 5))
