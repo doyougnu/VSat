@@ -81,7 +81,7 @@ work cs = do
   if bs
     then do (_, sats) <- get
             let cs' = toPropDecomp cs
-                grnd = ground cs'
+                grnd = groundGProp cs'
                 cnf = propToCNF "does it run?" grnd
             _ <- lift $ runPMinisat cnf
             return $ case recompile (M.toList sats) of
@@ -98,9 +98,10 @@ work cs = do
                                     )) <$> cnfs
             mapM_ work' cnfs'
             (_, newSats) <- get
-            return $ case recompile (M.toList newSats) of
-                  Nothing -> False
-                  Just _  -> True
+            -- return $ case recompile (M.toList newSats) of
+            --       Nothing -> False
+            --       Just _  -> True
+            return False
 
 initAndRun :: (Eq d, Show a, Show d, Ord d, H.Hashable d, Integral a) =>
   VProp d a -> Env d Satisfiable
