@@ -69,12 +69,6 @@ instance Foldable GProp where
   foldMap f (GAnd l r) = mconcat [foldMap f l, foldMap f r]
   foldMap f (GOr l r)  = mconcat [foldMap f l, foldMap f r]
 
-instance Traversable GProp where
-  traverse f (GLit a) = GLit <$> f a
-  traverse f (GNLit a) = GNLit <$> f a
-  traverse f (GAnd l r) = GAnd <$> traverse f l <*> traverse f r
-  traverse f (GOr l r) = GOr <$> traverse f l <*> traverse f r
-
 instance Bifoldable VProp where
   bifoldr _ g acc (Obj c)      = g c acc
   bifoldr f g acc (Neg a)      = bifoldr f g acc a
@@ -342,12 +336,12 @@ ground c x@(Chc _ _ _) = case select c x of
                            Just a  -> ground c $ toCNF a
 ground c x             = ground c $ toCNF x
 
-groundGProp :: Ord d => VProp d a -> GProp (Maybe a)
-groundGProp (Obj x) = GLit . Just $ x
-groundGProp (Neg (Obj x)) = GNLit . Just $ x
+groundGProp :: Ord d => VProp d a -> GProp a
+groundGProp (Obj x) = GLit x
+groundGProp (Neg (Obj x)) = GNLit x
 groundGProp (Or l r) = GOr (groundGProp . toCNF $ l) (groundGProp . toCNF $ r)
 groundGProp (And l r) = GAnd (groundGProp . toCNF $ l) (groundGProp . toCNF $ r)
-groundGProp (Chc _ _ _) = GLit Nothing
+groundGProp (Chc _ _ _) = error "andDecomp cannot produce a choice, you must have called this without calling andDecomp"
 groundGProp x = groundGProp $ toCNF x
 
 
