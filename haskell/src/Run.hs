@@ -84,20 +84,19 @@ work :: (Eq d
 work cs = do
   bs <- asks baseline
   if bs
-    then do (_, sats) <- get
+    then do (vars, sats) <- get
             let cs' = toPropDecomp cs
                 grnd = groundGProp cs'
                 cnf = propToCNF "does it run?" grnd
             tell $ show grnd
-            _ <- lift $ runPMinisat cnf
+            res <- lift $ runPMinisat cnf
+            put (vars, M.map (const res) sats)
             return $ recompile (M.toList sats)
 
     else do
             (_, sats) <- get
             let keys = M.keys sats
                 cnfs = (\y -> (y, select y cs)) <$> keys
-            -- generate a 3-tuple of config, Bool representing the existence of a
-            -- nothing, and the actual prop term
             mapM_ work' cnfs
             (_, newSats) <- get
             return $ recompile (M.toList newSats)
