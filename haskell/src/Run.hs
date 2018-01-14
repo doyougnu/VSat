@@ -75,8 +75,12 @@ propToCNF str ps = cnf
               }
 
 -- | main workhorse for running the SAT solver
-work :: (Eq d, Show a, Show d, Ord d, Hashable d, Integral a) =>
-  VProp d a -> Env d Satisfiable
+work :: (Eq d
+        , Show a
+        , Show d
+        , Ord d
+        , Hashable d
+        , Integral a) => VProp d a -> Env d (Maybe (VProp d Satisfiable))
 work cs = do
   bs <- asks baseline
   if bs
@@ -84,10 +88,9 @@ work cs = do
             let cs' = toPropDecomp cs
                 grnd = groundGProp cs'
                 cnf = propToCNF "does it run?" grnd
+            tell $ show grnd
             _ <- lift $ runPMinisat cnf
-            return $ case recompile (M.toList sats) of
-              Nothing -> False
-              Just _  -> True
+            return $ recompile (M.toList sats)
 
     else do
             (_, sats) <- get
@@ -97,13 +100,15 @@ work cs = do
             -- nothing, and the actual prop term
             mapM_ work' cnfs
             (_, newSats) <- get
-            -- return $ case recompile (M.toList newSats) of
-            --       Nothing -> False
-            --       Just _  -> True
-            return False
+            return $ recompile (M.toList newSats)
 
-initAndRun :: (Eq d, Show a, Show d, Ord d, H.Hashable d, Integral a) =>
-  VProp d a -> Env d Satisfiable
+initAndRun :: (Eq d
+              , Show a
+              , Show d
+              , Ord d
+              , H.Hashable d
+              , Integral a) =>
+              VProp d a -> Env d (Maybe (VProp d Satisfiable))
 initAndRun cs = do
   recordVars cs -- initialize the environment
   work cs
@@ -115,8 +120,11 @@ initAndRun cs = do
 -- work' :: (Ord d, Show a, Show d, Integral a, MonadTrans t1,
 --            MonadState (t, M.Map (Config d) Satisfiable) (t1 IO)) =>
 --          (Config d, Bool, Maybe (VProp d a)) -> t1 IO ()
-work' :: (MonadTrans m, MonadState (St d) (m IO), Ord d, Show d, Integral a) =>
-  (Config d, Maybe (VProp d a)) -> m IO ()
+work' :: (MonadTrans m
+         , MonadState (St d) (m IO)
+         , Ord d
+         , Show d
+         , Integral a) => (Config d, Maybe (VProp d a)) -> m IO ()
 work' (conf, prop) = when (isJust prop) $
   do (vars, sats) <- get
      result <- lift . runPMinisat . propToCNF (show conf) . fmap fromJust . ground conf . fromJust $ prop
