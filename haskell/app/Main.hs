@@ -9,4 +9,4 @@ main = defaultMain $
     [ bench "1" $ whnf runAll p2
     ]
   ]
-  where runAll = runEnv . initEnv
+  where runAll = runEnv . initAndRun
