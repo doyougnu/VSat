@@ -92,8 +92,7 @@ work cs = do
                 cnf = propToCNF "does it run?" grnd
             tell $ show grnd
             res <- lift $ runPMinisat cnf
-            put (vars, M.map (const res) sats)
-            return $ recompile (M.toList sats)
+            return $ recompile (M.toList (M.map (const res) sats))
 
     else do
             (_, sats) <- get
