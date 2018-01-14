@@ -289,17 +289,17 @@ paths = nub . filter (not . M.null) . go
     go (Obj _) = [M.empty]
 
 -- | Given a tag tree, fmap over the tree with respect to a config
-replace :: Ord d => Config d -> (a -> a) -> VProp d (Maybe a) -> VProp d (Maybe a)
-replace _    f (Obj a) = Obj $ f <$> a
-replace conf f (Chc d l r) = case M.lookup d conf of
-  Nothing -> Chc d (replace conf f l) (replace conf f r)
-  Just True ->  Chc d (replace conf f l) r
-  Just False -> Chc d l (replace conf f r)
-replace conf f (Neg x) = Neg $ replace conf f x
-replace conf f (And l r)    = And    (replace conf f l) (replace conf f r)
-replace conf f (Or l r)     = Or     (replace conf f l) (replace conf f r)
-replace conf f (Impl l r)   = Impl   (replace conf f l) (replace conf f r)
-replace conf f (BiImpl l r) = BiImpl (replace conf f l) (replace conf f r)
+replace :: Ord d => Config d -> a -> VProp d (Maybe a) -> VProp d (Maybe a)
+replace _    v (Obj _) = Obj $ Just v
+replace conf v (Chc d l r) = case M.lookup d conf of
+  Nothing ->    Chc d (replace conf v l) (replace conf v r)
+  Just True ->  Chc d (replace conf v l) r
+  Just False -> Chc d l (replace conf v r)
+replace conf v (Neg x) = Neg $ replace conf v x
+replace conf v (And l r)    = And    (replace conf v l) (replace conf v r)
+replace conf v (Or l r)     = Or     (replace conf v l) (replace conf v r)
+replace conf v (Impl l r)   = Impl   (replace conf v l) (replace conf v r)
+replace conf v (BiImpl l r) = BiImpl (replace conf v l) (replace conf v r)
 
 -- | helper function used to create seed value for fold just once
 _recompile :: Ord d => Config d -> a -> VProp d (Maybe a)
@@ -319,11 +319,11 @@ recompile xs = sequence $ go (tail xs') (_recompile conf val)
   where
     xs' = reverse $ sortOn (M.size . fst) xs
     (conf, val) = head xs'
-    go :: Ord d =>
-      [(Config d, a)] -> VProp d (Maybe a) -> VProp d (Maybe a)
+    go :: Ord d => [(Config d, a)] -> VProp d (Maybe a) -> VProp d (Maybe a)
     go []          acc = acc
     go ((c, v):cs) acc = go cs next
-      where next = replace c (const v) acc
+      where next = replace c v acc
+
 ---------------------- Language Reduction --------------------------------------
 -- | Convert a propositional term to a grounded term
 ground :: Ord d => Config d -> VProp d a -> GProp (Maybe a)
