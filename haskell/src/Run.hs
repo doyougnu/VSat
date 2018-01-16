@@ -45,8 +45,10 @@ emptySt :: (VarDict d, SatDict d)
 emptySt = (I.empty, M.empty)
 
 -- | Given a variational term pack an initial state in the environment Monad
-recordVars :: (Eq d, Ord d, H.Hashable d, MonadState (VarDict d, SatDict d) m) =>
-  VProp d a -> m ()
+recordVars :: (Eq d
+              , Ord d
+              , H.Hashable d
+              , MonadState (VarDict d, SatDict d) m) => VProp d a -> m ()
 recordVars cs = do
   st@(_, old_sats) <- get
   let (newvars, _)=

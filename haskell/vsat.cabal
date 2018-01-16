@@ -18,10 +18,9 @@ library
   exposed-modules:     SubProcess, CNF, VProp, TagTree, Utils, Run
   default-extensions:          NamedFieldPuns
                              , OverloadedStrings
-                             , UndecidableInstances
                              , FlexibleContexts
                              , DeriveFunctor
-                             , GeneralizedNewtypeDeriving
+                             , DeriveGeneric
 
   build-depends:       base >= 4.7 && < 5
                      , containers >= 0.5
@@ -32,6 +31,8 @@ library
                      , foldl
                      , hashable >= 1.2
                      , bifunctors
+                     , QuickCheck
+                     , generic-random
 
   default-language:    Haskell2010
 
