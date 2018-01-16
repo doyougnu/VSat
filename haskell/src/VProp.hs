@@ -2,15 +2,17 @@ module VProp where
 
 import Utils (parens)
 import Data.Maybe (isJust)
-import Control.Monad (ap)
+import Control.Monad (ap, liftM, liftM3, liftM2)
 import Data.List (nub, sortOn)
 import Data.Bifunctor
 import Data.Bifoldable
 import Data.Bitraversable
+import Test.QuickCheck
 import qualified Data.Map as M
 
 -- | A general propositional language that has all the usual suspects
-data VProp d a = Obj a                           -- ^ A Literal term
+data VProp d a = Obj a                           -- ^ A literal result of a choice
+               | Lit a                           -- ^ A literal
                | Neg    (VProp d a)              -- ^ Negation of a term
                | And    (VProp d a) (VProp d a)  -- ^ A Logical And
                | Or     (VProp d a) (VProp d a)  -- ^ A Logical Or
@@ -34,6 +36,7 @@ data GProp a = GLit a                   -- ^ A grounded prop literal
 
 instance (Show d, Show a) => Show (VProp d a) where
   show (Obj a)          = show a
+  show (Lit a)          = show a
   show (Neg a)          = "-" ++ show a
   show (And x y)        = parens $ show x ++ " && " ++ show y
   show (Or x y)         = parens $ show x ++ " || " ++ show y
@@ -49,6 +52,7 @@ instance (Show a) => Show (GProp a) where
 
 instance Bifunctor VProp where
   bimap _ g (Obj d)      = Obj $ g d
+  bimap _ g (Lit d)      = Lit $ g d
   bimap f g (Chc t l r)  = Chc (f t) (bimap f g l) (bimap f g r)
   bimap f g (Neg a)      = Neg $ bimap f g a
   bimap f g (And l r)    = And (bimap f g l) (bimap f g r)
@@ -71,6 +75,7 @@ instance Foldable GProp where
 
 instance Bifoldable VProp where
   bifoldr _ g acc (Obj c)      = g c acc
+  bifoldr _ g acc (Lit c)      = g c acc
   bifoldr f g acc (Neg a)      = bifoldr f g acc a
   bifoldr f g acc (And l r)    = bifoldr f g (bifoldr f g acc r) l
   bifoldr f g acc (Or l r)     = bifoldr f g (bifoldr f g acc r) l
@@ -86,6 +91,7 @@ instance Traversable (VProp d) where
 
 instance Bitraversable VProp where
   bitraverse _ g (Obj a)      = Obj <$> g a
+  bitraverse _ g (Lit a)      = Lit <$> g a
   bitraverse f g (Neg a)      = Neg <$> bitraverse f g a
   bitraverse f g (And l r)    = And    <$> bitraverse f g l <*> bitraverse f g r
   bitraverse f g (Or l r)     = Or     <$> bitraverse f g l <*> bitraverse f g r
@@ -98,6 +104,7 @@ instance Bitraversable VProp where
 instance Monad (VProp d) where
   return = Obj
   (Obj x) >>= f = f x
+  (Lit x) >>= f = f x
   (Neg x) >>= f = Neg $ x >>= f
   (And l r)    >>= f = And    (l >>= f) (r >>= f)
   (Or l r)     >>= f = Or     (l >>= f) (r >>= f)
@@ -105,6 +112,20 @@ instance Monad (VProp d) where
   (BiImpl l r) >>= f = BiImpl (l >>= f) (r >>= f)
   (Chc t y n)  >>= f = Chc t  (y >>= f)(n >>= f)
 
+instance (Arbitrary d, Arbitrary a) => Arbitrary (VProp d a) where
+  arbitrary = sized arbVProp
+
+arbVProp :: (Arbitrary a, Arbitrary d) => Int -> Gen (VProp d a)
+arbVProp 0 = liftM Obj arbitrary
+arbVProp n = frequency [ (1, liftM Obj arbitrary)
+                       , (4, liftM3 Chc arbitrary l l)
+                       , (4, liftM Neg l)
+                       , (4, liftM2 Or l l)
+                       , (4, liftM2 And l l)
+                       , (4, liftM2 Impl l l)
+                       , (4, liftM2 BiImpl l l)
+                       ]
+  where l = arbVProp (n `div` 2)
 ------------------- Propositional Formulae Laws --------------------------------
 -- all this repetition must be able to be factored out somehow
 -- | Eliminate an biconditionals
@@ -234,6 +255,7 @@ prune = pruneTagTree M.empty
 -- | Given d config and variational expression remove redundant choices
 pruneTagTree :: (Ord d) => Config d -> VProp d b -> VProp d b
 pruneTagTree _ (Obj d) = Obj d
+pruneTagTree _ (Lit d) = Lit d
 pruneTagTree tb (Chc t y n) = case M.lookup t tb of
                              Nothing -> Chc t
                                         (pruneTagTree (M.insert t True tb) y)
@@ -250,6 +272,7 @@ pruneTagTree tb (BiImpl l r) = BiImpl (pruneTagTree tb l) (pruneTagTree tb r)
 -- config points to
 select :: (Ord d) => Config d -> VProp d a -> Maybe (VProp d a)
 select _ (Obj a) = Just $ Obj a
+select _ (Lit a) = Just $ Lit a
 select tbs (Chc t y n) = case M.lookup t tbs of
                            Nothing    -> Nothing
                            Just True  -> select tbs y
@@ -266,6 +289,7 @@ andDecomp (Chc t l r) = Or
                         (And (Obj t)       (andDecomp l))
                         (And (Neg $ Obj t) (andDecomp r))
 andDecomp (Obj x)     = Obj x
+andDecomp (Lit x)     = Lit x
 andDecomp (Neg x)     = Neg (andDecomp x)
 andDecomp (Or l r)    = Or (andDecomp l) (andDecomp r)
 andDecomp (And l r)   = And (andDecomp l) (andDecomp r)
@@ -286,11 +310,12 @@ paths = nub . filter (not . M.null) . go
     go (Or l r)     = go l ++ go r
     go (Impl l r)   = go l ++ go r
     go (BiImpl l r) = go l ++ go r
-    go (Obj _) = [M.empty]
+    go _ = [M.empty]
 
 -- | Given a tag tree, fmap over the tree with respect to a config
 replace :: Ord d => Config d -> a -> VProp d (Maybe a) -> VProp d (Maybe a)
 replace _    v (Obj _) = Obj $ Just v
+replace _    _ (Lit x) = Lit x
 replace conf v (Chc d l r) = case M.lookup d conf of
   Nothing ->    Chc d (replace conf v l) (replace conf v r)
   Just True ->  Chc d (replace conf v l) r
@@ -323,6 +348,12 @@ recompile xs = sequence $ go (tail xs') (_recompile conf val)
     go []          acc = acc
     go ((c, v):cs) acc = go cs next
       where next = replace c v acc
+
+recompile' :: Ord d => [(Config d, a)] -> VProp d a -> Maybe (VProp d a)
+recompile' [] _ = Nothing
+recompile' confs vs = sequence $ foldr (\(conf, val) acc -> replace conf val acc)
+  (Just <$> vs)
+  (reverse (sortOn (M.size . fst) confs))
 
 ---------------------- Language Reduction --------------------------------------
 -- | Convert a propositional term to a grounded term
@@ -363,11 +394,6 @@ orSplit = fmap helper
     helper (GOr l r) = helper l ++ helper r
     helper _         = [] --this will only ever be an AND, fix the case later
 
--- | Take any propositional term, ground it, then massage it until it fits the
--- DIMACS CNF clause form
--- toDimacsProp :: (Num a, Show a) => VProp d a -> [[a]]
--- toDimacsProp = orSplit . toListAndSplit . ground
-
 -- -- Test Examples
 ex :: VProp String String
 ex = And
@@ -389,7 +415,7 @@ ex2 :: VProp String Integer
 ex2 = Chc "a" (And (one 1) (one 3)) (Neg $ one 2)
 
 ex3 :: VProp String Integer
-ex3 = And (one 1) (Chc "d" (one 3) (one 2))
+ex3 = And (Lit 1) (Chc "d" (Chc "a" (one 3) (one 4)) (one 2))
 
 ex4 :: VProp String Integer
 ex4 = Chc "a" (one 1) (one 2)
