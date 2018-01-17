@@ -72,10 +72,6 @@ instance Bifunctor VProp where
 instance Functor (VProp d) where
   fmap = bimap id
 
--- instance Applicative (VProp d) where
---   pure = Ref
---   (<*>) = ap
-
 instance Foldable GProp where
   foldMap f (GLit a)   = f a
   foldMap f (GNLit a)  = f a
@@ -101,11 +97,6 @@ instance Bitraversable VProp where
   bitraverse f g (Chc d l r)  = Chc <$>
                                 f d <*>
                                 bitraverse f g l <*> bitraverse f g r
-
--- -- instance Monad (VProp d) where
--- --   return = Ref
--- --   (Ref x) >>= f = f x
--- --   (Chc t y n)  >>= f = Chc t  (y >>= f)(n >>= f)
 
 instance (Arbitrary d, Arbitrary a) => Arbitrary (VProp d a) where
   arbitrary = sized arbVProp
