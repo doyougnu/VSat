@@ -291,9 +291,9 @@ _recompile conf = go (M.toList conf)
 
 -- | Given a list of configs with associated values, remake the tag tree by
 -- folding over the config list
-recompile :: Ord d => [(Config d, a)] -> Maybe (VProp d a)
-recompile [] = Nothing
-recompile xs = sequence $ go (tail xs') (_recompile conf val)
+recompile :: Ord d => [(Config d, a)] -> VProp d (Maybe a)
+recompile [] = Ref Nothing
+recompile xs = go (tail xs') (_recompile conf val)
   where
     xs' = reverse $ sortOn (M.size . fst) xs
     (conf, val) = head xs'
@@ -353,6 +353,8 @@ ex2 = Neg (_and
             (Chc "a" (_and (Ref 1) (Ref 3)) (Neg $ Ref 2))
             (_impl (Ref 2) (Ref 3)))
 
+ex3 :: VProp String Integer
+ex3 = _impl (Chc "a" (Ref 1) (Ref 2)) (Ref 3)
 -- ex3 :: VProp String Integer
 -- ex3 = And (one 1) (Chc "d" (Chc "a" (one 3) (one 4)) (one 2))
 
