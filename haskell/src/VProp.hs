@@ -1,13 +1,13 @@
 module VProp where
 
-import Utils (parens)
-import Data.Maybe (isJust)
-import Control.Monad (liftM3, liftM2)
-import Data.List (nub, sortOn)
-import Data.Bifunctor
-import Data.Bifoldable
-import Data.Bitraversable
-import Test.QuickCheck
+import Utils              (parens)
+import Data.Maybe         (isJust)
+import Control.Monad      (liftM3, liftM2)
+import Data.List          (nub, sortOn)
+import Data.Bifunctor     (Bifunctor, bimap)
+import Data.Bifoldable    (Bifoldable, bifoldr)
+import Data.Bitraversable (Bitraversable, bitraverse)
+import Test.QuickCheck    (Arbitrary, Gen, arbitrary, frequency, sized)
 import qualified Data.Map as M
 
 -- | A general propositional language that has all the usual suspects
@@ -269,13 +269,13 @@ paths = nub . filter (not . M.null) . go
     go _ = [M.empty]
 
 -- | Given a tag tree, fmap over the tree with respect to a config
-replace :: Ord d => Config d -> b -> VProp d (Maybe a) -> VProp d (Maybe b)
+replace :: Ord d => Config d -> a -> VProp d (Maybe a) -> VProp d (Maybe a)
 replace _    v (Ref _) = Ref $ Just v
 replace conf v (Chc d l r) =
   case M.lookup d conf of
     Nothing    -> Chc d (replace conf v l) (replace conf v r)
-    Just True  -> Chc d (replace conf v l) (Ref Nothing)
-    Just False -> Chc d (Ref Nothing) (replace conf v r)
+    Just True  -> Chc d (replace conf v l) r
+    Just False -> Chc d l (replace conf v r)
 replace conf v (Neg x) = Neg $ replace conf v x
 replace conf v (Op2 a l r) = Op2 a (replace conf v l) (replace conf v r)
 
@@ -291,16 +291,15 @@ _recompile conf = go (M.toList conf)
 
 -- | Given a list of configs with associated values, remake the tag tree by
 -- folding over the config list
-recompile :: Ord d => [(Config d, a)] -> VProp d (Maybe a)
-recompile [] = Ref Nothing
-recompile xs = go (tail xs') (_recompile conf val)
+recompile :: Ord d => [(Config d, a)] -> Maybe (VProp d a)
+recompile [] = Nothing
+recompile xs = sequence $ go (tail xs') (_recompile conf val)
   where
     xs' = reverse $ sortOn (M.size . fst) xs
     (conf, val) = head xs'
     go :: Ord d => [(Config d, a)] -> VProp d (Maybe a) -> VProp d (Maybe a)
     go []          acc = acc
-    go ((c, v):cs) acc = go cs next
-      where next = replace c v acc
+    go ((c, v):cs) acc = go cs $ replace c v acc
 
 ---------------------- Language Reduction --------------------------------------
 -- | Convert a propositional term to a grounded term
