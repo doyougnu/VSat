@@ -85,7 +85,7 @@ work :: (Eq d
 work cs = do
   bs <- asks baseline
   if bs
-    then do (vars, sats) <- get
+    then do (_, sats) <- get
             let cnf = propToCNF (show cs) . groundGProp . toPropDecomp $ cs
             res <- lift $ runPMinisat cnf
             return $ recompile (M.toList (M.map (const res) sats))

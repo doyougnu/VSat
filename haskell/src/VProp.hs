@@ -101,18 +101,21 @@ instance Bitraversable VProp where
 instance (Arbitrary d, Arbitrary a) => Arbitrary (VProp d a) where
   arbitrary = sized arbVProp
 
+-- | Generate an Arbitrary VProp, these frequencies can change for different
+-- depths
 arbVProp :: (Arbitrary a, Arbitrary d) => Int -> Gen (VProp d a)
 arbVProp 0 = fmap Ref arbitrary
 arbVProp n = frequency [ (1, fmap Ref arbitrary)
                        , (4, liftM3 Chc arbitrary l l)
-                       , (4, fmap Neg l)
-                       , (4, liftM2 _or l l)
-                       , (4, liftM2 _and l l)
-                       , (4, liftM2 _impl l l)
-                       , (4, liftM2 _bimpl l l)
+                       , (3, fmap Neg l)
+                       , (3, liftM2 _or l l)
+                       , (3, liftM2 _and l l)
+                       , (3, liftM2 _impl l l)
+                       , (3, liftM2 _bimpl l l)
                        ]
   where l = arbVProp (n `div` 2)
--- ------------------- Propositional Formulae Laws --------------------------------
+
+------------------- Propositional Formulae Laws --------------------------------
 -- | Eliminate an biconditionals
 elimBi :: VProp d a -> VProp d a
 elimBi (Op2 BiImpl a c) = _and
@@ -191,7 +194,7 @@ toCNF :: VProp d a -> VProp d a
 toCNF = head . filter isCNF . iterate funcs
   where funcs = dubNeg . distrib . deMorgs . elimImp . elimBi
 
--- ---------------------- Choice Functions ----------------------------------------
+---------------------- Choice Functions ----------------------------------------
 -- | smart constructor for obj
 one :: a -> VProp d a
 one = Ref
@@ -223,7 +226,7 @@ isChc = not . isObj
 prune :: (Ord d) => VProp d b -> VProp d b
 prune = pruneTagTree M.empty
 
--- -- | Given d config and variational expression remove redundant choices
+-- | Given d config and variational expression remove redundant choices
 pruneTagTree :: (Ord d) => Config d -> VProp d b -> VProp d b
 pruneTagTree _ (Ref d) = Ref d
 pruneTagTree tb (Chc t y n) = case M.lookup t tb of
@@ -234,6 +237,24 @@ pruneTagTree tb (Chc t y n) = case M.lookup t tb of
                              Just False -> pruneTagTree tb n
 pruneTagTree tb (Neg x)      = Neg $ pruneTagTree tb x
 pruneTagTree tb (Op2 a l r)  = Op2 a (pruneTagTree tb l) (pruneTagTree tb r)
+
+-- | Count the terms in the expression
+numTerms :: VProp d a -> Integer -> Integer
+numTerms (Ref _) acc     = succ acc
+numTerms (Neg a) acc     = numTerms a acc
+numTerms (Op2 _ l r) acc = numTerms l (numTerms r acc)
+numTerms Chc{}       acc = succ acc
+
+-- | Count the choices in a tree
+numChc :: VProp d a -> Integer
+numChc = bifoldr (\_ acc -> succ acc) (\_ acc -> acc) 0
+
+-- | Depth of the Term tree
+depth :: VProp d a -> Integer -> Integer
+depth (Ref _) acc = acc
+depth (Neg a) acc = depth a (succ acc)
+depth (Op2 _ l r) acc = max (depth l (succ acc)) (depth r (succ acc))
+depth Chc{}       acc = acc
 
 -- | Given a config and a Variational Prop term select the element out that the
 -- config points to
@@ -340,7 +361,7 @@ orSplit = fmap helper
     helper (GOr l r) = helper l ++ helper r
     helper _         = [] --this will only ever be an AND, fix the case later
 
--- -- -- Test Examples
+-- Test Examples
 ex :: VProp String String
 ex = Op2 And (Ref "a") (Chc "D" (Op2 Or (Ref "b") (Ref "c")) (Ref "x"))
 
@@ -354,11 +375,3 @@ ex2 = Neg (_and
 
 ex3 :: VProp String Integer
 ex3 = _impl (Chc "a" (Ref 1) (Ref 2)) (Ref 3)
--- ex3 :: VProp String Integer
--- ex3 = And (one 1) (Chc "d" (Chc "a" (one 3) (one 4)) (one 2))
-
--- ex4 :: VProp String Integer
--- ex4 = Chc "a" (one 1) (one 2)
-
--- ex5 :: VProp a Integer
--- ex5 = And (one 1) (Or (one 2) (one 4))
