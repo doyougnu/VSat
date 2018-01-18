@@ -11,7 +11,6 @@ import Control.Monad.RWS.Lazy
 import Control.Monad (when)
 
 import VProp
--- import TagTree
 import CNF
 import SubProcess
 
