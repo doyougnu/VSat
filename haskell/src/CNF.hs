@@ -1,4 +1,4 @@
-module CNF where
+module CNF (CNF (..)) where
 
 import qualified Data.Set as S
 

@@ -40,7 +40,7 @@ library
 executable vsat
   hs-source-dirs:      app
   main-is:             Main.hs
-  ghc-options:         -O2 -threaded -rtsopts -with-rtsopts=-N -Wall
+  ghc-options:         -O2 -threaded -dynamic -rtsopts -with-rtsopts=-N -Wall
   build-depends:       base
                      , vsat
                      , criterion

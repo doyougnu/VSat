@@ -2,16 +2,22 @@ module Main where
 
 import Run
 import Gen
-import VProp
-import Criterion.Main
+-- import VProp
+-- import Criterion.Main
 
 main :: IO ()
 main = do
-        props <- sequence . take 10 $! repeat genVProp
-        defaultMain $
-          [ bgroup "andDecomp" $! fmap b (take 1 props)
-          ]
-          where runAll opts = flip runEnv Opts {baseline=opts, others=[]} . initAndRun
-                b x = bench ("NumTerms: " ++ (show $ numTerms x 0) ++ "\n" ++
-                            "NumChc: " ++ (show $ numChc x) ++ "\n" ++
-                            "Depth: " ++ (show $ depth x 0)) $! nfIO (runAll True x)
+        props <- sequence . take 1 $! repeat genVProp
+        print props
+        xs <- (flip runEnv) Opts{baseline=True, others=[]} . initAndRun $ head props
+        print xs
+        -- return ()
+
+
+        -- defaultMain $
+        --   [ bgroup "andDecomp" $! b <$> props
+        --   ]
+        --   where runAll opts = flip runEnv Opts {baseline=opts, others=[]} . initAndRun
+        --         b x = bench ("NumTerms: " ++ (show $ numTerms x 0) ++ "\n" ++
+        --                     "NumChc: " ++ (show $ numChc x) ++ "\n" ++
+        --                     "Depth: " ++ (show $ depth x 0)) $! nfIO (runAll True x)
