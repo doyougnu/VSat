@@ -7,11 +7,11 @@ import Criterion.Main
 
 main :: IO ()
 main = do
-        props <- sequence . take 10 $ repeat genVProp
+        props <- sequence . take 10 $! repeat genVProp
         defaultMain $
-          [ bgroup "andDecomp" $ (b) <$> props
+          [ bgroup "andDecomp" $! fmap b (take 1 props)
           ]
-          where runAll = runEnv . initAndRun
+          where runAll opts = flip runEnv Opts {baseline=opts, others=[]} . initAndRun
                 b x = bench ("NumTerms: " ++ (show $ numTerms x 0) ++ "\n" ++
                             "NumChc: " ++ (show $ numChc x) ++ "\n" ++
-                            "Depth: " ++ (show $ depth x 0)) $ whnf runAll x
+                            "Depth: " ++ (show $ depth x 0)) $! nfIO (runAll True x)

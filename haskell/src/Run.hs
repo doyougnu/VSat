@@ -35,8 +35,8 @@ emptyOpts = Opts { baseline = True -- set to use andDecomp
                  }
 
 -- | Run the RWS monad with defaults of empty state, reader
-runEnv :: Env d r -> IO (r, (VarDict d, SatDict d),  Log)
-runEnv m = runRWST m emptyOpts emptySt
+runEnv :: Env d r -> Opts d r -> IO (r, (VarDict d, SatDict d),  Log)
+runEnv m opts = runRWST m opts emptySt
 
 -- | An Empty env state is a dictionary of variable names and their hashes and
 -- a dictionary for each hash that holds the results of the sat solver

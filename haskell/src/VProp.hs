@@ -1,23 +1,35 @@
-module VProp where
+module VProp ( VProp
+             , numChc
+             , numTerms
+             , depth
+             , ground
+             , groundGProp
+             , recompile
+             , paths
+             , orSplit
+             , toListAndSplit
+             , andDecomp) where
 
 import Utils              (parens)
 import Data.Maybe         (isJust)
 import Control.Monad      (liftM3, liftM2)
 import Data.List          (nub, sortOn)
+import GHC.Generics       (Generic)
+import Control.DeepSeq
 import Data.Bifunctor     (Bifunctor, bimap)
-import Data.Bifoldable    (Bifoldable, bifoldr)
+import Data.Bifoldable    (Bifoldable, bifoldr', bifoldr)
 import Data.Bitraversable (Bitraversable, bitraverse)
 import Test.QuickCheck    (Arbitrary, Gen, arbitrary, frequency, sized)
-import qualified Data.Map as M
+import qualified Data.Map.Strict as M
 
 -- | A general propositional language that has all the usual suspects
-data VProp d a = Ref a                           -- ^ A literal result of a choice
-               | Neg (VProp d a)                 -- ^ Negation
-               | Op2 Op2 (VProp d a) (VProp d a) -- ^ Binary Terms
-               | Chc d  (VProp d a) (VProp d a)  -- ^ A Choice in Dimension d
-            deriving Eq
+data VProp d a = Ref !a                            -- ^ A literal result of a choice
+               | Neg !(VProp d a)                  -- ^ Negation
+               | Op2 Op2 !(VProp d a) !(VProp d a) -- ^ Binary Terms
+               | Chc d  !(VProp d a) !(VProp d a)  -- ^ A Choice in Dimension d
+            deriving (Eq, Generic)
 
-data Op2 = And | Or | Impl | BiImpl deriving Eq
+data Op2 = And | Or | Impl | BiImpl deriving (Eq, Generic)
 
 -- | smart constructors
 _and :: VProp d a -> VProp d a -> VProp d a
@@ -32,9 +44,6 @@ _impl = Op2 Impl
 _bimpl :: VProp d a -> VProp d a -> VProp d a
 _bimpl = Op2 BiImpl
 
--- | a tag is just a string that represents a dimension in a Choice
-type Tag = String
-
 -- | A configuration
 type Config d = M.Map d Bool
 
@@ -43,7 +52,7 @@ data GProp a = GLit a                   -- ^ A grounded prop literal
              | GNLit a                  -- ^ A negated grounded literal
              | GAnd (GProp a) (GProp a) -- ^ A grounded and term
              | GOr  (GProp a) (GProp a) -- ^ a ground or term
-             deriving Functor
+             deriving (Functor, Generic)
 
 instance Show Op2 where
   show And    = " && "
@@ -85,7 +94,7 @@ instance Bifoldable VProp where
   bifoldr f g acc (Op2 _ l r)  = bifoldr f g (bifoldr f g acc r) l
 
 instance Foldable (VProp d) where
-  foldr = bifoldr (flip const)
+  foldr = bifoldr' (flip const)
 
 instance Traversable (VProp d) where
   traverse = bitraverse pure
@@ -100,6 +109,10 @@ instance Bitraversable VProp where
 
 instance (Arbitrary d, Arbitrary a) => Arbitrary (VProp d a) where
   arbitrary = sized arbVProp
+
+instance (NFData a) => NFData (GProp a)
+instance (NFData d, NFData a) => NFData (VProp d a)
+instance NFData Op2
 
 -- | Generate an Arbitrary VProp, these frequencies can change for different
 -- depths
@@ -118,75 +131,65 @@ arbVProp n = frequency [ (1, fmap Ref arbitrary)
 ------------------- Propositional Formulae Laws --------------------------------
 -- | Eliminate an biconditionals
 elimBi :: VProp d a -> VProp d a
-elimBi (Op2 BiImpl a c) = _and
+elimBi !(Op2 BiImpl a c) = _and
                           (_impl (elimBi a) (elimBi c))
                           (_impl (elimBi c) (elimBi a))
-elimBi (Chc d l r) = Chc d (elimBi l) (elimBi r)
-elimBi (Op2 a l r) = Op2 a (elimBi l) (elimBi r)
-elimBi (Neg a)     = Neg  (elimBi a)
-elimBi x           = x
+elimBi !(Chc d l r) = Chc d (elimBi l) (elimBi r)
+elimBi !(Op2 a l r) = Op2 a (elimBi l) (elimBi r)
+elimBi !(Neg a)     = Neg  (elimBi a)
+elimBi !x           = x
 
 -- | Eliminate Implications
 elimImp :: VProp d a -> VProp d a
-elimImp (Op2 Impl a c)     = _or (Neg $ elimImp a) (elimImp c)
-elimImp x@(Op2 BiImpl _ _) = elimImp $ elimBi x
-elimImp (Chc d l r) = Chc d (elimImp l) (elimImp r)
-elimImp (Op2 a l r) = Op2 a (elimImp l) (elimImp r)
-elimImp (Neg a)     = Neg   (elimImp a)
-elimImp x@(Ref _)   = x
+elimImp !(Op2 Impl a c)     = _or (Neg $ elimImp a) (elimImp c)
+elimImp !x@(Op2 BiImpl _ _) = elimImp $ elimBi x
+elimImp !(Chc d l r) = Chc d (elimImp l) (elimImp r)
+elimImp !(Op2 a l r) = Op2 a (elimImp l) (elimImp r)
+elimImp !(Neg a)     = Neg   (elimImp a)
+elimImp !x@(Ref _)   = x
 
--- -- -- | Demorgans law
+-- | Demorgans law
 deMorgs :: VProp d a -> VProp d a
-deMorgs (Neg (Op2 And l r)) = _or  (Neg l) (Neg r)
-deMorgs (Neg (Op2 Or l r))  = _and (Neg l) (Neg r)
-deMorgs (Chc d l r) = Chc d (deMorgs l) (deMorgs r)
-deMorgs (Op2 a l r) = Op2 a (deMorgs l) (deMorgs r)
-deMorgs (Neg q)     = Neg   (deMorgs q)
-deMorgs x           = x
+deMorgs !(Neg (Op2 And l r)) = _or  (Neg l) (Neg r)
+deMorgs !(Neg (Op2 Or l r))  = _and (Neg l) (Neg r)
+deMorgs !(Chc d l r) = Chc d (deMorgs l) (deMorgs r)
+deMorgs !(Op2 a l r) = Op2 a (deMorgs l) (deMorgs r)
+deMorgs !(Neg q)     = Neg   (deMorgs q)
+deMorgs !x           = x
 
 -- | Double Negation law
 dubNeg :: VProp d a -> VProp d a
-dubNeg (Neg (Neg a)) = a
-dubNeg (Chc d l r)   = Chc d (dubNeg l) (dubNeg r)
-dubNeg (Op2 a l r)   = Op2 a (dubNeg l) (dubNeg r)
-dubNeg x             = x
+dubNeg !(Neg (Neg a)) = a
+dubNeg !(Chc d l r)   = Chc d (dubNeg l) (dubNeg r)
+dubNeg !(Op2 a l r)   = Op2 a (dubNeg l) (dubNeg r)
+dubNeg !x             = x
 
 -- | Distributive laws
 distrib :: VProp d a -> VProp d a
-distrib (Op2 Or p (Op2 And q r)) = _and
-                                   (_or (distrib p) (distrib q))
-                                   (_or (distrib p) (distrib r))
-distrib (Op2 Or (Op2 And q r) p) = _and
-                                   (_or (distrib p) (distrib q))
-                                   (_or (distrib p) (distrib r))
-distrib (Chc d l r)  = Chc d (distrib l) (distrib r)
-distrib (Op2 a l r)  = Op2 a (distrib l) (distrib r)
-distrib (Neg q)      = Neg   (distrib q)
-distrib x            = x
-
--- | Absorption
-absorb :: (Eq (VProp d a)) => VProp d a -> VProp d a
-absorb x@(Op2 Or p (Op2 And p1 _))
-  | p == p1 = p
-  | otherwise = x
-absorb x@(Op2 And p (Op2 Or p1 _))
-  | p == p1 = p
-  | otherwise = x
-absorb x = x
+distrib !(Op2 Or p (Op2 And q r)) = _and
+                                    (_or (distrib p) (distrib q))
+                                    (_or (distrib p) (distrib r))
+distrib !(Op2 Or (Op2 And q r) p) = _and
+                                    (_or (distrib p) (distrib q))
+                                    (_or (distrib p) (distrib r))
+distrib !(Chc d l r)  = Chc d (distrib l) (distrib r)
+distrib !(Op2 a l r)  = Op2 a (distrib l) (distrib r)
+distrib !(Neg q)      = Neg   (distrib q)
+distrib !x            = x
 
 -- | True iff a propositional term contains only literals, ands, ors or negations
 isCNF :: VProp d a -> Bool
-isCNF (Op2 And l r) = (isAnd l && isAnd r) || (isCNF l && isCNF r)
-isCNF (Op2 Or l r)  = isCNF l && isCNF r && not (isAnd l) && not (isAnd r)
-isCNF (Neg n)   = isCNF n
-isCNF (Ref _)     = True
-isCNF (Chc _ _ _) = True
+isCNF !(Op2 And l r) = (isAnd l && isAnd r) || (isCNF l && isCNF r)
+isCNF !(Op2 Or l r)  = isCNF l && isCNF r && not (isAnd l) && not (isAnd r)
+isCNF !(Neg n)     = isCNF n
+isCNF !(Ref _)     = True
+isCNF !(Chc _ _ _) = True
 isCNF _         = False
 
 -- | True if the propositional term is an And or the negation of an And
 isAnd :: VProp d a -> Bool
-isAnd (Op2 And _ _)       = True
-isAnd (Neg (Op2 And _ _)) = True
+isAnd !(Op2 And _ _)       = True
+isAnd !(Neg (Op2 And _ _)) = True
 isAnd _                   = False
 
 -- -- | For any Propositional term, reduce it to CNF via logical equivalences
@@ -202,25 +205,6 @@ one = Ref
 -- | smart constructor for chc
 chc :: d -> VProp d a -> VProp d a -> VProp d a
 chc = Chc
-
--- | Given d variational term, return all objects in it
-getAllObjs :: VProp d b -> [b]
-getAllObjs (Chc _ y n) = concatMap getAllObjs [y, n]
-getAllObjs (Ref d)     = return d
-getAllObjs _           = []
-
--- | Given d variation term, if it is an object, get the object
-getObj :: VProp d b -> Maybe b
-getObj (Ref d) = Just d
-getObj _ = Nothing
-
--- | Given d variational expression, return true if its an object
-isObj :: VProp d b -> Bool
-isObj = isJust . getObj
-
--- | Given d variational expression, return true if its an choice
-isChc :: VProp d b -> Bool
-isChc = not . isObj
 
 -- | Wrapper around engine
 prune :: (Ord d) => VProp d b -> VProp d b
@@ -247,7 +231,7 @@ numTerms Chc{}       acc = succ acc
 
 -- | Count the choices in a tree
 numChc :: VProp d a -> Integer
-numChc = bifoldr (\_ acc -> succ acc) (\_ acc -> acc) 0
+numChc = bifoldr' (\_ acc -> succ acc) (\_ acc -> acc) 0
 
 -- | Depth of the Term tree
 depth :: VProp d a -> Integer -> Integer
@@ -360,18 +344,3 @@ orSplit = fmap helper
     helper (GNLit x) = [negate x]
     helper (GOr l r) = helper l ++ helper r
     helper _         = [] --this will only ever be an AND, fix the case later
-
--- Test Examples
-ex :: VProp String String
-ex = Op2 And (Ref "a") (Chc "D" (Op2 Or (Ref "b") (Ref "c")) (Ref "x"))
-
-ex1 :: VProp String Integer
-ex1 = _bimpl (Ref 1) (_impl (Ref 2) (Ref 3))
-
-ex2 :: VProp String Integer
-ex2 = Neg (_and
-            (Chc "a" (_and (Ref 1) (Ref 3)) (Neg $ Ref 2))
-            (_impl (Ref 2) (Ref 3)))
-
-ex3 :: VProp String Integer
-ex3 = _impl (Chc "a" (Ref 1) (Ref 2)) (Ref 3)
