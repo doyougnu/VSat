@@ -1,4 +1,5 @@
-module SubProcess where
+module SubProcess (runPMinisat
+                  , Satisfiable) where
 
 import qualified Turtle as T
 import qualified Data.Text as D (pack)

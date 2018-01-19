@@ -1,4 +1,6 @@
-module VProp ( VProp
+module VProp ( VProp (..)
+             , Config
+             , GProp (..)
              , numChc
              , numTerms
              , depth
@@ -8,10 +10,13 @@ module VProp ( VProp
              , paths
              , orSplit
              , toListAndSplit
-             , andDecomp) where
+             , andDecomp
+             , select
+             , one
+             , chc
+             , prune) where
 
 import Utils              (parens)
-import Data.Maybe         (isJust)
 import Control.Monad      (liftM3, liftM2)
 import Data.List          (nub, sortOn)
 import GHC.Generics       (Generic)

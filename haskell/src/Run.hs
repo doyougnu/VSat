@@ -1,8 +1,12 @@
-module Run where
+module Run ( runEnv
+           , initAndRun
+           , Opts (..)
+           ) where
 
 import Data.Hashable as H
 import Data.Bifunctor (bimap)
 import Data.Bifoldable
+import Data.Foldable (foldr')
 import Data.Maybe (fromJust, isJust)
 import qualified Data.IntMap as I
 import qualified Data.Map as M
@@ -71,7 +75,7 @@ propToCNF :: (Num a, Integral a) => String -> GProp a -> CNF
 propToCNF str ps = cnf
   where
     cnf = CNF { comment = str
-              , vars    = S.fromList $ foldr ((:) . toInteger) [] ps
+              , vars    = S.fromList $ foldr' ((:) . toInteger) [] ps
               , clauses = orSplit . toListAndSplit $ toInteger <$> ps
               }
 
@@ -127,14 +131,14 @@ work' (conf, prop) = when (isJust prop) $
      put (vars, M.insert conf result sats)
 
 -- preliminary test cases run with: runEnv (initEnv p1)
-p1 :: VProp String Integer
-p1 = _and
-      (Chc "d" (Ref 1) (Ref 2))
-      (Chc "d" (Ref 1) (Chc "b" (Ref 2) (Ref 3)))
+-- p1 :: VProp String Integer
+-- p1 = _and
+--       (Chc "d" (one 1) (one 2))
+--       (Chc "d" (one 1) (Chc "b" (one 2) (one 3)))
 
-p2 :: VProp String Integer
-p2 = _impl (Chc "d" (Ref 20) (Ref 40)) (Ref 1001)
+-- p2 :: VProp String Integer
+-- p2 = _impl (Chc "d" (one 20) (one 40)) (one 1001)
 
--- this will cause a header mismatch because it doesn't start at 1
-up1 :: VProp Integer Integer
-up1 = Chc 1 (Ref 2) (Chc 3 (Ref 4) (Ref 5))
+-- -- this will cause a header mismatch because it doesn't start at 1
+-- up1 :: VProp Integer Integer
+-- up1 = Chc 1 (one 2) (Chc 3 (one 4) (one 5))
