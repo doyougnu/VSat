@@ -8,8 +8,8 @@ import Gen
 main :: IO ()
 main = do
         props <- sequence . take 1 $! repeat genVProp
-        print props
-        xs <- (flip runEnv) Opts{baseline=True, others=[]} . initAndRun $ head props
+        print $ head props
+        xs <- (flip evalEnv) Opts{baseline=True, others=[]} . initAndRun $ head props
         print xs
         -- return ()
 

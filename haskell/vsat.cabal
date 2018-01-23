@@ -22,6 +22,7 @@ library
                              , DeriveFunctor
                              , DeriveGeneric
                              , BangPatterns
+                             , GeneralizedNewtypeDeriving
 
   build-depends:       base >= 4.7 && < 5
                      , containers >= 0.5
