@@ -1,6 +1,9 @@
 module VProp ( VProp (..)
              , Config
              , GProp (..)
+             , _impl
+             , _and
+             , _or
              , numChc
              , numTerms
              , depth
@@ -266,15 +269,15 @@ andDecomp (Neg x)     = Neg (andDecomp x)
 andDecomp (Op2 a l r) = Op2 a (andDecomp l) (andDecomp r)
 
 -- | Given a variational term find all paths for the tree in a flat list
+-- TODO cleanup nub and filter calls
 paths :: Ord d => VProp d a -> [Config d]
 paths = nub . filter (not . M.null) . go
   where
-    go (Chc d l r) = do -- TODO: remove nub
+    go (Chc d l r) = do
       summaryl <- go l
       summaryr <- go r
       [M.insert d True summaryl, M.insert d False summaryr]
     go (Neg x) = go x
-    -- TODO cleanup nub and filter calls
     go (Op2 _ l r)  = go l ++ go r
     go _ = [M.empty]
 
@@ -349,3 +352,6 @@ orSplit = fmap helper
     helper (GNLit x) = [negate x]
     helper (GOr l r) = helper l ++ helper r
     helper _         = [] --this will only ever be an AND, fix the case later
+
+p2 :: VProp String Integer
+p2 = Neg $ (_or (Ref 1) (Ref 2))

@@ -9,10 +9,10 @@ import Data.Bifunctor (bimap)
 import Data.Bifoldable
 import Data.Foldable (foldr')
 import Data.Maybe (fromJust, isJust)
-import qualified Data.IntMap as I
-import qualified Data.Map as M
+import qualified Data.IntMap.Strict as I
+import qualified Data.Map.Strict as M
 import qualified Data.Set as S (fromList)
-import Control.Monad.RWS.Lazy
+import Control.Monad.RWS.Strict
 import Control.Monad (when)
 
 import VProp
@@ -136,15 +136,18 @@ work' (conf, prop) = when (isJust prop) $
      result <- lift . runPMinisat . propToCNF (show conf) . fmap fromJust . ground conf . fromJust $ prop
      put (vars, M.insert conf result sats)
 
--- preliminary test cases run with: runEnv (initEnv p1)
--- p1 :: VProp String Integer
--- p1 = _and
---       (Chc "d" (one 1) (one 2))
---       (Chc "d" (one 1) (Chc "b" (one 2) (one 3)))
+-- This test case never terminates: run with (flip runEnv) Opts{baseline=False, others=[]} . initAndRun $ p1
+-- (-(((2 -> 1) && (2 -> 1)) -> ((2 -> 2) || "ibyzldzishzdd"<1, 5>)) -> 1)
+p1 :: VProp String Integer
+p1 = _or (_impl
+          (_and
+           (_impl (Ref 2) (Ref 1))
+           (_impl (Ref 2) (Ref 1)))
+          (_impl
+           (_or
+            (_impl (Ref 2) (Ref 2))
+             (Chc "a" (Ref 1) (Ref 5)))
+           (Ref 1))) (Ref 2)
 
--- p2 :: VProp String Integer
--- p2 = _impl (Chc "d" (one 20) (one 40)) (one 1001)
-
--- -- this will cause a header mismatch because it doesn't start at 1
--- up1 :: VProp Integer Integer
--- up1 = Chc 1 (one 2) (Chc 3 (one 4) (one 5))
+p2 :: VProp String Integer
+p2 = _or (Ref 1) (Ref 2)

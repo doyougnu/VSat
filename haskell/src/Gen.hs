@@ -23,8 +23,8 @@ instance NFData ANString
 instance NFData BInt
 
 instance Bounded BInt where
-  minBound = 0
-  maxBound = 25
+  minBound = 1
+  maxBound = 5
 
 instance Arbitrary BInt where
   arbitrary = arbitrarySizedBoundedIntegral
