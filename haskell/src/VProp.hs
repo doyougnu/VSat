@@ -355,8 +355,6 @@ orSplit = fmap helper
     helper :: (Num a) => GProp a -> [a]
     helper (GLit x)  = [x]
     helper (GNLit x) = [negate x]
+    helper (GNeg x)  = negate <$> helper x
     helper (GOr l r) = helper l ++ helper r
     helper _         = [] --this will only ever be an AND, fix the case later
-
-p2 :: VProp String Integer
-p2 = Neg $ (_or (Ref 1) (Ref 2))

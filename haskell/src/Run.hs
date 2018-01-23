@@ -151,3 +151,6 @@ work' (conf, prop) = when (isJust prop) $
 
 -- p2 :: VProp String Integer
 -- p2 = _or (Ref 1) (Ref 2)
+
+ex :: VProp String Integer
+ex = Chc "a" (Chc "b" (Ref 1) (Ref 2)) (Chc "c" (Ref 1) (Ref 2))
