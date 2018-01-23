@@ -138,16 +138,16 @@ work' (conf, prop) = when (isJust prop) $
 
 -- This test case never terminates: run with (flip runEnv) Opts{baseline=False, others=[]} . initAndRun $ p1
 -- (-(((2 -> 1) && (2 -> 1)) -> ((2 -> 2) || "ibyzldzishzdd"<1, 5>)) -> 1)
-p1 :: VProp String Integer
-p1 = _or (_impl
-          (_and
-           (_impl (Ref 2) (Ref 1))
-           (_impl (Ref 2) (Ref 1)))
-          (_impl
-           (_or
-            (_impl (Ref 2) (Ref 2))
-             (Chc "a" (Ref 1) (Ref 5)))
-           (Ref 1))) (Ref 2)
+-- p1 :: VProp String Integer
+-- p1 = Neg (_or (_impl
+--           (_and
+--            (_impl (Ref 2) (Ref 1))
+--            (_impl (Ref 2) (Ref 1)))
+--           (_impl
+--            (_or
+--             (_impl (Ref 2) (Ref 2))
+--              (Chc "a" (Ref 1) (Ref 3)))
+--            (Ref 1))) (Ref 2))
 
-p2 :: VProp String Integer
-p2 = _or (Ref 1) (Ref 2)
+-- p2 :: VProp String Integer
+-- p2 = _or (Ref 1) (Ref 2)

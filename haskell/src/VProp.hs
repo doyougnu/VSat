@@ -58,6 +58,7 @@ type Config d = M.Map d Bool
 -- | A Propositional Language that only allows grounded terms
 data GProp a = GLit a                   -- ^ A grounded prop literal
              | GNLit a                  -- ^ A negated grounded literal
+             | GNeg (GProp a)           -- ^ A negated grounded term
              | GAnd (GProp a) (GProp a) -- ^ A grounded and term
              | GOr  (GProp a) (GProp a) -- ^ a ground or term
              deriving (Functor, Generic)
@@ -77,6 +78,7 @@ instance (Show d, Show a) => Show (VProp d a) where
 instance (Show a) => Show (GProp a) where
   show (GLit a)   = show a
   show (GNLit a)  = "-" ++ show a
+  show (GNeg a)  = "-" ++ show a
   show (GAnd x y) = parens $ show x ++ " && " ++ show y
   show (GOr x y)  = parens $ show x ++ " || " ++ show y
 
@@ -92,6 +94,7 @@ instance Functor (VProp d) where
 instance Foldable GProp where
   foldMap f (GLit a)   = f a
   foldMap f (GNLit a)  = f a
+  foldMap f (GNeg x)   = mconcat [foldMap f x]
   foldMap f (GAnd l r) = mconcat [foldMap f l, foldMap f r]
   foldMap f (GOr l r)  = mconcat [foldMap f l, foldMap f r]
 
@@ -319,6 +322,7 @@ recompile xs = sequence $ go (tail xs') (_recompile conf val)
 ground :: Ord d => Config d -> VProp d a -> GProp (Maybe a)
 ground _ (Ref x)       = GLit . Just $ x
 ground _ (Neg (Ref x)) = GNLit . Just $ x
+ground c (Neg x)       = GNeg (ground c . toCNF $ x)
 ground c (Op2 Or l r)  = GOr  (ground c . toCNF $ l) (ground c . toCNF $ r)
 ground c (Op2 And l r) = GAnd (ground c . toCNF $ l) (ground c . toCNF $ r)
 ground c x@(Chc _ _ _) = case select c x of
@@ -329,6 +333,7 @@ ground c x             = ground c $ toCNF x
 groundGProp :: Ord d => VProp d a -> GProp a
 groundGProp (Ref x) = GLit x
 groundGProp (Neg (Ref x)) = GNLit x
+groundGProp (Neg x)       = GNeg (groundGProp . toCNF $ x)
 groundGProp (Op2 Or l r)  = GOr (groundGProp . toCNF $ l) (groundGProp . toCNF $ r)
 groundGProp (Op2 And l r) = GAnd (groundGProp . toCNF $ l) (groundGProp . toCNF $ r)
 groundGProp (Chc _ _ _)   = error "andDecomp cannot produce a choice, you must have called this without calling andDecomp"
