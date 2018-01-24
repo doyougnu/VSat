@@ -91,6 +91,7 @@ propToCNF str ps = cnf
               }
 
 -- | main workhorse for running the SAT solver
+-- FIXE THE ENGINE CALL SO YOU CAN RUN SOMETHING
 work :: VProp Integer Integer -> Env Integer Integer (Maybe (VProp Integer Satisfiable))
 work cs = do
   bs <- asks baseline
