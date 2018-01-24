@@ -18,8 +18,8 @@ emptyCNF = CNF { comment = ""
                }
 
 -- | Given a CNF generate the variable set from the clauses
-genVars :: CNF -> CNF
-genVars CNF{comment=cs, vars=_, clauses=cls} = CNF { comment = cs
+_genVars :: CNF -> CNF
+_genVars CNF{comment=cs, vars=_, clauses=cls} = CNF { comment = cs
                                                     , vars    = genVars' cls
                                                     , clauses = cls
                                                     }
@@ -48,10 +48,10 @@ instance Monoid CNF where
   mconcat = Prelude.foldr1 mappend
 
 -- | Plain Examples
-plainEx1 :: CNF
-plainEx1 = CNF { comment = "I'm a comment"
-               , vars = S.fromList [0]
-               , clauses = [ [1, 2]
-                           , [(-1), 2]
-                           ]
-               }
+-- plainEx1 :: CNF
+-- plainEx1 = CNF { comment = "I'm a comment"
+--                , vars = S.fromList [0]
+--                , clauses = [ [1, 2]
+--                            , [(-1), 2]
+--                            ]
+--                }

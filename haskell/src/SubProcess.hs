@@ -6,12 +6,8 @@ import qualified Data.Text as D (pack)
 import qualified Control.Foldl as F
 
 import CNF
-import TagTree
 
 type Satisfiable = Bool
-
--- | A result is d particular configuration, and its satisfiability result
-type Result d = (Config d, Satisfiable)
 
 -- | Take anything that can be shown and pack it into d shell line
 toLine :: Show d => d -> T.Shell T.Line
@@ -29,7 +25,3 @@ run sat cnf = do
 -- | Take any plain CNF term and run it through the SAT solver
 runPMinisat :: CNF -> IO Satisfiable
 runPMinisat = run "minisat"
-
--- | Given d list of results, only return the failures
-failures :: [Result d] -> [Result d]
-failures = filter ((==False) . snd)
