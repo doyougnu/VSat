@@ -91,10 +91,14 @@ propToCNF str ps = cnf
 
 -- | main workhorse for running the SAT solver
 -- FIXE THE ENGINE CALL SO YOU CAN RUN SOMETHING
-work :: (Show a1, Integral a1, Ord d1, MonadTrans t2,
-          MonadState (t, M.Map (Config d1) b, t1) (t2 IO),
-          MonadReader (Opts d a) (t2 IO)) =>
-        VProp a1 a1 -> t2 IO (Maybe (VProp d1 Satisfiable))
+-- work :: (Show a1, Integral a1, Num d1, Show d1, Ord d1, MonadTrans t2,
+--           MonadState (t, M.Map (Config d1) b, t1) (t2 IO),
+--           MonadReader (Opts d a) (t2 IO)) =>
+--         VProp a1 a1 -> t2 IO (Maybe (VProp d1 Satisfiable))
+work :: (Show a1, Show b1, Integral a1, Ord k, MonadTrans t1,
+          MonadState (t, M.Map (Config k) b, M.Map k b1) (t1 IO),
+          MonadReader (Opts d a) (t1 IO)) =>
+        VProp a1 a1 -> t1 IO (Maybe (VProp k Satisfiable))
 work cs = do
   bs <- asks baseline
   (vDict, sats, rDict) <- get
@@ -102,10 +106,12 @@ work cs = do
   res <- lift $ runPMinisat cnf
   if bs
     then do
-            return $ recompile (M.toList (M.map (const res) sats))
+    let aa = recompile (M.toList (M.map (const res) sats))
+    lift $ print $ (bimap (\x -> rDict M.! x) id) <$> aa
+    return aa
 
     else do
-    -- let keys = M.keys sats
+    let keys = M.keys sats
     -- cnfs = (\y -> (y, select y cs)) <$> keys
     -- mapM_ work' cnfs
     -- (_, newSats, rvars) <- get
