@@ -19,14 +19,14 @@ import SubProcess
 
 -- | A variable dictionary mapping with dimensions or integers to integers,
 -- required for the sat solver
-type VarDict d a = M.Map (Either d a) Integer
+type VarDict d a = M.Map (Either d a) Int
 
 -- | a intmap that maps integers back to the dimension or value names
-type VarDictR d a = I.IntMap (Either d a)
+type VarDictR d a = M.Map Int (Either d a)
 
 -- | The satisfiable dictionary, this is actually the "state" keys are configs
 -- and values are whether that config is satisfiable or not (a bool)
-type SatDict = M.Map (Config Integer) Satisfiable -- keys may incur perf penalty
+type SatDict = M.Map (Config Int) Satisfiable -- keys may incur perf penalty
 
 -- | The optimizations that could be set
 data Opts d a = Opts { baseline :: Bool  -- ^ True for andDecomp, False for brute
@@ -36,7 +36,7 @@ type Log = String
 
 -- | Takes a dimension d, a value a, and a result r
 type St d a = (VarDict d a, SatDict, VarDictR d a) -- ^ convenience type for State
-type Env d a r = RWST (Opts d r) Log (St d a) IO r -- ^ the monad stack
+type Env d a r = RWST (Opts d a) Log (St d a) IO r -- ^ the monad stack
 
 -- | An empty reader monad environment, in the future read these from config file
 _emptyOpts :: Opts d a
@@ -51,32 +51,31 @@ _setOpts x ys = Opts { baseline = x
                     }
 
 -- | Run the RWS monad with defaults of empty state, reader
-runEnv :: Env d a r -> Opts d r -> IO (r, (St d a),  Log)
+runEnv :: Env d a r -> Opts d a -> IO (r, (St d a),  Log)
 runEnv m opts = runRWST m opts emptySt
 
 -- | Run the RWS monad and grab the result value
-evalEnv :: Env d a r -> Opts d r -> IO r
-evalEnv m o = runEnv m o >>= return . f
+evalEnv :: Env d a r -> Opts d a -> IO r
+evalEnv m o = f <$> runEnv m o
   where f (x,_,_) = x
 
 -- | An Empty env state is a dictionary of variable names and their hashes and
 -- a dictionary for each hash that holds the results of the sat solver
 emptySt :: (St d a)
-emptySt = (M.empty, M.empty, I.empty)
+emptySt = (M.empty, M.empty, M.empty)
 
--- | Given a variational term pack an initial state in the environment Monad
 recordVars :: (Ord a
               , Ord d
-              , MonadState (St d a) m) => VProp d a -> m (VProp Integer Integer)
+              , MonadState (St d a) m)
+           => VProp d a -> m (VProp Int Int)
 recordVars cs = do
-  (_, _, _) <- get
   let t = bifoldr'
-          (\dim acc -> (Left dim) : acc)
-          (\val acc -> (Right val) : acc) [] cs
+          (\dim acc -> Left dim : acc)
+          (\val acc -> Right val : acc) [] cs
       pairs = zip t [1..]
-      vDict = M.fromList $ zip t [1..]
-      vRDict = foldr' (\(dim, int) dict -> I.insert int dim dict) I.empty pairs
-      cs' = bimap (\x-> vDict M.! (Left x)) (\x -> vDict M.! (Right x)) cs
+      vDict = M.fromList $ pairs
+      vRDict = foldr' (\(dim, int) dict -> M.insert int dim dict) M.empty pairs
+      cs' = bimap ((vDict M.!) . Left) ((vDict M.!) . Right) cs
       satDict = M.fromList $ zip (paths cs') (repeat False)
   put (vDict, satDict, vRDict)
   return cs'
@@ -92,38 +91,42 @@ propToCNF str ps = cnf
 
 -- | main workhorse for running the SAT solver
 -- FIXE THE ENGINE CALL SO YOU CAN RUN SOMETHING
-work :: VProp Integer Integer -> Env Integer Integer (Maybe (VProp Integer Satisfiable))
+work :: (Show a1, Integral a1, Ord d1, MonadTrans t2,
+          MonadState (t, M.Map (Config d1) b, t1) (t2 IO),
+          MonadReader (Opts d a) (t2 IO)) =>
+        VProp a1 a1 -> t2 IO (Maybe (VProp d1 Satisfiable))
 work cs = do
   bs <- asks baseline
+  (vDict, sats, rDict) <- get
+  let cnf = propToCNF (show cs) . groundGProp . andDecomp $ cs
+  res <- lift $ runPMinisat cnf
   if bs
-    then do (_, sats, rvars) <- get
-            let cnf = propToCNF (show cs) . groundGProp . andDecomp $ cs
-            res <- lift $ runPMinisat cnf
+    then do
             return $ recompile (M.toList (M.map (const res) sats))
 
     else do
-            (_, sats, _) <- get
-            let keys = M.keys sats
-                cnfs = (\y -> (y, select y cs)) <$> keys
-            mapM_ work' cnfs
-            (_, newSats, rvars) <- get
-            return $ (bimap (extract . (rvars I.!) . fromIntegral) id) <$> recompile (M.toList newSats)
+    -- let keys = M.keys sats
+    -- cnfs = (\y -> (y, select y cs)) <$> keys
+    -- mapM_ work' cnfs
+    -- (_, newSats, rvars) <- get
+    -- let x = recompile (M.toList newSats)
+    -- y = bimap (yankOut rvars) id  <$> y
+    return $ recompile (M.toList (M.map (const res) sats))
+
   where
     extract (Left a) = a
     extract (Right a) = a
+    yankOut m = extract . (m M.!)
 
--- | Given a configuration, a boolean representing satisfiability and a Prop, If
--- the prop does not contain a Nothing (as denoted by the bool) then extract the
--- values from the prop, ground then prop, convert to a CNF with descriptor of
--- the configuration, run the sat solver and save the result to the SAT table
--- TODO: Fix this nonsensical type signature
-work' :: (Ord d, Show d, Integral a, MonadTrans t2,
-           MonadState (t, M.Map (M.Map d Bool) Satisfiable, t1) (t2 IO)) =>
-         (M.Map d Bool, Maybe (VProp d a)) -> t2 IO ()
-work' (conf, prop) = when (isJust prop) $
-  do (vars, sats, rvars) <- get
-     result <- lift . runPMinisat . propToCNF (show conf) . fmap fromJust . ground conf . fromJust $ prop
-     put (vars, M.insert conf result sats, rvars)
+-- -- | Given a configuration, a boolean representing satisfiability and a Prop, If
+-- -- the prop does not contain a Nothing (as denoted by the bool) then extract the
+-- -- values from the prop, ground then prop, convert to a CNF with descriptor of
+-- -- the configuration, run the sat solver and save the result to the SAT table
+-- -- TODO: Fix this nonsensical type signature
+-- work' (conf, prop) = when (isJust prop) $
+--   do (vars, sats, rvars) <- get
+--      result <- lift . runPMinisat . propToCNF (show conf) . fmap fromJust . ground conf . fromJust $ prop
+--      put (vars, M.insert conf result sats, rvars)
 
 
 _ex :: VProp String Integer

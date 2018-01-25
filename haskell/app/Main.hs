@@ -9,7 +9,7 @@ main :: IO ()
 main = do
         props <- sequence . take 1 $! repeat genVProp
         print $ head props
-        xs <- (flip evalEnv) Opts{baseline=True, others=[]} . initAndRun $! head props
+        -- xs <- (flip evalEnv) Opts{baseline=True, others=[]} . initAndRun $! head props
         -- defaultMain $
         --   [ bgroup "andDecomp" $! b <$> props
         --   ]
@@ -18,7 +18,7 @@ main = do
         --     b x = bench ("NumTerms: " ++ (show $ numTerms x 0) ++ "\n" ++
         --                   "NumChc: " ++ (show $ numChc x) ++ "\n" ++
         --                   "Depth: " ++ (show $ depth x 0)) $! nfIO (runAll True x)
-        print xs
+        -- print xs
         return ()
 
 
