@@ -31,6 +31,8 @@ type SatDict = M.Map (Config Int) Satisfiable -- keys may incur perf penalty
 -- | The optimizations that could be set
 data Opts d a = Opts { baseline :: Bool  -- ^ True for andDecomp, False for brute
                      , others :: [VProp d a -> VProp d a] -- ^ a list of optimizations
+                     , vars :: VarDictR d a
+                     , rvars :: VarDictR
                      }
 type Log = String
 
@@ -51,7 +53,7 @@ _setOpts x ys = Opts { baseline = x
                     }
 
 -- | Run the RWS monad with defaults of empty state, reader
-runEnv :: Env d a r -> Opts d a -> IO (r, (St d a),  Log)
+runEnv :: Env d a r -> Opts d a -> IO (r, St d a,  Log)
 runEnv m opts = runRWST m opts emptySt
 
 -- | Run the RWS monad and grab the result value
@@ -63,6 +65,25 @@ evalEnv m o = f <$> runEnv m o
 -- a dictionary for each hash that holds the results of the sat solver
 emptySt :: (St d a)
 emptySt = (M.empty, M.empty, M.empty)
+
+-- | Given a vprop collapse it to a list of dimensions and values
+collect :: VProp d a -> [Either d a]
+collect = nub $ bifoldr'
+          (\dim acc -> Left dim : acc)
+          (\val acc -> Right val : acc) []
+
+-- | Given a list of dimensions and values and an integer construct the vardict
+genVDict :: [((Either d a), Int)] -> VarDict d a
+genVDict = M.fromList
+
+-- | Given a list of dimensions and values and an integer construct the reverse
+-- vardict
+genRVDict :: [((Either d a), Int)] -> VarDictR d a
+genRVDict = foldr' (\(dim, int) dict -> M.insert int dim dict) M.empty pairs
+
+
+toPropInt :: VarDict d a -> VProp d a ->  VProp Int Int
+toPropInt vDict = bimap ((vDict M.!) . Left) ((vDict M.!) . Right)
 
 recordVars :: (Ord a
               , Ord d
@@ -95,10 +116,10 @@ propToCNF str ps = cnf
 --           MonadState (t, M.Map (Config d1) b, t1) (t2 IO),
 --           MonadReader (Opts d a) (t2 IO)) =>
 --         VProp a1 a1 -> t2 IO (Maybe (VProp d1 Satisfiable))
-work :: (Show a1, Show b1, Integral a1, Ord k, MonadTrans t1,
+work :: (Show a1, Show b1, Integral a1, Ord k, Ord b1, MonadTrans t1,
           MonadState (t, M.Map (Config k) b, M.Map k b1) (t1 IO),
           MonadReader (Opts d a) (t1 IO)) =>
-        VProp a1 a1 -> t1 IO (Maybe (VProp k Satisfiable))
+        VProp a1 a1 -> t1 IO (Maybe (VProp b1 Satisfiable))
 work cs = do
   bs <- asks baseline
   (vDict, sats, rDict) <- get
@@ -107,8 +128,7 @@ work cs = do
   if bs
     then do
     let aa = recompile (M.toList (M.map (const res) sats))
-    lift $ print $ (bimap (\x -> rDict M.! x) id) <$> aa
-    return aa
+    return $ bimap (\x -> rDict M.! x) id <$> aa
 
     else do
     let keys = M.keys sats
