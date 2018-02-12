@@ -12,6 +12,7 @@ import qualified Data.IntMap.Strict as I
 import qualified Data.Set as S (fromList)
 import Control.Monad.RWS.Strict
 import Control.Monad (when)
+import Data.List (nub)
 
 import VProp
 import CNF
@@ -93,7 +94,7 @@ recordVars cs = do
   let t = bifoldr'
           (\dim acc -> Left dim : acc)
           (\val acc -> Right val : acc) [] cs
-      pairs = zip t [1..]
+      pairs = zip (nub t) [1..]
       vDict = M.fromList $ pairs
       vRDict = foldr' (\(dim, int) dict -> M.insert int dim dict) M.empty pairs
       cs' = bimap ((vDict M.!) . Left) ((vDict M.!) . Right) cs
@@ -124,6 +125,10 @@ work cs = do
   bs <- asks baseline
   (vDict, sats, rDict) <- get
   let cnf = propToCNF (show cs) . groundGProp . andDecomp $ cs
+  -- bug in orSplit
+  lift $ print (orSplit $ toListAndSplit $ groundGProp $ andDecomp cs)
+  lift $ print cnf
+  -- bug in orSplit
   res <- lift $ runPMinisat cnf
   if bs
     then do
