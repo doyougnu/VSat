@@ -12,7 +12,6 @@ import qualified Data.Map.Strict as M
 -- import qualified Data.IntMap.Strict as I
 import qualified Data.Set as S (fromList)
 import Control.Monad.RWS.Strict
--- import Control.Monad (when)
 
 import VProp
 import qualified CNF as C
