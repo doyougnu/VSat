@@ -4,17 +4,18 @@ module Run ( runEnv
            ) where
 
 import Data.Bifunctor (bimap)
+import Data.List (nub)
 import Data.Bifoldable
 import Data.Foldable (foldr')
-import Data.Maybe (fromJust, isJust)
+-- import Data.Maybe (fromJust, isJust)
 import qualified Data.Map.Strict as M
-import qualified Data.IntMap.Strict as I
+-- import qualified Data.IntMap.Strict as I
 import qualified Data.Set as S (fromList)
 import Control.Monad.RWS.Strict
-import Control.Monad (when)
+-- import Control.Monad (when)
 
 import VProp
-import CNF
+import qualified CNF as C
 import SubProcess
 
 -- | A variable dictionary mapping with dimensions or integers to integers,
@@ -30,27 +31,27 @@ type SatDict = M.Map (Config Int) Satisfiable -- keys may incur perf penalty
 
 -- | The optimizations that could be set
 data Opts d a = Opts { baseline :: Bool  -- ^ True for andDecomp, False for brute
-                     , others :: [VProp d a -> VProp d a] -- ^ a list of optimizations
-                     , vars :: VarDictR d a
-                     , rvars :: VarDictR
+                     , optimizations :: [VProp d a -> VProp d a] -- ^ a list of optimizations
+                     , vars :: VarDict d a
+                     , rvars :: VarDictR d a
                      }
+
+-- | Type convenience for Log
 type Log = String
 
+-- | Type convenience for State
+type St d a = SatDict
+
 -- | Takes a dimension d, a value a, and a result r
-type St d a = (VarDict d a, SatDict, VarDictR d a) -- ^ convenience type for State
 type Env d a r = RWST (Opts d a) Log (St d a) IO r -- ^ the monad stack
 
 -- | An empty reader monad environment, in the future read these from config file
 _emptyOpts :: Opts d a
 _emptyOpts = Opts { baseline = True -- set to use andDecomp
-                 , others = []
+                 , optimizations = []
+                 , vars = M.empty
+                 , rvars = M.empty
                  }
-
--- | Given a bool and a list of opts return a reader configuration
-_setOpts :: Bool -> [VProp d a -> VProp d a] -> Opts d a
-_setOpts x ys = Opts { baseline = x
-                    , others = ys
-                    }
 
 -- | Run the RWS monad with defaults of empty state, reader
 runEnv :: Env d a r -> Opts d a -> IO (r, St d a,  Log)
@@ -64,80 +65,86 @@ evalEnv m o = f <$> runEnv m o
 -- | An Empty env state is a dictionary of variable names and their hashes and
 -- a dictionary for each hash that holds the results of the sat solver
 emptySt :: (St d a)
-emptySt = (M.empty, M.empty, M.empty)
+emptySt = M.empty
 
 -- | Given a vprop collapse it to a list of dimensions and values
-collect :: VProp d a -> [Either d a]
-collect = nub $ bifoldr'
+collect :: (Eq a, Eq d) => VProp d a -> [Either d a]
+collect = nub . bifoldr'
           (\dim acc -> Left dim : acc)
           (\val acc -> Right val : acc) []
 
 -- | Given a list of dimensions and values and an integer construct the vardict
-genVDict :: [((Either d a), Int)] -> VarDict d a
+genVDict :: (Ord a, Ord d) => [((Either d a), Int)] -> VarDict d a
 genVDict = M.fromList
 
 -- | Given a list of dimensions and values and an integer construct the reverse
 -- vardict
-genRVDict :: [((Either d a), Int)] -> VarDictR d a
-genRVDict = foldr' (\(dim, int) dict -> M.insert int dim dict) M.empty pairs
+genRVDict :: [(Either d a, Int)] -> VarDictR d a
+genRVDict = foldr' (\(dim, int) dict -> M.insert int dim dict) M.empty
+
+-- | Given a variable dictionary and a vprop term. Construct a representative
+-- VProp with only integers for both dimensions and variables
+unify :: (Ord d, Ord a) => VarDict d a -> VProp d a ->  VProp Int Int
+unify vDict = bimap ((vDict M.!) . Left) ((vDict M.!) . Right)
 
 
-toPropInt :: VarDict d a -> VProp d a ->  VProp Int Int
-toPropInt vDict = bimap ((vDict M.!) . Left) ((vDict M.!) . Right)
+-- | Flatten the VProp term to a homogeneous list
+flatten :: VProp d a -> [Either d a]
+flatten = bifoldr' (\dim acc -> Left dim : acc)
+                   (\val acc -> Right val : acc) []
 
-recordVars :: (Ord a
-              , Ord d
-              , MonadState (St d a) m)
-           => VProp d a -> m (VProp Int Int)
-recordVars cs = do
-  let t = bifoldr'
-          (\dim acc -> Left dim : acc)
-          (\val acc -> Right val : acc) [] cs
-      pairs = zip t [1..]
-      vDict = M.fromList $ pairs
-      vRDict = foldr' (\(dim, int) dict -> M.insert int dim dict) M.empty pairs
-      cs' = bimap ((vDict M.!) . Left) ((vDict M.!) . Right) cs
-      satDict = M.fromList $ zip (paths cs') (repeat False)
-  put (vDict, satDict, vRDict)
-  return cs'
+
+-- | Given a VProp term prepare the runtime environment
+_recordVars :: (Ord a , Ord d) => VProp d a -> Opts d a -> Opts d a
+_recordVars cs opts = Opts { baseline = baseline opts
+                          , optimizations = optimizations opts
+                          , vars = vDict
+                          , rvars = genRVDict numberedProp
+                          }
+  where flatProp = flatten cs
+        numberedProp = zip flatProp [1..]
+        vDict = genVDict numberedProp
+        cs' = unify vDict cs
+        satDict = M.fromList $ zip (paths cs') (repeat False)
+
 
 -- | convert  propositional term to a DIMACS CNF term
-propToCNF :: (Num a, Integral a) => String -> GProp a -> CNF
+propToCNF :: (Num a, Integral a) => String -> GProp a -> C.CNF
 propToCNF str ps = cnf
   where
-    cnf = CNF { comment = str
-              , vars    = S.fromList $ foldr' ((:) . toInteger) [] ps
-              , clauses = orSplit . toListAndSplit $ toInteger <$> ps
-              }
+    cnf = C.CNF { C.comment = str
+                , C.vars    = S.fromList $ foldr' ((:) . toInteger) [] ps
+                , C.clauses = orSplit . toListAndSplit $ toInteger <$> ps
+                }
+
+-- | given a variable dictionary and a vprop, replace all dimenions with the
+-- values in the dict
+packProp :: VProp d a -> VarDict d b -> VProp Int a
+packProp ps dict = bimap (\x -> dict M.! x) id ps
 
 -- | main workhorse for running the SAT solver
 -- FIXE THE ENGINE CALL SO YOU CAN RUN SOMETHING
--- work :: (Show a1, Integral a1, Num d1, Show d1, Ord d1, MonadTrans t2,
---           MonadState (t, M.Map (Config d1) b, t1) (t2 IO),
---           MonadReader (Opts d a) (t2 IO)) =>
---         VProp a1 a1 -> t2 IO (Maybe (VProp d1 Satisfiable))
-work :: (Show a1, Show b1, Integral a1, Ord k, Ord b1, MonadTrans t1,
-          MonadState (t, M.Map (Config k) b, M.Map k b1) (t1 IO),
-          MonadReader (Opts d a) (t1 IO)) =>
-        VProp a1 a1 -> t1 IO (Maybe (VProp b1 Satisfiable))
 work cs = do
   bs <- asks baseline
-  (vDict, sats, rDict) <- get
+  rDict <- asks vars
+  sats <- get
   let cnf = propToCNF (show cs) . groundGProp . andDecomp $ cs
   res <- lift $ runPMinisat cnf
+  let aa = recompile (M.toList $ M.map (const res) sats)
   if bs
     then do
-    let aa = recompile (M.toList (M.map (const res) sats))
-    return $ bimap (\x -> rDict M.! x) id <$> aa
+    -- return $ bimap (\x -> rDict M.! x) id <$> aa
+    return aa
 
     else do
-    let keys = M.keys sats
+    -- let keys = M.keys sats
     -- cnfs = (\y -> (y, select y cs)) <$> keys
     -- mapM_ work' cnfs
     -- (_, newSats, rvars) <- get
     -- let x = recompile (M.toList newSats)
     -- y = bimap (yankOut rvars) id  <$> y
-    return $ recompile (M.toList (M.map (const res) sats))
+    -- return $ recompile (M.toList (M.map (const res) sats))
+    return aa
 
   where
     extract (Left a) = a
@@ -157,3 +164,6 @@ work cs = do
 
 _ex :: VProp String Integer
 _ex = Chc "a" (Chc "b" (Ref 1) (Ref 2)) (Chc "c" (Ref 1) (Ref 2))
+
+_ex2 :: VProp Integer Integer
+_ex2 = Chc 0 (Chc 1 (Ref 1) (Ref 2)) (Chc 2 (Ref 1) (Ref 2))
