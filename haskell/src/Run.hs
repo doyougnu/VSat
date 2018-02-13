@@ -119,8 +119,14 @@ propToCNF str ps = cnf
 
 -- | given a variable dictionary and a vprop, replace all dimenions with the
 -- values in the dict
-packProp :: VProp d a -> VarDict d b -> VProp Int a
-packProp ps dict = bimap (\x -> dict M.! x) id ps
+packProp :: (Ord a, Ord d) => VProp d a -> VarDict d a -> VProp Int a
+packProp ps dict = bimap (\x -> dict M.! x) id $ bimap Left id ps
+
+
+-- | Utility to pull out d or a from an Either type
+extract (Left a) = a
+extract (Right a) = a
+
 
 -- | main workhorse for running the SAT solver
 -- FIXE THE ENGINE CALL SO YOU CAN RUN SOMETHING
@@ -147,8 +153,6 @@ work cs = do
     return aa
 
   where
-    extract (Left a) = a
-    extract (Right a) = a
     yankOut m = extract . (m M.!)
 
 -- -- | Given a configuration, a boolean representing satisfiability and a Prop, If
