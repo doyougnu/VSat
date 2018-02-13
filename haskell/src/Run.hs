@@ -74,7 +74,7 @@ collect = nub . bifoldr'
           (\val acc -> Right val : acc) []
 
 -- | Given a list of dimensions and values and an integer construct the vardict
-genVDict :: (Ord a, Ord d) => [((Either d a), Int)] -> VarDict d a
+genVDict :: (Ord a, Ord d) => [(Either d a, Int)] -> VarDict d a
 genVDict = M.fromList
 
 -- | Given a list of dimensions and values and an integer construct the reverse
@@ -89,8 +89,8 @@ unify vDict = bimap ((vDict M.!) . Left) ((vDict M.!) . Right)
 
 
 -- | Flatten the VProp term to a homogeneous list
-flatten :: VProp d a -> [Either d a]
-flatten = bifoldr' (\dim acc -> Left dim : acc)
+flatten :: (Eq a, Eq d) => VProp d a -> [Either d a]
+flatten = nub . bifoldr' (\dim acc -> Left dim : acc)
                    (\val acc -> Right val : acc) []
 
 
@@ -107,12 +107,10 @@ getR (Left _) = error "You've called getR on Left!"
 _recordVars :: (Ord a , Ord d) => VProp d a -> Opts d a -> Opts d a
 _recordVars cs opts = Opts { baseline = baseline opts
                           , optimizations = optimizations opts
-                          , vars = vDict
+                          , vars = genVDict numberedProp
                           , rvars = genRVDict numberedProp
                           }
-  where flatProp = flatten cs
-        numberedProp = zip flatProp [1..]
-        vDict = genVDict numberedProp
+  where numberedProp = zip (flatten cs) [1..]
 
 
 -- | convert  propositional term to a DIMACS CNF term
@@ -126,24 +124,27 @@ propToCNF str ps = cnf
 
 -- | given a variable dictionary and a vprop, replace all dimenions with the
 -- values in the dict
-dimToInt :: (Ord a, Ord d) => VProp d a -> VarDict d a -> VProp Int a
-dimToInt ps dict = bimap ((dict M.!) . Left) id ps
+packProp :: (Ord a, Ord d) => VProp d a -> VarDict d a -> VProp Int Int
+packProp ps dict = bimap ((dict M.!) . Left) ((dict M.!) . Right) ps
 
 
 -- | Given a reverse variable dictionary and a VProp Int a replace all
 -- dimensions with their values in the reverse variable dictionary
-intToDim :: (Ord a, Ord d) => VProp Int a -> VarDictR d a -> VProp d a
-intToDim ps dict = bimap (getL . (dict M.!)) id ps
+unPackProp :: (Ord a, Ord d) => VProp Int Int -> VarDictR d a -> VProp d a
+unPackProp ps dict = bimap (getL . (dict M.!)) (getR . (dict M.!)) ps
+
 
 -- | main workhorse for running the SAT solver
 -- FIXE THE ENGINE CALL SO YOU CAN RUN SOMETHING
+-- run like: runEnv (work _ex) (_recordVars _ex _emptyOpts)
 work cs = do
   bs <- asks baseline
-  rDict <- asks vars
+  vdict <- asks vars
   sats <- get
-  let cnf = propToCNF (show cs) . groundGProp . andDecomp $ cs
+  let cnf = propToCNF (show cs) . groundGProp . andDecomp $ packProp cs vdict
+  lift $ print (packProp cs vdict)
   res <- lift $ runPMinisat cnf
-  let aa = recompile (M.toList $ M.map (const res) sats)
+  let aa = recompile . M.toList $ M.map (const res) sats
   if bs
     then do
     -- return $ bimap (\x -> rDict M.! x) id <$> aa
@@ -171,8 +172,8 @@ work cs = do
 --      put (vars, M.insert conf result sats, rvars)
 
 
-_ex :: VProp String Integer
+_ex :: VProp String Int
 _ex = Chc "a" (Chc "b" (Ref 1) (Ref 2)) (Chc "c" (Ref 1) (Ref 2))
 
-_ex2 :: VProp Integer Integer
+_ex2 :: VProp Int Int
 _ex2 = Chc 0 (Chc 1 (Ref 1) (Ref 2)) (Chc 2 (Ref 1) (Ref 2))
