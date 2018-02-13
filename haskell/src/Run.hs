@@ -94,6 +94,15 @@ flatten = bifoldr' (\dim acc -> Left dim : acc)
                    (\val acc -> Right val : acc) []
 
 
+-- | extract an element from a Either term
+getL :: Either d a -> d
+getL (Left a) = a
+getL (Right _) = error "You've called getL on Right!"
+
+getR :: Either d a -> a
+getR (Right a) = a
+getR (Left _) = error "You've called getR on Left!"
+
 -- | Given a VProp term prepare the runtime environment
 _recordVars :: (Ord a , Ord d) => VProp d a -> Opts d a -> Opts d a
 _recordVars cs opts = Opts { baseline = baseline opts
@@ -104,8 +113,6 @@ _recordVars cs opts = Opts { baseline = baseline opts
   where flatProp = flatten cs
         numberedProp = zip flatProp [1..]
         vDict = genVDict numberedProp
-        cs' = unify vDict cs
-        satDict = M.fromList $ zip (paths cs') (repeat False)
 
 
 -- | convert  propositional term to a DIMACS CNF term
@@ -119,14 +126,14 @@ propToCNF str ps = cnf
 
 -- | given a variable dictionary and a vprop, replace all dimenions with the
 -- values in the dict
-packProp :: (Ord a, Ord d) => VProp d a -> VarDict d a -> VProp Int a
-packProp ps dict = bimap (\x -> dict M.! x) id $ bimap Left id ps
+dimToInt :: (Ord a, Ord d) => VProp d a -> VarDict d a -> VProp Int a
+dimToInt ps dict = bimap ((dict M.!) . Left) id ps
 
 
--- | Utility to pull out d or a from an Either type
-extract (Left a) = a
-extract (Right a) = a
-
+-- | Given a reverse variable dictionary and a VProp Int a replace all
+-- dimensions with their values in the reverse variable dictionary
+intToDim :: (Ord a, Ord d) => VProp Int a -> VarDictR d a -> VProp d a
+intToDim ps dict = bimap (getL . (dict M.!)) id ps
 
 -- | main workhorse for running the SAT solver
 -- FIXE THE ENGINE CALL SO YOU CAN RUN SOMETHING
@@ -152,8 +159,6 @@ work cs = do
     -- return $ recompile (M.toList (M.map (const res) sats))
     return aa
 
-  where
-    yankOut m = extract . (m M.!)
 
 -- -- | Given a configuration, a boolean representing satisfiability and a Prop, If
 -- -- the prop does not contain a Nothing (as denoted by the bool) then extract the
