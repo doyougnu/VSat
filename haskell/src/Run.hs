@@ -12,7 +12,6 @@ import qualified Data.Map.Strict as M
 -- import qualified Data.IntMap.Strict as I
 import qualified Data.Set as S (fromList)
 import Control.Monad.RWS.Strict
--- import Control.Monad (when)
 
 import VProp
 import qualified CNF as C
@@ -27,7 +26,7 @@ type VarDictR d a = M.Map Int (Either d a)
 
 -- | The satisfiable dictionary, this is actually the "state" keys are configs
 -- and values are whether that config is satisfiable or not (a bool)
-type SatDict = M.Map (Config Int) Satisfiable -- keys may incur perf penalty
+type SatDict d = M.Map (Config d) Satisfiable -- keys may incur perf penalty
 
 -- | The optimizations that could be set
 data Opts d a = Opts { baseline :: Bool  -- ^ True for andDecomp, False for brute
@@ -39,11 +38,8 @@ data Opts d a = Opts { baseline :: Bool  -- ^ True for andDecomp, False for brut
 -- | Type convenience for Log
 type Log = String
 
--- | Type convenience for State
-type St d a = SatDict
-
 -- | Takes a dimension d, a value a, and a result r
-type Env d a r = RWST (Opts d a) Log (St d a) IO r -- ^ the monad stack
+type Env d a r = RWST (Opts d a) Log (SatDict d) IO r -- ^ the monad stack
 
 -- | An empty reader monad environment, in the future read these from config file
 _emptyOpts :: Opts d a
@@ -54,18 +50,25 @@ _emptyOpts = Opts { baseline = True -- set to use andDecomp
                  }
 
 -- | Run the RWS monad with defaults of empty state, reader
-runEnv :: Env d a r -> Opts d a -> IO (r, St d a,  Log)
-runEnv m opts = runRWST m opts emptySt
+runEnv :: Env d a r -> Opts d a -> SatDict d -> IO (r, SatDict d,  Log)
+runEnv m opts st = runRWST m opts st
+
+run :: (Show d, Show a, Ord a, Ord d) =>
+  VProp d a -> IO (Maybe (VProp d Satisfiable), SatDict d, Log)
+run x = runEnv (work x) (_recordVars x _emptyOpts) (initSt x)
+
 
 -- | Run the RWS monad and grab the result value
-evalEnv :: Env d a r -> Opts d a -> IO r
-evalEnv m o = f <$> runEnv m o
+evalEnv :: Env d a r -> Opts d a -> SatDict d -> IO r
+evalEnv m o s = f <$> runEnv m o s
   where f (x,_,_) = x
+
 
 -- | An Empty env state is a dictionary of variable names and their hashes and
 -- a dictionary for each hash that holds the results of the sat solver
-emptySt :: (St d a)
+emptySt :: SatDict d
 emptySt = M.empty
+
 
 -- | Given a vprop collapse it to a list of dimensions and values
 collect :: (Eq a, Eq d) => VProp d a -> [Either d a]
@@ -73,14 +76,17 @@ collect = nub . bifoldr'
           (\dim acc -> Left dim : acc)
           (\val acc -> Right val : acc) []
 
+
 -- | Given a list of dimensions and values and an integer construct the vardict
 genVDict :: (Ord a, Ord d) => [(Either d a, Int)] -> VarDict d a
 genVDict = M.fromList
+
 
 -- | Given a list of dimensions and values and an integer construct the reverse
 -- vardict
 genRVDict :: [(Either d a, Int)] -> VarDictR d a
 genRVDict = foldr' (\(dim, int) dict -> M.insert int dim dict) M.empty
+
 
 -- | Given a variable dictionary and a vprop term. Construct a representative
 -- VProp with only integers for both dimensions and variables
@@ -99,18 +105,25 @@ getL :: Either d a -> d
 getL (Left a) = a
 getL (Right _) = error "You've called getL on Right!"
 
+
 getR :: Either d a -> a
 getR (Right a) = a
 getR (Left _) = error "You've called getR on Left!"
 
+
 -- | Given a VProp term prepare the runtime environment
 _recordVars :: (Ord a , Ord d) => VProp d a -> Opts d a -> Opts d a
 _recordVars cs opts = Opts { baseline = baseline opts
-                          , optimizations = optimizations opts
-                          , vars = genVDict numberedProp
-                          , rvars = genRVDict numberedProp
-                          }
+                           , optimizations = optimizations opts
+                           , vars = genVDict numberedProp
+                           , rvars = genRVDict numberedProp
+                           }
   where numberedProp = zip (flatten cs) [1..]
+
+
+-- | Given a VProp term generate the satisfiability map
+initSt :: (Ord a, Ord d) => VProp d a -> SatDict d
+initSt vs = M.fromList $ zip (paths vs) (repeat False)
 
 
 -- | convert  propositional term to a DIMACS CNF term
@@ -142,7 +155,6 @@ work cs = do
   vdict <- asks vars
   sats <- get
   let cnf = propToCNF (show cs) . groundGProp . andDecomp $ packProp cs vdict
-  lift $ print (packProp cs vdict)
   res <- lift $ runPMinisat cnf
   let aa = recompile . M.toList $ M.map (const res) sats
   if bs
@@ -174,6 +186,9 @@ work cs = do
 
 _ex :: VProp String Int
 _ex = Chc "a" (Chc "b" (Ref 1) (Ref 2)) (Chc "c" (Ref 1) (Ref 2))
+
+_ex1 :: VProp String Int
+_ex1 = Chc "a" (Ref 1) (Ref 2)
 
 _ex2 :: VProp Int Int
 _ex2 = Chc 0 (Chc 1 (Ref 1) (Ref 2)) (Chc 2 (Ref 1) (Ref 2))
