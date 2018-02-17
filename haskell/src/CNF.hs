@@ -7,7 +7,7 @@ import Utils
 -- | Syntax
 data CNF = CNF { comment :: String        -- ^ A Comment
                , vars :: S.Set Integer    -- ^ Unique Variables
-               , clauses :: [[Integer]] -- ^ Clauses
+               , clauses :: [[Integer]]   -- ^ Clauses
                }
 
 -- | An empty CNF

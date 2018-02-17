@@ -319,26 +319,33 @@ recompile xs = sequence $ go (tail xs') (_recompile conf val)
 
 ---------------------- Language Reduction --------------------------------------
 -- | Convert a propositional term to a grounded term
-ground :: Ord d => Config d -> VProp d a -> GProp (Maybe a)
-ground _ (Ref x)       = GLit . Just $ x
-ground _ (Neg (Ref x)) = GNLit . Just $ x
-ground c (Neg x)       = GNeg (ground c . toCNF $ x)
-ground c (Op2 Or l r)  = GOr  (ground c . toCNF $ l) (ground c . toCNF $ r)
-ground c (Op2 And l r) = GAnd (ground c . toCNF $ l) (ground c . toCNF $ r)
-ground c x@(Chc _ _ _) = case select c x of
+_ground :: Ord d => Config d -> VProp d a -> GProp (Maybe a)
+_ground _ (Ref x)       = GLit . Just $ x
+_ground _ (Neg (Ref x)) = GNLit . Just $ x
+_ground c (Neg x)       = GNeg (ground c x)
+_ground c (Op2 Or l r)  = GOr  (ground c l) (ground c r)
+_ground c (Op2 And l r) = GAnd (ground c l) (ground c r)
+_ground c x@(Chc _ _ _) = case select c x of
                            Nothing -> GLit Nothing
-                           Just a  -> ground c $ toCNF a
-ground c x             = ground c $ toCNF x
+                           Just a  -> ground c a
+_ground c x             = ground c $ toCNF x
 
+-- | force to conjunctive normal form and then convert to grounded term
+ground :: Ord d => Config d -> VProp d a -> GProp (Maybe a)
+ground c vs = _ground c (toCNF vs)
+
+_groundGProp :: Ord d => VProp d a -> GProp a
+_groundGProp (Ref x) = GLit x
+_groundGProp (Neg (Ref x)) = GNLit x
+_groundGProp (Neg x)       = GNeg (groundGProp x)
+_groundGProp (Op2 Or l r)  = GOr (groundGProp l) (groundGProp r)
+_groundGProp (Op2 And l r) = GAnd (groundGProp l) (groundGProp r)
+_groundGProp (Chc _ _ _)   = error "andDecomp cannot produce a choice, you must have called this without calling andDecomp first"
+_groundGProp x = groundGProp $ toCNF x
+
+-- | force to conjunctive normal form and then convert to grounded term
 groundGProp :: Ord d => VProp d a -> GProp a
-groundGProp (Ref x) = GLit x
-groundGProp (Neg (Ref x)) = GNLit x
-groundGProp (Neg x)       = GNeg (groundGProp . toCNF $ x)
-groundGProp (Op2 Or l r)  = GOr (groundGProp . toCNF $ l) (groundGProp . toCNF $ r)
-groundGProp (Op2 And l r) = GAnd (groundGProp . toCNF $ l) (groundGProp . toCNF $ r)
-groundGProp (Chc _ _ _)   = error "andDecomp cannot produce a choice, you must have called this without calling andDecomp"
-groundGProp x = groundGProp $ toCNF x
-
+groundGProp = _groundGProp . toCNF
 
 -- | traverse a propositional term and pack a list with new elements at each and
 toListAndSplit :: GProp a -> [GProp a]
