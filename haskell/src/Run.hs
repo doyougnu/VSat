@@ -43,18 +43,27 @@ type Env d a r = RWST (Opts d a) Log (SatDict d) IO r -- ^ the monad stack
 -- | An empty reader monad environment, in the future read these from config file
 _emptyOpts :: Opts d a
 _emptyOpts = Opts { baseline = False -- set to use andDecomp
-                 , optimizations = []
-                 , vars = M.empty
-                 , rvars = M.empty
-                 }
+                  , optimizations = []
+                  , vars = M.empty
+                  , rvars = M.empty
+                  }
+
+_setOpts :: Bool -> Opts d a
+_setOpts b = Opts { baseline = b
+                  , optimizations = []
+                  , vars = M.empty
+                  , rvars = M.empty
+                  }
+
+
 
 -- | Run the RWS monad with defaults of empty state, reader
 _runEnv :: Env d a r -> Opts d a -> SatDict d -> IO (r, SatDict d,  Log)
 _runEnv m opts st = runRWST m opts st
 
-runEnv :: (Show d, Show a, Ord a, Ord d, Integral a) =>
+runEnv :: (Show d, Show a, Ord a, Ord d, Integral a) => Bool ->
   VProp d a -> IO (VProp d Satisfiable, SatDict d, Log)
-runEnv x = _runEnv (work x) (_recordVars x _emptyOpts) (initSt x)
+runEnv b x = _runEnv (work x) (_recordVars x (_setOpts b)) (initSt x)
 
 
 -- | An Empty env state is a dictionary of variable names and their hashes and
@@ -139,9 +148,17 @@ packProp ps dict = bimap ((dict M.!) . Left) ((dict M.!) . Right) ps
 unPackProp :: (Ord a, Ord d) => VProp Integer Integer -> VarDictR d a -> VProp d a
 unPackProp ps dict = bimap (getL . (dict M.!)) (getR . (dict M.!)) ps
 
+-- | Some logging functions
+_logBaseline :: (Show a, MonadWriter [Char] m) => a -> m ()
+_logBaseline x = tell $ "Running baseline: " ++ show x
+
+_logCNF :: (Show a, MonadWriter [Char] m) => a -> m ()
+_logCNF x = tell $ "Generated CNF: " ++ show x
+
+_logResult :: (Show a, MonadWriter [Char] m) => a -> m ()
+_logResult x = tell $ "Got result: " ++ show x
 
 -- | main workhorse for running the SAT solver
-
 work :: (Show a, Show d, Ord a, Ord d, MonadReader (Opts d a) (t IO),
           MonadTrans t,
           MonadWriter Log (t IO),
@@ -151,11 +168,12 @@ work cs = do
   bs <- asks baseline
   sats <- get
   vdict <- asks vars
-  tell (show bs)
+  _logBaseline bs
   if bs
-    then do let cnf = propToCNF (show cs) . groundGProp . andDecomp
-                  $ packProp cs vdict
+    then do let cnf = propToCNF (show cs) . groundGProp . andDecomp $ packProp cs vdict
+            _logCNF cnf
             res <- lift $ runPMinisat cnf
+            _logResult res
             -- this fromJust should never error because we will always have to
             -- right configuration to recompile form
             return . fromJust $ recompile . M.toList $ M.map (const res) sats
@@ -186,8 +204,9 @@ work' (conf, prop) = when (isJust prop) $
     vdict <- asks vars
     let conf' = M.mapKeys ((vdict M.!) . Left) conf
         cnf = propToCNF (show conf) . fmap fromJust . ground conf' . fromJust $ prop
-    tell (show cnf)
+    _logCNF cnf
     result <- lift $ runPMinisat cnf
+    _logResult result
     put (M.insert conf result sats)
 
 
