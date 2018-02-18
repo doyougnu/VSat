@@ -29,7 +29,7 @@ instance Show CNF where
   show CNF{comment, vars, clauses} =
     mconcat [ smtComment comment
             , "p cnf " -- required concrete syntax
-            , affixSp $ S.size vars
+            , affixSp $ maximum vars
             , affixSp . toInteger $ length clauses
             , "\n" --end problem statement
             , mconcat $ (flip (++) " 0\n" . format) <$> clauses
