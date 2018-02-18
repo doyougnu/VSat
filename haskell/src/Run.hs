@@ -1,5 +1,4 @@
 module Run ( runEnv
-           , evalEnv
            , Opts (..)
            ) where
 
@@ -7,10 +6,11 @@ import Data.Bifunctor (bimap)
 import Data.List (nub)
 import Data.Bifoldable
 import Data.Foldable (foldr')
-import Data.Maybe (fromJust, isJust)
+import Data.Maybe (fromJust, isJust, fromMaybe)
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S (fromList)
 import Control.Monad.RWS.Strict
+import Debug.Trace (trace)
 
 import VProp
 import qualified CNF as C
@@ -49,18 +49,12 @@ _emptyOpts = Opts { baseline = False -- set to use andDecomp
                  }
 
 -- | Run the RWS monad with defaults of empty state, reader
-runEnv :: Env d a r -> Opts d a -> SatDict d -> IO (r, SatDict d,  Log)
-runEnv m opts st = runRWST m opts st
+_runEnv :: Env d a r -> Opts d a -> SatDict d -> IO (r, SatDict d,  Log)
+_runEnv m opts st = runRWST m opts st
 
-run :: (Show d, Show a, Ord a, Ord d, Integral a) =>
-  VProp d a -> IO (Maybe (VProp d Satisfiable), SatDict d, Log)
-run x = runEnv (work x) (_recordVars x _emptyOpts) (initSt x)
-
-
--- | Run the RWS monad and grab the result value
-evalEnv :: Env d a r -> Opts d a -> SatDict d -> IO r
-evalEnv m o s = f <$> runEnv m o s
-  where f (x,_,_) = x
+runEnv :: (Show d, Show a, Ord a, Ord d, Integral a) =>
+  VProp d a -> IO (VProp d Satisfiable, SatDict d, Log)
+runEnv x = _runEnv (work x) (_recordVars x _emptyOpts) (initSt x)
 
 
 -- | An Empty env state is a dictionary of variable names and their hashes and
@@ -151,45 +145,47 @@ unPackProp ps dict = bimap (getL . (dict M.!)) (getR . (dict M.!)) ps
 work :: (Show a, Show d, Ord a, Ord d, MonadReader (Opts d a) (t IO),
           MonadTrans t,
           MonadState (SatDict d) (t IO)) =>
-        VProp d a -> t IO (Maybe (VProp d Satisfiable))
+        VProp d a -> t IO (VProp d Satisfiable)
 work cs = do
   bs <- asks baseline
-  vdict <- asks vars
   sats <- get
-  let cnf = propToCNF (show cs) . groundGProp . andDecomp $ packProp cs vdict
-  res <- lift $ runPMinisat cnf
-  let aa = recompile . M.toList $ M.map (const res) sats
+  vdict <- asks vars
   if bs
-    then do
-    -- return $ bimap (\x -> rDict M.! x) id <$> aa
-    return aa
+    then do let cnf = propToCNF (show cs) . groundGProp . andDecomp
+                  $ packProp cs vdict
+            res <- lift $ runPMinisat cnf
+            return . fromJust $ recompile . M.toList $ M.map (const res) sats
 
     else do
-    let confs = M.keys sats
-        cnfs = (\y ->
-                  (y,  fmap (flip packProp vdict) . flip select cs $ y)) <$> confs
-    mapM_ work' cnfs
-    -- let x = recompile (M.toList newSats)
-    --     y = bimap (yankOut rvars) id  <$> y
-    -- return $ recompile (M.toList (M.map (const res) sats))
-    return aa
+            let confs = M.keys sats
+                cnfs = (\y ->
+                          (y,  fmap (flip packProp vdict) . flip select cs $ y))
+                       <$> confs
+            mapM_ work' cnfs
+            newSats <- get
+            return . fromJust $ recompile (M.toList newSats)
 
 
 -- | Given a configuration, a boolean representing satisfiability and a Prop, If
 -- the prop does not contain a Nothing (as denoted by the bool) then extract the
 -- values from the prop, ground then prop, convert to a CNF with descriptor of
 -- the configuration, run the sat solver and save the result to the SAT table
-work' :: (Ord d, Show d, MonadTrans t, MonadState (SatDict d) (t IO)) =>
-         (M.Map d Bool, Maybe (VProp Integer Integer)) -> t IO ()
+-- work' :: (Ord d, Show d, MonadTrans t, MonadState (SatDict d) (t IO)) =>
+--          (Config d, Maybe (VProp Integer Integer)) -> t IO ()
 work' (conf, prop) = when (isJust prop) $
   do
     sats <- get
-    result <- lift . runPMinisat . propToCNF (show conf) . fmap fromJust . ground conf . fromJust $ prop
+    vdict <- asks vars
+    let conf' = M.mapKeys ((vdict M.!) . Left) conf
+        cnf = propToCNF (show conf) . fmap fromJust . ground conf' . fromJust $ prop
+    lift $ print (conf, prop)
+    lift $ print cnf
+    result <- lift $ runPMinisat cnf
     put (M.insert conf result sats)
 
 
 _ex :: VProp String Integer
-_ex = Chc "a" (Chc "b" (Ref 1) (Ref 2)) (Chc "c" (Ref 1) (Ref 2))
+_ex = Chc "a" (Chc "b" (_and (Ref 1) (Ref 3)) (Ref 2)) (Chc "c" (Ref 1) (Ref 2))
 
 _ex1 :: VProp String Integer
 _ex1 = Chc "a" (Ref 1) (Ref 2)
