@@ -144,20 +144,23 @@ unPackProp ps dict = bimap (getL . (dict M.!)) (getR . (dict M.!)) ps
 
 work :: (Show a, Show d, Ord a, Ord d, MonadReader (Opts d a) (t IO),
           MonadTrans t,
+          MonadWriter Log (t IO),
           MonadState (SatDict d) (t IO)) =>
         VProp d a -> t IO (VProp d Satisfiable)
 work cs = do
   bs <- asks baseline
   sats <- get
   vdict <- asks vars
+  tell (show bs)
   if bs
     then do let cnf = propToCNF (show cs) . groundGProp . andDecomp
                   $ packProp cs vdict
             res <- lift $ runPMinisat cnf
+            -- this fromJust should never error because we will always have to
+            -- right configuration to recompile form
             return . fromJust $ recompile . M.toList $ M.map (const res) sats
 
-    else do
-            let confs = M.keys sats
+    else do let confs = M.keys sats
                 cnfs = (\y ->
                           (y,  fmap (flip packProp vdict) . flip select cs $ y))
                        <$> confs
@@ -172,14 +175,18 @@ work cs = do
 -- the configuration, run the sat solver and save the result to the SAT table
 -- work' :: (Ord d, Show d, MonadTrans t, MonadState (SatDict d) (t IO)) =>
 --          (Config d, Maybe (VProp Integer Integer)) -> t IO ()
+work' :: (Show d, Ord a, Ord d, MonadTrans t,
+                MonadReader (Opts d a) (t IO),
+                MonadWriter Log (t IO),
+                MonadState (SatDict d) (t IO)) =>
+               (M.Map d Bool, Maybe (VProp Integer Integer)) -> t IO ()
 work' (conf, prop) = when (isJust prop) $
   do
     sats <- get
     vdict <- asks vars
     let conf' = M.mapKeys ((vdict M.!) . Left) conf
         cnf = propToCNF (show conf) . fmap fromJust . ground conf' . fromJust $ prop
-    lift $ print (conf, prop)
-    lift $ print cnf
+    tell (show cnf)
     result <- lift $ runPMinisat cnf
     put (M.insert conf result sats)
 

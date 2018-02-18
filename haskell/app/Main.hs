@@ -9,6 +9,8 @@ main :: IO ()
 main = do
         props <- sequence . take 1 $! repeat genVProp
         print $ head props
+        res <- runEnv (head props)
+        print res
         -- xs <- (flip evalEnv) Opts{baseline=True, others=[]} . initAndRun $! head props
         -- defaultMain $
         --   [ bgroup "andDecomp" $! b <$> props
