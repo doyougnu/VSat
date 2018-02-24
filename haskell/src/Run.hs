@@ -10,7 +10,7 @@ import Data.Maybe (fromJust, isJust, fromMaybe)
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S (fromList)
 import Control.Monad.RWS.Strict
-import Debug.Trace (trace)
+-- import Pipes
 
 import VProp
 import qualified CNF as C
@@ -158,6 +158,42 @@ _logCNF x = tell $ "Generated CNF: " ++ show x
 _logResult :: (Show a, MonadWriter [Char] m) => a -> m ()
 _logResult x = tell $ "Got result: " ++ show x
 
+
+-- | Run a baseline with and decomposition
+runADBase :: (Show a, Show d, Ord a, Ord d, MonadReader (Opts d a) (t IO),
+          MonadTrans t,
+          MonadWriter Log (t IO),
+          MonadState (SatDict d) (t IO)) =>
+        VProp d a -> t IO (VProp d Satisfiable)
+runADBase cs = do
+  sats <- get
+  vdict <- asks vars
+  let cnf = propToCNF (show cs) . groundGProp . andDecomp $ packProp cs vdict
+  _logCNF cnf
+  res <- lift $ runPMinisat cnf
+  _logResult res
+  return . fromJust $ recompile . M.toList $ M.map (const res) sats
+
+
+-- | Run the brute force baseline
+runBFBase :: (Show a, Show d, Ord a, Ord d, MonadReader (Opts d a) (t IO),
+          MonadTrans t,
+          MonadWriter Log (t IO),
+          MonadState (SatDict d) (t IO)) =>
+        VProp d a -> t IO (VProp d Satisfiable)
+runBFBase cs = do
+  sats <- get
+  vdict <- asks vars
+  let confs = M.keys sats
+      cnfs = (\y -> (y,  fmap (flip packProp vdict) . flip select cs $ y)) <$> confs
+  mapM_ work' cnfs
+  newSats <- get
+   -- this fromJust should never error because we will always have the
+   -- right configuration to recompile form
+  return . fromJust $ recompile (M.toList newSats)
+
+
+
 -- | main workhorse for running the SAT solver
 work :: (Show a, Show d, Ord a, Ord d, MonadReader (Opts d a) (t IO),
           MonadTrans t,
@@ -166,33 +202,14 @@ work :: (Show a, Show d, Ord a, Ord d, MonadReader (Opts d a) (t IO),
         VProp d a -> t IO (VProp d Satisfiable)
 work cs = do
   bs <- asks baseline
-  sats <- get
-  vdict <- asks vars
   _logBaseline bs
-  if bs
-    then do let cnf = propToCNF (show cs) . groundGProp . andDecomp $ packProp cs vdict
-            _logCNF cnf
-            res <- lift $ runPMinisat cnf
-            _logResult res
-            -- this fromJust should never error because we will always have to
-            -- right configuration to recompile form
-            return . fromJust $ recompile . M.toList $ M.map (const res) sats
-
-    else do let confs = M.keys sats
-                cnfs = (\y ->
-                          (y,  fmap (flip packProp vdict) . flip select cs $ y))
-                       <$> confs
-            mapM_ work' cnfs
-            newSats <- get
-            return . fromJust $ recompile (M.toList newSats)
+  if bs then runADBase cs else runBFBase cs
 
 
 -- | Given a configuration, a boolean representing satisfiability and a Prop, If
 -- the prop does not contain a Nothing (as denoted by the bool) then extract the
 -- values from the prop, ground then prop, convert to a CNF with descriptor of
 -- the configuration, run the sat solver and save the result to the SAT table
--- work' :: (Ord d, Show d, MonadTrans t, MonadState (SatDict d) (t IO)) =>
---          (Config d, Maybe (VProp Integer Integer)) -> t IO ()
 work' :: (Show d, Ord a, Ord d, MonadTrans t,
                 MonadReader (Opts d a) (t IO),
                 MonadWriter Log (t IO),
