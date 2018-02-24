@@ -15,7 +15,7 @@ main :: IO ()
 main = do
         props <- sequence . take 5 $ repeat genVProp
         defaultMain $
-          [ bgroup "Brute Force Baseline \n" $ runner False <$> props
+          [ C.bgroup "Brute Force Baseline \n" $ runner False <$> props
           -- , bgroup "And Decomposition Baseline \n" $ runner True <$> props
           ]
 -- qsort1 :: (Ord a) => [a] -> [a]
