@@ -103,14 +103,14 @@ flatten = nub . bifoldr' (\dim acc -> Left dim : acc)
 
 
 -- | extract an element from a Either term
-getL :: Either d a -> d
-getL (Left a) = a
-getL (Right _) = error "You've called getL on Right!"
+-- getL :: Either d a -> d
+-- getL (Left a) = a
+-- getL (Right _) = error "You've called getL on Right!"
 
 
-getR :: Either d a -> a
-getR (Right a) = a
-getR (Left _) = error "You've called getR on Left!"
+-- getR :: Either d a -> a
+-- getR (Right a) = a
+-- getR (Left _) = error "You've called getR on Left!"
 
 
 -- | Given a VProp term prepare the runtime environment
@@ -145,8 +145,8 @@ packProp ps dict = bimap ((dict M.!) . Left) ((dict M.!) . Right) ps
 
 -- | Given a reverse variable dictionary and a VProp Integer a replace all
 -- dimensions with their values in the reverse variable dictionary
-unPackProp :: (Ord a, Ord d) => VProp Integer Integer -> VarDictR d a -> VProp d a
-unPackProp ps dict = bimap (getL . (dict M.!)) (getR . (dict M.!)) ps
+-- unPackProp :: (Ord a, Ord d) => VProp Integer Integer -> VarDictR d a -> VProp d a
+-- unPackProp ps dict = bimap (getL . (dict M.!)) (getR . (dict M.!)) ps
 
 -- | Some logging functions
 _logBaseline :: (Show a, MonadWriter [Char] m) => a -> m ()
@@ -158,6 +158,16 @@ _logCNF x = tell $ "Generated CNF: " ++ show x
 _logResult :: (Show a, MonadWriter [Char] m) => a -> m ()
 _logResult x = tell $ "Got result: " ++ show x
 
+-- data MonadEval t d a
+
+-- instance ( Show a
+--          , Show d
+--          , Ord a
+--          , Ord d
+--          , MonadReader (Opts d a) (t IO)
+--          , MonadTrans t
+--          , MonadWriter Log (t IO)
+--          , MonadState (SatDict d) (t IO)) => MonadEval (t IO r) d a
 
 -- | Run a baseline with and decomposition
 runADBase :: (Show a, Show d, Ord a, Ord d, MonadReader (Opts d a) (t IO),

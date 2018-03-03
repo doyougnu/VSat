@@ -1,11 +1,10 @@
 module Gen (genVProp) where
 
-import Data.Hashable
 import Test.QuickCheck.Gen
 import Test.QuickCheck.Arbitrary
 import GHC.Generics (Generic)
-import Control.DeepSeq
-import VProp
+import Control.DeepSeq (NFData)
+import VProp (VProp)
 
 genAlphaNum :: Gen Char
 genAlphaNum = elements ['a'..'z']
@@ -34,9 +33,6 @@ instance Show BInt where
 
 instance Show ANString where
   show = show . unwrapANString
-
-instance Hashable ANString where
-  hashWithSalt x s = hashWithSalt x (unwrapANString s)
 
 instance Ord ANString where
   compare x y = compare (unwrapANString x) (unwrapANString y)

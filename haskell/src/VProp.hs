@@ -23,7 +23,7 @@ import Utils              (parens)
 import Control.Monad      (liftM3, liftM2)
 import Data.List          (nub, sortOn)
 import GHC.Generics       (Generic)
-import Control.DeepSeq
+import Control.DeepSeq    (NFData)
 import Data.Bifunctor     (Bifunctor, bimap)
 import Data.Bifoldable    (Bifoldable, bifoldr', bifoldr)
 import Data.Bitraversable (Bitraversable, bitraverse)
