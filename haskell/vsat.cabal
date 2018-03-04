@@ -32,18 +32,16 @@ library
                      , text
                      , unix
                      , foldl
-                     , hashable >= 1.2
                      , bifunctors
                      , QuickCheck
                      , deepseq
-                     , pipes
 
   default-language:    Haskell2010
 
 executable vsat
   hs-source-dirs:      app
   main-is:             Main.hs
-  ghc-options:         -O2 -threaded -dynamic -rtsopts -with-rtsopts=-N -Wall
+  ghc-options:         -O2 -threaded -rtsopts -with-rtsopts=-N -Wall
   build-depends:       base
                      , vsat
                      , criterion

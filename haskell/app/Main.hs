@@ -3,7 +3,7 @@ module Main where
 import Run
 import Gen
 import VProp
-import Criterion.Main
+-- import Criterion.Main
 
 main :: IO ()
 main = do
