@@ -2,6 +2,7 @@ module NVProp where
 
 import           Data.Data       (Data, Typeable, typeOf)
 import           Data.String     (IsString)
+import           Control.Monad   (liftM3, liftM2)
 
 import qualified Data.Map.Strict as Map
 import           Data.Maybe      (fromMaybe)
@@ -12,12 +13,15 @@ import           Data.SBV
 import           GHC.Generics
 import           SAT
 
+import Control.DeepSeq    (NFData)
+import Test.QuickCheck    (Arbitrary, Gen, arbitrary, frequency, sized)
+
 -- | A feature is a named, boolean configuration option.
 newtype Var = Var { varName :: String }
-  deriving (Data,Eq,IsString,Ord,Show,Typeable)
+  deriving (Data,Eq,IsString,Ord,Show,Typeable,Generic,NFData,Arbitrary)
 
 newtype Dim = Dim { dimName :: String }
-  deriving (Data,Eq,IsString,Ord,Show,Typeable)
+  deriving (Data,Eq,IsString,Ord,Show,Typeable,Generic,NFData,Arbitrary)
 
 type VConfig b = Var -> b
 type DimBool = Dim -> SBool
@@ -36,12 +40,36 @@ data Prop
    | Op2 Op2 Prop Prop
   deriving (Data,Eq,Generic,Typeable)
 
-data Op2 = And | Or | Impl | BiImpl deriving (Eq, Generic, Data, Typeable)
+-- | data constructor for binary operations
+data Op2 = And | Or | Impl | BiImpl deriving (Eq,Generic,Data,Typeable)
 
-instance Mergeable Prop where
-  symbolicMerge _ b thn els
-    | Just result <- unliteral b = if result then thn else els
-  symbolicMerge _ _ _ _ = undefined -- quite -WALL
+-- | smart constructors
+_and :: Prop -> Prop -> Prop
+_and = Op2 And
+
+_or:: Prop -> Prop -> Prop
+_or = Op2 Or
+
+_impl:: Prop -> Prop -> Prop
+_impl = Op2 Impl
+
+_bimpl :: Prop -> Prop -> Prop
+_bimpl = Op2 BiImpl
+
+
+-- | Generate an Arbitrary VProp, these frequencies can change for different
+-- depths
+arbVProp :: Int -> Gen Prop
+arbVProp 0 = fmap Ref arbitrary
+arbVProp n = frequency [ (1, fmap Ref arbitrary)
+                       , (4, liftM3 Chc arbitrary l l)
+                       , (3, fmap Not l)
+                       , (3, liftM2 _or l l)
+                       , (3, liftM2 _and l l)
+                       , (3, liftM2 _impl l l)
+                       , (3, liftM2 _bimpl l l)
+                       ]
+  where l = arbVProp (n `div` 2)
 
 ----------------------------- Choice Manipulation ------------------------------
 -- | Wrapper around engine
@@ -79,7 +107,8 @@ dimToVar = Ref . Var . dimName
 
 -- | Perform andDecomposition, removing all choices from a proposition
 andDecomp :: Prop -> Prop
-andDecomp (Chc d l r) = (dimToVar d &&& andDecomp l) ||| (bnot (dimToVar d) &&& andDecomp r)
+andDecomp (Chc d l r) = (dimToVar d &&& andDecomp l) |||
+                        (bnot (dimToVar d) &&& andDecomp r)
 andDecomp (Not x)     = Not (andDecomp x)
 andDecomp (Op2 c l r) = Op2 c (andDecomp l) (andDecomp r)
 andDecomp x           = x
@@ -180,3 +209,17 @@ instance SAT Prop where
 
 instance Show Prop where
   show = prettyPropExpr
+
+-- | make prop mergeable so choices can use symbolic conditionals
+instance Mergeable Prop where
+  symbolicMerge _ b thn els
+    | Just result <- unliteral b = if result then thn else els
+  symbolicMerge _ _ _ _ = undefined -- quite -WALL
+
+-- | arbritrary instance for the generator monad
+instance Arbitrary Prop where
+  arbitrary = sized arbVProp
+
+-- | Deep Seq instances for Criterion Benchmarking
+instance NFData Prop
+instance NFData Op2
