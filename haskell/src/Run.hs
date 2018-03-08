@@ -6,11 +6,10 @@ import Data.Bifunctor (bimap)
 import Data.List (nub)
 import Data.Bifoldable
 import Data.Foldable (foldr')
-import Data.Maybe (fromJust, isJust, fromMaybe)
+import Data.Maybe (fromJust, isJust)
 import qualified Data.Map.Strict as M
 import qualified Data.Set as S (fromList)
 import Control.Monad.RWS.Strict
--- import Pipes
 
 import VProp
 import qualified CNF as C
@@ -61,22 +60,10 @@ _setOpts b = Opts { baseline = b
 _runEnv :: Env d a r -> Opts d a -> SatDict d -> IO (r, SatDict d,  Log)
 _runEnv m opts st = runRWST m opts st
 
+
 runEnv :: (Show d, Show a, Ord a, Ord d, Integral a) => Bool ->
   VProp d a -> IO (VProp d Satisfiable, SatDict d, Log)
 runEnv b x = _runEnv (work x) (_recordVars x (_setOpts b)) (initSt x)
-
-
--- | An Empty env state is a dictionary of variable names and their hashes and
--- a dictionary for each hash that holds the results of the sat solver
-emptySt :: SatDict d
-emptySt = M.empty
-
-
--- | Given a vprop collapse it to a list of dimensions and values
-collect :: (Eq a, Eq d) => VProp d a -> [Either d a]
-collect = nub . bifoldr'
-          (\dim acc -> Left dim : acc)
-          (\val acc -> Right val : acc) []
 
 
 -- | Given a list of dimensions and values and an integer construct the vardict
@@ -90,27 +77,10 @@ genRVDict :: [(Either d a, Integer)] -> VarDictR d a
 genRVDict = foldr' (\(dim, int) dict -> M.insert int dim dict) M.empty
 
 
--- | Given a variable dictionary and a vprop term. Construct a representative
--- VProp with only integers for both dimensions and variables
-unify :: (Ord d, Ord a) => VarDict d a -> VProp d a ->  VProp Integer Integer
-unify vDict = bimap ((vDict M.!) . Left) ((vDict M.!) . Right)
-
-
 -- | Flatten the VProp term to a homogeneous list
 flatten :: (Eq a, Eq d) => VProp d a -> [Either d a]
 flatten = nub . bifoldr' (\dim acc -> Left dim : acc)
                    (\val acc -> Right val : acc) []
-
-
--- | extract an element from a Either term
--- getL :: Either d a -> d
--- getL (Left a) = a
--- getL (Right _) = error "You've called getL on Right!"
-
-
--- getR :: Either d a -> a
--- getR (Right a) = a
--- getR (Left _) = error "You've called getR on Left!"
 
 
 -- | Given a VProp term prepare the runtime environment
@@ -236,12 +206,8 @@ work' (conf, prop) = when (isJust prop) $
     _logResult result
     put (M.insert conf result sats)
 
+_ex2 :: VProp [Char] Integer
+_ex2 = Op2 BiImpl (Chc "ecfgwaidq" (Neg (Op2 Or (Op2 Impl (Ref 5) (Ref 4)) (Neg (Ref 3)))) (Op2 Or (Op2 BiImpl (Op2 Or (Ref 5) (Ref 3)) (Op2 Or (Ref 4) (Ref 5))) (Chc "iqgkbdbcspzngvacqgfsrxhptmtjg" (Op2 Or (Ref 3) (Ref 3)) (Op2 And (Ref 5) (Ref 1))))) (Chc "vjsb" (Op2 BiImpl (Op2 And (Op2 Impl (Ref 5) (Ref 1)) (Chc "uwygmbopwrrobpyqngnzyazxiucsuo" (Ref 5) (Ref 4))) (Neg (Op2 Or (Ref 4) (Ref 3)))) (Op2 And (Op2 And (Chc "ey" (Ref 5) (Ref 4)) (Op2 Or (Ref 3) (Ref 1))) (Op2 Or (Op2 And (Ref 4) (Ref 3)) (Op2 Or (Ref 2) (Ref 5)))))
 
-_ex :: VProp String Integer
-_ex = Chc "a" (Chc "b" (_and (Ref 1) (Ref 3)) (Ref 2)) (Chc "c" (Ref 1) (Ref 2))
-
-_ex1 :: VProp String Integer
-_ex1 = Chc "a" (Ref 1) (Ref 2)
-
-_ex2 :: VProp Integer Integer
-_ex2 = Chc 0 (Chc 1 (Ref 1) (Ref 2)) (Chc 2 (Ref 1) (Ref 2))
+x = packProp _ex2 (vars opts)
+  where opts = _recordVars _ex2 (_setOpts True)

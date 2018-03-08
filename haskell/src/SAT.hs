@@ -1,49 +1,46 @@
 module SAT where
 
-import qualified Data.Set as S
+import Control.Monad (liftM2)
+import Data.SBV (Boolean(..),Predicate,SBool,Symbolic,isSatisfiable)
+import System.IO.Unsafe (unsafePerformIO)
 
-import Utils
 
-data SAT a = SAT { sComment :: String                -- ^ A Comment
-               , sVars :: S.Set Integer            -- ^ Unique Variables
-               , formula :: [Formula (a Integer)]  -- ^ One or more Formula
-               }
+-- | A type class for types that can be converted to symbolic predicates
+--   and checked by a SAT solver.
+class Boolean b => SAT b where
+  toPredicate :: b -> Predicate
 
-data Formula a = Neg (Formula a)  -- ^ a negation
-               | Lit a            -- ^ a literal term
-               | And [Formula a]  -- ^ a conjunction
-               | Or [Formula a]   -- ^ a disjunction
+-- | Is the predicate satisfiable?
+satisfiable :: SAT b => b -> Bool
+satisfiable b = unsafePerformIO (isSatisfiable (toPredicate b))
 
--- | An empty SAT
-emptySAT :: SAT a
-emptySAT = SAT { sComment = ""
-               , sVars = S.empty
-               , formula = []
-               }
+-- | Is the predicate unsatisfiable?
+unsatisfiable :: SAT b => b -> Bool
+unsatisfiable = not . satisfiable
 
--- | Typeclass instances
-instance Show a => Show (Formula a) where
-  show (Neg e) = "-" ++ show e
-  show (Lit e) = show e
-  show (And es) = mconcat ["*(", format es, ")"]
-  show (Or es)  = mconcat ["+(", format es, ")"]
+-- | Is the predicate a tautology?
+tautology :: SAT b => b -> Bool
+tautology = unsatisfiable . bnot
 
-instance (Show (a Integer)) => Show (SAT a) where
-  show SAT{sComment, sVars, formula} =
-    mconcat [ smtComment sComment
-            , "p sat "
-            , affixSp $ S.size sVars
-            , "\n" -- end of problem line
-            , concatMap show formula
-            ]
+-- | Are these predicates equivalent?
+equivalent :: SAT b => b -> b -> Bool
+equivalent a b = tautology (a <=> b)
 
-instance Monoid (SAT a) where
-  mempty = emptySAT
-  mappend
-    SAT{sComment=lcomment, sVars=lvars, formula=lformula}
-    SAT{sComment=rcomment, sVars=rvars, formula=rformula} =
-    SAT { sComment = lcomment `mappend` rcomment
-        , sVars = lvars `mappend` rvars
-        , formula = pure . And $ lformula `mappend` rformula
-        }
-  mconcat = Prelude.foldr1 mappend
+
+-- Instances
+
+instance Boolean b => Boolean (Symbolic b) where
+  true  = return true
+  false = return false
+  bnot  = fmap bnot
+  (&&&) = liftM2 (&&&)
+  (|||) = liftM2 (|||)
+
+instance SAT SBool where
+  toPredicate = return
+
+instance SAT Predicate where
+  toPredicate = id
+
+instance SAT (Symbolic Bool) where
+  toPredicate = fmap fromBool

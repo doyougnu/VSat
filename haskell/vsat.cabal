@@ -24,6 +24,7 @@ library
                              , BangPatterns
                              , GeneralizedNewtypeDeriving
                              , FlexibleInstances
+                             , DeriveDataTypeable
 
   build-depends:       base >= 4.7 && < 5
                      , containers >= 0.5
@@ -35,6 +36,7 @@ library
                      , bifunctors
                      , QuickCheck
                      , deepseq
+                     , sbv
 
   default-language:    Haskell2010
 

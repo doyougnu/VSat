@@ -2,11 +2,10 @@ module Main where
 
 import Run
 import Gen
-import VProp
--- import Criterion.Main
 
 main :: IO ()
 main = do
+
         props <- sequence . take 1 $! repeat genVProp
         print $ head props
         res <- runEnv True (head props)
