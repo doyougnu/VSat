@@ -1,6 +1,6 @@
 module NVProp where
 
-import           Data.Data       (Data, Typeable)
+import           Data.Data       (Data, Typeable, typeOf)
 import           Data.String     (IsString)
 
 import qualified Data.Map.Strict as Map
@@ -19,9 +19,9 @@ newtype Var = Var { varName :: String }
 newtype Dim = Dim { dimName :: String }
   deriving (Data,Eq,IsString,Ord,Show,Typeable)
 
-type FConfig b = Var -> b
-type Config b = Dim -> b
+type VConfig b = Var -> b
 type DimBool = Dim -> SBool
+type Config = Map.Map Dim Bool
 
 --
 -- * Syntax
@@ -33,23 +33,64 @@ data Prop
    | Ref Var
    | Chc Dim Prop Prop
    | Not Prop
-   | And Prop Prop
-   | Or  Prop Prop
+   | Op2 Op2 Prop Prop
   deriving (Data,Eq,Generic,Typeable)
 
+data Op2 = And | Or | Impl | BiImpl deriving (Eq, Generic, Data, Typeable)
 
 instance Mergeable Prop where
   symbolicMerge _ b thn els
     | Just result <- unliteral b = if result then thn else els
   symbolicMerge _ _ _ _ = undefined -- quite -WALL
 
+----------------------------- Choice Manipulation ------------------------------
+-- | Wrapper around engine
+prune :: Prop -> Prop
+prune = pruneTagTree Map.empty
+
+-- | Given d config and variational expression remove redundant choices
+pruneTagTree :: Config -> Prop -> Prop
+pruneTagTree _ (Ref d) = Ref d
+pruneTagTree _ (Lit b) = Lit b
+pruneTagTree tb (Chc t y n) = case Map.lookup t tb of
+                             Nothing -> Chc t
+                                        (pruneTagTree (Map.insert t True tb) y)
+                                        (pruneTagTree (Map.insert t False tb) n)
+                             Just True -> pruneTagTree tb y
+                             Just False -> pruneTagTree tb n
+pruneTagTree tb (Not x)      = Not $ pruneTagTree tb x
+pruneTagTree tb (Op2 a l r)  = Op2 a (pruneTagTree tb l) (pruneTagTree tb r)
+
+-- | Given a config and a Variational Prop term select the element out that the
+-- config points to
+selectVariant :: Config -> Prop -> Maybe Prop
+selectVariant _ (Ref a) = Just $ Ref a
+selectVariant _ (Lit a) = Just $ Lit a
+selectVariant tbs (Chc t y n) = case Map.lookup t tbs of
+                           Nothing    -> Nothing
+                           Just True  -> selectVariant tbs y
+                           Just False -> selectVariant tbs n
+selectVariant tb (Not x)      = Not   <$> selectVariant tb x
+selectVariant tb (Op2 a l r)  = Op2 a <$> selectVariant tb l <*> selectVariant tb r
+
+-- | Convert a dimension to a variable
+dimToVar :: Dim -> Prop
+dimToVar = Ref . Var . dimName
+
+-- | Perform andDecomposition, removing all choices from a proposition
+andDecomp :: Prop -> Prop
+andDecomp (Chc d l r) = (dimToVar d &&& andDecomp l) ||| (bnot (dimToVar d) &&& andDecomp r)
+andDecomp (Not x)     = Not (andDecomp x)
+andDecomp (Op2 c l r) = Op2 c (andDecomp l) (andDecomp r)
+andDecomp x           = x
+
+--------------------------- Getters --------------------------------------------
 -- | The set of features referenced in a feature expression.
 features :: Prop -> Set Var
 features (Lit _)     = Set.empty
 features (Ref f)     = Set.singleton f
 features (Not e)     = features e
-features (And l r)   = features l `Set.union` features r
-features (Or  l r)   = features l `Set.union` features r
+features (Op2 _ l r) = features l `Set.union` features r
 features (Chc _ l r) = features l `Set.union` features r
 
 -- | The set of dimensions in a propositional expression
@@ -57,18 +98,20 @@ dimensions :: Prop -> Set Dim
 dimensions (Lit _)     = Set.empty
 dimensions (Ref _)     = Set.empty
 dimensions (Not e)     = dimensions e
-dimensions (And l r)   = dimensions l `Set.union` dimensions r
-dimensions (Or  l r)   = dimensions l `Set.union` dimensions r
+dimensions (Op2 _ l r) = dimensions l `Set.union` dimensions r
 dimensions (Chc d l r) = Set.singleton d `Set.union`
                          dimensions l `Set.union` dimensions r
 
+
+------------------------------ Evaluation --------------------------------------
 -- | Evaluate a feature expression against a configuration.
-evalPropExpr :: (Boolean b, Mergeable b) => DimBool -> FConfig b -> Prop -> b
+evalPropExpr :: (Boolean b, Mergeable b) => DimBool -> VConfig b -> Prop -> b
 evalPropExpr _ _ (Lit b)   = if b then true else false
 evalPropExpr _ c (Ref f)   = c f
 evalPropExpr d c (Not e)   = bnot (evalPropExpr d c e)
-evalPropExpr d c (And l r) = evalPropExpr d c l &&& evalPropExpr d c r
-evalPropExpr d c (Or  l r) = evalPropExpr d c l ||| evalPropExpr d c r
+evalPropExpr d c (Op2 a l r)
+  | typeOf a == typeOf And = evalPropExpr d c l &&& evalPropExpr d c r
+  | typeOf a == typeOf Or = evalPropExpr d c l ||| evalPropExpr d c r
 evalPropExpr d c (Chc dim l r) = ite (d dim)
                                     (evalPropExpr d c l)
                                     (evalPropExpr d c r)
@@ -77,8 +120,8 @@ evalPropExpr d c (Chc dim l r) = ite (d dim)
 prettyPropExpr :: Prop -> String
 prettyPropExpr = top
   where
-    top (And l r)   = sub l ++ "∧" ++ sub r
-    top (Or  l r)   = sub l ++ "∨" ++ sub r
+    top (Op2 And l r)   = sub l ++ "∧" ++ sub r
+    top (Op2 Or  l r)   = sub l ++ "∨" ++ sub r
     top (Chc d l r) = show d ++ "<" ++ sub l ++ ", " ++ sub r ++ ">"
     top e           = sub e
     sub (Lit b) = if b then "#T" else "#F"
@@ -106,31 +149,20 @@ shrinkPropExpr e
     | unsatisfiable e           = Lit False
     | tautology e               = Lit True
 shrinkPropExpr (Not (Not e)) = shrinkPropExpr e
-shrinkPropExpr (And l r)
+shrinkPropExpr (Op2 And l r)
     | tautology l               = shrinkPropExpr r
     | tautology r               = shrinkPropExpr l
-shrinkPropExpr (Or l r)
+shrinkPropExpr (Op2 Or l r)
     | unsatisfiable l           = shrinkPropExpr r
     | unsatisfiable r           = shrinkPropExpr l
 shrinkPropExpr e = e
-
--- | Perform andDecomposition, removing all choices from a proposition
-andDecomp :: Prop -> Prop
-andDecomp (Chc d l r) = Or
-                        (And (dimToVar d) (andDecomp l))
-                        (And (Not (dimToVar d)) (andDecomp r))
-  where dimToVar = Ref . Var . dimName
-andDecomp (Not x)     = Not (andDecomp x)
-andDecomp (Or l r)    = Or (andDecomp l) (andDecomp r)
-andDecomp (And l r)   = And (andDecomp l) (andDecomp r)
-andDecomp x           = x
 
 instance Boolean Prop where
   true  = Lit True
   false = Lit False
   bnot  = Not
-  (&&&) = And
-  (|||) = Or
+  (&&&) = Op2 And
+  (|||) = Op2 Or
 
 instance SAT Prop where
   toPredicate = symbolicPropExpr
