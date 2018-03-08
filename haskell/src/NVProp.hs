@@ -110,8 +110,11 @@ evalPropExpr _ _ (Lit b)   = if b then true else false
 evalPropExpr _ c (Ref f)   = c f
 evalPropExpr d c (Not e)   = bnot (evalPropExpr d c e)
 evalPropExpr d c (Op2 a l r)
-  | typeOf a == typeOf And = evalPropExpr d c l &&& evalPropExpr d c r
-  | typeOf a == typeOf Or = evalPropExpr d c l ||| evalPropExpr d c r
+  | typeOf a == typeOf And    = makePropWith (&&&)
+  | typeOf a == typeOf Or     = makePropWith (|||)
+  | typeOf a == typeOf Impl   = makePropWith (==>)
+  | typeOf a == typeOf BiImpl = makePropWith (<=>)
+    where makePropWith f = evalPropExpr d c l `f` evalPropExpr d c r
 evalPropExpr d c (Chc dim l r) = ite (d dim)
                                     (evalPropExpr d c l)
                                     (evalPropExpr d c r)
@@ -120,8 +123,14 @@ evalPropExpr d c (Chc dim l r) = ite (d dim)
 prettyPropExpr :: Prop -> String
 prettyPropExpr = top
   where
-    top (Op2 And l r)   = sub l ++ "∧" ++ sub r
-    top (Op2 Or  l r)   = sub l ++ "∨" ++ sub r
+    top (Op2 a l r)
+      | typeOf a == typeOf And    = l' ++ "∧"  ++ r'
+      | typeOf a == typeOf Or     = l' ++ "∨"  ++ r'
+      | typeOf a == typeOf Impl   = l' ++ "->"  ++ r'
+      | typeOf a == typeOf BiImpl = l' ++ "<->" ++ r'
+      where l' = sub l
+            r' = sub r
+
     top (Chc d l r) = show d ++ "<" ++ sub l ++ ", " ++ sub r ++ ">"
     top e           = sub e
     sub (Lit b) = if b then "#T" else "#F"
@@ -163,6 +172,8 @@ instance Boolean Prop where
   bnot  = Not
   (&&&) = Op2 And
   (|||) = Op2 Or
+  (==>) = Op2 Impl
+  (<=>) = Op2 BiImpl
 
 instance SAT Prop where
   toPredicate = symbolicPropExpr
