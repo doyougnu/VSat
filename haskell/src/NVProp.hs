@@ -9,18 +9,18 @@ import           Data.Set        (Set)
 import qualified Data.Set        as Set
 
 import           Data.SBV
-import           SAT
 import           GHC.Generics
+import           SAT
 
 -- | A feature is a named, boolean configuration option.
 newtype Var = Var { featureName :: String }
   deriving (Data,Eq,IsString,Ord,Show,Typeable)
 
 newtype Dim = Dim { dimName :: String }
-  deriving (Data,Eq,IsString,Ord,Show,Typeable,Generic,Mergable)
+  deriving (Data,Eq,IsString,Ord,Show,Typeable)
 
 type FConfig b = Var -> b
-type Config b = Dim -> Bool
+type Config = Dim -> SBool
 
 --
 -- * Syntax
@@ -34,7 +34,12 @@ data Prop
    | Not Prop
    | And Prop Prop
    | Or  Prop Prop
-  deriving (Data,Eq,Typeable)
+  deriving (Data,Eq,Generic,Typeable)
+
+instance Mergeable Prop where
+  symbolicMerge f b thn els
+    | Just result <- unliteral b = if result then thn else els
+
 
 -- | The set of features referenced in a feature expression.
 features :: Prop -> Set Var
@@ -56,15 +61,15 @@ dimensions (Chc d l r) = Set.singleton d `Set.union`
                          dimensions l `Set.union` dimensions r
 
 -- | Evaluate a feature expression against a configuration.
-evalFeatureExpr :: Boolean b => Config b -> FConfig b -> Prop -> b
+evalFeatureExpr :: (Boolean b, Mergeable b) => Config -> FConfig b -> Prop -> b
 evalFeatureExpr _ _ (Lit b)   = if b then true else false
 evalFeatureExpr _ c (Ref f)   = c f
 evalFeatureExpr d c (Not e)   = bnot (evalFeatureExpr d c e)
 evalFeatureExpr d c (And l r) = evalFeatureExpr d c l &&& evalFeatureExpr d c r
 evalFeatureExpr d c (Or  l r) = evalFeatureExpr d c l ||| evalFeatureExpr d c r
-evalFeatureExpr d c (Chc dim l r) = if d dim
-                                    then evalFeatureExpr d c l
-                                    else evalFeatureExpr d c r
+evalFeatureExpr d c (Chc dim l r) = ite (d dim)
+                                    (evalFeatureExpr d c l)
+                                    (evalFeatureExpr d c r)
 
 -- | Pretty print a feature expression.
 prettyFeatureExpr :: Prop -> String
@@ -85,9 +90,9 @@ symbolicFeatureExpr e = do
     let fs = Set.toList (features e)
         ds = Set.toList (dimensions e)
     syms <- fmap (Map.fromList . zip fs) (sBools (map featureName fs))
-    let dims = Map.fromList $ zip ds (map dimName ds)
+    dims <- Map.fromList . zip ds <$> (sBools (map dimName ds))
     let look f = fromMaybe err (Map.lookup f syms)
-    let lookd d = fromMaybe errd (Map.lookup d dims)
+        lookd d = fromMaybe errd (Map.lookup d dims)
     return (evalFeatureExpr lookd look e)
   where err = error "symbolicFeatureExpr: Internal error, no symbol found."
         errd = error "symbolicFeatureExpr: Internal error, no dimension found."
