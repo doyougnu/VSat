@@ -72,13 +72,13 @@ runBruteForce prop = do
       plainProps = (\y -> (y, selectVariant y prop)) <$> confs
   mapM_ work' plainProps
   newSats <- get
-  return . fromJust . recompile $ (\(x, y) -> (x, show y)) <$> M.toList newSats
+  return . recompile prop $ (\(x, y) -> (x, show y)) <$> M.toList newSats
 
 runAndDecomp :: (MonadTrans t, MonadState SatDict (t IO)) => VProp -> t IO VProp
 runAndDecomp prop = do
   sats <- get
   result <- lift . isSatisfiable . symbolicPropExpr $ (andDecomp prop)
-  return . fromJust . recompile . fmap (\(x, y) -> (x, show y)) . M.toList $ M.map (const result) sats
+  return . recompile prop . fmap (\(x, y) -> (x, show y)) . M.toList $ M.map (const result) sats
 
 
 -- | main workhorse for running the SAT solver

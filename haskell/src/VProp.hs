@@ -4,7 +4,6 @@ import           Control.Monad       (liftM2, liftM3)
 import           Data.Data           (Data, Typeable)
 import           Data.String         (IsString)
 
-import           Data.List           (sortOn, nub)
 import qualified Data.Map.Strict     as Map
 import           Data.Maybe          (fromMaybe)
 import           Data.Set            (Set)
@@ -120,6 +119,32 @@ andDecomp (Not x)     = Not (andDecomp x)
 andDecomp (Op2 c l r) = Op2 c (andDecomp l) (andDecomp r)
 andDecomp x           = x
 
+--------------------------- Descriptors ----------------------------------------
+-- | Count the terms in the expression
+numTerms :: VProp -> Integer
+numTerms prop = go prop 0
+  where go (Not a) acc     = go a acc
+        go (Op2 _ l r) acc = go l (go r acc)
+        go _       acc     = succ acc
+
+-- | Count the choices in a tree
+numChc :: VProp -> Integer
+numChc prop = go 0 prop
+  where
+    go :: Integer -> VProp -> Integer
+    go cnt (Chc _ l r) = go (succ cnt) l + go (succ cnt) r
+    go cnt (Op2 _ l r) = go cnt l + go cnt r
+    go cnt (Not a)     = go cnt a
+    go cnt _           = cnt
+
+
+-- | Depth of the Term tree
+depth :: VProp -> Integer
+depth prop = go prop 0
+  where go (Not a) acc     = go a (succ acc)
+        go (Op2 _ l r) acc = max (go l (succ acc)) (go r (succ acc))
+        go _ acc           = acc
+
 --------------------------- Getters --------------------------------------------
 -- | The set of features referenced in a feature expression.
 vars :: VProp -> Set Var
@@ -162,26 +187,29 @@ replace conf v (Op2 a l r) = Op2 a (replace conf v l) (replace conf v r)
 replace _    _ x           = x
 
 -- | helper function used to create seed value for fold just once
-_recompile :: Config -> String -> VProp
-_recompile conf = go (Map.toList conf)
-  where
-    go :: [(Dim, Bool)] -> String -> VProp
-    go [] val' = Ref . Var $ val'
-    go ((d, b):cs) val'
-          | b = Chc d (go cs val') (Ref (Var ""))
-          | otherwise = Chc d (Ref (Var "")) (go cs val')
+-- _recompile :: Config -> String -> VProp
+-- _recompile conf = go (Map.toList conf)
+--   where
+--     go :: [(Dim, Bool)] -> String -> VProp
+--     go [] val' = Ref . Var $ val'
+--     go ((d, b):cs) val'
+--           | b = Chc d (go cs val') (Ref (Var "__"))
+--           | otherwise = Chc d (Ref (Var "__")) (go cs val')
 
 -- | Given a list of configs with associated values, remake the tag tree by
 -- folding over the config list
-recompile :: [(Config, String)] -> Maybe VProp
-recompile [] = Nothing
-recompile xs = Just $ go (tail xs') (_recompile conf (show val))
-  where
-    xs' = reverse $ sortOn (Map.size . fst) xs
-    (conf, val) = head xs'
-    go :: [(Config, String)] -> VProp -> VProp
-    go []          acc = acc
-    go ((c, v):cs) acc = go cs $ replace c (show v) acc
+-- recompile :: [(Config, String)] -> Maybe VProp
+-- recompile [] = Nothing
+-- recompile xs = Just $ go (tail xs') (_recompile conf (show val))
+--   where
+--     xs' = reverse $ sortOn (Map.size . fst) xs
+--     (conf, val) = head xs'
+--     go :: [(Config, String)] -> VProp -> VProp
+--     go []          acc = acc
+--     go ((c, v):cs) acc = go cs $ replace c (show v) acc
+
+recompile :: VProp -> [(Config, String)] ->   VProp
+recompile = foldr (\(conf, val) acc -> replace conf val acc)
 
 ------------------------------ Evaluation --------------------------------------
 -- | Evaluate a feature expression against a configuration.
@@ -193,7 +221,7 @@ evalPropExpr d c (Op2 And l r)    = evalPropExpr d c l &&& evalPropExpr d c r
 evalPropExpr d c (Op2 Or l r)     = evalPropExpr d c l ||| evalPropExpr d c r
 evalPropExpr d c (Op2 Impl l r)   = evalPropExpr d c l ==> evalPropExpr d c r
 evalPropExpr d c (Op2 BiImpl l r) = evalPropExpr d c l <=> evalPropExpr d c r
-evalPropExpr d c (Chc dim l r) = ite (d dim)
+evalPropExpr d c (Chc dim l r)    = ite (d dim)
                                     (evalPropExpr d c l)
                                     (evalPropExpr d c r)
 
