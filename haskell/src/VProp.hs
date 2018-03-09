@@ -1,21 +1,23 @@
 module VProp where
 
-import           Data.Data       (Data, Typeable, typeOf)
-import           Data.String     (IsString)
-import           Control.Monad   (liftM3, liftM2)
+import           Control.Monad       (liftM2, liftM3)
+import           Data.Data           (Data, Typeable, typeOf)
+import           Data.String         (IsString)
 
-import qualified Data.Map.Strict as Map
-import           Data.Maybe      (fromMaybe)
-import           Data.Set        (Set)
-import qualified Data.Set        as Set
+import qualified Data.Map.Strict     as Map
+import           Data.Maybe          (fromMaybe)
+import           Data.Set            (Set)
+import qualified Data.Set            as Set
 
 import           Data.SBV
 import           GHC.Generics
 import           SAT
 
-import Control.DeepSeq    (NFData)
-import Test.QuickCheck    (Arbitrary, Gen, arbitrary, frequency, sized)
-import Test.QuickCheck.Gen
+import           Control.DeepSeq     (NFData)
+import           Data.Char           (toUpper)
+import           Test.QuickCheck     (Arbitrary, Gen, arbitrary, frequency,
+                                      sized)
+import           Test.QuickCheck.Gen
 
 -- | A feature is a named, boolean configuration option.
 newtype Var = Var { varName :: String }
@@ -44,19 +46,6 @@ data VProp
 -- | data constructor for binary operations
 data Op2 = And | Or | Impl | BiImpl deriving (Eq,Generic,Data,Typeable)
 
--- | smart constructors
-_and :: VProp -> VProp -> VProp
-_and = Op2 And
-
-_or:: VProp -> VProp -> VProp
-_or = Op2 Or
-
-_impl:: VProp -> VProp -> VProp
-_impl = Op2 Impl
-
-_bimpl :: VProp -> VProp -> VProp
-_bimpl = Op2 BiImpl
-
 -- | Generate only alphabetical characters
 genAlphaNum :: Gen Char
 genAlphaNum = elements ['a'..'z']
@@ -66,7 +55,7 @@ genAlphaNumStr :: Gen String
 genAlphaNumStr = listOf genAlphaNum
 
 genDim :: Gen Dim
-genDim = Dim <$> genAlphaNumStr
+genDim = Dim <$> (fmap . fmap) toUpper genAlphaNumStr
 
 genVar :: Gen Var
 genVar = Var <$> genAlphaNumStr
@@ -78,10 +67,10 @@ arbVProp 0 = fmap Ref genVar
 arbVProp n = frequency [ (1, fmap Ref genVar)
                        , (4, liftM3 Chc genDim l l)
                        , (3, fmap Not l)
-                       , (3, liftM2 _or l l)
-                       , (3, liftM2 _and l l)
-                       , (3, liftM2 _impl l l)
-                       , (3, liftM2 _bimpl l l)
+                       , (3, liftM2 (&&&) l l)
+                       , (3, liftM2 (|||) l l)
+                       , (3, liftM2 (==>) l l)
+                       , (3, liftM2 (<=>) l l)
                        ]
   where l = arbVProp (n `div` 2)
 
@@ -148,6 +137,14 @@ dimensions (Op2 _ l r) = dimensions l `Set.union` dimensions r
 dimensions (Chc d l r) = Set.singleton d `Set.union`
                          dimensions l `Set.union` dimensions r
 
+paths :: VProp -> Set Config
+paths = Set.fromList . go
+  where go (Chc d l r) = do someL <- go l
+                            someR <- go r
+                            [Map.insert d True someL, Map.insert d False someR]
+        go (Not x) = go x
+        go (Op2 _ l r) = go l ++ go r
+        go _ = [Map.empty]
 
 ------------------------------ Evaluation --------------------------------------
 -- | Evaluate a feature expression against a configuration.
@@ -170,14 +167,14 @@ prettyPropExpr :: VProp -> String
 prettyPropExpr = top
   where
     top (Op2 a l r)
-      | typeOf a == typeOf And    = l' ++ "∧"  ++ r'
-      | typeOf a == typeOf Or     = l' ++ "∨"  ++ r'
-      | typeOf a == typeOf Impl   = l' ++ "->"  ++ r'
-      | typeOf a == typeOf BiImpl = l' ++ "<->" ++ r'
+      | typeOf a == typeOf And    = l' ++ " ∧ "  ++ r'
+      | typeOf a == typeOf Or     = l' ++ " ∨ "  ++ r'
+      | typeOf a == typeOf Impl   = l' ++ " → "  ++ r'
+      | typeOf a == typeOf BiImpl = l' ++ " ↔ " ++ r'
       where l' = sub l
             r' = sub r
 
-    top (Chc d l r) = show d ++ "<" ++ sub l ++ ", " ++ sub r ++ ">"
+    top (Chc d l r) = show (dimName d) ++ "<" ++ sub l ++ ", " ++ sub r ++ ">"
     top e           = sub e
     sub (Lit b) = if b then "#T" else "#F"
     sub (Ref f) = varName f
