@@ -8,6 +8,7 @@ import qualified Data.Map.Strict     as Map
 import           Data.Maybe          (fromMaybe)
 import           Data.Set            (Set)
 import qualified Data.Set            as Set
+import           Data.List           (sortOn)
 
 import           Data.SBV
 import           GHC.Generics
@@ -82,7 +83,7 @@ genVProp = generate arbitrary
 prune :: VProp -> VProp
 prune = pruneTagTree Map.empty
 
--- | Given d config and variational expression remove redundant choices
+-- | Given a config and variational expression remove redundant choices
 pruneTagTree :: Config -> VProp -> VProp
 pruneTagTree _ (Ref d) = Ref d
 pruneTagTree _ (Lit b) = Lit b
@@ -137,6 +138,7 @@ dimensions (Op2 _ l r) = dimensions l `Set.union` dimensions r
 dimensions (Chc d l r) = Set.singleton d `Set.union`
                          dimensions l `Set.union` dimensions r
 
+-- | Given a Variational Prop term, get all possible paths in the choice tree
 paths :: VProp -> Set Config
 paths = Set.fromList . go
   where go (Chc d l r) = do someL <- go l
@@ -145,6 +147,41 @@ paths = Set.fromList . go
         go (Not x) = go x
         go (Op2 _ l r) = go l ++ go r
         go _ = [Map.empty]
+
+------------------------------ Manipulation ------------------------------------
+-- | Given a tag tree, fmap over the tree with respect to a config
+replace :: Config -> String -> VProp -> VProp
+replace _    v (Ref _) = Ref . Var $ v
+replace conf v (Chc d l r) =
+  case Map.lookup d conf of
+    Nothing    -> Chc d (replace conf v l) (replace conf v r)
+    Just True  -> Chc d (replace conf v l) r
+    Just False -> Chc d l (replace conf v r)
+replace conf v (Not x) = Not $ replace conf v x
+replace conf v (Op2 a l r) = Op2 a (replace conf v l) (replace conf v r)
+replace _    _ x           = x
+
+-- | helper function used to create seed value for fold just once
+_recompile :: Config -> String -> VProp
+_recompile conf = go (Map.toList conf)
+  where
+    go :: [(Dim, Bool)] -> String -> VProp
+    go [] val' = Ref . Var $ val'
+    go ((d, b):cs) val'
+          | b = Chc d (go cs val') (Ref (Var ""))
+          | otherwise = Chc d (Ref (Var "")) (go cs val')
+
+-- | Given a list of configs with associated values, remake the tag tree by
+-- folding over the config list
+recompile :: [(Config, String)] -> Maybe VProp
+recompile [] = Nothing
+recompile xs = Just $ go (tail xs') (_recompile conf (show val))
+  where
+    xs' = reverse $ sortOn (Map.size . fst) xs
+    (conf, val) = head xs'
+    go :: [(Config, String)] -> VProp -> VProp
+    go []          acc = acc
+    go ((c, v):cs) acc = go cs $ replace c (show v) acc
 
 ------------------------------ Evaluation --------------------------------------
 -- | Evaluate a feature expression against a configuration.
