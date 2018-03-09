@@ -1,14 +1,14 @@
 module VProp where
 
 import           Control.Monad       (liftM2, liftM3)
-import           Data.Data           (Data, Typeable, typeOf)
+import           Data.Data           (Data, Typeable)
 import           Data.String         (IsString)
 
+import           Data.List           (sortOn, nub)
 import qualified Data.Map.Strict     as Map
 import           Data.Maybe          (fromMaybe)
 import           Data.Set            (Set)
 import qualified Data.Set            as Set
-import           Data.List           (sortOn)
 
 import           Data.SBV
 import           GHC.Generics
@@ -122,12 +122,12 @@ andDecomp x           = x
 
 --------------------------- Getters --------------------------------------------
 -- | The set of features referenced in a feature expression.
-features :: VProp -> Set Var
-features (Lit _)     = Set.empty
-features (Ref f)     = Set.singleton f
-features (Not e)     = features e
-features (Op2 _ l r) = features l `Set.union` features r
-features (Chc _ l r) = features l `Set.union` features r
+vars :: VProp -> Set Var
+vars (Lit _)     = Set.empty
+vars (Ref f)     = Set.singleton f
+vars (Not e)     = vars e
+vars (Op2 _ l r) = vars l `Set.union` vars r
+vars (Chc _ l r) = vars l `Set.union` vars r
 
 -- | The set of dimensions in a propositional expression
 dimensions :: VProp -> Set Dim
@@ -140,7 +140,7 @@ dimensions (Chc d l r) = Set.singleton d `Set.union`
 
 -- | Given a Variational Prop term, get all possible paths in the choice tree
 paths :: VProp -> Set Config
-paths = Set.fromList . go
+paths = Set.fromList . filter (not . Map.null) . go
   where go (Chc d l r) = do someL <- go l
                             someR <- go r
                             [Map.insert d True someL, Map.insert d False someR]
@@ -189,12 +189,10 @@ evalPropExpr :: (Boolean b, Mergeable b) => DimBool -> VConfig b -> VProp -> b
 evalPropExpr _ _ (Lit b)   = if b then true else false
 evalPropExpr _ c (Ref f)   = c f
 evalPropExpr d c (Not e)   = bnot (evalPropExpr d c e)
-evalPropExpr d c (Op2 a l r)
-  | typeOf a == typeOf And    = makePropWith (&&&)
-  | typeOf a == typeOf Or     = makePropWith (|||)
-  | typeOf a == typeOf Impl   = makePropWith (==>)
-  | typeOf a == typeOf BiImpl = makePropWith (<=>)
-    where makePropWith f = evalPropExpr d c l `f` evalPropExpr d c r
+evalPropExpr d c (Op2 And l r)    = evalPropExpr d c l &&& evalPropExpr d c r
+evalPropExpr d c (Op2 Or l r)     = evalPropExpr d c l ||| evalPropExpr d c r
+evalPropExpr d c (Op2 Impl l r)   = evalPropExpr d c l ==> evalPropExpr d c r
+evalPropExpr d c (Op2 BiImpl l r) = evalPropExpr d c l <=> evalPropExpr d c r
 evalPropExpr d c (Chc dim l r) = ite (d dim)
                                     (evalPropExpr d c l)
                                     (evalPropExpr d c r)
@@ -203,16 +201,13 @@ evalPropExpr d c (Chc dim l r) = ite (d dim)
 prettyPropExpr :: VProp -> String
 prettyPropExpr = top
   where
-    top (Op2 a l r)
-      | typeOf a == typeOf And    = l' ++ " ∧ "  ++ r'
-      | typeOf a == typeOf Or     = l' ++ " ∨ "  ++ r'
-      | typeOf a == typeOf Impl   = l' ++ " → "  ++ r'
-      | typeOf a == typeOf BiImpl = l' ++ " ↔ " ++ r'
-      where l' = sub l
-            r' = sub r
-
+    top (Op2 Or l r)     = sub l ++ " ∨ "  ++ sub r
+    top (Op2 And l r)    = sub l ++ " ∧ "  ++ sub r
+    top (Op2 Impl l r)   = sub l ++ " → "  ++ sub r
+    top (Op2 BiImpl l r) = sub l ++ " ↔ " ++ sub r
     top (Chc d l r) = show (dimName d) ++ "<" ++ sub l ++ ", " ++ sub r ++ ">"
     top e           = sub e
+
     sub (Lit b) = if b then "#T" else "#F"
     sub (Ref f) = varName f
     sub (Not e) = "¬" ++ sub e
@@ -221,9 +216,9 @@ prettyPropExpr = top
 -- | Generate a symbolic predicate for a feature expression.
 symbolicPropExpr :: VProp -> Predicate
 symbolicPropExpr e = do
-    let fs = Set.toList (features e)
+    let vs = Set.toList (vars e)
         ds = Set.toList (dimensions e)
-    syms <- fmap (Map.fromList . zip fs) (sBools (map varName fs))
+    syms <- fmap (Map.fromList . zip vs) (sBools (map varName vs))
     dims <- fmap (Map.fromList . zip ds) (sBools (map dimName ds))
     let look f = fromMaybe err (Map.lookup f syms)
         lookd d = fromMaybe errd (Map.lookup d dims)

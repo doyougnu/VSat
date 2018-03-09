@@ -87,9 +87,7 @@ work :: ( MonadTrans t
         , MonadReader Opts (t IO)) => VProp -> t IO VProp
 work prop = do
   b <- asks baseline
-  if b
-    then runAndDecomp prop
-    else runBruteForce prop
+  if b then runAndDecomp prop else runBruteForce prop
 
 
 work' :: ( MonadTrans t
