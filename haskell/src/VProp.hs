@@ -43,11 +43,13 @@ data VProp
    | Ref Var
    | Chc Dim VProp VProp
    | Not VProp
-   | Op2 Op2 [VProp] [VProp]
+   | Opn Opn [VProp]
+   | Op2 Op2 VProp VProp
   deriving (Data,Eq,Generic,Typeable)
 
 -- | data constructor for binary operations
-data Op2 = And | Or | Impl | BiImpl deriving (Eq,Generic,Data,Typeable)
+data Op2 = Impl | BiImpl deriving (Eq,Generic,Data,Typeable)
+data Opn = And | Or deriving (Eq,Generic,Data,Typeable)
 
 -- | Generate only alphabetical characters
 genAlphaNum :: Gen Char
