@@ -145,7 +145,7 @@ depth prop = go prop 0
         go (Op2 _ l r) acc = max (go l (succ acc)) (go r (succ acc))
         go _ acc           = acc
 
---------------------------- Getters --------------------------------------------
+--------------------------- Destructors -----------------------------------------
 -- | The set of features referenced in a feature expression.
 vars :: VProp -> Set Var
 vars (Lit _)     = Set.empty
@@ -162,6 +162,21 @@ dimensions (Not e)     = dimensions e
 dimensions (Op2 _ l r) = dimensions l `Set.union` dimensions r
 dimensions (Chc d l r) = Set.singleton d `Set.union`
                          dimensions l `Set.union` dimensions r
+
+-- | The set of all choices
+-- choices :: VProp -> [Map.Map Dim Bool]
+choices :: VProp -> Set [(Dim, Bool)]
+choices prop = Set.fromList $ take n [ [(x, a), (y, b)] |
+                                       x <- ds
+                                       , y <- ds
+                                       , a <- bs
+                                       , b <- bs
+                                       , x /= y
+                                     ]
+
+  where ds = Set.toList $ dimensions prop
+        n  = length ds * 2
+        bs = [True, False]
 
 -- | Given a Variational Prop term, get all possible paths in the choice tree
 paths :: VProp -> Set Config

@@ -14,7 +14,7 @@ import VProp
 
 -- | The satisfiable dictionary, this is actually the "state" keys are configs
 -- and values are whether that config is satisfiable or not (a bool)
-type SatDict = M.Map Config Bool -- keys may incur perf penalty
+type SatDict = (M.Map Config Bool, M.Map Var Bool) -- keys may incur perf penalty
 
 -- | The optimizations that could be set
 data Opts = Opts { baseline :: Bool  -- ^ Run optimizations or not?
@@ -51,7 +51,9 @@ runEnv b x = _runEnv (work x) (_setOpts b) (initSt x)
 
 -- | Given a VProp term generate the satisfiability map
 initSt :: VProp -> SatDict
-initSt vs = M.fromList . fmap (\x -> (x, False)) . Set.toList $ paths vs
+initSt prop = (sats, vs)
+  where sats = M.fromList . fmap (\x -> (x, False)) . Set.toList $ paths prop
+        vs = M.fromList $ zip (Set.toList $ vars prop) (repeat False)
 
 
 -- | Some logging functions
@@ -65,18 +67,22 @@ _logResult :: (Show a, MonadWriter [Char] m) => a -> m ()
 _logResult x = tell $ "Got result: " ++ show x
 
 
+-- | Run the brute force baseline case, that is select every plain variant and
+-- run them to the sat solver
 runBruteForce :: (MonadTrans t, MonadState SatDict (t IO)) => VProp -> t IO VProp
 runBruteForce prop = do
-  _confs <- get
+  (_confs, _) <- get
   let confs = M.keys _confs
       plainProps = (\y -> (y, selectVariant y prop)) <$> confs
   mapM_ work' plainProps
-  newSats <- get
+  (newSats, _) <- get
   return . recompile prop $ (\(x, y) -> (x, show y)) <$> M.toList newSats
 
+-- | Run the and decomposition baseline case, that is deconstruct every choice
+-- and then run the sat solver
 runAndDecomp :: (MonadTrans t, MonadState SatDict (t IO)) => VProp -> t IO VProp
 runAndDecomp prop = do
-  sats <- get
+  (sats, _) <- get
   result <- lift . isSatisfiable . symbolicPropExpr $ (andDecomp prop)
   return . recompile prop . fmap (\(x, y) -> (x, show y)) . M.toList $ M.map (const result) sats
 
@@ -93,6 +99,6 @@ work prop = do
 work' :: ( MonadTrans t
          , MonadState SatDict (t IO)) => (Config, Maybe VProp) -> t IO ()
 work' (conf, plainProp) = when (isJust plainProp) $
-  do sats <- get
+  do (sats, vs) <- get
      result <- lift . isSatisfiable . symbolicPropExpr . fromJust $ plainProp
-     put (M.insert conf result sats)
+     put (M.insert conf result sats, vs)
