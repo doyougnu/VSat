@@ -281,7 +281,34 @@ moveNotIn (Opn a ps)  = Opn a (moveNotIn <$> ps)
 moveNotIn (Chc d l r) = Chc d (moveNotIn l) (moveNotIn r)
 moveNotIn x = x
 
+-- | distribute ands over ors
+distributeAndOr :: VProp -> VProp
+distributeAndOr (Opn Or ps) = foldr1 distribute $ distributeAndOr <$> ps
+  where distribute (Opn And vs) p = Opn And $ distributeAndOr <$> [ v ||| p | v <- vs]
+        distribute p (Opn And vs) = Opn And $ distributeAndOr <$> [ v ||| p | v <- vs]
+        distribute (Opn Or vs) p  = Opn Or $ vs ++ pure p
+        distribute p (Opn Or vs)  = Opn Or $ vs ++ pure p
+        distribute p q            = p ||| q
+distributeAndOr (Opn a ps)  = Opn a $ distributeAndOr <$> ps
+distributeAndOr (Op2 a l r) = Op2 a (distributeAndOr l) (distributeAndOr r)
+distributeAndOr (Chc d l r) = Chc d (distributeAndOr l) (distributeAndOr r)
+distributeAndOr (Not p)     = Not . distributeAndOr $ p
+distributeAndOr p           = p
 
+flatten :: VProp -> VProp
+flatten (Opn And ps) = Opn And $ foldr' helper [] $ flatten <$> ps
+  where helper (Opn And vs) xs = vs <> xs
+        helper e          xs = e : xs
+flatten (Opn Or ps) = Opn Or $ foldr' helper [] $ flatten <$> ps
+  where helper (Opn Or vs) xs = vs <> xs
+        helper e          xs = e : xs
+flatten (Op2 a l r) = Op2 a (flatten l) (flatten r)
+flatten (Chc d l r) = Chc d (flatten l) (flatten r)
+flatten (Not p)     = Not (flatten p)
+flatten e           = e
+
+toCNF :: VProp -> VProp
+toCNF = flatten . distributeAndOr . moveNotIn . eliminateImpl
 ------------------------------ Evaluation --------------------------------------
 -- TODO fix this repetition
 -- | Evaluate a feature expression against a configuration.
