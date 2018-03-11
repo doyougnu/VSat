@@ -1,6 +1,6 @@
 module VProp where
 
-import           Control.Monad       (liftM2, liftM3)
+import           Control.Monad       (liftM, liftM2, liftM3)
 import           Data.Data           (Data, Typeable)
 import           Data.Foldable       (foldr', foldr1)
 import           Data.List           (intercalate)
@@ -98,9 +98,8 @@ pruneTagTree tb (Chc t y n) = case Map.lookup t tb of
                              Just True -> pruneTagTree tb y
                              Just False -> pruneTagTree tb n
 pruneTagTree tb (Not x)      = Not $ pruneTagTree tb x
-pruneTagTree tb (Op2 a ls rs)  = Op2 a
-                                 (pruneTagTree tb <$> ls)
-                                 (pruneTagTree tb <$> rs)
+pruneTagTree tb (Op2 a l r)  = Op2 a (pruneTagTree tb l) (pruneTagTree tb r)
+pruneTagTree tb (Opn a ps)  = Opn a (pruneTagTree tb <$> ps)
 
 -- | Given a config and a Variational VProp term select the element out that the
 -- config points to
@@ -112,9 +111,10 @@ selectVariant tbs (Chc t y n) = case Map.lookup t tbs of
                            Just True  -> selectVariant tbs y
                            Just False -> selectVariant tbs n
 selectVariant tb (Not x)      = Not   <$> selectVariant tb x
-selectVariant tb (Op2 a ls rs) = liftM2 (Op2 a)
-                                 (sequence $ selectVariant tb <$> ls)
-                                 (sequence $ selectVariant tb <$> rs)
+selectVariant tb (Opn a ps) = liftM (Opn a) (sequence $ selectVariant tb <$> ps)
+selectVariant tb (Op2 a l r) = liftM2 (Op2 a)
+                               (selectVariant tb l)
+                               (selectVariant tb r)
 
 -- | Convert a dimension to a variable
 dimToVar :: Dim -> VProp
@@ -125,7 +125,8 @@ andDecomp :: VProp -> VProp
 andDecomp (Chc d l r) = (dimToVar d &&& andDecomp l) |||
                         (bnot (dimToVar d) &&& andDecomp r)
 andDecomp (Not x)       = Not (andDecomp x)
-andDecomp (Op2 c ls rs) = Op2 c (andDecomp <$> ls) (andDecomp <$> rs)
+andDecomp (Op2 c l r) = Op2 c (andDecomp l) (andDecomp r)
+andDecomp (Opn c ps)  = Opn c (andDecomp <$> ps)
 andDecomp x             = x
 
 --------------------------- Descriptors ----------------------------------------
@@ -134,19 +135,21 @@ numTerms :: VProp -> Integer
 numTerms prop = go prop 0
   where
     go :: VProp -> Integer -> Integer
-    go (Not a) acc       = go a acc
-    go (Op2 _ ls rs) acc = foldr' go (foldr' go acc rs) ls
-    go _       acc       = succ acc
+    go (Not a) acc     = go a acc
+    go (Op2 _ l r) acc = go r (go l acc)
+    go (Opn _ ps) acc  = foldr' go acc ps
+    go _       acc     = succ acc
 
 -- | Count the choices in a tree
 numChc :: VProp -> Integer
 numChc prop = go prop 0
   where
     go :: VProp -> Integer -> Integer
-    go (Chc _ l r) cnt    = go l (succ cnt) + go r (succ cnt)
-    go (Op2 _ ls rs)  cnt = foldr' go (foldr' go cnt rs) ls
-    go (Not a)     cnt    = go a cnt
-    go _           cnt    = cnt
+    go (Chc _ l r) cnt = go l (succ cnt) + go r (succ cnt)
+    go (Op2 _ l r) cnt = go l (go r cnt)
+    go (Opn _ ps)  cnt = foldr' go cnt ps
+    go (Not a)     cnt = go a cnt
+    go _           cnt = cnt
 
 
 -- | Depth of the Term tree
@@ -154,26 +157,29 @@ depth :: VProp -> Integer
 depth prop = go prop 0
   where
     go :: VProp -> Integer -> Integer
-    go (Not a) acc       = go a (succ acc)
-    go (Op2 _ ls rs) acc = maximum $ flip go (succ acc) <$> ls <> rs
-    go (Chc _ l r) acc   = max (go l acc) (go r acc)
-    go _ acc             = acc
+    go (Not a) acc     = go a (succ acc)
+    go (Op2 _ l r) acc = max (go l (succ acc)) (go r (succ acc))
+    go (Opn _ ps)  acc = maximum $ flip go acc <$> ps
+    go (Chc _ l r) acc = max (go l acc) (go r acc)
+    go _ acc           = acc
 
 --------------------------- Destructors -----------------------------------------
 -- | The set of features referenced in a feature expression.
 vars :: VProp -> Set Var
-vars (Lit _)       = Set.empty
-vars (Ref f)       = Set.singleton f
-vars (Not e)       = vars e
-vars (Op2 _ ls rs) = Set.unions $ vars <$> ls <> rs
-vars (Chc _ l r)   = vars l `Set.union` vars r
+vars (Lit _)     = Set.empty
+vars (Ref f)     = Set.singleton f
+vars (Not e)     = vars e
+vars (Op2 _ l r) = vars l `Set.union` vars r
+vars (Opn _ ps)  = Set.unions $ vars <$> ps
+vars (Chc _ l r) = vars l `Set.union` vars r
 
 -- | The set of dimensions in a propositional expression
 dimensions :: VProp -> Set Dim
 dimensions (Lit _)       = Set.empty
 dimensions (Ref _)       = Set.empty
 dimensions (Not e)       = dimensions e
-dimensions (Op2 _ ls rs) = Set.unions $ dimensions <$> ls <> rs
+dimensions (Op2 _ l r)   = dimensions l `Set.union` dimensions r
+dimensions (Opn _ ps)    = Set.unions $ dimensions <$> ps
 dimensions (Chc d l r)   = Set.singleton d `Set.union`
                            dimensions l `Set.union` dimensions r
 
@@ -198,7 +204,8 @@ paths = Set.fromList . filter (not . Map.null) . go
                             someR <- go r
                             [Map.insert d True someL, Map.insert d False someR]
         go (Not x) = go x
-        go (Op2 _ ls rs) = concatMap go $ ls <> rs
+        go (Op2 _ l r) = go l <> go r
+        go (Opn _ ps)  = concatMap go $ ps
         go _ = [Map.empty]
 
 ------------------------------ Manipulation ------------------------------------
@@ -211,9 +218,8 @@ replace conf v (Chc d l r) =
     Just True  -> Chc d (replace conf v l) r
     Just False -> Chc d l (replace conf v r)
 replace conf v (Not x) = Not $ replace conf v x
-replace conf v (Op2 a ls rs) = Op2 a
-                               (replace conf v <$> ls)
-                               (replace conf v <$> rs)
+replace conf v (Op2 a l r) = Op2 a (replace conf v l) (replace conf v r)
+replace conf v (Opn a ps)  = Opn a (replace conf v <$> ps)
 replace _    _ x           = x
 
 -- | helper function used to create seed value for fold just once
@@ -248,40 +254,31 @@ shrinkPropExpr e
     | unsatisfiable e           = Lit False
     | tautology e               = Lit True
 shrinkPropExpr (Not (Not e))    = shrinkPropExpr e
-shrinkPropExpr (Op2 And ls rs)  = Op2 And
-                                  (filter (not . tautology) ls)
-                                  (filter (not . tautology) rs)
-shrinkPropExpr (Op2 Or ls rs)   = Op2 Or
-                                  (filter (not . unsatisfiable) ls)
-                                  (filter (not . unsatisfiable) rs)
+shrinkPropExpr (Opn And ps)  = Opn And (filter (not . tautology) ps)
+shrinkPropExpr (Opn Or ps)   = Opn Or (filter (not . unsatisfiable) ps)
 shrinkPropExpr e = e
 
 -- | remove implications from propositional terms
 eliminateImpl :: VProp -> VProp
-eliminateImpl (Op2 Impl ls rs) = Op2 Or
-                                 (Not . eliminateImpl <$> ls)
-                                 (eliminateImpl <$> rs)
-eliminateImpl (Op2 BiImpl ls rs) = (Op2 Or (Not <$> ls) rs) &&&
-                                   (Op2 Or ls (Not <$> rs))
-eliminateImpl (Not ps)           = Not (eliminateImpl ps)
-eliminateImpl (Op2 And ls rs)    = Op2 And
-                                   (eliminateImpl <$> ls)
-                                   (eliminateImpl <$> rs)
-eliminateImpl (Op2 Or ls rs)     = Op2 Or
-                                   (eliminateImpl <$> ls)
-                                   (eliminateImpl <$> rs)
-eliminateImpl (Chc d l r)        = Chc d (eliminateImpl l) (eliminateImpl r)
-eliminateImpl e                  = e
+eliminateImpl (Op2 Impl l r)   = (Not . eliminateImpl $ l) ||| (eliminateImpl r)
+eliminateImpl (Op2 BiImpl l r) = (Not l' ||| r') &&& (l' ||| (Not r'))
+  where l' = eliminateImpl l
+        r' = eliminateImpl r
+eliminateImpl (Not ps)      = Not (eliminateImpl ps)
+eliminateImpl (Opn a ps)    = Opn a (eliminateImpl <$> ps)
+eliminateImpl (Chc d l r)   = Chc d (eliminateImpl l) (eliminateImpl r)
+eliminateImpl e             = e
 
 -- | Move nots inward as much as possible
 moveNotIn :: VProp -> VProp
 moveNotIn (Not p) = case p of
-  Op2 And ls rs -> Op2 Or (moveNotIn . Not <$> ls) (moveNotIn . Not <$> rs)
-  Op2 Or  ls rs -> Op2 And (moveNotIn . Not <$> ls) (moveNotIn . Not <$> rs)
-  Not prop      -> prop
-  prop          -> Not prop
-moveNotIn (Op2 a ls rs) = Op2 a (moveNotIn <$> ls) (moveNotIn <$> rs)
-moveNotIn (Chc d l r)   = Chc d (moveNotIn l) (moveNotIn r)
+  Opn And ps -> Opn Or (moveNotIn . Not <$> ps)
+  Opn Or  ps -> Opn And (moveNotIn . Not <$> ps)
+  Not prop   -> prop
+  prop       -> Not prop
+moveNotIn (Op2 a l r) = Op2 a (moveNotIn l) (moveNotIn r)
+moveNotIn (Opn a ps)  = Opn a (moveNotIn <$> ps)
+moveNotIn (Chc d l r) = Chc d (moveNotIn l) (moveNotIn r)
 moveNotIn x = x
 
 
@@ -292,23 +289,23 @@ evalPropExpr :: (Boolean b, Mergeable b) => DimBool -> VConfig b -> VProp -> b
 evalPropExpr _ _ (Lit b)   = if b then true else false
 evalPropExpr _ c (Ref f)   = c f
 evalPropExpr d c (Not e)   = bnot (evalPropExpr d c e)
-evalPropExpr d c (Op2 And ls rs)    = foldr1 (&&&) $ evalPropExpr d c <$> ls <> rs
-evalPropExpr d c (Op2 Or ls rs)     = foldr1 (|||) $ evalPropExpr d c <$> ls <> rs
-evalPropExpr d c (Op2 Impl ls rs)   = foldr1 (==>) $ evalPropExpr d c <$> ls <> rs
-evalPropExpr d c (Op2 BiImpl ls rs) = foldr1 (<=>) $ evalPropExpr d c <$> ls <> rs
-evalPropExpr d c (Chc dim l r)   = ite (d dim)
-                                   (evalPropExpr d c l)
-                                   (evalPropExpr d c r)
+evalPropExpr d c (Opn And ps)     = foldr1 (&&&) $ evalPropExpr d c <$> ps
+evalPropExpr d c (Opn Or ps)      = foldr1 (|||) $ evalPropExpr d c <$> ps
+evalPropExpr d c (Op2 Impl l r)   = evalPropExpr d c l ==> evalPropExpr d c r
+evalPropExpr d c (Op2 BiImpl l r) = evalPropExpr d c l <=> evalPropExpr d c r
+evalPropExpr d c (Chc dim l r)    = ite (d dim)
+                                    (evalPropExpr d c l)
+                                    (evalPropExpr d c r)
 
 -- | Pretty print a feature expression.
 prettyPropExpr :: VProp -> String
 prettyPropExpr = top
   where
     top :: VProp -> String
-    top (Op2 Or ls rs)     = intercalate " ∨ " $ sub <$> ls <> rs
-    top (Op2 And ls rs)    = intercalate " ∧ " $ sub <$> ls <> rs
-    top (Op2 Impl ls rs)   = foldMap sub ls ++ " → " ++ foldMap sub rs
-    top (Op2 BiImpl ls rs) = foldMap sub ls ++ " ↔ " ++ foldMap sub rs
+    top (Opn Or ps)     = intercalate " ∨ " $ sub <$> ps
+    top (Opn And ps)    = intercalate " ∧ " $ sub <$> ps
+    top (Op2 Impl l r)   = sub l ++ " → " ++ sub r
+    top (Op2 BiImpl l r) = sub l ++ " ↔ " ++ sub r
     top (Chc d ls rs) = show (dimName d) ++ "<" ++ top ls ++ ", " ++ top rs++ ">"
     top e           = sub e
 
@@ -335,10 +332,10 @@ instance Boolean VProp where
   true  = Lit True
   false = Lit False
   bnot  = Not
-  l &&& r = Op2 And    [l] [r]
-  l ||| r = Op2 Or     [l] [r]
-  l ==> r = Op2 Impl   [l] [r]
-  l <=> r = Op2 BiImpl [l] [r]
+  l &&& r = Opn And [l, r]
+  l ||| r = Opn Or [l, r]
+  (==>) = Op2 Impl
+  (<=>) = Op2 BiImpl
 
 instance SAT VProp where
   toPredicate = symbolicPropExpr
@@ -359,3 +356,4 @@ instance Arbitrary VProp where
 -- | Deep Seq instances for Criterion Benchmarking
 instance NFData VProp
 instance NFData Op2
+instance NFData Opn
