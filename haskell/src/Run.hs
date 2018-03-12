@@ -6,6 +6,7 @@ import qualified Data.Map.Strict as M
 import Control.Monad.RWS.Strict
 
 import qualified Data.Set            as Set
+import Data.Foldable                 (foldr')
 
 import Data.SBV                      (isSatisfiable)
 import Data.Maybe                    (fromJust, isJust)
@@ -103,19 +104,40 @@ modifySt vprop b = do
   let variables = vars vprop
   put (confs, Set.foldr' (M.adjust (const b)) vs variables)
 
+-- | Given a VProp update the VProp variables with their satisfiability results
+updateSt :: (MonadState SatDict m, Monad m) => VProp -> m VProp
+updateSt prop = do
+  (_, vs) <- get
+  let updatedVars = M.filter id vs
+      keys  = M.keys updatedVars
+  return $ foldr
+    (\var acc -> alterToLit var (const $ (M.!) updatedVars var) prop)
+    prop keys
+
+
 if' :: Bool -> a -> a -> a
 if' True a _  = a
-if' False a b = b
+if' False _ b = b
+
+-- | pick a term to evaluate
+select :: VProp -> VProp
+select (Opn And (x:_)) = x
 
 -- | main workhorse for running the SAT solver
 work :: ( MonadTrans t
         , MonadState SatDict (t IO)
         , MonadReader Opts (t IO)) => VProp -> t IO VProp
-work prop = do
+work prop@(Opn And ps) = do
   baselines <- asks runBaselines
   bAD <- asks runAD
   -- fix this antipattern later
-  if baselines then if' bAd runAndDecomp runBruteForce
+  if baselines
+    then if' bAD (runAndDecomp prop) (runBruteForce prop)
+    else do
+    let [p] = [p | p <- ps]
+    result <- lift . isSatisfiable . symbolicPropExpr $ p
+    modifySt p result
+
 
 
 
