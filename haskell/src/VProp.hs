@@ -222,8 +222,8 @@ replace conf v (Op2 a l r) = Op2 a (replace conf v l) (replace conf v r)
 replace conf v (Opn a ps)  = Opn a (replace conf v <$> ps)
 replace _    _ x           = x
 
-alterToLit :: (String -> Bool) -> VProp -> VProp
-alterToLit f (Ref x)     = Lit . f $ varName x
+alterToLit :: (Var -> Bool) -> VProp -> VProp
+alterToLit f (Ref x)     = Lit $ f x
 alterToLit f (Not x)     = Not $ alterToLit f x
 alterToLit f (Chc d l r) = Chc d (alterToLit f l) (alterToLit f r)
 alterToLit f (Opn a ps)  = Opn a $ alterToLit f <$> ps
