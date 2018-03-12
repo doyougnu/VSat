@@ -17,7 +17,9 @@ import VProp
 type SatDict = (M.Map Config Bool, M.Map Var Bool) -- keys may incur perf penalty
 
 -- | The optimizations that could be set
-data Opts = Opts { baseline :: Bool  -- ^ Run optimizations or not?
+data Opts = Opts { runAD :: Bool          -- ^ Run and decomp baseline
+                 , runBF :: Bool          -- ^ Run brute for baseline
+                 , runOpts :: Bool                   -- ^ Run optimizations or not?
                  , optimizations :: [VProp -> VProp] -- ^ a list of optimizations
                  }
 
@@ -29,14 +31,19 @@ type Env r = RWST Opts Log SatDict IO r -- ^ the monad stack
 
 -- | An empty reader monad environment, in the future read these from config file
 _emptyOpts :: Opts
-_emptyOpts = Opts { baseline = False -- set to use andDecomp
+_emptyOpts = Opts { runAD = False
+                  , runBF = False
+                  , runOpts = False
                   , optimizations = []
                   }
 
-_setOpts :: Bool -> Opts
-_setOpts b = Opts { baseline = b
-                  , optimizations = []
-                  }
+
+_setOpts :: Bool -> Bool -> Bool -> [VProp -> VProp] -> Opts
+_setOpts bAD bBF bOpt opts = Opts { runAD = bAD
+                                  , runBF = bBF
+                                  , runOpts = bOpt
+                                  , optimizations = opts
+                                  }
 
 
 
@@ -44,16 +51,19 @@ _setOpts b = Opts { baseline = b
 _runEnv :: Env r -> Opts -> SatDict -> IO (r, SatDict,  Log)
 _runEnv m opts st = runRWST m opts st
 
-
-runEnv :: Bool -> VProp -> IO (VProp, SatDict, Log)
-runEnv b x = _runEnv (work x) (_setOpts b) (initSt x)
+-- TODO use configurate and load the config from a file
+runEnv :: Bool -> Bool -> Bool -> [VProp -> VProp] -> VProp -> IO (VProp, SatDict, Log)
+runEnv bAD bBF bOpt opts x = _runEnv
+                             (work x)
+                             (_setOpts bAD bBF bOpt opts)
+                             (initSt x)
 
 
 -- | Given a VProp term generate the satisfiability map
 initSt :: VProp -> SatDict
 initSt prop = (sats, vs)
   where sats = M.fromList . fmap (\x -> (x, False)) . Set.toList $ paths prop
-        vs = M.fromList $ zip (Set.toList $ vars prop) (repeat False)
+        vs = M.fromSet (const False) (vars prop)
 
 
 -- | Some logging functions
@@ -86,14 +96,22 @@ runAndDecomp prop = do
   result <- lift . isSatisfiable . symbolicPropExpr $ (andDecomp prop)
   return . recompile prop . fmap (\(x, y) -> (x, show y)) . M.toList $ M.map (const result) sats
 
+-- | given a VProp term update the state with the result of a isSatisfiable check
+modifySt :: (MonadState SatDict m, Monad m) => VProp -> Bool -> m ()
+modifySt vprop b = do
+  (confs, vs) <- get
+  let variables = vars vprop
+  put (confs, Set.foldr' (M.adjust (const b)) vs variables)
 
 -- | main workhorse for running the SAT solver
 work :: ( MonadTrans t
         , MonadState SatDict (t IO)
         , MonadReader Opts (t IO)) => VProp -> t IO VProp
 work prop = do
-  b <- asks baseline
-  if b then runAndDecomp prop else runBruteForce prop
+  -- fix this antipattern later
+  (base, b) <- asks baseline
+  if base then runAndDecomp else runBruteForce
+
 
 
 work' :: ( MonadTrans t
