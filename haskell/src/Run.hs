@@ -105,8 +105,8 @@ modifySt vprop b = do
   put (confs, Set.foldr' (M.adjust (const b)) vs variables)
 
 -- | Given a VProp update the VProp variables with their satisfiability results
-updateSt :: (MonadState SatDict m, Monad m) => VProp -> m VProp
-updateSt prop = do
+updateProp :: (MonadState SatDict m, Monad m) => VProp -> m VProp
+updateProp prop = do
   (_, vs) <- get
   let updatedVars = M.filter id vs
       keys  = M.keys updatedVars
