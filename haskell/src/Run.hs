@@ -17,8 +17,8 @@ import VProp
 type SatDict = (M.Map Config Bool, M.Map Var Bool) -- keys may incur perf penalty
 
 -- | The optimizations that could be set
-data Opts = Opts { runAD :: Bool          -- ^ Run and decomp baseline
-                 , runBF :: Bool          -- ^ Run brute for baseline
+data Opts = Opts { runBaselines :: Bool              -- ^ Run baselines?
+                 , runAD :: Bool                     -- ^ run anddecomp baseline? else Brute Force
                  , runOpts :: Bool                   -- ^ Run optimizations or not?
                  , optimizations :: [VProp -> VProp] -- ^ a list of optimizations
                  }
@@ -31,16 +31,16 @@ type Env r = RWST Opts Log SatDict IO r -- ^ the monad stack
 
 -- | An empty reader monad environment, in the future read these from config file
 _emptyOpts :: Opts
-_emptyOpts = Opts { runAD = False
-                  , runBF = False
+_emptyOpts = Opts { runBaselines = False
+                  , runAD = False
                   , runOpts = False
                   , optimizations = []
                   }
 
 
 _setOpts :: Bool -> Bool -> Bool -> [VProp -> VProp] -> Opts
-_setOpts bAD bBF bOpt opts = Opts { runAD = bAD
-                                  , runBF = bBF
+_setOpts base bAD bOpt opts = Opts { runBaselines = base
+                                  , runAD = bAD
                                   , runOpts = bOpt
                                   , optimizations = opts
                                   }
@@ -53,9 +53,9 @@ _runEnv m opts st = runRWST m opts st
 
 -- TODO use configurate and load the config from a file
 runEnv :: Bool -> Bool -> Bool -> [VProp -> VProp] -> VProp -> IO (VProp, SatDict, Log)
-runEnv bAD bBF bOpt opts x = _runEnv
+runEnv base bAD bOpt opts x = _runEnv
                              (work x)
-                             (_setOpts bAD bBF bOpt opts)
+                             (_setOpts base bAD bOpt opts)
                              (initSt x)
 
 
@@ -103,14 +103,19 @@ modifySt vprop b = do
   let variables = vars vprop
   put (confs, Set.foldr' (M.adjust (const b)) vs variables)
 
+if' :: Bool -> a -> a -> a
+if' True a _  = a
+if' False a b = b
+
 -- | main workhorse for running the SAT solver
 work :: ( MonadTrans t
         , MonadState SatDict (t IO)
         , MonadReader Opts (t IO)) => VProp -> t IO VProp
 work prop = do
+  baselines <- asks runBaselines
+  bAD <- asks runAD
   -- fix this antipattern later
-  (base, b) <- asks baseline
-  if base then runAndDecomp else runBruteForce
+  if baselines then if' bAd runAndDecomp runBruteForce
 
 
 
