@@ -114,7 +114,7 @@ updateProp prop = do
     (\var acc -> alterToLit var (const $ (M.!) updatedVars var) prop)
     prop keys
 
-
+-- | If then else, the way it should've been defined in Prelude
 if' :: Bool -> a -> a -> a
 if' True a _  = a
 if' False _ b = b
@@ -127,16 +127,25 @@ select (Opn And (x:_)) = x
 work :: ( MonadTrans t
         , MonadState SatDict (t IO)
         , MonadReader Opts (t IO)) => VProp -> t IO VProp
-work prop@(Opn And ps) = do
+work prop = do
   baselines <- asks runBaselines
   bAD <- asks runAD
   -- fix this antipattern later
   if baselines
     then if' bAD (runAndDecomp prop) (runBruteForce prop)
-    else do
-    let [p] = [p | p <- ps]
-    result <- lift . isSatisfiable . symbolicPropExpr $ p
-    modifySt p result
+    else incrementalSolve prop
+
+-- | Solve a vprop expression by choosing a subterm, solving it, updating the
+-- state and repeating
+incrementalSolve :: ( MonadTrans t
+                    , MonadState SatDict (t IO)
+                    , MonadReader Opts (t IO)) => VProp -> t IO VProp
+incrementalSolve prop@(Opn And ps) =
+  do let [p] = [p' | p' <- ps]
+     result <- lift . isSatisfiable . symbolicPropExpr $ p
+     modifySt p result
+     updateProp prop
+incrementalSolve prop = incrementalSolve $ toCNF prop
 
 
 
