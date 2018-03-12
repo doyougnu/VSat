@@ -110,8 +110,8 @@ updateProp prop = do
   (_, vs) <- get
   let updatedVars = M.filter id vs
       keys  = M.keys updatedVars
-  return $ foldr
-    (\var acc -> alterToLit var (const $ (M.!) updatedVars var) prop)
+  return $ foldr'
+    (\var acc -> alterToLit var (const $ (M.!) updatedVars var) acc)
     prop keys
 
 -- | If then else, the way it should've been defined in Prelude
@@ -120,8 +120,8 @@ if' True a _  = a
 if' False _ b = b
 
 -- | pick a term to evaluate
-select :: VProp -> VProp
-select (Opn And (x:_)) = x
+-- select :: VProp -> VProp
+-- select (Opn And (x:_)) = x
 
 -- | main workhorse for running the SAT solver
 work :: ( MonadTrans t
@@ -141,11 +141,13 @@ incrementalSolve :: ( MonadTrans t
                     , MonadState SatDict (t IO)
                     , MonadReader Opts (t IO)) => VProp -> t IO VProp
 incrementalSolve prop@(Opn And ps) =
-  do let [p] = [p' | p' <- ps]
-     result <- lift . isSatisfiable . symbolicPropExpr $ p
-     modifySt p result
-     updateProp prop
-incrementalSolve prop = incrementalSolve $ toCNF prop
+  do -- let [p] = [p' | p' <- ps, isPlain p]
+     -- lift $ print ps
+     -- result <- lift . isSatisfiable . symbolicPropExpr $ p
+     -- modifySt p result
+     -- updateProp prop
+     return prop
+incrementalSolve prop = incrementalSolve $ toCNF prop -- infinite loop here
 
 
 

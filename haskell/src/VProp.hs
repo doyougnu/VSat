@@ -82,6 +82,15 @@ arbVProp n = frequency [ (1, fmap Ref genVar)
 -- | Generate a random prop term according to arbVProp
 genVProp :: IO VProp
 genVProp = generate arbitrary
+
+----------------------------- Predicates ---------------------------------------
+isPlain :: VProp -> Bool
+isPlain (Chc _ _ _) = False
+isPlain (Not x)     = isPlain x
+isPlain (Opn _ ps)    = any isPlain ps
+isPlain (Op2 _ l r) = isPlain l && isPlain r
+isPlain _           = True
+
 ----------------------------- Choice Manipulation ------------------------------
 -- | Wrapper around engine
 prune :: VProp -> VProp
