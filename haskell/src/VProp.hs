@@ -222,6 +222,14 @@ replace conf v (Op2 a l r) = Op2 a (replace conf v l) (replace conf v r)
 replace conf v (Opn a ps)  = Opn a (replace conf v <$> ps)
 replace _    _ x           = x
 
+alterToLit :: (String -> Bool) -> VProp -> VProp
+alterToLit f (Ref x)     = Lit . f $ varName x
+alterToLit f (Not x)     = Not $ alterToLit f x
+alterToLit f (Chc d l r) = Chc d (alterToLit f l) (alterToLit f r)
+alterToLit f (Opn a ps)  = Opn a $ alterToLit f <$> ps
+alterToLit f (Op2 a l r) = Op2 a (alterToLit f l) (alterToLit f r)
+alterToLit _ x           = x
+
 -- | helper function used to create seed value for fold just once
 -- _recompile :: Config -> String -> VProp
 -- _recompile conf = go (Map.toList conf)
@@ -298,10 +306,10 @@ distributeAndOr p           = p
 flatten :: VProp -> VProp
 flatten (Opn And ps) = Opn And $ foldr' helper [] $ flatten <$> ps
   where helper (Opn And vs) xs = vs <> xs
-        helper e          xs = e : xs
+        helper e          xs   = e : xs
 flatten (Opn Or ps) = Opn Or $ foldr' helper [] $ flatten <$> ps
   where helper (Opn Or vs) xs = vs <> xs
-        helper e          xs = e : xs
+        helper e          xs  = e : xs
 flatten (Op2 a l r) = Op2 a (flatten l) (flatten r)
 flatten (Chc d l r) = Chc d (flatten l) (flatten r)
 flatten (Not p)     = Not (flatten p)
