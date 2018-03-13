@@ -87,7 +87,7 @@ genVProp = generate arbitrary
 isPlain :: VProp -> Bool
 isPlain (Chc _ _ _) = False
 isPlain (Not x)     = isPlain x
-isPlain (Opn _ ps)    = any isPlain ps
+isPlain (Opn _ ps)  = all isPlain ps
 isPlain (Op2 _ l r) = isPlain l && isPlain r
 isPlain _           = True
 

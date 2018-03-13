@@ -10,7 +10,7 @@ main = do
         print prop
         C.defaultMain
           [ C.bgroup "Baselines"
-            [ bench "Brute Force" $ C.whnfIO (runEnv False prop)
-            , bench "And Decomposition" $ C.whnfIO (runEnv True prop)
+            [ bench "Brute Force" $ C.whnfIO (runEnv True False False [] prop)
+            , bench "And Decomposition" $ C.whnfIO (runEnv True True False [] prop)
             ]
           ]

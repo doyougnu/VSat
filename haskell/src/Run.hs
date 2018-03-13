@@ -4,6 +4,7 @@ module Run ( runEnv
 
 import qualified Data.Map.Strict as M
 import Control.Monad.RWS.Strict
+import Data.SBV                      (true, (&&&))
 
 import qualified Data.Set            as Set
 import Data.Foldable                 (foldr')
@@ -141,13 +142,18 @@ incrementalSolve :: ( MonadTrans t
                     , MonadState SatDict (t IO)
                     , MonadReader Opts (t IO)) => VProp -> t IO VProp
 incrementalSolve prop@(Opn And ps) =
-  do -- let [p] = [p' | p' <- ps, isPlain p]
-     -- lift $ print ps
-     -- result <- lift . isSatisfiable . symbolicPropExpr $ p
-     -- modifySt p result
-     -- updateProp prop
-     return prop
-incrementalSolve prop = incrementalSolve $ toCNF prop -- infinite loop here
+  do let [p] = [p' | p' <- ps, isPlain p'] -- solve the plain problems first
+     if null p
+       then do -- now eval choices
+       p <- ps
+       _ <- guard (isSatisfiable . symbolicPropExpr $ p)
+       return p
+       else do
+       result <- lift . isSatisfiable . symbolicPropExpr $ p
+       modifySt p result
+       np <- updateProp prop
+       incrementalSolve np
+incrementalSolve prop = incrementalSolve $ true &&& (toCNF prop)
 
 
 
