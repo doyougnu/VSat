@@ -4,7 +4,9 @@ module Run ( runEnv
 
 import qualified Data.Map.Strict as M
 import Control.Monad.RWS.Strict
-import Data.SBV                      (true, (&&&))
+import Data.SBV.Internals
+import Data.SBV
+import Data.SBV.Control
 
 import qualified Data.Set            as Set
 import Data.Foldable                 (foldr')
@@ -134,28 +136,21 @@ work prop = do
   -- fix this antipattern later
   if baselines
     then if' bAD (runAndDecomp prop) (runBruteForce prop)
-    else incrementalSolve prop
+    else if' bAD (runAndDecomp prop) (runBruteForce prop)
 
 -- | Solve a vprop expression by choosing a subterm, solving it, updating the
 -- state and repeating
-incrementalSolve :: ( MonadTrans t
-                    , MonadState SatDict (t IO)
-                    , MonadReader Opts (t IO)) => VProp -> t IO VProp
-incrementalSolve prop@(Opn And ps) =
-  do let [p] = [p' | p' <- ps, isPlain p'] -- solve the plain problems first
-     if null p
-       then do -- now eval choices
-       p <- ps
-       _ <- guard (isSatisfiable . symbolicPropExpr $ p)
-       return p
-       else do
-       result <- lift . isSatisfiable . symbolicPropExpr $ p
-       modifySt p result
-       np <- updateProp prop
-       incrementalSolve np
-incrementalSolve prop = incrementalSolve $ true &&& (toCNF prop)
-
-
+incrementalSolve :: VProp -> Symbolic (Maybe SMTModel)
+incrementalSolve prop = do
+  p <- symbolicPropExpr prop
+  constrain $ p
+  query $ do
+    c <- checkSat
+    case c of
+      Unk -> error "asdf"
+      Unsat -> return Nothing
+      Sat -> do a <- getModel
+                return (Just a)
 
 
 work' :: ( MonadTrans t
