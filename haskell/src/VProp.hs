@@ -119,8 +119,8 @@ selectVariant tbs (Chc t y n) = case Map.lookup t tbs of
                            Nothing    -> Nothing
                            Just True  -> selectVariant tbs y
                            Just False -> selectVariant tbs n
-selectVariant tb (Not x)      = Not   <$> selectVariant tb x
-selectVariant tb (Opn a ps) = liftM (Opn a) (sequence $ selectVariant tb <$> ps)
+selectVariant tb (Not x)     = Not <$> selectVariant tb x
+selectVariant tb (Opn a ps)  = liftM (Opn a) (sequence $ selectVariant tb <$> ps)
 selectVariant tb (Op2 a l r) = liftM2 (Op2 a)
                                (selectVariant tb l)
                                (selectVariant tb r)
@@ -327,6 +327,7 @@ flatten e           = e
 
 toCNF :: VProp -> VProp
 toCNF = flatten . distributeAndOr . moveNotIn . eliminateImpl
+
 ------------------------------ Evaluation --------------------------------------
 -- TODO fix this repetition
 -- | Evaluate a feature expression against a configuration.
