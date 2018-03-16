@@ -12,7 +12,7 @@ import qualified Data.Set            as Set
 import Data.Foldable                 (foldr')
 
 import Data.SBV                      (isSatisfiable)
-import Data.Maybe                    (fromJust, isJust)
+import Data.Maybe                    (fromJust, isJust, fromMaybe)
 
 import VProp
 
@@ -142,15 +142,37 @@ work prop = do
 -- state and repeating
 incrementalSolve :: VProp -> Symbolic (Maybe SMTModel)
 incrementalSolve prop = do
-  Just _p <- return $ Run.select prop
-  p <- symbolicPropExpr _p
-  constrain $ p
+  Just p <- return . Run.select $ toCNF prop
+  res <- incrementalQuery p Nothing
+  return res
+
+incrementalQuery :: VProp -> Maybe SMTModel -> Symbolic (Maybe SMTModel)
+incrementalQuery prop model = do
+  p <- symbolicPropExpr prop
+  constrain p
+  modelToConstraint model
   query $ do
     c <- checkSat
     case c of
       Unk -> error "asdf"
       Unsat -> return Nothing
-      Sat -> do a <- getModel
+      Sat -> do model' <- getModel
+                return $ Just model'
+
+assocToConstraint :: (String, CW) -> Symbolic ()
+assocToConstraint (var, val) = do v <- sBool var
+                                  constrain $ v .== (bToSb boolVal)
+                                    where boolVal = cwToBool val
+                                          bToSb True = true
+                                          bToSb False = false
+
+modelToConstraint :: Maybe SMTModel -> Symbolic ()
+modelToConstraint _model =
+  do model <- return $ fromMaybe emptyModel _model
+     mapM_ assocToConstraint (modelAssocs model)
+       where emptyModel = SMTModel {modelAssocs = [], modelObjectives = []}
+
+
 
 select :: VProp -> Maybe VProp
 select (Opn _ ps) = safeHead [ p | p <- ps ]
