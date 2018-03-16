@@ -57,7 +57,7 @@ genAlphaNum = elements ['a'..'z']
 
 -- | generate a list of only alphabetical characters and convert to Dim
 genAlphaNumStr :: Gen String
-genAlphaNumStr = listOf genAlphaNum
+genAlphaNumStr = flip suchThat (not . null) $ listOf genAlphaNum
 
 genDim :: Gen Dim
 genDim = Dim <$> (fmap . fmap) toUpper genAlphaNumStr
