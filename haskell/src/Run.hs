@@ -10,9 +10,14 @@ import Data.SBV.Control
 
 import qualified Data.Set            as Set
 import Data.Foldable                 (foldr')
+import Data.List                     (partition)
+import Data.Char                     (isUpper)
+import Control.Arrow                 ((***))
 
 import Data.SBV                      (isSatisfiable)
 import Data.Maybe                    (fromJust, isJust, fromMaybe)
+
+import Debug.Trace                   (trace)
 
 import VProp
 
@@ -101,21 +106,21 @@ runAndDecomp prop = do
   return . recompile prop . fmap (\(x, y) -> (x, show y)) . M.toList $ M.map (const result) sats
 
 -- | given a VProp term update the state with the result of a isSatisfiable check
-modifySt :: (MonadState SatDict m, Monad m) => VProp -> Bool -> m ()
-modifySt vprop b = do
-  (confs, vs) <- get
-  let variables = vars vprop
-  put (confs, Set.foldr' (M.adjust (const b)) vs variables)
+-- modifySt :: (MonadState SatDict m, Monad m) => VProp -> Bool -> m ()
+-- modifySt vprop b = do
+--   (confs, vs) <- get
+--   let variables = vars vprop
+--   put (confs, Set.foldr' (M.adjust (const b)) vs variables)
 
 -- | Given a VProp update the VProp variables with their satisfiability results
-updateProp :: (MonadState SatDict m, Monad m) => VProp -> m VProp
-updateProp prop = do
-  (_, vs) <- get
-  let updatedVars = M.filter id vs
-      keys  = M.keys updatedVars
-  return $ foldr'
-    (\var acc -> alterToLit var (const $ (M.!) updatedVars var) acc)
-    prop keys
+-- updateProp :: (MonadState SatDict m, Monad m) => VProp -> m VProp
+-- updateProp prop = do
+--   (_, vs) <- get
+--   let updatedVars = M.filter id vs
+--       keys  = M.keys updatedVars
+--   return $ foldr'
+--     (\var acc -> refToLit var (const $ (M.!) updatedVars var) acc)
+--     prop keys
 
 -- | If then else, the way it should've been defined in Prelude
 if' :: Bool -> a -> a -> a
@@ -138,17 +143,30 @@ work prop = do
     then if' bAD (runAndDecomp prop) (runBruteForce prop)
     else if' bAD (runAndDecomp prop) (runBruteForce prop)
 
+-- | given VProp, incrementally solve it using variational tricks and SBV
+incrementalSolve :: VProp -> [VProp -> VProp] -> Symbolic (Maybe SMTModel)
+incrementalSolve prop opts = do
+  let props = grabProps $ toCNF prop
+  selectAndSolve props Nothing
+  -- selectAndSolve ([Lit True, Lit True]) Nothing
+    where grabProps (Opn VProp.And props) = props
+          grabProps x                     = pure x
+
+
 -- | Solve a vprop expression by choosing a subterm, solving it, updating the
 -- state and repeating
-incrementalSolve :: VProp -> Symbolic (Maybe SMTModel)
-incrementalSolve prop = do
-  Just p <- return . Run.select $ toCNF prop
-  res <- incrementalQuery p Nothing
-  return res
+selectAndSolve :: [VProp] -> Maybe SMTModel -> Symbolic (Maybe SMTModel)
+selectAndSolve [] model = return model
+selectAndSolve (prop:ps) model = do
+  newModel <- incrementalQuery prop model
+  let ps' = (flip updateProp newModel <$> ps)
+  selectAndSolve ps' newModel
 
 incrementalQuery :: VProp -> Maybe SMTModel -> Symbolic (Maybe SMTModel)
+incrementalQuery (Lit _) model = return model
 incrementalQuery prop model = do
   p <- symbolicPropExpr prop
+  trace ("\nThe prop and model" ++ show (prop, model)) $ return ()
   constrain p
   modelToConstraint model
   query $ do
@@ -159,6 +177,15 @@ incrementalQuery prop model = do
       Sat -> do model' <- getModel
                 return $ Just model'
 
+updateProp :: VProp -> Maybe SMTModel -> VProp
+updateProp prop Nothing = prop
+updateProp prop (Just model) = selectedDims
+  where
+    assignments = modelAssocs model
+    (dims, vs) = partition (all isUpper . fst) assignments
+    replacedRefs = foldr' (\(var, val) accProp -> refToLit (Var var) (const $ cwToBool val) accProp) prop vs
+    selectedDims = pruneTagTree (M.fromList ((Dim *** cwToBool) <$> dims)) replacedRefs
+
 assocToConstraint :: (String, CW) -> Symbolic ()
 assocToConstraint (var, val) = do v <- sBool var
                                   constrain $ v .== (bToSb boolVal)
@@ -167,12 +194,14 @@ assocToConstraint (var, val) = do v <- sBool var
                                           bToSb False = false
 
 modelToConstraint :: Maybe SMTModel -> Symbolic ()
-modelToConstraint _model =
-  do model <- return $ fromMaybe emptyModel _model
-     mapM_ assocToConstraint (modelAssocs model)
-       where emptyModel = SMTModel {modelAssocs = [], modelObjectives = []}
+modelToConstraint Nothing = return ()
+modelToConstraint (Just model)
+  | isModelNull model = return ()
+  | otherwise = do
+      mapM_ assocToConstraint (modelAssocs model)
 
-
+isModelNull :: SMTModel -> Bool
+isModelNull SMTModel{modelAssocs=as, modelObjectives=os} = null as && null os
 
 select :: VProp -> Maybe VProp
 select (Opn _ ps) = safeHead [ p | p <- ps ]
