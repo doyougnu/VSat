@@ -45,11 +45,11 @@ data VProp
    | Not VProp
    | Opn Opn [VProp]
    | Op2 Op2 VProp VProp
-  deriving (Data,Eq,Generic,Typeable)
+  deriving (Data,Eq,Generic,Typeable, Show)
 
 -- | data constructor for binary operations
-data Op2 = Impl | BiImpl deriving (Eq,Generic,Data,Typeable)
-data Opn = And | Or deriving (Eq,Generic,Data,Typeable)
+data Op2 = Impl | BiImpl deriving (Eq,Generic,Data,Typeable, Show)
+data Opn = And | Or deriving (Eq,Generic,Data,Typeable, Show)
 
 -- | Generate only alphabetical characters
 genAlphaNum :: Gen Char
@@ -326,7 +326,16 @@ flatten (Not p)     = Not (flatten p)
 flatten e           = e
 
 toCNF :: VProp -> VProp
-toCNF = flatten . distributeAndOr . moveNotIn . eliminateImpl
+toCNF p = head $ [ p' | p' <- iterate fs p, isCNF p' ]
+  where fs = flatten . distributeAndOr . moveNotIn . eliminateImpl
+
+isCNF :: VProp -> Bool
+isCNF (Opn And ps) = True && all isCNF' ps
+isCNF x            = False
+
+isCNF' :: VProp -> Bool
+isCNF' (Opn And _) = False
+isCNF' x            = True
 
 ------------------------------ Evaluation --------------------------------------
 -- TODO fix this repetition
@@ -386,8 +395,8 @@ instance Boolean VProp where
 instance SAT VProp where
   toPredicate = symbolicPropExpr
 
-instance Show VProp where
-  show = prettyPropExpr
+-- instance Show VProp where
+--   show = prettyPropExpr
 
 -- | make prop mergeable so choices can use symbolic conditionals
 instance Mergeable VProp where
