@@ -231,14 +231,14 @@ replace conf v (Op2 a l r) = Op2 a (replace conf v l) (replace conf v r)
 replace conf v (Opn a ps)  = Opn a (replace conf v <$> ps)
 replace _    _ x           = x
 
-alterToLit :: Var -> (Var -> Bool) -> VProp -> VProp
-alterToLit v f a@(Ref x) | v == x = Lit $ f x
+refToLit :: Var -> (Var -> Bool) -> VProp -> VProp
+refToLit v f a@(Ref x) | v == x = Lit $ f x
                          | otherwise = a
-alterToLit v f (Not x)     = Not $ alterToLit v f x
-alterToLit v f (Chc d l r) = Chc d (alterToLit v f l) (alterToLit v f r)
-alterToLit v f (Opn a ps)  = Opn a $ alterToLit v f <$> ps
-alterToLit v f (Op2 a l r) = Op2 a (alterToLit v f l) (alterToLit v f r)
-alterToLit _ _ x           = x
+refToLit v f (Not x)     = Not $ refToLit v f x
+refToLit v f (Chc d l r) = Chc d (refToLit v f l) (refToLit v f r)
+refToLit v f (Opn a ps)  = Opn a $ refToLit v f <$> ps
+refToLit v f (Op2 a l r) = Op2 a (refToLit v f l) (refToLit v f r)
+refToLit _ _ x           = x
 
 -- | helper function used to create seed value for fold just once
 -- _recompile :: Config -> String -> VProp
