@@ -21,6 +21,7 @@ import           Data.Char           (toUpper)
 import           Test.QuickCheck     (Arbitrary, Gen, arbitrary, frequency,
                                       sized)
 import           Test.QuickCheck.Gen
+import Debug.Trace (trace)
 
 -- | A feature is a named, boolean configuration option.
 newtype Var = Var { varName :: String }
@@ -293,6 +294,7 @@ moveNotIn (Not p) = case p of
   Opn And ps -> Opn Or (moveNotIn . Not <$> ps)
   Opn Or  ps -> Opn And (moveNotIn . Not <$> ps)
   Not prop   -> prop
+  Chc d l r  -> Chc d r l
   prop       -> Not prop
 moveNotIn (Op2 a l r) = Op2 a (moveNotIn l) (moveNotIn r)
 moveNotIn (Opn a ps)  = Opn a (moveNotIn <$> ps)
@@ -326,16 +328,28 @@ flatten (Not p)     = Not (flatten p)
 flatten e           = e
 
 toCNF :: VProp -> VProp
-toCNF p = head $ [ p' | p' <- iterate fs p, isCNF p' ]
+toCNF (Chc d l r) = true &&& Chc d (toCNF l) (toCNF r)
+toCNF x           = _toCNF x
+
+_toCNF :: VProp -> VProp
+_toCNF p
+  | trace (show p ++ "\n") $ isCNF p = p
+  | otherwise = toCNF $ fs p
   where fs = flatten . distributeAndOr . moveNotIn . eliminateImpl
 
 isCNF :: VProp -> Bool
 isCNF (Opn And ps) = True && all isCNF' ps
-isCNF x            = False
+isCNF (Chc _ l r)  = True && isCNF l && isCNF r
+isCNF (Opn Or ps)  = True && all isCNF ps
+isCNF (Lit _)      = True
+isCNF (Ref _)      = True
+isCNF (Not (Lit _)) = True
+isCNF (Not (Ref _)) = True
+isCNF _            = False
 
 isCNF' :: VProp -> Bool
 isCNF' (Opn And _) = False
-isCNF' x            = True
+isCNF' _            = True
 
 ------------------------------ Evaluation --------------------------------------
 -- TODO fix this repetition

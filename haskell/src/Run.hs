@@ -4,9 +4,9 @@ module Run ( runEnv
 
 import qualified Data.Map.Strict as M
 import Control.Monad.RWS.Strict
-import Data.SBV.Internals
-import Data.SBV
-import Data.SBV.Control
+import qualified Data.SBV.Internals  as I
+import qualified Data.SBV            as S
+import qualified Data.SBV.Control    as SC
 
 import qualified Data.Set            as Set
 import Data.Foldable                 (foldr')
@@ -148,7 +148,6 @@ incrementalSolve :: VProp -> [VProp -> VProp] -> Symbolic (Maybe SMTModel)
 incrementalSolve prop opts = do
   let props = grabProps $ toCNF prop
   selectAndSolve props Nothing
-  -- selectAndSolve ([Lit True, Lit True]) Nothing
     where grabProps (Opn VProp.And props) = props
           grabProps x                     = pure x
 
@@ -163,19 +162,20 @@ selectAndSolve (prop:ps) model = do
   selectAndSolve ps' newModel
 
 incrementalQuery :: VProp -> Maybe SMTModel -> Symbolic (Maybe SMTModel)
-incrementalQuery (Lit _) model = return model
-incrementalQuery prop model = do
+incrementalQuery prop model
+  | isOnlyLits prop = return model
+  | otherwise = do
   p <- symbolicPropExpr prop
-  trace ("\nThe prop and model" ++ show (prop, model)) $ return ()
+  trace ("\n The prop \n" ++ show prop ++ "\n The model: \n" ++ show model) $ return ()
   constrain p
   modelToConstraint model
-  query $ do
-    c <- checkSat
+  SC.query $ do
+    c <- SC.checkSat
     case c of
-      Unk -> error "asdf"
-      Unsat -> return Nothing
-      Sat -> do model' <- getModel
-                return $ Just model'
+      SC.Unk -> error "asdf"
+      SC.Unsat -> return Nothing
+      SC.Sat -> do model' <- SC.getModel
+                   return $ Just model'
 
 updateProp :: VProp -> Maybe SMTModel -> VProp
 updateProp prop Nothing = prop
@@ -184,24 +184,36 @@ updateProp prop (Just model) = selectedDims
     assignments = modelAssocs model
     (dims, vs) = partition (all isUpper . fst) assignments
     replacedRefs = foldr' (\(var, val) accProp -> refToLit (Var var) (const $ cwToBool val) accProp) prop vs
-    selectedDims = pruneTagTree (M.fromList ((Dim *** cwToBool) <$> dims)) replacedRefs
+    selectedDims = toCNF $
+                   pruneTagTree
+                   (M.fromList ((Dim *** cwToBool) <$> dims)) replacedRefs
 
 assocToConstraint :: (String, CW) -> Symbolic ()
-assocToConstraint (var, val) = do v <- sBool var
-                                  constrain $ v .== (bToSb boolVal)
+assocToConstraint (var, val) = do v <- S.sBool var
+                                  constrain $ v S..== (bToSb boolVal)
                                     where boolVal = cwToBool val
-                                          bToSb True = true
-                                          bToSb False = false
+                                          bToSb True = S.true
+                                          bToSb False = S.false
 
 modelToConstraint :: Maybe SMTModel -> Symbolic ()
 modelToConstraint Nothing = return ()
 modelToConstraint (Just model)
   | isModelNull model = return ()
   | otherwise = do
+      trace ("\n adding constraints \n" ++ show model) $ return ()
       mapM_ assocToConstraint (modelAssocs model)
 
 isModelNull :: SMTModel -> Bool
 isModelNull SMTModel{modelAssocs=as, modelObjectives=os} = null as && null os
+
+isOnlyLits :: VProp -> Bool
+isOnlyLits (Lit _) = S.true
+isOnlyLits (Ref _) = S.false
+isOnlyLits (Chc _ _ _) = S.false
+isOnlyLits (VProp.Not p) = isOnlyLits p
+isOnlyLits (Opn _ ps) = all isOnlyLits ps
+isOnlyLits (Op2 _ l r) = isOnlyLits l && isOnlyLits r
+
 
 select :: VProp -> Maybe VProp
 select (Opn _ ps) = safeHead [ p | p <- ps ]
