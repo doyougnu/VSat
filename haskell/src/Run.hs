@@ -142,7 +142,8 @@ work prop = do
 -- state and repeating
 incrementalSolve :: VProp -> Symbolic (Maybe SMTModel)
 incrementalSolve prop = do
-  p <- symbolicPropExpr prop
+  Just _p <- return $ Run.select prop
+  p <- symbolicPropExpr _p
   constrain $ p
   query $ do
     c <- checkSat
@@ -150,8 +151,15 @@ incrementalSolve prop = do
       Unk -> error "asdf"
       Unsat -> return Nothing
       Sat -> do a <- getModel
-                return (Just a)
 
+select :: VProp -> Maybe VProp
+select (Opn _ ps) = safeHead [ p | p <- ps ]
+  where safeHead [] = Nothing
+        safeHead (x:_) = Just x
+select (Op2 _ l _) = Just l
+select (VProp.Not x) = Just x
+select (Chc _ l _) = Just l
+select x         = Just x
 
 work' :: ( MonadTrans t
          , MonadState SatDict (t IO)) => (Config, Maybe VProp) -> t IO ()
