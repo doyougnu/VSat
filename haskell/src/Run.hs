@@ -110,10 +110,6 @@ if' :: Bool -> a -> a -> a
 if' True a _  = a
 if' False _ b = b
 
--- | pick a term to evaluate
--- select :: VProp -> VProp
--- select (Opn And (x:_)) = x
-
 -- | main workhorse for running the SAT solver
 work :: ( MonadTrans t
         , MonadState SatDict (t IO)
@@ -127,7 +123,7 @@ work prop = do
     else if' bAD (runAndDecomp prop) (runBruteForce prop)
 
 -- | given VProp, incrementally solve it using variational tricks and SBV
-incrementalSolve :: VProp -> [VProp -> VProp] -> I.Symbolic (Maybe I.SMTModel)
+incrementalSolve :: VProp -> [VProp -> VProp] -> IO (Maybe I.SMTModel)
 incrementalSolve prop opts = do
   let props = grabProps $ toCNF prop
   selectAndSolve props Nothing
@@ -136,23 +132,22 @@ incrementalSolve prop opts = do
 
 -- | Solve a vprop expression by choosing a subterm, solving it, updating the
 -- state and repeating
-selectAndSolve :: [VProp] -> Maybe I.SMTModel -> I.Symbolic (Maybe I.SMTModel)
+selectAndSolve :: [VProp] -> Maybe I.SMTModel -> IO (Maybe I.SMTModel)
 selectAndSolve [] model = return model
 selectAndSolve (prop:ps) model = do
-  newModel <- incrementalQuery prop model
-  let ps' = (flip updateProp newModel <$> ps)
+  newModel <- S.runSMT $ incrementalQuery prop model
+  let ps' = (flip updateProp newModel <$> ps) -- TODO don't rewrite the props with their values, this is combinatoric, we want SBV to handle the naming and constraint propogation
   selectAndSolve ps' newModel
 
--- incrementalQuery :: VProp -> Maybe I.SMTModel -> I.Symbolic (Maybe I.SMTModel)
 incrementalQuery :: VProp -> Maybe I.SMTModel -> I.Symbolic (Maybe I.SMTModel)
 incrementalQuery prop model
   | isOnlyLits prop = return model
   | otherwise = do
-  p <- symbolicPropExpr prop
   trace ("\n The prop \n" ++ show prop ++ "\n The model: \n" ++ show model) $ return ()
-  I.constrain p
   assumptions <- modelToConstraint model
+  p <- symbolicPropExpr prop
   SC.query $ do
+    S.constrain p
     c <- SC.checkSatAssuming assumptions
     case c of
       SC.Unk -> error "asdf"
@@ -171,13 +166,6 @@ updateProp prop (Just model) = selectedDims
                    pruneTagTree
                    (M.fromList ((Dim *** I.cwToBool) <$> dims)) replacedRefs
 
--- assocToConstraint :: (String, I.CW) -> I.Symbolic ()
--- assocToConstraint (var, val) = do v <- S.sBool var
---                                   I.constrain $ v S..== (bToSb boolVal)
---                                     where boolVal = I.cwToBool val
---                                           bToSb True = S.true
---                                           bToSb False = S.false
-
 assocToConstraint :: (String, I.CW) -> S.Symbolic S.SBool
 assocToConstraint (var, val) = do v <- S.sBool var
                                   return $ v S..== (bToSb boolVal)
@@ -189,9 +177,7 @@ modelToConstraint :: Maybe I.SMTModel -> I.Symbolic [S.SBool]
 modelToConstraint Nothing = return []
 modelToConstraint (Just model)
   | isModelNull model = return []
-  | otherwise = do
-      trace ("\n adding constraints \n" ++ show model) $ return ()
-      mapM assocToConstraint (I.modelAssocs model)
+  | otherwise = mapM assocToConstraint (I.modelAssocs model)
 
 isModelNull :: I.SMTModel -> Bool
 isModelNull I.SMTModel{I.modelAssocs=as, I.modelObjectives=os} = null as && null os
@@ -220,3 +206,25 @@ work' (conf, plainProp) = when (isJust plainProp) $
   do (sats, vs) <- get
      result <- lift . isSatisfiable . symbolicPropExpr . fromJust $ plainProp
      put (M.insert conf result sats, vs)
+
+test :: S.Symbolic (Maybe I.SMTModel)
+test = do bools <- S.sBools ["a", "b"]
+          -- require the sum to be 10
+          S.constrain (head bools)
+          -- Go into the Query mode
+          SC.query $ do
+            -- Query the solver: Are the constraints satisfiable?
+            cs <- SC.checkSat
+            case cs of
+              SC.Unk   -> error "Solver said unknown!"
+              SC.Unsat -> return Nothing -- no solution!
+              SC.Sat   -> -- Query the values:
+                do S.constrain $ (head bools) S.&&& (last bools)
+
+                                  -- call checkSat again
+                   csNew <- SC.checkSat
+                   case csNew of
+                     SC.Unk   -> error "Solver said unknown!"
+                     SC.Unsat -> return Nothing
+                     SC.Sat   -> do m <- SC.getModel
+                                    return $ Just m
