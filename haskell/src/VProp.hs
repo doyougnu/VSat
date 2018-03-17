@@ -21,7 +21,6 @@ import           Data.Char           (toUpper)
 import           Test.QuickCheck     (Arbitrary, Gen, arbitrary, frequency,
                                       sized)
 import           Test.QuickCheck.Gen
-import Debug.Trace (trace)
 
 -- | A feature is a named, boolean configuration option.
 newtype Var = Var { varName :: String }
@@ -333,7 +332,7 @@ toCNF x           = _toCNF x
 
 _toCNF :: VProp -> VProp
 _toCNF p
-  | trace (show p ++ "\n") $ isCNF p = p
+  | isCNF p = p
   | otherwise = toCNF $ fs p
   where fs = flatten . distributeAndOr . moveNotIn . eliminateImpl
 

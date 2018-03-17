@@ -105,23 +105,6 @@ runAndDecomp prop = do
   result <- lift . isSatisfiable . symbolicPropExpr $ (andDecomp prop)
   return . recompile prop . fmap (\(x, y) -> (x, show y)) . M.toList $ M.map (const result) sats
 
--- | given a VProp term update the state with the result of a isSatisfiable check
--- modifySt :: (MonadState SatDict m, Monad m) => VProp -> Bool -> m ()
--- modifySt vprop b = do
---   (confs, vs) <- get
---   let variables = vars vprop
---   put (confs, Set.foldr' (M.adjust (const b)) vs variables)
-
--- | Given a VProp update the VProp variables with their satisfiability results
--- updateProp :: (MonadState SatDict m, Monad m) => VProp -> m VProp
--- updateProp prop = do
---   (_, vs) <- get
---   let updatedVars = M.filter id vs
---       keys  = M.keys updatedVars
---   return $ foldr'
---     (\var acc -> refToLit var (const $ (M.!) updatedVars var) acc)
---     prop keys
-
 -- | If then else, the way it should've been defined in Prelude
 if' :: Bool -> a -> a -> a
 if' True a _  = a
@@ -144,7 +127,7 @@ work prop = do
     else if' bAD (runAndDecomp prop) (runBruteForce prop)
 
 -- | given VProp, incrementally solve it using variational tricks and SBV
-incrementalSolve :: VProp -> [VProp -> VProp] -> Symbolic (Maybe SMTModel)
+incrementalSolve :: VProp -> [VProp -> VProp] -> I.Symbolic (Maybe I.SMTModel)
 incrementalSolve prop opts = do
   let props = grabProps $ toCNF prop
   selectAndSolve props Nothing
@@ -154,20 +137,20 @@ incrementalSolve prop opts = do
 
 -- | Solve a vprop expression by choosing a subterm, solving it, updating the
 -- state and repeating
-selectAndSolve :: [VProp] -> Maybe SMTModel -> Symbolic (Maybe SMTModel)
+selectAndSolve :: [VProp] -> Maybe I.SMTModel -> I.Symbolic (Maybe I.SMTModel)
 selectAndSolve [] model = return model
 selectAndSolve (prop:ps) model = do
   newModel <- incrementalQuery prop model
   let ps' = (flip updateProp newModel <$> ps)
   selectAndSolve ps' newModel
 
-incrementalQuery :: VProp -> Maybe SMTModel -> Symbolic (Maybe SMTModel)
+incrementalQuery :: VProp -> Maybe I.SMTModel -> I.Symbolic (Maybe I.SMTModel)
 incrementalQuery prop model
   | isOnlyLits prop = return model
   | otherwise = do
   p <- symbolicPropExpr prop
   trace ("\n The prop \n" ++ show prop ++ "\n The model: \n" ++ show model) $ return ()
-  constrain p
+  I.constrain p
   modelToConstraint model
   SC.query $ do
     c <- SC.checkSat
@@ -177,34 +160,34 @@ incrementalQuery prop model
       SC.Sat -> do model' <- SC.getModel
                    return $ Just model'
 
-updateProp :: VProp -> Maybe SMTModel -> VProp
+updateProp :: VProp -> Maybe I.SMTModel -> VProp
 updateProp prop Nothing = prop
 updateProp prop (Just model) = selectedDims
   where
-    assignments = modelAssocs model
+    assignments = I.modelAssocs model
     (dims, vs) = partition (all isUpper . fst) assignments
-    replacedRefs = foldr' (\(var, val) accProp -> refToLit (Var var) (const $ cwToBool val) accProp) prop vs
+    replacedRefs = foldr' (\(var, val) accProp -> refToLit (Var var) (const $ I.cwToBool val) accProp) prop vs
     selectedDims = toCNF $
                    pruneTagTree
-                   (M.fromList ((Dim *** cwToBool) <$> dims)) replacedRefs
+                   (M.fromList ((Dim *** I.cwToBool) <$> dims)) replacedRefs
 
-assocToConstraint :: (String, CW) -> Symbolic ()
+assocToConstraint :: (String, I.CW) -> I.Symbolic ()
 assocToConstraint (var, val) = do v <- S.sBool var
-                                  constrain $ v S..== (bToSb boolVal)
-                                    where boolVal = cwToBool val
+                                  I.constrain $ v S..== (bToSb boolVal)
+                                    where boolVal = I.cwToBool val
                                           bToSb True = S.true
                                           bToSb False = S.false
 
-modelToConstraint :: Maybe SMTModel -> Symbolic ()
+modelToConstraint :: Maybe I.SMTModel -> I.Symbolic ()
 modelToConstraint Nothing = return ()
 modelToConstraint (Just model)
   | isModelNull model = return ()
   | otherwise = do
       trace ("\n adding constraints \n" ++ show model) $ return ()
-      mapM_ assocToConstraint (modelAssocs model)
+      mapM_ assocToConstraint (I.modelAssocs model)
 
-isModelNull :: SMTModel -> Bool
-isModelNull SMTModel{modelAssocs=as, modelObjectives=os} = null as && null os
+isModelNull :: I.SMTModel -> Bool
+isModelNull I.SMTModel{I.modelAssocs=as, I.modelObjectives=os} = null as && null os
 
 isOnlyLits :: VProp -> Bool
 isOnlyLits (Lit _) = S.true
