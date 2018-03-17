@@ -134,7 +134,6 @@ incrementalSolve prop opts = do
     where grabProps (Opn VProp.And props) = props
           grabProps x                     = pure x
 
-
 -- | Solve a vprop expression by choosing a subterm, solving it, updating the
 -- state and repeating
 selectAndSolve :: [VProp] -> Maybe I.SMTModel -> I.Symbolic (Maybe I.SMTModel)
@@ -144,6 +143,7 @@ selectAndSolve (prop:ps) model = do
   let ps' = (flip updateProp newModel <$> ps)
   selectAndSolve ps' newModel
 
+-- incrementalQuery :: VProp -> Maybe I.SMTModel -> I.Symbolic (Maybe I.SMTModel)
 incrementalQuery :: VProp -> Maybe I.SMTModel -> I.Symbolic (Maybe I.SMTModel)
 incrementalQuery prop model
   | isOnlyLits prop = return model
@@ -151,9 +151,9 @@ incrementalQuery prop model
   p <- symbolicPropExpr prop
   trace ("\n The prop \n" ++ show prop ++ "\n The model: \n" ++ show model) $ return ()
   I.constrain p
-  modelToConstraint model
+  assumptions <- modelToConstraint model
   SC.query $ do
-    c <- SC.checkSat
+    c <- SC.checkSatAssuming assumptions
     case c of
       SC.Unk -> error "asdf"
       SC.Unsat -> return Nothing
@@ -171,20 +171,27 @@ updateProp prop (Just model) = selectedDims
                    pruneTagTree
                    (M.fromList ((Dim *** I.cwToBool) <$> dims)) replacedRefs
 
-assocToConstraint :: (String, I.CW) -> I.Symbolic ()
-assocToConstraint (var, val) = do v <- S.sBool var
-                                  I.constrain $ v S..== (bToSb boolVal)
-                                    where boolVal = I.cwToBool val
-                                          bToSb True = S.true
-                                          bToSb False = S.false
+-- assocToConstraint :: (String, I.CW) -> I.Symbolic ()
+-- assocToConstraint (var, val) = do v <- S.sBool var
+--                                   I.constrain $ v S..== (bToSb boolVal)
+--                                     where boolVal = I.cwToBool val
+--                                           bToSb True = S.true
+--                                           bToSb False = S.false
 
-modelToConstraint :: Maybe I.SMTModel -> I.Symbolic ()
-modelToConstraint Nothing = return ()
+assocToConstraint :: (String, I.CW) -> S.Symbolic S.SBool
+assocToConstraint (var, val) = do v <- S.sBool var
+                                  return $ v S..== (bToSb boolVal)
+  where boolVal = I.cwToBool val
+        bToSb True = S.true
+        bToSb False = S.false
+
+modelToConstraint :: Maybe I.SMTModel -> I.Symbolic [S.SBool]
+modelToConstraint Nothing = return []
 modelToConstraint (Just model)
-  | isModelNull model = return ()
+  | isModelNull model = return []
   | otherwise = do
       trace ("\n adding constraints \n" ++ show model) $ return ()
-      mapM_ assocToConstraint (I.modelAssocs model)
+      mapM assocToConstraint (I.modelAssocs model)
 
 isModelNull :: I.SMTModel -> Bool
 isModelNull I.SMTModel{I.modelAssocs=as, I.modelObjectives=os} = null as && null os
