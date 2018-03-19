@@ -20,6 +20,7 @@ import Data.Maybe                    (fromJust, isJust, fromMaybe)
 import Debug.Trace                   (trace)
 
 import VProp
+import V
 
 -- | The satisfiable dictionary, this is actually the "state" keys are configs
 -- and values are whether that config is satisfiable or not (a bool)
@@ -99,11 +100,17 @@ runBruteForce prop = do
 
 -- | Run the and decomposition baseline case, that is deconstruct every choice
 -- and then run the sat solver
-runAndDecomp :: (MonadTrans t, MonadState SatDict (t IO)) => VProp -> t IO VProp
-runAndDecomp prop = do
-  (sats, _) <- get
-  result <- lift . isSatisfiable . symbolicPropExpr $ (andDecomp prop)
-  return . recompile prop . fmap (\(x, y) -> (x, show y)) . M.toList $ M.map (const result) sats
+runAndDecomp :: VProp -> IO (Maybe I.SMTModel)
+runAndDecomp prop = S.runSMT $ do
+  p <- symbolicPropExpr $ (andDecomp prop)
+  S.constrain p
+  SC.query $ do
+    c <- SC.checkSat
+    case c of
+      SC.Unk -> error "asdf"
+      SC.Unsat -> return Nothing
+      SC.Sat -> do model' <- SC.getModel
+                   return $ Just model'
 
 -- | If then else, the way it should've been defined in Prelude
 if' :: Bool -> a -> a -> a
@@ -120,7 +127,12 @@ work prop = do
   -- fix this antipattern later
   if baselines
     then if' bAD (runAndDecomp prop) (runBruteForce prop)
-    else if' bAD (runAndDecomp prop) (runBruteForce prop)
+    else do
+    opts <- asks optimizations
+    result <- lift $ incrementalSolve prop opts
+    case result of
+      Just r -> return r
+      Nothing -> return Nothing
 
 -- | given VProp, incrementally solve it using variational tricks and SBV
 incrementalSolve :: VProp -> [VProp -> VProp] -> IO (Maybe I.SMTModel)
@@ -207,24 +219,7 @@ work' (conf, plainProp) = when (isJust plainProp) $
      result <- lift . isSatisfiable . symbolicPropExpr . fromJust $ plainProp
      put (M.insert conf result sats, vs)
 
-test :: S.Symbolic (Maybe I.SMTModel)
-test = do bools <- S.sBools ["a", "b"]
-          -- require the sum to be 10
-          S.constrain (head bools)
-          -- Go into the Query mode
-          SC.query $ do
-            -- Query the solver: Are the constraints satisfiable?
-            cs <- SC.checkSat
-            case cs of
-              SC.Unk   -> error "Solver said unknown!"
-              SC.Unsat -> return Nothing -- no solution!
-              SC.Sat   -> -- Query the values:
-                do S.constrain $ (head bools) S.&&& (last bools)
-
-                                  -- call checkSat again
-                   csNew <- SC.checkSat
-                   case csNew of
-                     SC.Unk   -> error "Solver said unknown!"
-                     SC.Unsat -> return Nothing
-                     SC.Sat   -> do m <- SC.getModel
-                                    return $ Just m
+-- fromModel :: I.SMTModel -> V String Bool
+-- fromModel I.SMTModel{ I.modelAssocs=assocs
+--                     , I.modelObjectives=os} = recompile
+--   where (choices, plains) = partitionBy (all isUpper) assocs
