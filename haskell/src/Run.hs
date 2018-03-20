@@ -14,13 +14,12 @@ import Data.List                     (partition)
 import Data.Char                     (isUpper)
 import Control.Arrow                 ((***))
 
-import Data.SBV                      (isSatisfiable)
 import Data.Maybe                    (fromJust, isJust, fromMaybe)
 
 import Debug.Trace                   (trace)
 
 import VProp
-import V
+import qualified V as V
 
 -- | The satisfiable dictionary, this is actually the "state" keys are configs
 -- and values are whether that config is satisfiable or not (a bool)
@@ -134,6 +133,15 @@ work prop = do
       Just r -> return r
       Nothing -> return Nothing
 
+-- | return all possible models incrementally
+incrementalSolveAll :: VProp -> [VProp -> VProp] -> IO [Maybe I.SMTModel]
+incrementalSolveAll prop opts = do
+  let props = grabProps $ toCNF prop
+      models_ = dimModels prop
+  mapM (selectAndSolve props . Just) models_
+    where grabProps (Opn VProp.And props) = props
+          grabProps x                     = pure x
+
 -- | given VProp, incrementally solve it using variational tricks and SBV
 incrementalSolve :: VProp -> [VProp -> VProp] -> IO (Maybe I.SMTModel)
 incrementalSolve prop opts = do
@@ -141,6 +149,7 @@ incrementalSolve prop opts = do
   selectAndSolve props Nothing
     where grabProps (Opn VProp.And props) = props
           grabProps x                     = pure x
+
 
 -- | Solve a vprop expression by choosing a subterm, solving it, updating the
 -- state and repeating
@@ -155,7 +164,6 @@ incrementalQuery :: VProp -> Maybe I.SMTModel -> I.Symbolic (Maybe I.SMTModel)
 incrementalQuery prop model
   | isOnlyLits prop = return model
   | otherwise = do
-  trace ("\n The prop \n" ++ show prop ++ "\n The model: \n" ++ show model) $ return ()
   assumptions <- modelToConstraint model
   p <- symbolicPropExpr prop
   SC.query $ do
@@ -184,6 +192,21 @@ assocToConstraint (var, val) = do v <- S.sBool var
   where boolVal = I.cwToBool val
         bToSb True = S.true
         bToSb False = S.false
+
+dimModels :: VProp -> [I.SMTModel]
+dimModels prop = mkModel <$> models''
+  where dims = Set.toList $ dimensions prop
+        models' = [(dimName d, b) | d <- dims, b <- [I.trueCW, I.falseCW]]
+        models'' = do
+          a <- models'
+          b <- models'
+          guard $ (fst a) /= (fst b)
+          return [a, b]
+        models = take (length models'' `div` 2) models''
+        mkModel m = I.SMTModel{I.modelObjectives=[], I.modelAssocs=m}
+
+
+
 
 modelToConstraint :: Maybe I.SMTModel -> I.Symbolic [S.SBool]
 modelToConstraint Nothing = return []
@@ -216,10 +239,17 @@ work' :: ( MonadTrans t
          , MonadState SatDict (t IO)) => (Config, Maybe VProp) -> t IO ()
 work' (conf, plainProp) = when (isJust plainProp) $
   do (sats, vs) <- get
-     result <- lift . isSatisfiable . symbolicPropExpr . fromJust $ plainProp
+     result <- lift . S.isSatisfiable . symbolicPropExpr . fromJust $ plainProp
      put (M.insert conf result sats, vs)
 
--- fromModel :: I.SMTModel -> V String Bool
--- fromModel I.SMTModel{ I.modelAssocs=assocs
---                     , I.modelObjectives=os} = recompile
---   where (choices, plains) = partitionBy (all isUpper) assocs
+getIsoDims :: VProp -> VProp
+getIsoDims (Opn a ps) = Opn a $ getIsoDims <$> filter isChc ps
+getIsoDims (Op2 a l r) = (getIsoDims l) S.&&& (getIsoDims r)
+getIsoDims (Not ps)    = getIsoDims ps
+getIsoDims (Chc d l r) = Chc d (getIsoDims l) (getIsoDims r)
+getIsoDims (Lit a)     = Lit False
+getIsoDims (Ref a)     = Ref . Var $ ""
+
+-- propToV :: VProp -> [V.V String String]
+-- propToV (And)
+-- propToV (Chc d l r) = V d (propToV l) (propToV r)

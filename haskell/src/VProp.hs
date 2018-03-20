@@ -91,6 +91,9 @@ isPlain (Opn _ ps)  = all isPlain ps
 isPlain (Op2 _ l r) = isPlain l && isPlain r
 isPlain _           = True
 
+isChc :: VProp -> Bool
+isChc = not . isPlain
+
 ----------------------------- Choice Manipulation ------------------------------
 -- | Wrapper around engine
 prune :: VProp -> VProp
