@@ -10,7 +10,7 @@ import qualified Data.SBV.Control    as SC
 
 import qualified Data.Set            as Set
 import Data.Foldable                 (foldr')
-import Data.List                     (partition)
+import Data.List                     (partition, (\\))
 import Data.Char                     (isUpper)
 import Control.Arrow                 ((***))
 
@@ -61,7 +61,7 @@ _runEnv :: Env r -> Opts -> SatDict -> IO (r, SatDict,  Log)
 _runEnv m opts st = runRWST m opts st
 
 -- TODO use configurate and load the config from a file
-runEnv :: Bool -> Bool -> Bool -> [VProp -> VProp] -> VProp -> IO (VProp, SatDict, Log)
+runEnv :: Bool -> Bool -> Bool -> [VProp -> VProp] -> VProp -> IO (Result, SatDict, Log)
 runEnv base bAD bOpt opts x = _runEnv
                              (work x)
                              (_setOpts base bAD bOpt opts)
@@ -95,7 +95,7 @@ runBruteForce prop = do
       plainProps = (\y -> (y, selectVariant y prop)) <$> confs
   mapM_ work' plainProps
   (newSats, _) <- get
-  return . recompile prop $ (\(x, y) -> (x, show y)) <$> M.toList newSats
+  return $ recompile prop $ (\(x, y) -> (x, show y)) <$> M.toList newSats
 
 -- | Run the and decomposition baseline case, that is deconstruct every choice
 -- and then run the sat solver
@@ -117,21 +117,27 @@ if' True a _  = a
 if' False _ b = b
 
 -- | main workhorse for running the SAT solver
+data Result = R (Maybe I.SMTModel)
+            | L [Maybe I.SMTModel]
+            | V VProp
+
 work :: ( MonadTrans t
         , MonadState SatDict (t IO)
-        , MonadReader Opts (t IO)) => VProp -> t IO VProp
+        , MonadReader Opts (t IO)) => VProp -> t IO Result
 work prop = do
   baselines <- asks runBaselines
   bAD <- asks runAD
   -- fix this antipattern later
   if baselines
-    then if' bAD (runAndDecomp prop) (runBruteForce prop)
+    then if bAD
+         then do r <- lift $ runAndDecomp prop
+                 return $ R r
+         else do r <- runBruteForce prop
+                 return $ V r
     else do
     opts <- asks optimizations
     result <- lift $ incrementalSolve prop opts
-    case result of
-      Just r -> return r
-      Nothing -> return Nothing
+    return $ R result
 
 -- | return all possible models incrementally
 incrementalSolveAll :: VProp -> [VProp -> VProp] -> IO [Maybe I.SMTModel]
@@ -157,18 +163,19 @@ selectAndSolve :: [VProp] -> Maybe I.SMTModel -> IO (Maybe I.SMTModel)
 selectAndSolve [] model = return model
 selectAndSolve (prop:ps) model = do
   newModel <- S.runSMT $ incrementalQuery prop model
-  let ps' = (flip updateProp newModel <$> ps) -- TODO don't rewrite the props with their values, this is combinatoric, we want SBV to handle the naming and constraint propogation
-  selectAndSolve ps' newModel
+  -- let ps' = (flip updateProp newModel <$> ps) -- TODO don't rewrite the props with their values, this is combinatoric, we want SBV to handle the naming and constraint propogation
+  selectAndSolve ps newModel
 
 incrementalQuery :: VProp -> Maybe I.SMTModel -> I.Symbolic (Maybe I.SMTModel)
 incrementalQuery prop model
   | isOnlyLits prop = return model
   | otherwise = do
-  assumptions <- modelToConstraint model
-  p <- symbolicPropExpr prop
+  -- assumptions <- modelToConstraint model
+  p <- symbolicPropExpr' prop model
   SC.query $ do
     S.constrain p
-    c <- SC.checkSatAssuming assumptions
+    -- c <- SC.checkSatAssuming assumptions
+    c <- SC.checkSat
     case c of
       SC.Unk -> error "asdf"
       SC.Unsat -> return Nothing
@@ -204,8 +211,6 @@ dimModels prop = mkModel <$> models''
           return [a, b]
         models = take (length models'' `div` 2) models''
         mkModel m = I.SMTModel{I.modelObjectives=[], I.modelAssocs=m}
-
-
 
 
 modelToConstraint :: Maybe I.SMTModel -> I.Symbolic [S.SBool]
@@ -250,6 +255,18 @@ getIsoDims (Chc d l r) = Chc d (getIsoDims l) (getIsoDims r)
 getIsoDims (Lit a)     = Lit False
 getIsoDims (Ref a)     = Ref . Var $ ""
 
--- propToV :: VProp -> [V.V String String]
--- propToV (And)
--- propToV (Chc d l r) = V d (propToV l) (propToV r)
+-- | Change a prop to a predicate, avoiding anything that has already been assigned
+symbolicPropExpr' :: VProp -> Maybe I.SMTModel -> S.Predicate
+symbolicPropExpr' prop Nothing = symbolicPropExpr prop
+symbolicPropExpr' prop (Just model) = do
+    let vs = (Set.toList (vars prop)) \\ (Var <$> assignedVs)
+        ds = (Set.toList (dimensions prop)) \\ (Dim <$> assignedDs)
+        assignments = fst <$> I.modelAssocs model
+        (assignedVs, assignedDs) = partition (all isUpper) assignments
+    syms <- fmap (M.fromList . zip vs) (S.sBools (map varName vs))
+    dims <- fmap (M.fromList . zip ds) (S.sBools (map dimName ds))
+    let look f = fromMaybe err (M.lookup f syms)
+        lookd d = fromMaybe errd (M.lookup d dims)
+    return (evalPropExpr lookd look prop)
+  where err = error "symbolicPropExpr: Internal error, no symbol found."
+        errd = error "symbolicPropExpr: Internal error, no dimension found."
