@@ -16,10 +16,7 @@ import Control.Arrow                 ((***))
 
 import Data.Maybe                    (fromJust, isJust, fromMaybe)
 
-import Debug.Trace                   (trace)
-
 import VProp
-import qualified V as V
 
 -- | The satisfiable dictionary, this is actually the "state" keys are configs
 -- and values are whether that config is satisfiable or not (a bool)
