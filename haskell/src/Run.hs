@@ -10,6 +10,8 @@ import qualified Data.SBV.Control    as SC
 
 import qualified Data.Set            as Set
 import Data.Foldable                 (foldr')
+import Data.Bitraversable            (bitraverse)
+import Control.Applicative           (liftA)
 import Data.List                     (partition, (\\))
 import Data.Char                     (isUpper)
 import Control.Arrow                 ((***))
@@ -17,6 +19,7 @@ import Control.Arrow                 ((***))
 import Data.Maybe                    (fromJust, isJust, fromMaybe)
 
 import VProp
+import V
 
 -- | The satisfiable dictionary, this is actually the "state" keys are configs
 -- and values are whether that config is satisfiable or not (a bool)
@@ -156,14 +159,48 @@ incrementalSolve prop opts = do
 
 -- | Solve a vprop expression by choosing a subterm, solving it, updating the
 -- state and repeating
-selectAndSolve :: [VProp] -> Maybe I.SMTModel -> IO (Maybe I.SMTModel)
-selectAndSolve [] model = return model
+selectAndSolve :: [VProp] -> Maybe I.SMTModel -> IO [[Maybe (V Dim I.SMTModel)]]
+selectAndSolve [] model = return [[sequence $ pure model]]
 selectAndSolve (prop:ps) model = do
   newModel <- S.runSMT $ incrementalQuery prop model
-  -- let ps' = (flip updateProp newModel <$> ps) -- TODO don't rewrite the props with their values, this is combinatoric, we want SBV to handle the naming and constraint propogation
   selectAndSolve ps newModel
 
-incrementalQuery :: VProp -> Maybe I.SMTModel -> I.Symbolic (Maybe I.SMTModel)
+
+solveChoice :: VProp -> Maybe I.SMTModel -> S.Symbolic [Maybe I.SMTModel]
+solveChoice prop model = do
+  let ps = fmap M.toList . Set.toList $ paths prop
+
+      introDims :: [[(Dim, Bool)]] -> S.Symbolic [[(S.SBool, Bool)]]
+      introDims = traverse $ traverse $ bitraverse (S.sBool . dimName) pure
+
+      dTosB :: Dim -> S.Symbolic S.SBool
+      dTosB = S.sBool . dimName
+
+      cConstrain :: (S.SBool, Bool) -> Maybe I.SMTModel -> SC.Query ()
+      cConstrain x@(dim, b) (Just mdl) = assocToConstraint x >>= S.constrain
+      cConstrain x Nothing  = assocToConstraint x >>= S.constrain
+
+      cQuery :: [(S.SBool, Bool)] -> S.Symbolic (Maybe I.SMTModel)
+      cQuery x = SC.query $ do SC.push 1
+                               mapM_ (flip cConstrain model) x
+                               c <- SC.checkSat
+                               case c of
+                                 SC.Unk -> error "asdf"
+                                 SC.Unsat -> return Nothing
+                                 SC.Sat -> do model' <- SC.getModel
+                                              SC.pop 1
+                                              return $ Just model'
+  introDims ps
+  p <- symbolicPropExpr' prop model
+  SC.query $ do
+    c <- SC.checkSat
+    case c of
+      SC.Unk -> error "asdf"
+      SC.Unsat -> return . pure $ Nothing
+      SC.Sat -> do model' <- SC.getModel
+                   return . pure $ Just model'
+
+incrementalQuery :: VProp -> Maybe I.SMTModel -> S.Symbolic (Maybe I.SMTModel)
 incrementalQuery prop model
   | isOnlyLits prop = return model
   | otherwise = do
@@ -190,11 +227,9 @@ updateProp prop (Just model) = selectedDims
                    pruneTagTree
                    (M.fromList ((Dim *** I.cwToBool) <$> dims)) replacedRefs
 
-assocToConstraint :: (String, I.CW) -> S.Symbolic S.SBool
-assocToConstraint (var, val) = do v <- S.sBool var
-                                  return $ v S..== (bToSb boolVal)
-  where boolVal = I.cwToBool val
-        bToSb True = S.true
+assocToConstraint :: (S.SBool, Bool) -> SC.Query S.SBool
+assocToConstraint (var, val) = return $ var S..== (bToSb val)
+  where bToSb True = S.true
         bToSb False = S.false
 
 dimModels :: VProp -> [I.SMTModel]
@@ -210,11 +245,11 @@ dimModels prop = mkModel <$> models''
         mkModel m = I.SMTModel{I.modelObjectives=[], I.modelAssocs=m}
 
 
-modelToConstraint :: Maybe I.SMTModel -> I.Symbolic [S.SBool]
-modelToConstraint Nothing = return []
-modelToConstraint (Just model)
-  | isModelNull model = return []
-  | otherwise = mapM assocToConstraint (I.modelAssocs model)
+-- modelToConstraint :: Maybe I.SMTModel -> I.Symbolic [S.SBool]
+-- modelToConstraint Nothing = return []
+-- modelToConstraint (Just model)
+--   | isModelNull model = return []
+--   | otherwise = mapM assocToConstraint (I.modelAssocs model)
 
 isModelNull :: I.SMTModel -> Bool
 isModelNull I.SMTModel{I.modelAssocs=as, I.modelObjectives=os} = null as && null os
@@ -226,7 +261,6 @@ isOnlyLits (Chc _ _ _) = S.false
 isOnlyLits (VProp.Not p) = isOnlyLits p
 isOnlyLits (Opn _ ps) = all isOnlyLits ps
 isOnlyLits (Op2 _ l r) = isOnlyLits l && isOnlyLits r
-
 
 select :: VProp -> Maybe VProp
 select (Opn _ ps) = safeHead [ p | p <- ps ]
@@ -243,14 +277,6 @@ work' (conf, plainProp) = when (isJust plainProp) $
   do (sats, vs) <- get
      result <- lift . S.isSatisfiable . symbolicPropExpr . fromJust $ plainProp
      put (M.insert conf result sats, vs)
-
-getIsoDims :: VProp -> VProp
-getIsoDims (Opn a ps) = Opn a $ getIsoDims <$> filter isChc ps
-getIsoDims (Op2 a l r) = (getIsoDims l) S.&&& (getIsoDims r)
-getIsoDims (Not ps)    = getIsoDims ps
-getIsoDims (Chc d l r) = Chc d (getIsoDims l) (getIsoDims r)
-getIsoDims (Lit a)     = Lit False
-getIsoDims (Ref a)     = Ref . Var $ ""
 
 -- | Change a prop to a predicate, avoiding anything that has already been assigned
 symbolicPropExpr' :: VProp -> Maybe I.SMTModel -> S.Predicate
