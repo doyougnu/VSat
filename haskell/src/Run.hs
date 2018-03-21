@@ -190,15 +190,9 @@ solveChoice prop model = do
                                  SC.Sat -> do model' <- SC.getModel
                                               SC.pop 1
                                               return $ Just model'
-  introDims ps
+  ds <- introDims ps
   p <- symbolicPropExpr' prop model
-  SC.query $ do
-    c <- SC.checkSat
-    case c of
-      SC.Unk -> error "asdf"
-      SC.Unsat -> return . pure $ Nothing
-      SC.Sat -> do model' <- SC.getModel
-                   return . pure $ Just model'
+  mapM cQuery ds
 
 incrementalQuery :: VProp -> Maybe I.SMTModel -> S.Symbolic (Maybe I.SMTModel)
 incrementalQuery prop model
