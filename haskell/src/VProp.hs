@@ -152,16 +152,10 @@ numTerms prop = go prop 0
     go (Opn _ ps) acc  = foldr' go acc ps
     go _       acc     = succ acc
 
+
 -- | Count the choices in a tree
-numChc :: VProp -> Integer
-numChc prop = go prop 0
-  where
-    go :: VProp -> Integer -> Integer
-    go (Chc _ l r) cnt = go l (succ cnt) + go r (succ cnt)
-    go (Op2 _ l r) cnt = go l (go r cnt)
-    go (Opn _ ps)  cnt = foldr' go cnt ps
-    go (Not a)     cnt = go a cnt
-    go _           cnt = cnt
+numChc :: VProp -> Int
+numChc = Set.size . dimensions
 
 
 -- | Depth of the Term tree
