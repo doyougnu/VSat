@@ -12,11 +12,12 @@ import qualified Data.Set            as Set
 import Data.Foldable                 (foldr')
 import Data.Bitraversable            (bitraverse)
 import Control.Applicative           (liftA)
-import Data.List                     (partition, (\\))
+import Data.List                     (partition, (\\), nub, lookup)
 import Data.Char                     (isUpper)
-import Control.Arrow                 ((***))
+import Control.Arrow                 ((***), (&&&))
 
 import Data.Maybe                    (fromJust, isJust, fromMaybe)
+import Debug.Trace (trace)
 
 import VProp
 import V
@@ -149,7 +150,7 @@ incrementalSolveAll prop opts = do
           grabProps x                     = pure x
 
 -- | given VProp, incrementally solve it using variational tricks and SBV
-incrementalSolve :: VProp -> [VProp -> VProp] -> IO (Maybe I.SMTModel)
+incrementalSolve :: VProp -> [VProp -> VProp] -> IO [[Maybe (V Dim I.SMTModel)]]
 incrementalSolve prop opts = do
   let props = grabProps $ toCNF prop
   selectAndSolve props Nothing
@@ -169,9 +170,18 @@ selectAndSolve (prop:ps) model = do
 solveChoice :: VProp -> Maybe I.SMTModel -> S.Symbolic [Maybe I.SMTModel]
 solveChoice prop model = do
   let ps = fmap M.toList . Set.toList $ paths prop
+      dims = Set.toList $ dimensions prop
+      fauxModel = I.SMTModel{ I.modelAssocs = zipWith (\x y -> (dimName x, y))
+                                              dims (repeat I.falseCW)
+                            , I.modelObjectives=[]
+                            }
+      newModel = combineModels model (Just fauxModel)
 
-      introDims :: [[(Dim, Bool)]] -> S.Symbolic [[(S.SBool, Bool)]]
-      introDims = traverse $ traverse $ bitraverse (S.sBool . dimName) pure
+      dimBoolMap :: [Dim] -> S.Symbolic [(Dim, S.SBool)]
+      dimBoolMap =  traverse (\x -> sequence (x, S.sBool $ dimName x))
+
+      mkPaths :: [(Dim, S.SBool)] -> [[(Dim, Bool)]] -> [[(S.SBool, Bool)]]
+      mkPaths dimBools paths = fmap (((fromJust . flip lookup dimBools) *** id )) <$> paths
 
       dTosB :: Dim -> S.Symbolic S.SBool
       dTosB = S.sBool . dimName
@@ -180,19 +190,42 @@ solveChoice prop model = do
       cConstrain x@(dim, b) (Just mdl) = assocToConstraint x >>= S.constrain
       cConstrain x Nothing  = assocToConstraint x >>= S.constrain
 
-      cQuery :: [(S.SBool, Bool)] -> S.Symbolic (Maybe I.SMTModel)
-      cQuery x = SC.query $ do SC.push 1
-                               mapM_ (flip cConstrain model) x
-                               c <- SC.checkSat
-                               case c of
-                                 SC.Unk -> error "asdf"
-                                 SC.Unsat -> return Nothing
-                                 SC.Sat -> do model' <- SC.getModel
-                                              SC.pop 1
-                                              return $ Just model'
-  ds <- introDims ps
-  p <- symbolicPropExpr' prop model
-  mapM cQuery ds
+      cQuery :: [(S.SBool, Bool)] -> SC.Query (Maybe I.SMTModel)
+      cQuery x = do SC.push 1
+                    mapM_ (flip cConstrain newModel) x
+                    c <- SC.checkSat
+                    case c of
+                      SC.Unk -> error "asdf"
+                      SC.Unsat -> return Nothing
+                      SC.Sat -> do model' <- SC.getModel
+                                   SC.pop 1
+                                   return $ Just model'
+
+  -- ds <- S.sBools $ dimName <$> dims
+  ds <- dimBoolMap dims
+  p <- symbolicPropExpr' prop newModel -- "A" isn't being avoided here
+  -- aa <- S.sBool "A"
+  -- b <- S.sBool "b"
+  -- c <- S.sBool "c"
+  -- d <- S.sBool "d"
+  -- e <- S.sBool "e"
+  -- S.constrain $ ((aa S.&&& b) S.||| ((S.bnot aa) S.&&& c)) S.&&& ((aa S.&&& d) S.||| ((S.bnot aa) S.&&& e))
+  -- mapM cQuery ds
+  -- mapM cQuery [[(aa, False)], [(aa, True)]]
+  S.constrain p
+  SC.query $ do
+    mapM cQuery (mkPaths ds ps)
+
+combineModels :: Maybe I.SMTModel -> Maybe I.SMTModel -> Maybe I.SMTModel
+combineModels Nothing a = a
+combineModels a Nothing = a
+combineModels Nothing Nothing = Nothing
+combineModels
+  (Just I.SMTModel{I.modelAssocs=aAs, I.modelObjectives=aOs})
+  (Just I.SMTModel{I.modelAssocs=bAs , I.modelObjectives=bOs}) = trace (show $ nub $ aAs ++ bAs)
+  (Just I.SMTModel{ I.modelAssocs= nub $ aAs ++ bAs
+            , I.modelObjectives = aOs ++ bOs})
+
 
 incrementalQuery :: VProp -> Maybe I.SMTModel -> S.Symbolic (Maybe I.SMTModel)
 incrementalQuery prop model
