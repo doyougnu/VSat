@@ -203,7 +203,7 @@ solveChoice prop model = do
 
   -- ds <- S.sBools $ dimName <$> dims
   ds <- dimBoolMap dims
-  p <- symbolicPropExpr' prop newModel -- "A" isn't being avoided here
+  p <- symbolicPropExpr' prop newModel ds
   -- aa <- S.sBool "A"
   -- b <- S.sBool "b"
   -- c <- S.sBool "c"
@@ -306,17 +306,19 @@ work' (conf, plainProp) = when (isJust plainProp) $
      put (M.insert conf result sats, vs)
 
 -- | Change a prop to a predicate, avoiding anything that has already been assigned
-symbolicPropExpr' :: VProp -> Maybe I.SMTModel -> S.Predicate
-symbolicPropExpr' prop Nothing = symbolicPropExpr prop
-symbolicPropExpr' prop (Just model) = do
+symbolicPropExpr' :: VProp -> Maybe I.SMTModel -> [(Dim, S.SBool)] -> S.Predicate
+symbolicPropExpr' prop Nothing as = symbolicPropExpr prop
+symbolicPropExpr' prop (Just model) as = do
     let vs = (Set.toList (vars prop)) \\ (Var <$> assignedVs)
         ds = (Set.toList (dimensions prop)) \\ (Dim <$> assignedDs)
         assignments = fst <$> I.modelAssocs model
-        (assignedVs, assignedDs) = partition (all isUpper) assignments
+        (assignedDs, assignedVs) = partition (all isUpper) assignments
     syms <- fmap (M.fromList . zip vs) (S.sBools (map varName vs))
     dims <- fmap (M.fromList . zip ds) (S.sBools (map dimName ds))
     let look f = fromMaybe err (M.lookup f syms)
-        lookd d = fromMaybe errd (M.lookup d dims)
+        lookd d = fromMaybe errd (M.lookup d (dims `M.union` (M.fromList as)))
+
     return (evalPropExpr lookd look prop)
+
   where err = error "symbolicPropExpr: Internal error, no symbol found."
         errd = error "symbolicPropExpr: Internal error, no dimension found."
