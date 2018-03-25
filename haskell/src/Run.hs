@@ -96,7 +96,7 @@ runBruteForce prop = do
       plainProps = (\y -> (y, selectVariant y prop)) <$> confs
   mapM_ work' plainProps
   (newSats, _) <- get
-  return $ recompile prop $ (\(x, y) -> (x, show y)) <$> M.toList newSats
+  return $ VProp.recompile prop $ (\(x, y) -> (x, show y)) <$> M.toList newSats
 
 -- | Run the and decomposition baseline case, that is deconstruct every choice
 -- and then run the sat solver
@@ -167,7 +167,8 @@ selectAndSolve (prop:ps) model = do
   selectAndSolve ps newModel
 
 
-solveChoice :: VProp -> Maybe I.SMTModel -> S.Symbolic [Maybe I.SMTModel]
+solveChoice :: VProp -> Maybe I.SMTModel
+  -> S.Symbolic (Maybe (V Dim (Maybe I.SMTModel)))
 solveChoice prop model = do
   let ps = fmap M.toList . Set.toList $ paths prop
       dims = Set.toList $ dimensions prop
@@ -177,44 +178,37 @@ solveChoice prop model = do
                             }
       newModel = combineModels model (Just fauxModel)
 
-      dimBoolMap :: [Dim] -> S.Symbolic [(Dim, S.SBool)]
+      dimBoolMap :: [(Dim)] -> S.Symbolic [(Dim, S.SBool)]
       dimBoolMap =  traverse (\x -> sequence (x, S.sBool $ dimName x))
 
-      mkPaths :: [(Dim, S.SBool)] -> [[(Dim, Bool)]] -> [[(S.SBool, Bool)]]
-      mkPaths dimBools paths = fmap (((fromJust . flip lookup dimBools) *** id )) <$> paths
+      mkPaths :: [(Dim, S.SBool)] -> [[(Dim, Bool)]] -> [[(Dim, S.SBool, Bool)]]
+      mkPaths dimBools paths =
+        fmap (\(dim, bl) -> (dim, fromJust $ lookup dim dimBools, bl)) <$> paths
 
       dTosB :: Dim -> S.Symbolic S.SBool
       dTosB = S.sBool . dimName
 
-      cConstrain :: (S.SBool, Bool) -> Maybe I.SMTModel -> SC.Query ()
-      cConstrain x@(dim, b) (Just mdl) = assocToConstraint x >>= S.constrain
-      cConstrain x Nothing  = assocToConstraint x >>= S.constrain
+      cConstrain :: (Dim, S.SBool, Bool) -> Maybe I.SMTModel -> SC.Query ()
+      cConstrain x@(_, dim, b) (Just mdl) = assocToConstraint (dim, b) >>= S.constrain
+      cConstrain (_, dim, b) Nothing  = assocToConstraint (dim, b) >>= S.constrain
 
-      cQuery :: [(S.SBool, Bool)] -> SC.Query (Maybe I.SMTModel)
+      cQuery :: [(Dim, S.SBool, Bool)] -> SC.Query (Maybe I.SMTModel)
       cQuery x = do SC.push 1
                     mapM_ (flip cConstrain newModel) x
                     c <- SC.checkSat
                     case c of
-                      SC.Unk -> error "asdf"
+                      SC.Unk   -> error "asdf"
                       SC.Unsat -> return Nothing
-                      SC.Sat -> do model' <- SC.getModel
-                                   SC.pop 1
-                                   return $ Just model'
+                      SC.Sat   -> do model' <- SC.getModel
+                                     SC.pop 1
+                                     return $ Just model'
 
-  -- ds <- S.sBools $ dimName <$> dims
   ds <- dimBoolMap dims
   p <- symbolicPropExpr' prop newModel ds
-  -- aa <- S.sBool "A"
-  -- b <- S.sBool "b"
-  -- c <- S.sBool "c"
-  -- d <- S.sBool "d"
-  -- e <- S.sBool "e"
-  -- S.constrain $ ((aa S.&&& b) S.||| ((S.bnot aa) S.&&& c)) S.&&& ((aa S.&&& d) S.||| ((S.bnot aa) S.&&& e))
-  -- mapM cQuery ds
-  -- mapM cQuery [[(aa, False)], [(aa, True)]]
   S.constrain p
-  SC.query $ do
-    mapM cQuery (mkPaths ds ps)
+  let madePaths = mkPaths ds ps
+  res <- SC.query $ do mapM (\x -> sequence (M.fromList x, cQuery x)) madePaths
+  return $ V.recompile res
 
 combineModels :: Maybe I.SMTModel -> Maybe I.SMTModel -> Maybe I.SMTModel
 combineModels Nothing a = a
@@ -222,26 +216,24 @@ combineModels a Nothing = a
 combineModels Nothing Nothing = Nothing
 combineModels
   (Just I.SMTModel{I.modelAssocs=aAs, I.modelObjectives=aOs})
-  (Just I.SMTModel{I.modelAssocs=bAs , I.modelObjectives=bOs}) = trace (show $ nub $ aAs ++ bAs)
-  (Just I.SMTModel{ I.modelAssocs= nub $ aAs ++ bAs
-            , I.modelObjectives = aOs ++ bOs})
+  (Just I.SMTModel{I.modelAssocs=bAs , I.modelObjectives=bOs}) =
+  (Just I.SMTModel{ I.modelAssocs= nub aAs ++ bAs
+                  , I.modelObjectives = aOs ++ bOs})
 
 
-incrementalQuery :: VProp -> Maybe I.SMTModel -> S.Symbolic (Maybe I.SMTModel)
-incrementalQuery prop model
-  | isOnlyLits prop = return model
-  | otherwise = do
-  -- assumptions <- modelToConstraint model
-  p <- symbolicPropExpr' prop model
-  SC.query $ do
-    S.constrain p
-    -- c <- SC.checkSatAssuming assumptions
-    c <- SC.checkSat
-    case c of
-      SC.Unk -> error "asdf"
-      SC.Unsat -> return Nothing
-      SC.Sat -> do model' <- SC.getModel
-                   return $ Just model'
+-- incrementalQuery :: VProp -> Maybe I.SMTModel -> S.Symbolic (Maybe I.SMTModel)
+-- incrementalQuery prop model
+--   | isOnlyLits prop = return model
+--   | otherwise = do
+--   p <- symbolicPropExpr' prop model
+--   SC.query $ do
+--     S.constrain p
+--     c <- SC.checkSat
+--     case c of
+--       SC.Unk -> error "asdf"
+--       SC.Unsat -> return Nothing
+--       SC.Sat -> do model' <- SC.getModel
+--                    return $ Just model'
 
 updateProp :: VProp -> Maybe I.SMTModel -> VProp
 updateProp prop Nothing = prop
@@ -270,13 +262,6 @@ dimModels prop = mkModel <$> models''
           return [a, b]
         models = take (length models'' `div` 2) models''
         mkModel m = I.SMTModel{I.modelObjectives=[], I.modelAssocs=m}
-
-
--- modelToConstraint :: Maybe I.SMTModel -> I.Symbolic [S.SBool]
--- modelToConstraint Nothing = return []
--- modelToConstraint (Just model)
---   | isModelNull model = return []
---   | otherwise = mapM assocToConstraint (I.modelAssocs model)
 
 isModelNull :: I.SMTModel -> Bool
 isModelNull I.SMTModel{I.modelAssocs=as, I.modelObjectives=os} = null as && null os
@@ -307,7 +292,7 @@ work' (conf, plainProp) = when (isJust plainProp) $
 
 -- | Change a prop to a predicate, avoiding anything that has already been assigned
 symbolicPropExpr' :: VProp -> Maybe I.SMTModel -> [(Dim, S.SBool)] -> S.Predicate
-symbolicPropExpr' prop Nothing as = symbolicPropExpr prop
+symbolicPropExpr' prop Nothing _ = symbolicPropExpr prop
 symbolicPropExpr' prop (Just model) as = do
     let vs = (Set.toList (vars prop)) \\ (Var <$> assignedVs)
         ds = (Set.toList (dimensions prop)) \\ (Dim <$> assignedDs)
