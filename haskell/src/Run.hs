@@ -9,11 +9,13 @@ import qualified Data.SBV            as S
 import qualified Data.SBV.Control    as SC
 
 import qualified Data.Set            as Set
-import Data.Foldable                 (foldr')
 import Data.List                     (partition, (\\), nub, lookup)
 import Data.Char                     (isUpper)
 
-import Data.Maybe                    (fromJust, fromMaybe)
+import GHC.Generics
+import Control.DeepSeq               (NFData)
+
+import Data.Maybe                    (fromJust, fromMaybe, catMaybes)
 
 import VProp
 import V
@@ -89,8 +91,8 @@ runBruteForce :: (MonadTrans t, MonadState SatDict (t IO)) => VProp -> t IO [S.S
 runBruteForce prop = do
   (_confs, _) <- get
   let confs = M.keys _confs
-      plainProps = (\y -> (y, selectVariant y prop)) <$> confs
-  plainModels <- lift $ mapM (S.sat . symbolicPropExpr . fromJust . snd) plainProps
+      plainProps = (\y -> sequence $ (y, selectVariant y prop)) <$> confs
+  plainModels <- lift $ mapM (S.sat . symbolicPropExpr . snd) $ catMaybes plainProps
   return plainModels
 
 -- | Run the and decomposition baseline case, that is deconstruct every choice
@@ -111,6 +113,9 @@ runAndDecomp prop = S.runSMT $ do
 data Result = R (Maybe I.SMTModel)
             | L [S.SatResult]
             | Vr (V Dim (Maybe I.SMTModel))
+            deriving Generic
+
+instance NFData Result
 
 work :: ( MonadTrans t
         , MonadState SatDict (t IO)

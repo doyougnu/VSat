@@ -45,7 +45,7 @@ data VProp
    | Not VProp
    | Opn Opn [VProp]
    | Op2 Op2 VProp VProp
-  deriving (Data,Eq,Generic,Typeable, Show)
+  deriving (Data,Eq,Generic,Typeable)
 
 -- | data constructor for binary operations
 data Op2 = Impl | BiImpl deriving (Eq,Generic,Data,Typeable, Show)
@@ -405,8 +405,8 @@ instance Boolean VProp where
 instance SAT VProp where
   toPredicate = symbolicPropExpr
 
--- instance Show VProp where
---   show = prettyPropExpr
+instance Show VProp where
+  show = prettyPropExpr
 
 -- | make prop mergeable so choices can use symbolic conditionals
 instance Mergeable VProp where

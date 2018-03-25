@@ -9,11 +9,15 @@ import Control.Monad          (ap)
 import Data.Monoid            ((<>))
 import Data.List              (sortOn)
 import qualified Data.Map.Strict     as Map
+import GHC.Generics
+import Control.DeepSeq        (NFData)
 
 -- | a choice data type, without the object language
-data V d a = Plain a | VChc d (V d a) (V d a) deriving Show
+data V d a = Plain a | VChc d (V d a) (V d a) deriving (Show,Generic)
 
 type VConfig d = Map.Map d Bool
+
+instance (NFData a, NFData d) => NFData (V d a)
 
 instance Bifunctor V where
   bimap _ g (Plain a) = Plain $ g a
