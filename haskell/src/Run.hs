@@ -12,7 +12,6 @@ import qualified Data.Set            as Set
 import Data.Foldable                 (foldr')
 import Data.List                     (partition, (\\), nub, lookup)
 import Data.Char                     (isUpper)
-import Control.Arrow                 ((***))
 
 import Data.Maybe                    (fromJust, fromMaybe)
 
@@ -133,7 +132,38 @@ work prop = do
 incrementalSolve :: VProp -> [VProp -> VProp] -> IO (V Dim (Maybe I.SMTModel))
 incrementalSolve prop opts = solveChoice prop Nothing
 
+-- | convert a list of dims to symbolic dims, and keep the association
+dimBoolMap :: [Dim] -> S.Symbolic [(Dim, S.SBool)]
+dimBoolMap =  traverse (\x -> sequence (x, S.sBool $ dimName x))
 
+-- | combine a list of dims and symbolic dims with a list of configs, this returns
+-- a config with the symbolic dim in the snd position
+mkPaths :: [(Dim, S.SBool)] -> [[(Dim, Bool)]] -> [[(Dim, S.SBool, Bool)]]
+mkPaths dimBools pths = fmap (\(dim, bl) ->
+                                (dim, fromJust $ lookup dim dimBools, bl)) <$> pths
+
+-- | Given a 3 tuple use the symbolic dim and the boolean to set a query constraint
+cConstrain :: (Dim, S.SBool, Bool) -> SC.Query ()
+cConstrain (_, dim, b) = assocToConstraint (dim, b) >>= S.constrain
+
+-- | perform a query with a choice expression. This assumes the query monad
+-- knows about the dimension variables, the plain variables, and the expression
+-- to solve. It then pushes teh assertion stack, constrains the dimension
+-- variables according to its config, then pops the assertion stack and returns
+-- the internal model
+cQuery :: [(Dim, S.SBool, Bool)] -> SC.Query (Maybe I.SMTModel)
+cQuery x = do SC.push 1
+              mapM_ cConstrain x
+              c <- SC.checkSat
+              case c of
+                SC.Unk   -> error "asdf"
+                SC.Unsat -> return Nothing
+                SC.Sat   -> do model' <- SC.getModel
+                               SC.pop 1
+                               return $ Just model'
+
+-- | given a prop, check if it is plain, if so run SMT normally, if not run the
+-- variational solver
 solveChoice :: VProp -> Maybe I.SMTModel -> IO (V Dim (Maybe I.SMTModel))
 solveChoice prop model
   | isPlain prop = S.runSMT $ do
@@ -153,37 +183,16 @@ solveChoice prop model
                                 }
           newModel = combineModels model (Just fauxModel)
 
-          dimBoolMap :: [Dim] -> S.Symbolic [(Dim, S.SBool)]
-          dimBoolMap =  traverse (\x -> sequence (x, S.sBool $ dimName x))
-
-          mkPaths :: [(Dim, S.SBool)] -> [[(Dim, Bool)]] -> [[(Dim, S.SBool, Bool)]]
-          mkPaths dimBools pths =
-            fmap (\(dim, bl) -> (dim, fromJust $ lookup dim dimBools, bl)) <$> pths
-
-          cConstrain :: (Dim, S.SBool, Bool) -> SC.Query ()
-          cConstrain (_, dim, b) = assocToConstraint (dim, b) >>= S.constrain
-
-          cQuery :: [(Dim, S.SBool, Bool)] -> SC.Query (Maybe I.SMTModel)
-          cQuery x = do SC.push 1
-                        mapM_ cConstrain x
-                        c <- SC.checkSat
-                        case c of
-                          SC.Unk   -> error "asdf"
-                          SC.Unsat -> return Nothing
-                          SC.Sat   -> do model' <- SC.getModel
-                                         SC.pop 1
-                                         return $ Just model'
-
       ds <- dimBoolMap dims
       p <- symbolicPropExpr' prop newModel ds
       S.constrain p
-      let madePaths = mkPaths ds ps
       res <- SC.query $ do
         mapM (\x -> sequence
                ( M.fromList $ fmap (\(dim, _, bl) -> (dim, bl)) x
-               , cQuery x)) madePaths
+               , cQuery x)) (mkPaths ds ps)
       return . fromJust $ V.recompile res
 
+-- | Given two models, if both are not nothing, combine them
 combineModels :: Maybe I.SMTModel -> Maybe I.SMTModel -> Maybe I.SMTModel
 combineModels Nothing a = a
 combineModels a Nothing = a
@@ -193,54 +202,12 @@ combineModels
   (Just I.SMTModel{ I.modelAssocs= nub aAs ++ bAs
                   , I.modelObjectives = aOs ++ bOs})
 
-
-updateProp :: VProp -> Maybe I.SMTModel -> VProp
-updateProp prop Nothing = prop
-updateProp prop (Just model) = selectedDims
-  where
-    assignments = I.modelAssocs model
-    (dims, vs) = partition (all isUpper . fst) assignments
-    replacedRefs = foldr' (\(var, val) accProp -> refToLit (Var var) (const $ I.cwToBool val) accProp) prop vs
-    selectedDims = toCNF $
-                   pruneTagTree
-                   (M.fromList ((Dim *** I.cwToBool) <$> dims)) replacedRefs
-
+-- | Given an association between a symbolic bool variable and a normal bool,
+-- add a representative constraint to the query monad
 assocToConstraint :: (S.SBool, Bool) -> SC.Query S.SBool
 assocToConstraint (var, val) = return $ var S..== (bToSb val)
   where bToSb True = S.true
         bToSb False = S.false
-
-dimModels :: VProp -> [I.SMTModel]
-dimModels prop = mkModel <$> models''
-  where dims = Set.toList $ dimensions prop
-        models' = [(dimName d, b) | d <- dims, b <- [I.trueCW, I.falseCW]]
-        models'' = do
-          a <- models'
-          b <- models'
-          guard $ (fst a) /= (fst b)
-          return [a, b]
-        models = take (length models'' `div` 2) models''
-        mkModel m = I.SMTModel{I.modelObjectives=[], I.modelAssocs=m}
-
-isModelNull :: I.SMTModel -> Bool
-isModelNull I.SMTModel{I.modelAssocs=as, I.modelObjectives=os} = null as && null os
-
-isOnlyLits :: VProp -> Bool
-isOnlyLits (Lit _) = S.true
-isOnlyLits (Ref _) = S.false
-isOnlyLits (Chc _ _ _) = S.false
-isOnlyLits (VProp.Not p) = isOnlyLits p
-isOnlyLits (Opn _ ps) = all isOnlyLits ps
-isOnlyLits (Op2 _ l r) = isOnlyLits l && isOnlyLits r
-
-select :: VProp -> Maybe VProp
-select (Opn _ ps) = safeHead [ p | p <- ps ]
-  where safeHead [] = Nothing
-        safeHead (x:_) = Just x
-select (Op2 _ l _) = Just l
-select (VProp.Not x) = Just x
-select (Chc _ l _) = Just l
-select x         = Just x
 
 -- | Change a prop to a predicate, avoiding anything that has already been assigned
 symbolicPropExpr' :: VProp -> Maybe I.SMTModel -> [(Dim, S.SBool)] -> S.Predicate
