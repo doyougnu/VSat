@@ -182,19 +182,18 @@ solveChoice prop model = do
       dimBoolMap =  traverse (\x -> sequence (x, S.sBool $ dimName x))
 
       mkPaths :: [(Dim, S.SBool)] -> [[(Dim, Bool)]] -> [[(Dim, S.SBool, Bool)]]
-      mkPaths dimBools paths =
-        fmap (\(dim, bl) -> (dim, fromJust $ lookup dim dimBools, bl)) <$> paths
+      mkPaths dimBools pths =
+        fmap (\(dim, bl) -> (dim, fromJust $ lookup dim dimBools, bl)) <$> pths
 
       dTosB :: Dim -> S.Symbolic S.SBool
       dTosB = S.sBool . dimName
 
-      cConstrain :: (Dim, S.SBool, Bool) -> Maybe I.SMTModel -> SC.Query ()
-      cConstrain x@(_, dim, b) (Just mdl) = assocToConstraint (dim, b) >>= S.constrain
-      cConstrain (_, dim, b) Nothing  = assocToConstraint (dim, b) >>= S.constrain
+      cConstrain :: (Dim, S.SBool, Bool) -> SC.Query ()
+      cConstrain (_, dim, b) = assocToConstraint (dim, b) >>= S.constrain
 
       cQuery :: [(Dim, S.SBool, Bool)] -> SC.Query (Maybe I.SMTModel)
       cQuery x = do SC.push 1
-                    mapM_ (flip cConstrain newModel) x
+                    mapM_ cConstrain x
                     c <- SC.checkSat
                     case c of
                       SC.Unk   -> error "asdf"
@@ -207,13 +206,16 @@ solveChoice prop model = do
   p <- symbolicPropExpr' prop newModel ds
   S.constrain p
   let madePaths = mkPaths ds ps
-  res <- SC.query $ do mapM (\x -> sequence (M.fromList x, cQuery x)) madePaths
+  res <- SC.query $ do
+    mapM (\x ->
+            sequence ( M.fromList $ fmap (\(dim, _, bl) -> (dim, bl)) x
+                     , cQuery x))
+      madePaths
   return $ V.recompile res
 
 combineModels :: Maybe I.SMTModel -> Maybe I.SMTModel -> Maybe I.SMTModel
 combineModels Nothing a = a
 combineModels a Nothing = a
-combineModels Nothing Nothing = Nothing
 combineModels
   (Just I.SMTModel{I.modelAssocs=aAs, I.modelObjectives=aOs})
   (Just I.SMTModel{I.modelAssocs=bAs , I.modelObjectives=bOs}) =
