@@ -10,14 +10,11 @@ import qualified Data.SBV.Control    as SC
 
 import qualified Data.Set            as Set
 import Data.Foldable                 (foldr')
-import Data.Bitraversable            (bitraverse)
-import Control.Applicative           (liftA)
 import Data.List                     (partition, (\\), nub, lookup)
 import Data.Char                     (isUpper)
-import Control.Arrow                 ((***), (&&&))
+import Control.Arrow                 ((***))
 
-import Data.Maybe                    (fromJust, isJust, fromMaybe)
-import Debug.Trace (trace)
+import Data.Maybe                    (fromJust, fromMaybe)
 
 import VProp
 import V
@@ -89,14 +86,13 @@ _logResult x = tell $ "Got result: " ++ show x
 
 -- | Run the brute force baseline case, that is select every plain variant and
 -- run them to the sat solver
-runBruteForce :: (MonadTrans t, MonadState SatDict (t IO)) => VProp -> t IO VProp
+runBruteForce :: (MonadTrans t, MonadState SatDict (t IO)) => VProp -> t IO [S.SatResult]
 runBruteForce prop = do
   (_confs, _) <- get
   let confs = M.keys _confs
       plainProps = (\y -> (y, selectVariant y prop)) <$> confs
-  mapM_ work' plainProps
-  (newSats, _) <- get
-  return $ VProp.recompile prop $ (\(x, y) -> (x, show y)) <$> M.toList newSats
+  plainModels <- lift $ mapM (S.sat . symbolicPropExpr . fromJust . snd) plainProps
+  return plainModels
 
 -- | Run the and decomposition baseline case, that is deconstruct every choice
 -- and then run the sat solver
@@ -112,15 +108,10 @@ runAndDecomp prop = S.runSMT $ do
       SC.Sat -> do model' <- SC.getModel
                    return $ Just model'
 
--- | If then else, the way it should've been defined in Prelude
-if' :: Bool -> a -> a -> a
-if' True a _  = a
-if' False _ b = b
-
 -- | main workhorse for running the SAT solver
 data Result = R (Maybe I.SMTModel)
-            | L [Maybe I.SMTModel]
-            | V VProp
+            | L [S.SatResult]
+            | Vr (V Dim (Maybe I.SMTModel))
 
 work :: ( MonadTrans t
         , MonadState SatDict (t IO)
@@ -131,87 +122,67 @@ work prop = do
   -- fix this antipattern later
   if baselines
     then if bAD
-         then do r <- lift $ runAndDecomp prop
-                 return $ R r
-         else do r <- runBruteForce prop
-                 return $ V r
+         then lift $ runAndDecomp prop >>= return . R
+         else runBruteForce prop >>= return . L
     else do
     opts <- asks optimizations
     result <- lift $ incrementalSolve prop opts
-    return $ R result
-
--- | return all possible models incrementally
-incrementalSolveAll :: VProp -> [VProp -> VProp] -> IO [Maybe I.SMTModel]
-incrementalSolveAll prop opts = do
-  let props = grabProps $ toCNF prop
-      models_ = dimModels prop
-  mapM (selectAndSolve props . Just) models_
-    where grabProps (Opn VProp.And props) = props
-          grabProps x                     = pure x
+    return $ Vr result
 
 -- | given VProp, incrementally solve it using variational tricks and SBV
-incrementalSolve :: VProp -> [VProp -> VProp] -> IO [[Maybe (V Dim I.SMTModel)]]
-incrementalSolve prop opts = do
-  let props = grabProps $ toCNF prop
-  selectAndSolve props Nothing
-    where grabProps (Opn VProp.And props) = props
-          grabProps x                     = pure x
+incrementalSolve :: VProp -> [VProp -> VProp] -> IO (V Dim (Maybe I.SMTModel))
+incrementalSolve prop opts = solveChoice prop Nothing
 
 
--- | Solve a vprop expression by choosing a subterm, solving it, updating the
--- state and repeating
-selectAndSolve :: [VProp] -> Maybe I.SMTModel -> IO [[Maybe (V Dim I.SMTModel)]]
-selectAndSolve [] model = return [[sequence $ pure model]]
-selectAndSolve (prop:ps) model = do
-  newModel <- S.runSMT $ incrementalQuery prop model
-  selectAndSolve ps newModel
-
-
-solveChoice :: VProp -> Maybe I.SMTModel
-  -> S.Symbolic (Maybe (V Dim (Maybe I.SMTModel)))
-solveChoice prop model = do
-  let ps = fmap M.toList . Set.toList $ paths prop
-      dims = Set.toList $ dimensions prop
-      fauxModel = I.SMTModel{ I.modelAssocs = zipWith (\x y -> (dimName x, y))
-                                              dims (repeat I.falseCW)
-                            , I.modelObjectives=[]
-                            }
-      newModel = combineModels model (Just fauxModel)
-
-      dimBoolMap :: [(Dim)] -> S.Symbolic [(Dim, S.SBool)]
-      dimBoolMap =  traverse (\x -> sequence (x, S.sBool $ dimName x))
-
-      mkPaths :: [(Dim, S.SBool)] -> [[(Dim, Bool)]] -> [[(Dim, S.SBool, Bool)]]
-      mkPaths dimBools pths =
-        fmap (\(dim, bl) -> (dim, fromJust $ lookup dim dimBools, bl)) <$> pths
-
-      dTosB :: Dim -> S.Symbolic S.SBool
-      dTosB = S.sBool . dimName
-
-      cConstrain :: (Dim, S.SBool, Bool) -> SC.Query ()
-      cConstrain (_, dim, b) = assocToConstraint (dim, b) >>= S.constrain
-
-      cQuery :: [(Dim, S.SBool, Bool)] -> SC.Query (Maybe I.SMTModel)
-      cQuery x = do SC.push 1
-                    mapM_ cConstrain x
-                    c <- SC.checkSat
+solveChoice :: VProp -> Maybe I.SMTModel -> IO (V Dim (Maybe I.SMTModel))
+solveChoice prop model
+  | isPlain prop = S.runSMT $ do
+      p <- symbolicPropExpr prop
+      S.constrain p
+      SC.query $ do c <- SC.checkSat
                     case c of
-                      SC.Unk   -> error "asdf"
-                      SC.Unsat -> return Nothing
-                      SC.Sat   -> do model' <- SC.getModel
-                                     SC.pop 1
-                                     return $ Just model'
+                      SC.Unk   -> error "SBV failed in plain solve Choice"
+                      SC.Unsat -> return $ Plain Nothing
+                      SC.Sat   -> SC.getModel >>= return . Plain . Just
+  | otherwise = S.runSMT $ do
+      let ps = fmap M.toList . Set.toList $ paths prop
+          dims = Set.toList $ dimensions prop
+          fauxModel = I.SMTModel{ I.modelAssocs = zipWith (\x y -> (dimName x, y))
+                                                  dims (repeat I.falseCW)
+                                , I.modelObjectives=[]
+                                }
+          newModel = combineModels model (Just fauxModel)
 
-  ds <- dimBoolMap dims
-  p <- symbolicPropExpr' prop newModel ds
-  S.constrain p
-  let madePaths = mkPaths ds ps
-  res <- SC.query $ do
-    mapM (\x ->
-            sequence ( M.fromList $ fmap (\(dim, _, bl) -> (dim, bl)) x
-                     , cQuery x))
-      madePaths
-  return $ V.recompile res
+          dimBoolMap :: [Dim] -> S.Symbolic [(Dim, S.SBool)]
+          dimBoolMap =  traverse (\x -> sequence (x, S.sBool $ dimName x))
+
+          mkPaths :: [(Dim, S.SBool)] -> [[(Dim, Bool)]] -> [[(Dim, S.SBool, Bool)]]
+          mkPaths dimBools pths =
+            fmap (\(dim, bl) -> (dim, fromJust $ lookup dim dimBools, bl)) <$> pths
+
+          cConstrain :: (Dim, S.SBool, Bool) -> SC.Query ()
+          cConstrain (_, dim, b) = assocToConstraint (dim, b) >>= S.constrain
+
+          cQuery :: [(Dim, S.SBool, Bool)] -> SC.Query (Maybe I.SMTModel)
+          cQuery x = do SC.push 1
+                        mapM_ cConstrain x
+                        c <- SC.checkSat
+                        case c of
+                          SC.Unk   -> error "asdf"
+                          SC.Unsat -> return Nothing
+                          SC.Sat   -> do model' <- SC.getModel
+                                         SC.pop 1
+                                         return $ Just model'
+
+      ds <- dimBoolMap dims
+      p <- symbolicPropExpr' prop newModel ds
+      S.constrain p
+      let madePaths = mkPaths ds ps
+      res <- SC.query $ do
+        mapM (\x -> sequence
+               ( M.fromList $ fmap (\(dim, _, bl) -> (dim, bl)) x
+               , cQuery x)) madePaths
+      return . fromJust $ V.recompile res
 
 combineModels :: Maybe I.SMTModel -> Maybe I.SMTModel -> Maybe I.SMTModel
 combineModels Nothing a = a
@@ -222,20 +193,6 @@ combineModels
   (Just I.SMTModel{ I.modelAssocs= nub aAs ++ bAs
                   , I.modelObjectives = aOs ++ bOs})
 
-
--- incrementalQuery :: VProp -> Maybe I.SMTModel -> S.Symbolic (Maybe I.SMTModel)
--- incrementalQuery prop model
---   | isOnlyLits prop = return model
---   | otherwise = do
---   p <- symbolicPropExpr' prop model
---   SC.query $ do
---     S.constrain p
---     c <- SC.checkSat
---     case c of
---       SC.Unk -> error "asdf"
---       SC.Unsat -> return Nothing
---       SC.Sat -> do model' <- SC.getModel
---                    return $ Just model'
 
 updateProp :: VProp -> Maybe I.SMTModel -> VProp
 updateProp prop Nothing = prop
@@ -284,13 +241,6 @@ select (Op2 _ l _) = Just l
 select (VProp.Not x) = Just x
 select (Chc _ l _) = Just l
 select x         = Just x
-
-work' :: ( MonadTrans t
-         , MonadState SatDict (t IO)) => (Config, Maybe VProp) -> t IO ()
-work' (conf, plainProp) = when (isJust plainProp) $
-  do (sats, vs) <- get
-     result <- lift . S.isSatisfiable . symbolicPropExpr . fromJust $ plainProp
-     put (M.insert conf result sats, vs)
 
 -- | Change a prop to a predicate, avoiding anything that has already been assigned
 symbolicPropExpr' :: VProp -> Maybe I.SMTModel -> [(Dim, S.SBool)] -> S.Predicate
