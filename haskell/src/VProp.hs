@@ -51,6 +51,7 @@ data VProp
 data Op2 = Impl | BiImpl deriving (Eq,Generic,Data,Typeable, Show)
 data Opn = And | Or deriving (Eq,Generic,Data,Typeable, Show)
 
+----------------------------- Generators ---------------------------------------
 -- | Generate only alphabetical characters
 genAlphaNum :: Gen Char
 genAlphaNum = elements ['a'..'z']
@@ -62,26 +63,34 @@ genAlphaNumStr = flip suchThat (not . null) $ listOf genAlphaNum
 genDim :: Gen Dim
 genDim = Dim <$> (fmap . fmap) toUpper genAlphaNumStr
 
+genSharedDim :: Gen Dim
+genSharedDim = elements $
+  zipWith  (\a b -> Dim $ toUpper <$> [a, b]) ['a'..'f'] ['a'..'f']
+
 genVar :: Gen Var
 genVar = Var <$> genAlphaNumStr
 
--- | Generate an Arbitrary VProp, these frequencies can change for different
--- depths
-arbVProp :: Int -> Gen VProp
-arbVProp 0 = fmap Ref genVar
-arbVProp n = frequency [ (1, fmap Ref genVar)
-                       , (4, liftM3 Chc genDim l l)
-                       , (3, fmap Not l)
-                       , (3, liftM2 (&&&) l l)
-                       , (3, liftM2 (|||) l l)
-                       , (3, liftM2 (==>) l l)
-                       , (3, liftM2 (<=>) l l)
-                       ]
-  where l = arbVProp (n `div` 2)
+-- | Generate an Arbitrary VProp, given a generator and counter these
+-- frequencies can change for different depths. The counter is merely for a
+-- `sized` call
+arbVProp :: Int -> Gen Dim -> Gen VProp
+arbVProp 0 _    = Ref <$> genVar
+arbVProp n gDim = frequency [ (1, fmap Ref genVar)
+                            , (4, liftM3 Chc gDim l l)
+                            , (3, fmap Not l)
+                            , (3, liftM2 (&&&) l l)
+                            , (3, liftM2 (|||) l l)
+                            , (3, liftM2 (==>) l l)
+                            , (3, liftM2 (<=>) l l)
+                            ]
+  where l = arbVProp (n `div` 2) gDim
 
 -- | Generate a random prop term according to arbVProp
-genVProp :: IO VProp
-genVProp = generate arbitrary
+genVPropSharing :: IO VProp
+genVPropSharing = generate $ sized $ flip arbVProp genSharedDim
+
+genVPropSharing = IO VProp
+genVPropSharing = generate arbitrary
 
 ----------------------------- Predicates ---------------------------------------
 isPlain :: VProp -> Bool
@@ -236,28 +245,6 @@ refToLit v f (Chc d l r) = Chc d (refToLit v f l) (refToLit v f r)
 refToLit v f (Opn a ps)  = Opn a $ refToLit v f <$> ps
 refToLit v f (Op2 a l r) = Op2 a (refToLit v f l) (refToLit v f r)
 refToLit _ _ x           = x
-
--- | helper function used to create seed value for fold just once
--- _recompile :: Config -> String -> VProp
--- _recompile conf = go (Map.toList conf)
---   where
---     go :: [(Dim, Bool)] -> String -> VProp
---     go [] val' = Ref . Var $ val'
---     go ((d, b):cs) val'
---           | b = Chc d (go cs val') (Ref (Var "__"))
---           | otherwise = Chc d (Ref (Var "__")) (go cs val')
-
--- | Given a list of configs with associated values, remake the tag tree by
--- folding over the config list
--- recompile :: [(Config, String)] -> Maybe VProp
--- recompile [] = Nothing
--- recompile xs = Just $ go (tail xs') (_recompile conf (show val))
---   where
---     xs' = reverse $ sortOn (Map.size . fst) xs
---     (conf, val) = head xs'
---     go :: [(Config, String)] -> VProp -> VProp
---     go []          acc = acc
---     go ((c, v):cs) acc = go cs $ replace c (show v) acc
 
 recompile :: VProp -> [(Config, String)] -> VProp
 recompile = foldr (\(conf, val) acc -> replace conf val acc)
@@ -416,7 +403,7 @@ instance Mergeable VProp where
 
 -- | arbritrary instance for the generator monad
 instance Arbitrary VProp where
-  arbitrary = sized arbVProp
+  arbitrary = sized $ flip arbVProp genSharedDim
 
 -- | Deep Seq instances for Criterion Benchmarking
 instance NFData VProp
