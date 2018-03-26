@@ -3,7 +3,7 @@ module VProp where
 import           Control.Monad       (liftM, liftM2, liftM3)
 import           Data.Data           (Data, Typeable)
 import           Data.Foldable       (foldr', foldr1)
-import           Data.List           (intercalate)
+import           Data.List           (intercalate, group, sort)
 import           Data.Monoid         ((<>))
 import           Data.String         (IsString)
 
@@ -85,12 +85,17 @@ arbVProp n gDim = frequency [ (1, fmap Ref genVar)
                             ]
   where l = arbVProp (n `div` 2) gDim
 
--- | Generate a random prop term according to arbVProp
-genVPropSharing :: IO VProp
-genVPropSharing = generate $ sized $ flip arbVProp genSharedDim
+-- | Generate a random prop term with no sharing among dimensions
+genVPropNoShare :: IO VProp
+genVPropNoShare = generate $ sized $ flip arbVProp genDim
 
-genVPropSharing = IO VProp
-genVPropSharing = generate arbitrary
+-- | Generate a random prop according to its arbritrary type class instance,
+-- this has a strong likelihood of sharing
+genVProp :: IO VProp
+genVProp = generate arbitrary
+
+genLargeVProp :: IO VProp
+genLargeVProp = generate $ scale (+100) arbitrary
 
 ----------------------------- Predicates ---------------------------------------
 isPlain :: VProp -> Bool
@@ -178,6 +183,15 @@ depth prop = go prop 0
     go (Chc _ l r) acc = max (go l acc) (go r acc)
     go _ acc           = acc
 
+-- | Given a prop return the maximum number of times a given dimension was shared
+maxShared :: VProp -> Int
+maxShared = maximum . fmap length . group . sort . go
+  where go :: VProp -> [String]
+        go (Chc d l r) = (dimName d) : (go l) ++ (go r)
+        go (Not l)     = go l
+        go (Opn _ ps)  = foldMap go ps
+        go (Op2 _ l r) = go l ++ go r
+        go _           = []
 --------------------------- Destructors -----------------------------------------
 -- | The set of features referenced in a feature expression.
 vars :: VProp -> Set Var
