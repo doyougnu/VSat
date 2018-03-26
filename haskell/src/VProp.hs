@@ -192,6 +192,7 @@ maxShared = maximum . fmap length . group . sort . go
         go (Opn _ ps)  = foldMap go ps
         go (Op2 _ l r) = go l ++ go r
         go _           = []
+
 --------------------------- Destructors -----------------------------------------
 -- | The set of features referenced in a feature expression.
 vars :: VProp -> Set Var
