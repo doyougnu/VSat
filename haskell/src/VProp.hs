@@ -76,7 +76,7 @@ genVar = Var <$> genAlphaNumStr
 arbVProp :: Int -> Gen Dim -> Gen VProp
 arbVProp 0 _    = Ref <$> genVar
 arbVProp n gDim = frequency [ (1, fmap Ref genVar)
-                            , (4, liftM3 Chc gDim l l)
+                            , (5, liftM3 Chc gDim l l)
                             , (3, fmap Not l)
                             , (3, liftM2 (&&&) l l)
                             , (3, liftM2 (|||) l l)
@@ -86,16 +86,16 @@ arbVProp n gDim = frequency [ (1, fmap Ref genVar)
   where l = arbVProp (n `div` 2) gDim
 
 -- | Generate a random prop term with no sharing among dimensions
-genVPropNoShare :: IO VProp
-genVPropNoShare = generate $ sized $ flip arbVProp genDim
+vPropNoShare :: Gen VProp
+vPropNoShare = sized $ flip arbVProp genDim
 
 -- | Generate a random prop according to its arbritrary type class instance,
 -- this has a strong likelihood of sharing
 genVProp :: IO VProp
 genVProp = generate arbitrary
 
-genLargeVProp :: IO VProp
-genLargeVProp = generate $ scale (+100) arbitrary
+mkLargeVProp :: Gen VProp -> Gen VProp
+mkLargeVProp = scale (+1000)
 
 ----------------------------- Predicates ---------------------------------------
 isPlain :: VProp -> Bool
@@ -185,13 +185,16 @@ depth prop = go prop 0
 
 -- | Given a prop return the maximum number of times a given dimension was shared
 maxShared :: VProp -> Int
-maxShared = maximum . fmap length . group . sort . go
+maxShared = safeMaximum . fmap length . group . sort . go
   where go :: VProp -> [String]
         go (Chc d l r) = (dimName d) : (go l) ++ (go r)
         go (Not l)     = go l
         go (Opn _ ps)  = foldMap go ps
         go (Op2 _ l r) = go l ++ go r
         go _           = []
+
+        safeMaximum [] = 0
+        safeMaximum xs = maximum xs
 
 --------------------------- Destructors -----------------------------------------
 -- | The set of features referenced in a feature expression.
