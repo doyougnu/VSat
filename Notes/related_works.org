@@ -1,0 +1,97 @@
+#+AUTHOR: Jeffrey Young
+#+TITLE: VSat Troubles and Relations
+#+DATE: April 2, 2017
+
+# Fix the margins
+#+LATEX_HEADER: \usepackage[margin=1in]{geometry}
+#+LATEX_HEADER: \usepackage{amssymb}
+
+# Remove section numbers, no table of contents
+#+OPTIONS: toc:nil
+#+options: num:nil
+
+# Set the article class
+#+LaTeX_CLASS: article
+#+LaTeX_CLASS_OPTIONS: [10pt, letterpaper]
+
+* Problems
+  After working on VSAT for several months several things are increasingly clear:
+
+** Results
+   Recompiling plain results to variational results is expensive. A traversal of
+   the tree spitting effects is more apt
+
+** The Dimension issue
+   having to carry around a config for any branch is bad practice and wasteful.
+   Furthermore this limits the ability of variation to compose, become monoidal
+   or be a proper category. All bad signs
+
+** Variational Patterns
+   I keep observing several patterns:
+
+*** I want a variational x
+    the typical pattern is to embed choices into variational x and then make
+    ad-hoc solutions for composing variational elements with plain elements
+
+*** Maintaining a store
+    Because variational things do not typically compose neatly we are always
+    required to define and visit a store of selections or effects
+
+
+* Major things that would be nice to have
+** A bijection of results
+   some sort of encoding of results that is a bijection to the natural numbers.
+   If we had such a thing then I could look at a result, run the encoder and
+   say, oh this must have come from this exact config
+
+** A mathematical model of variation
+   All of the issues laid out here relate to this one. At its heart we are
+   designing variational x, v-x, for every x, what we need is a general,
+   variational model from which to embed systems into.
+
+* Major unanswered questions
+** Are we missing a constructor
+   In the common formulation of variation we have two data constructors V and
+   Plain, V for choices and Plain for plain values. Perhaps we are missing a
+   constructor, Determined that says that this value is and can only be the
+   result of a choice.
+** Choices do not compose cleanly, why?
+** what is the topology of variation?
+   We can use ternary to count variation terms (0 for undetermined, 1 for true,
+   2 for false) is there a topology in any configuration space then?
+** Do we have the right representation?
+   We have continually modeled variation as a binary tree. This typically means
+   we must do lots of traversals, insertion, deletion and rotations don't make
+   as much sense and variational datastructures become hyper-structures. Perhaps
+   we are better off this a table or some other encoding?
+
+* Leads
+** Kleene's ternary logic precisely describes variational logic
+** Halpern and Pearl's semantic equational models
+   These models are an entailment |= of variational models exactly. It is only
+   that they are stochastic in nature with flavors of bayesian and fisherian
+   statistics. Our models are derived from them by the following: Every
+   dimension is an exogeneous variable, every other variable is endogenous. The
+   graph space upon selection is mutated by exogenous variables, this
+   corresponds to our tree pruning, and selection routines.
+** Ternary Sierpinski Triangles
+   If you encode dimensions in ternary (because we have a ternary logic) with 0
+   as undetermined, 1 as the true branch, 2 as the false branch, then the
+   configuration space **of any** variational expression forms a sierspinski
+   triangle. This entails several things:
+   1. Each possible configuration will be points on the triangles
+   2. We can use barycentric coordinates to describe those points e.g. the configs
+   3. We can translate, rotate, and move from one configuration to another very
+      easily
+   4. Most importantly, we can draw any subtriangle **with no knowledge** of the
+      larger triangles. So this will likely be a more compact representation of
+      our config space then using a map of configs and we can select a
+      dimension, and carry that information cheaply to other dimensions when we
+      encounter them.
+
+* References
+  - http://ftp.cs.ucla.edu/pub/stat_ser/R266-part2.pdf
+  - http://ftp.cs.ucla.edu/pub/stat_ser/R266-part1.pdf
+  - http://ftp.cs.ucla.edu/pub/stat_ser/R273-U.pdf
+  - https://en.wikipedia.org/wiki/Barycentric_coordinates_(mathematics)#Barycentric_coordinates_on_triangles
+  - https://en.wikipedia.org/wiki/Sierpinski_triangle#Properties
