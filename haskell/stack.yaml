@@ -1,7 +1,6 @@
 flags: {}
 packages:
-- .
-system-ghc: false
+system-ghc: true
 extra-deps: []
 resolver: lts-10.7
 build:

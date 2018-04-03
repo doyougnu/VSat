@@ -197,6 +197,23 @@ solveChoice prop model
                , cQuery x)) (mkPaths ds ps)
       return . fromJust $ V.recompile res
 
+solveChoiceAgain :: VProp -> S.Symbolic (V Dim a)
+solveChoiceAgain (Chc d l r) = do
+  d' <- S.sBool $ dimName d
+  lq <- SC.query $ do
+    SC.push 1
+    S.constrain $ d' S..== S.true
+    res <- solveChoiceAgain l
+    SC.pop 1
+    return res
+  rq <- SC.query $ do
+    SC.push 1
+    S.constrain $ d' S..== S.false
+    res <- solveChoiceAgain l
+    SC.pop 1
+    return res
+  return $ VChc d lq rq
+
 -- | Given two models, if both are not nothing, combine them
 combineModels :: Maybe I.SMTModel -> Maybe I.SMTModel -> Maybe I.SMTModel
 combineModels Nothing a = a
