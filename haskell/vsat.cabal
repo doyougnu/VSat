@@ -45,6 +45,7 @@ executable vsat
   build-depends:       base
                      , vsat
                      , criterion
+                     , QuickCheck
   default-language:    Haskell2010
 
 benchmark baselines
@@ -55,7 +56,7 @@ benchmark baselines
                      , vsat
                      , criterion
                      , QuickCheck
-  ghc-options:         -O2 -threaded -fno-full-laziness
+  ghc-options:         -O2 -threaded -rtsopts -with-rtsopts=-N -fno-full-laziness
   default-language:    Haskell2010
 
 test-suite vsat-test
