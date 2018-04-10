@@ -95,7 +95,7 @@ genVProp :: IO VProp
 genVProp = generate arbitrary
 
 mkLargeVProp :: Gen VProp -> Gen VProp
-mkLargeVProp = scale (+1000)
+mkLargeVProp = scale (+100)
 
 ----------------------------- Predicates ---------------------------------------
 isPlain :: VProp -> Bool
