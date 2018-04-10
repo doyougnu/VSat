@@ -88,17 +88,19 @@ _logResult x = tell $ "Got result: " ++ show x
 -- | Run the brute force baseline case, that is select every plain variant and
 -- run them to the sat solver
 runBruteForce :: (MonadTrans t, MonadState SatDict (t IO)) => VProp -> t IO [S.SatResult]
-runBruteForce prop = do
+runBruteForce prop = {-# SCC "brute_force"#-} do
   (_confs, _) <- get
   let confs = M.keys _confs
       plainProps = (\y -> sequence $ (y, selectVariant y prop)) <$> confs
+  -- this line is always throwing a Nothing
   plainModels <- lift $ mapM (S.sat . symbolicPropExpr . snd) $ catMaybes plainProps
+  lift $ print $ plainModels
   return plainModels
 
 -- | Run the and decomposition baseline case, that is deconstruct every choice
 -- and then run the sat solver
 runAndDecomp :: VProp -> IO (Maybe I.SMTModel)
-runAndDecomp prop = S.runSMT $ do
+runAndDecomp prop = {-# SCC "andDecomp" #-} S.runSMT $ do
   p <- symbolicPropExpr $ (andDecomp prop)
   S.constrain p
   SC.query $ do
@@ -127,7 +129,8 @@ work prop = do
   if baselines
     then if bAD
          then lift $ runAndDecomp prop >>= return . R
-         else runBruteForce prop >>= return . L
+         else do
+    runBruteForce prop >>= return . L
     else do
     opts <- asks optimizations
     result <- lift $ incrementalSolve prop opts
@@ -135,7 +138,7 @@ work prop = do
 
 -- | given VProp, incrementally solve it using variational tricks and SBV
 incrementalSolve :: VProp -> [VProp -> VProp] -> IO [V Dim (Maybe I.SMTModel)]
-incrementalSolve prop opts = solveChoice prop
+incrementalSolve prop opts = {-# SCC "choice_solver"#-} solveChoice prop
 
 -- | convert a list of dims to symbolic dims, and keep the association
 dimBoolMap :: [Dim] -> S.Symbolic [(Dim, S.SBool)]
