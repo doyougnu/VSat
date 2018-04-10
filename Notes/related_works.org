@@ -50,10 +50,10 @@
    variational model from which to embed systems into.
 
 * Major unanswered questions
-** Are we missing a constructor
+** Are we missing a constructor?
    In the common formulation of variation we have two data constructors V and
    Plain, V for choices and Plain for plain values. Perhaps we are missing a
-   constructor, Determined that says that this value is and can only be the
+   constructor, Determined, that says that this value is and can only be the
    result of a choice.
 ** Choices do not compose cleanly, why?
 ** what is the topology of variation?
@@ -63,7 +63,7 @@
    We have continually modeled variation as a binary tree. This typically means
    we must do lots of traversals, insertion, deletion and rotations don't make
    as much sense and variational datastructures become hyper-structures. Perhaps
-   we are better off this a table or some other encoding?
+   we are better off encoding this as a table or some other encoding?
 
 * Leads
 ** Kleene's ternary logic precisely describes variational logic
@@ -88,6 +88,11 @@
       our config space then using a map of configs and we can select a
       dimension, and carry that information cheaply to other dimensions when we
       encounter them.
+** SBVs query mode
+   SBVs query mode is a non starter because of SBV constraints, so the question
+   becomes how can we use SBV naively and thread results through efficiently:
+   1. Final tagless approach?
+   2. Use Meng's variational stacks?
 
 * References
   - http://ftp.cs.ucla.edu/pub/stat_ser/R266-part2.pdf
@@ -95,3 +100,4 @@
   - http://ftp.cs.ucla.edu/pub/stat_ser/R273-U.pdf
   - https://en.wikipedia.org/wiki/Barycentric_coordinates_(mathematics)#Barycentric_coordinates_on_triangles
   - https://en.wikipedia.org/wiki/Sierpinski_triangle#Properties
+  - https://web.archive.org/web/20160303170255if_/http://www.uni-leipzig.de/~logik/gottwald/SGforDJ.pdf

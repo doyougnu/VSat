@@ -112,7 +112,7 @@ runAndDecomp prop = S.runSMT $ do
 -- | main workhorse for running the SAT solver
 data Result = R (Maybe I.SMTModel)
             | L [S.SatResult]
-            | Vr (V Dim (Maybe I.SMTModel))
+            | Vr [V Dim (Maybe I.SMTModel)]
             deriving Generic
 
 instance NFData Result
@@ -134,8 +134,8 @@ work prop = do
     return $ Vr result
 
 -- | given VProp, incrementally solve it using variational tricks and SBV
-incrementalSolve :: VProp -> [VProp -> VProp] -> IO (V Dim (Maybe I.SMTModel))
-incrementalSolve prop opts = solveChoice prop Nothing
+incrementalSolve :: VProp -> [VProp -> VProp] -> IO [V Dim (Maybe I.SMTModel)]
+incrementalSolve prop opts = solveChoice prop
 
 -- | convert a list of dims to symbolic dims, and keep the association
 dimBoolMap :: [Dim] -> S.Symbolic [(Dim, S.SBool)]
@@ -148,30 +148,36 @@ mkPaths dimBools pths = fmap (\(dim, bl) ->
                                 (dim, fromJust $ lookup dim dimBools, bl)) <$> pths
 
 -- | Given a 3 tuple use the symbolic dim and the boolean to set a query constraint
-cConstrain :: (Dim, S.SBool, Bool) -> SC.Query ()
-cConstrain (_, dim, b) = assocToConstraint (dim, b) >>= S.constrain
+cConstrain :: (Dim, S.SBool) -> Bool -> SC.Query ()
+cConstrain (_, sDim) bl = assocToConstraint (sDim, bl) >>= S.constrain
 
 -- | perform a query with a choice expression. This assumes the query monad
 -- knows about the dimension variables, the plain variables, and the expression
 -- to solve. It then pushes teh assertion stack, constrains the dimension
 -- variables according to its config, then pops the assertion stack and returns
 -- the internal model
-cQuery :: [(Dim, S.SBool, Bool)] -> SC.Query (Maybe I.SMTModel)
-cQuery x = do SC.push 1
-              mapM_ cConstrain x
-              c <- SC.checkSat
-              case c of
-                SC.Unk   -> error "asdf"
-                SC.Unsat -> return Nothing
-                SC.Sat   -> do model' <- SC.getModel
-                               SC.pop 1
-                               return $ Just model'
+_cQuery :: (Dim, S.SBool) -> Bool -> SC.Query (Maybe I.SMTModel)
+_cQuery x bl = do SC.push 1
+                  cConstrain x bl
+                  c <- SC.checkSat
+                  case c of
+                    SC.Unk   -> error "asdf"
+                    SC.Unsat -> return Nothing
+                    SC.Sat   -> do model' <- SC.getModel
+                                   SC.pop 1
+                                   return $ Just model'
+
+cQuery :: (Dim, S.SBool) -> SC.Query (V Dim (Maybe I.SMTModel))
+cQuery x@(dim, sDim) = do
+  trueModel <- Plain <$> _cQuery x True
+  falseModel <- Plain <$> _cQuery x False
+  return $ VChc dim trueModel falseModel
 
 -- | given a prop, check if it is plain, if so run SMT normally, if not run the
--- variational solver
-solveChoice :: VProp -> Maybe I.SMTModel -> IO (V Dim (Maybe I.SMTModel))
-solveChoice prop model
-  | isPlain prop = S.runSMT $ do
+-- | variational solver
+solveChoice :: VProp -> IO [V Dim (Maybe I.SMTModel)]
+solveChoice prop
+  | isPlain prop = fmap pure $ S.runSMT $ do
       p <- symbolicPropExpr prop
       S.constrain p
       SC.query $ do c <- SC.checkSat
@@ -180,22 +186,33 @@ solveChoice prop model
                       SC.Unsat -> return $ Plain Nothing
                       SC.Sat   -> SC.getModel >>= return . Plain . Just
   | otherwise = S.runSMT $ do
-      let ps = fmap M.toList . Set.toList $ paths prop
-          dims = Set.toList $ dimensions prop
-          fauxModel = I.SMTModel{ I.modelAssocs = zipWith (\x y -> (dimName x, y))
-                                                  dims (repeat I.falseCW)
-                                , I.modelObjectives=[]
-                                }
-          newModel = combineModels model (Just fauxModel)
-
-      ds <- dimBoolMap dims
-      p <- symbolicPropExpr' prop newModel ds
+      (p, ds') <- symbolicPropExpr' prop
       S.constrain p
-      res <- SC.query $ do
-        mapM (\x -> sequence
-               ( M.fromList $ fmap (\(dim, _, bl) -> (dim, bl)) x
-               , cQuery x)) (mkPaths ds ps)
-      return . fromJust $ V.recompile res
+      let ds = M.toList ds'
+      res <- SC.query $ do mapM (cQuery) ds
+      return res
+
+-- | Given a list of free variables, add them all together with SBV guessed
+-- integers
+ericTest :: [String] -> S.Symbolic (Maybe Integer)
+ericTest [] = return . return $ 0
+ericTest (x:xs) = do
+  a <- S.sInteger x
+  a' <- SC.query $ go a
+  b' <- ericTest xs -- this line will throw an exception for nested querys
+  return $ liftM2 (+) a' b'
+  where
+    -- | take a symbolic integer, get the value, print it, and return it
+    go :: S.SInteger -> SC.Query (Maybe Integer)
+    go x' = do cs <- SC.checkSat
+               case cs of
+                 SC.Unk   -> error "Solver said unknown!"
+                 SC.Unsat -> return Nothing -- no solution!
+                 SC.Sat   -> do xValue <- SC.getValue x'
+                                SC.io . print $ "I got a " ++ show xValue
+                                return $ Just xValue
+
+
 
 solveChoiceAgain :: VProp -> S.Symbolic (V Dim a)
 solveChoiceAgain (Chc d l r) = do
@@ -232,19 +249,15 @@ assocToConstraint (var, val) = return $ var S..== (bToSb val)
         bToSb False = S.false
 
 -- | Change a prop to a predicate, avoiding anything that has already been assigned
-symbolicPropExpr' :: VProp -> Maybe I.SMTModel -> [(Dim, S.SBool)] -> S.Predicate
-symbolicPropExpr' prop Nothing _ = symbolicPropExpr prop
-symbolicPropExpr' prop (Just model) as = do
-    let vs = (Set.toList (vars prop)) \\ (Var <$> assignedVs)
-        ds = (Set.toList (dimensions prop)) \\ (Dim <$> assignedDs)
-        assignments = fst <$> I.modelAssocs model
-        (assignedDs, assignedVs) = partition (all isUpper) assignments
+symbolicPropExpr' :: VProp -> S.Symbolic (S.SBool, M.Map Dim S.SBool)
+symbolicPropExpr' prop = do
+    let vs = (Set.toList (vars prop))
+        ds = (Set.toList (dimensions prop))
     syms <- fmap (M.fromList . zip vs) (S.sBools (map varName vs))
     dims <- fmap (M.fromList . zip ds) (S.sBools (map dimName ds))
     let look f = fromMaybe err (M.lookup f syms)
-        lookd d = fromMaybe errd (M.lookup d (dims `M.union` (M.fromList as)))
-
-    return (evalPropExpr lookd look prop)
+        lookd d = fromMaybe errd (M.lookup d dims)
+    return ((evalPropExpr lookd look prop), dims)
 
   where err = error "symbolicPropExpr: Internal error, no symbol found."
         errd = error "symbolicPropExpr: Internal error, no dimension found."
