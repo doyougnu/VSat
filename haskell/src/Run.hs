@@ -1,5 +1,8 @@
 module Run ( runEnv
            , Opts (..)
+           , Result
+           , SatDict
+           , Log
            ) where
 
 import qualified Data.Map.Strict as M
