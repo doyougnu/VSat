@@ -4,9 +4,7 @@ import Run
 import VProp (vPropNoShare, mkLargeVProp, genVProp, maxShared)
 import Test.QuickCheck (generate, arbitrary)
 
-main :: IO ()
+main :: IO (Result, SatDict, Log)
 main = do
   noShPrp <- generate vPropNoShare
-  res <- runEnv True False False [] noShPrp
-  putStrLn $ show res
-  return ()
+  runEnv True False False [] noShPrp
