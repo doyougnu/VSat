@@ -1,8 +1,9 @@
 flags: {}
 packages:
-system-ghc: true
+system-ghc: false
 extra-deps: []
-resolver: lts-10.7
+
+resolver: lts-11.3
 build:
   library-profiling: true
   executable-profiling: true
