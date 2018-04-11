@@ -12,7 +12,6 @@ import           Data.Maybe          (fromMaybe)
 import           Data.Set            (Set)
 import qualified Data.Set            as Set
 
-import           Data.SBV
 import           GHC.Generics
 import           SAT
 

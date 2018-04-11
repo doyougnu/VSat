@@ -26,7 +26,6 @@ dependencies:
 - bifunctors
 - QuickCheck
 - deepseq
-- sbv
 
 library:
   source-dirs: src
