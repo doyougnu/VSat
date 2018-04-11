@@ -58,12 +58,14 @@ executables:
 benchmarks:
   vsat-bench:
     main:                Baselines.hs
-    source-dirs:         bench
+    source-dirs:         bench, src
     ghc-options:
     - -O2
     - -threaded
     - -rtsopts
     - -with-rtsopts=-N
+    dependencies:
+      - criterion
 
 
 tests:
