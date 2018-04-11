@@ -132,10 +132,10 @@ pruneTagTree tb (Opn a ps)  = Opn a (pruneTagTree tb <$> ps)
 selectVariant :: Config -> VProp -> Maybe VProp
 selectVariant _ (Ref a) = Just $ Ref a
 selectVariant _ (Lit a) = Just $ Lit a
-selectVariant tbs (Chc t y n) = case Map.lookup t tbs of
-                           Nothing    -> Nothing
-                           Just True  -> selectVariant tbs y
-                           Just False -> selectVariant tbs n
+selectVariant tbs x@(Chc t y n) = case Map.lookup t tbs of
+                                    Nothing    -> Just x
+                                    Just True  -> selectVariant tbs y
+                                    Just False -> selectVariant tbs n
 selectVariant tb (Not x)     = Not <$> selectVariant tb x
 selectVariant tb (Opn a ps)  = liftM (Opn a) (sequence $ selectVariant tb <$> ps)
 selectVariant tb (Op2 a l r) = liftM2 (Op2 a)
@@ -217,18 +217,29 @@ dimensions (Chc d l r)   = Set.singleton d `Set.union`
                            dimensions l `Set.union` dimensions r
 
 -- | The set of all choices
-choices :: VProp -> Set [(Dim, Bool)]
-choices prop = Set.fromList $ take n [ [(x, a), (y, b)] |
-                                       x <- ds
-                                       , y <- ds
-                                       , a <- bs
-                                       , b <- bs
-                                       , x /= y
-                                     ]
-
+choices :: VProp -> [[(Dim, Bool)]]
+choices prop = go (length ds)
   where ds = Set.toList $ dimensions prop
-        n  = length ds * 2
         bs = [True, False]
+  -- its hideous, kill it with fire
+        go 0 = []
+        go 1 = pure $ (,) <$> ds <*> bs
+        go 2 = zip ds <$> bs'
+          where bs' = [[x, y] | x <- bs, y <- bs]
+        go 3 = zip ds <$> bs'
+          where bs' = [[x, y, z] | x <- bs, y <- bs, z <- bs]
+        go 4 = zip ds <$> bs'
+          where bs' = [[x, y, z, a] | x <- bs, y <- bs, z <- bs, a <- bs]
+        go 5 = zip ds <$> bs'
+          where bs' = [ [x, y, z, a, b] |
+                        x <- bs, y <- bs, z <- bs, a <- bs, b <- bs
+                      ]
+        go 6 = zip ds <$> bs'
+          where bs' = [ [x, y, z, a, b, c] |
+                        x <- bs, y <- bs, z <- bs, a <- bs, b <- bs, c <- bs
+                      ]
+
+
 
 -- | Given a Variational Prop term, get all possible paths in the choice tree
 paths :: VProp -> Set Config
@@ -236,10 +247,10 @@ paths = Set.fromList . filter (not . Map.null) . go
   where go (Chc d l r) = do someL <- go l
                             someR <- go r
                             [Map.insert d True someL, Map.insert d False someR]
-        go (Not x) = go x
+        go (Not x)     = go x
         go (Op2 _ l r) = go l <> go r
         go (Opn _ ps)  = concatMap go $ ps
-        go _ = [Map.empty]
+        go _           = [Map.empty]
 
 ------------------------------ Manipulation ------------------------------------
 -- | Given a tag tree, fmap over the tree with respect to a config
