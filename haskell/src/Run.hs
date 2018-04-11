@@ -70,7 +70,7 @@ runEnv base bAD bOpt opts x = _runEnv
 -- | Given a VProp term generate the satisfiability map
 initSt :: VProp -> SatDict
 initSt prop = (sats, vs)
-  where sats = M.fromList . fmap (\x -> (x, False)) . Set.toList $ paths prop
+  where sats = M.fromList . fmap (\x -> (x, False)) $ M.fromList <$> choices prop
         vs = M.fromSet (const False) (vars prop)
 
 
@@ -94,7 +94,6 @@ runBruteForce prop = {-# SCC "brute_force"#-} do
       plainProps = (\y -> sequence $ (y, selectVariant y prop)) <$> confs
   -- this line is always throwing a Nothing
   plainModels <- lift $ mapM (S.sat . symbolicPropExpr . snd) $ catMaybes plainProps
-  lift $ print $ plainModels
   return plainModels
 
 -- | Run the and decomposition baseline case, that is deconstruct every choice
@@ -171,7 +170,7 @@ _cQuery x bl = do SC.push 1
                                    return $ Just model'
 
 cQuery :: (Dim, S.SBool) -> SC.Query (V Dim (Maybe I.SMTModel))
-cQuery x@(dim, sDim) = do
+cQuery x@(dim, _) = do
   trueModel <- Plain <$> _cQuery x True
   falseModel <- Plain <$> _cQuery x False
   return $ VChc dim trueModel falseModel
@@ -215,24 +214,6 @@ ericTest (x:xs) = do
                                 SC.io . print $ "I got a " ++ show xValue
                                 return $ Just xValue
 
-
-
-solveChoiceAgain :: VProp -> S.Symbolic (V Dim a)
-solveChoiceAgain (Chc d l r) = do
-  d' <- S.sBool $ dimName d
-  lq <- SC.query $ do
-    SC.push 1
-    S.constrain $ d' S..== S.true
-    res <- solveChoiceAgain l
-    SC.pop 1
-    return res
-  rq <- SC.query $ do
-    SC.push 1
-    S.constrain $ d' S..== S.false
-    res <- solveChoiceAgain l
-    SC.pop 1
-    return res
-  return $ VChc d lq rq
 
 -- | Given two models, if both are not nothing, combine them
 combineModels :: Maybe I.SMTModel -> Maybe I.SMTModel -> Maybe I.SMTModel
