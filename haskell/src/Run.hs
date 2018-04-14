@@ -217,6 +217,25 @@ ericTest (x:xs) = do
                                 SC.io . print $ "I got a " ++ show xValue
                                 return $ Just xValue
 
+-- | This test is simulating recursively evaluating an And in our domain the
+-- list of strings are considered to be And [String] in our data type
+test :: [String] -> IO (Maybe I.SMTModel)
+test xs = S.runSMT $
+  do
+  xs' <- traverse (\a -> sequence (a, S.sBool a)) xs -- phase 1, add all vars
+  loop xs' -- now the recursion
+ where
+   -- | perform the recursion to that semantically converts our And to SBV's &&&
+   loop1 []           = S.true
+   loop1 ((s, sB):ss) = sB S.&&& loop1 ss
+
+   -- | the outer loop, run the constraint and then get a model
+   loop ys = SC.query $ do S.constrain $ loop1 ys
+                           cs <- SC.checkSat
+                           case cs of
+                             SC.Unk   -> error "Unknown!"
+                             SC.Unsat -> return Nothing
+                             SC.Sat   -> Just <$> SC.getModel
 
 -- | Given two models, if both are not nothing, combine them
 combineModels :: Maybe I.SMTModel -> Maybe I.SMTModel -> Maybe I.SMTModel
