@@ -12,12 +12,11 @@ import qualified Data.SBV            as S
 import qualified Data.SBV.Control    as SC
 
 import qualified Data.Set            as Set
-import Data.List                     (nub, lookup)
 
 import GHC.Generics
 import Control.DeepSeq               (NFData)
 
-import Data.Maybe                    (fromJust, fromMaybe, catMaybes)
+import Data.Maybe                    (fromMaybe, catMaybes)
 
 import VProp
 import V
@@ -72,7 +71,7 @@ runEnv base bAD bOpt opts x = _runEnv
 -- | Given a VProp a term generate the satisfiability map
 initSt :: (Show a, Ord a) => VProp a -> (SatDict a)
 initSt prop = (sats, vs)
-  where sats = M.fromList . fmap (\x -> (x, False)) $ M.fromList <$> choices prop
+  where sats = M.fromList . fmap (\x -> (x, False)) $ M.fromList <$> configs prop
         vs = M.fromSet (const False) (vars prop)
 
 
@@ -142,15 +141,15 @@ work prop = do
 incrementalSolve :: (Show a, Ord a) => VProp a -> [VProp a -> VProp a] -> IO [V Dim (Maybe I.SMTModel)]
 incrementalSolve prop opts = {-# SCC "choice_solver"#-} solveChoice prop
 
--- | convert a list of dims to symbolic dims, and keep the association
-dimBoolMap :: [Dim] -> S.Symbolic [(Dim, S.SBool)]
-dimBoolMap =  traverse (\x -> sequence (x, S.sBool $ dimName x))
+-- -- | convert a list of dims to symbolic dims, and keep the association
+-- dimBoolMap :: [Dim] -> S.Symbolic [(Dim, S.SBool)]
+-- dimBoolMap =  traverse (\x -> sequence (x, S.sBool $ dimName x))
 
--- | combine a list of dims and symbolic dims with a list of configs, this returns
--- a config with the symbolic dim in the snd position
-mkPaths :: [(Dim, S.SBool)] -> [[(Dim, Bool)]] -> [[(Dim, S.SBool, Bool)]]
-mkPaths dimBools pths = fmap (\(dim, bl) ->
-                                (dim, fromJust $ lookup dim dimBools, bl)) <$> pths
+-- -- | combine a list of dims and symbolic dims with a list of configs, this returns
+-- -- a config with the symbolic dim in the snd position
+-- mkPaths :: [(Dim, S.SBool)] -> [[(Dim, Bool)]] -> [[(Dim, S.SBool, Bool)]]
+-- mkPaths dimBools pths = fmap (\(dim, bl) ->
+--                                 (dim, fromJust $ lookup dim dimBools, bl)) <$> pths
 
 -- | Given a 3 tuple use the symbolic dim and the boolean to set a query constraint
 cConstrain :: (Dim, S.SBool) -> Bool -> SC.Query ()
@@ -217,15 +216,51 @@ test xs = S.runSMT $
                              SC.Unsat -> return Nothing
                              SC.Sat   -> Just <$> SC.getModel
 
--- | Given two models, if both are not nothing, combine them
-combineModels :: Maybe I.SMTModel -> Maybe I.SMTModel -> Maybe I.SMTModel
-combineModels Nothing a = a
-combineModels a Nothing = a
-combineModels
-  (Just I.SMTModel{I.modelAssocs=aAs, I.modelObjectives=aOs})
-  (Just I.SMTModel{I.modelAssocs=bAs , I.modelObjectives=bOs}) =
-  (Just I.SMTModel{ I.modelAssocs= nub aAs ++ bAs
-                  , I.modelObjectives = aOs ++ bOs})
+test2 :: VProp String -> S.Symbolic (V Dim (Maybe I.SMTModel))
+test2 prop = do
+  prop' <- traverse S.sBool prop -- phase 1, add all vars
+  loop prop'
+  where
+    -- | perform the recursion so that semantically converts our And to SBV's &&&
+    loop1 :: VProp S.SBool -> S.SBool
+    loop1 (Ref a) = a
+    loop1 (Lit True)      = S.true
+    loop1 (Lit False)     = S.false
+    -- loop1 (Opn _ [])      = S.true
+    loop1 (Opn _ (s:ss))  = foldr (S.&&&) (loop1 s) (loop1 <$> ss)
+
+    -- | the outer loop, run the constraint and then get a model
+    -- loop :: VProp a -> S.Symbolic [V Dim (Maybe I.SMTModel)]
+    loop (Chc d l r) = SC.query $
+      do
+        SC.push 1
+        S.constrain (loop1 l)
+        cs <- SC.checkSat
+        case cs of
+          SC.Unk   -> error "Unknown!"
+          SC.Unsat -> return (Plain Nothing)
+          SC.Sat   -> do lmodel <- SC.getModel
+                         SC.pop 1
+                         SC.push 1
+                         S.constrain $ loop1 r
+                         csl <- SC.checkSat
+                         case csl of
+                           SC.Unk   -> error "Unknown!"
+                           SC.Unsat -> return (Plain Nothing)
+                           SC.Sat   -> do rmodel <- SC.getModel
+                                          SC.pop 1
+                                          return $ VChc d (Plain (Just lmodel)) (Plain (Just rmodel))
+
+
+-- -- | Given two models, if both are not nothing, combine them
+-- combineModels :: Maybe I.SMTModel -> Maybe I.SMTModel -> Maybe I.SMTModel
+-- combineModels Nothing a = a
+-- combineModels a Nothing = a
+-- combineModels
+--   (Just I.SMTModel{I.modelAssocs=aAs, I.modelObjectives=aOs})
+--   (Just I.SMTModel{I.modelAssocs=bAs , I.modelObjectives=bOs}) =
+--   (Just I.SMTModel{ I.modelAssocs= nub aAs ++ bAs
+--                   , I.modelObjectives = aOs ++ bOs})
 
 -- | Given an association between a symbolic bool variable and a normal bool,
 -- add a representative constraint to the query monad
