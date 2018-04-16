@@ -1,6 +1,6 @@
 flags: {}
 packages:
-system-ghc: false
+# system-ghc: false
 extra-deps: []
 
 resolver: lts-11.3

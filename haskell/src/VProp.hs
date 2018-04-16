@@ -217,27 +217,27 @@ dimensions (Chc d l r)   = Set.singleton d `Set.union`
                            dimensions l `Set.union` dimensions r
 
 -- -- | The set of all choices
--- choices :: (VProp a) -> [[(Dim, Bool)]]
--- choices prop = go (length ds)
---   where ds = Set.toList $ dimensions prop
---         bs = [True, False]
---   -- its hideous, kill it with fire
---         go 0 = []
---         go 1 = pure $ (,) <$> ds <*> bs
---         go 2 = zip ds <$> bs'
---           where bs' = [[x, y] | x <- bs, y <- bs]
---         go 3 = zip ds <$> bs'
---           where bs' = [[x, y, z] | x <- bs, y <- bs, z <- bs]
---         go 4 = zip ds <$> bs'
---           where bs' = [[x, y, z, a] | x <- bs, y <- bs, z <- bs, a <- bs]
---         go 5 = zip ds <$> bs'
---           where bs' = [ [x, y, z, a, b] |
---                         x <- bs, y <- bs, z <- bs, a <- bs, b <- bs
---                       ]
---         go 6 = zip ds <$> bs'
---           where bs' = [ [x, y, z, a, b, c] |
---                         x <- bs, y <- bs, z <- bs, a <- bs, b <- bs, c <- bs
---                       ]
+choices :: (VProp a) -> [[(Dim, Bool)]]
+choices prop = go (length ds)
+  where ds = Set.toList $ dimensions prop
+        bs = [True, False]
+  -- its hideous, kill it with fire
+        go 0 = []
+        go 1 = pure $ (,) <$> ds <*> bs
+        go 2 = zip ds <$> bs'
+          where bs' = [[x, y] | x <- bs, y <- bs]
+        go 3 = zip ds <$> bs'
+          where bs' = [[x, y, z] | x <- bs, y <- bs, z <- bs]
+        go 4 = zip ds <$> bs'
+          where bs' = [[x, y, z, a] | x <- bs, y <- bs, z <- bs, a <- bs]
+        go 5 = zip ds <$> bs'
+          where bs' = [ [x, y, z, a, b] |
+                        x <- bs, y <- bs, z <- bs, a <- bs, b <- bs
+                      ]
+        go 6 = zip ds <$> bs'
+          where bs' = [ [x, y, z, a, b, c] |
+                        x <- bs, y <- bs, z <- bs, a <- bs, b <- bs, c <- bs
+                      ]
 
 
 
