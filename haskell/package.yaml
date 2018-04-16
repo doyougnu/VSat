@@ -37,6 +37,7 @@ default-extensions:
   - FlexibleContexts
   - DeriveFunctor
   - DeriveGeneric
+  - DeriveTraversable
   - BangPatterns
   - GeneralizedNewtypeDeriving
   - FlexibleInstances
