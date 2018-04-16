@@ -28,20 +28,20 @@ import V
 type SatDict = (M.Map Config Bool, M.Map Var Bool) -- keys may incur perf penalty
 
 -- | The optimizations that could be set
-data Opts = Opts { runBaselines :: Bool              -- ^ Run baselines?
+data Opts a = Opts { runBaselines :: Bool              -- ^ Run baselines?
                  , runAD :: Bool                     -- ^ run anddecomp baseline? else Brute Force
                  , runOpts :: Bool                   -- ^ Run optimizations or not?
-                 , optimizations :: [VProp -> VProp] -- ^ a list of optimizations
+                 , optimizations :: [(VProp a) -> (VProp a)] -- ^ a list of optimizations
                  }
 
 -- | Type convenience for Log
 type Log = String
 
 -- | Takes a dimension d, a value a, and a result r
-type Env r = RWST Opts Log SatDict IO r -- ^ the monad stack
+type Env a r = RWST (Opts a) Log SatDict IO r -- ^ the monad stack
 
 -- | An empty reader monad environment, in the future read these from config file
-_emptyOpts :: Opts
+_emptyOpts :: (Opts a)
 _emptyOpts = Opts { runBaselines = False
                   , runAD = False
                   , runOpts = False
@@ -49,7 +49,7 @@ _emptyOpts = Opts { runBaselines = False
                   }
 
 
-_setOpts :: Bool -> Bool -> Bool -> [VProp -> VProp] -> Opts
+_setOpts :: Bool -> Bool -> Bool -> [VProp a -> VProp a] -> Opts a
 _setOpts base bAD bOpt opts = Opts { runBaselines = base
                                   , runAD = bAD
                                   , runOpts = bOpt
@@ -59,19 +59,19 @@ _setOpts base bAD bOpt opts = Opts { runBaselines = base
 
 
 -- | Run the RWS monad with defaults of empty state, reader
-_runEnv :: Env r -> Opts -> SatDict -> IO (r, SatDict,  Log)
+_runEnv :: Env a r -> Opts a -> SatDict -> IO (r, SatDict,  Log)
 _runEnv m opts st = runRWST m opts st
 
 -- TODO use configurate and load the config from a file
-runEnv :: Bool -> Bool -> Bool -> [VProp -> VProp] -> VProp -> IO (Result, SatDict, Log)
+runEnv :: Bool -> Bool -> Bool -> [VProp a -> VProp a] -> VProp a -> IO (Result, SatDict, Log)
 runEnv base bAD bOpt opts x = _runEnv
                              (work x)
                              (_setOpts base bAD bOpt opts)
                              (initSt x)
 
 
--- | Given a VProp term generate the satisfiability map
-initSt :: VProp -> SatDict
+-- | Given a VProp a term generate the satisfiability map
+initSt :: VProp a -> SatDict
 initSt prop = (sats, vs)
   where sats = M.fromList . fmap (\x -> (x, False)) $ M.fromList <$> choices prop
         vs = M.fromSet (const False) (vars prop)
@@ -90,7 +90,7 @@ _logResult x = tell $ "Got result: " ++ show x
 
 -- | Run the brute force baseline case, that is select every plain variant and
 -- run them to the sat solver
-runBruteForce :: (MonadTrans t, MonadState SatDict (t IO)) => VProp -> t IO [S.SatResult]
+runBruteForce :: (MonadTrans t, MonadState SatDict (t IO)) => VProp a -> t IO [S.SatResult]
 runBruteForce prop = {-# SCC "brute_force"#-} do
   (_confs, _) <- get
   let confs = M.keys _confs
@@ -101,7 +101,7 @@ runBruteForce prop = {-# SCC "brute_force"#-} do
 
 -- | Run the and decomposition baseline case, that is deconstruct every choice
 -- and then run the sat solver
-runAndDecomp :: VProp -> IO (Maybe I.SMTModel)
+runAndDecomp :: (Show a, Ord a) => VProp a -> IO (Maybe I.SMTModel)
 runAndDecomp prop = {-# SCC "andDecomp" #-} S.runSMT $ do
   p <- symbolicPropExpr $ (andDecomp prop)
   S.constrain p
@@ -123,7 +123,9 @@ instance NFData Result
 
 work :: ( MonadTrans t
         , MonadState SatDict (t IO)
-        , MonadReader Opts (t IO)) => VProp -> t IO Result
+        , MonadReader (Opts a) (t IO)
+        , Show a
+        , Ord a) => VProp a -> t IO Result
 work prop = do
   baselines <- asks runBaselines
   bAD <- asks runAD
@@ -138,8 +140,8 @@ work prop = do
     result <- lift $ incrementalSolve prop opts
     return $ Vr result
 
--- | given VProp, incrementally solve it using variational tricks and SBV
-incrementalSolve :: VProp -> [VProp -> VProp] -> IO [V Dim (Maybe I.SMTModel)]
+-- | given VProp a, incrementally solve it using variational tricks and SBV
+incrementalSolve :: (Show a, Ord a) => VProp a -> [VProp a -> VProp a] -> IO [V Dim (Maybe I.SMTModel)]
 incrementalSolve prop opts = {-# SCC "choice_solver"#-} solveChoice prop
 
 -- | convert a list of dims to symbolic dims, and keep the association
@@ -180,7 +182,7 @@ cQuery x@(dim, _) = do
 
 -- | given a prop, check if it is plain, if so run SMT normally, if not run the
 -- | variational solver
-solveChoice :: VProp -> IO [V Dim (Maybe I.SMTModel)]
+solveChoice :: (Show a, Ord a) => VProp a -> IO [V Dim (Maybe I.SMTModel)]
 solveChoice prop
   | isPlain prop = fmap pure $ S.runSMT $ do
       p <- symbolicPropExpr prop
@@ -196,26 +198,6 @@ solveChoice prop
       let ds = M.toList ds'
       res <- SC.query $ do mapM (cQuery) ds
       return res
-
--- | Given a list of free variables, add them all together with SBV guessed
--- integers
-ericTest :: [String] -> S.Symbolic (Maybe Integer)
-ericTest [] = return . return $ 0
-ericTest (x:xs) = do
-  a <- S.sInteger x
-  a' <- SC.query $ go a
-  b' <- ericTest xs -- this line will throw an exception for nested querys
-  return $ liftM2 (+) a' b'
-  where
-    -- | take a symbolic integer, get the value, print it, and return it
-    go :: S.SInteger -> SC.Query (Maybe Integer)
-    go x' = do cs <- SC.checkSat
-               case cs of
-                 SC.Unk   -> error "Solver said unknown!"
-                 SC.Unsat -> return Nothing -- no solution!
-                 SC.Sat   -> do xValue <- SC.getValue x'
-                                SC.io . print $ "I got a " ++ show xValue
-                                return $ Just xValue
 
 -- | This test is simulating recursively evaluating an And in our domain the
 -- list of strings are considered to be And [String] in our data type
@@ -255,11 +237,11 @@ assocToConstraint (var, val) = return $ var S..== (bToSb val)
         bToSb False = S.false
 
 -- | Change a prop to a predicate, avoiding anything that has already been assigned
-symbolicPropExpr' :: VProp -> S.Symbolic (S.SBool, M.Map Dim S.SBool)
+symbolicPropExpr' :: (Show a, Ord a) => VProp a -> S.Symbolic (S.SBool, M.Map Dim S.SBool)
 symbolicPropExpr' prop = do
     let vs = (Set.toList (vars prop))
         ds = (Set.toList (dimensions prop))
-    syms <- fmap (M.fromList . zip vs) (S.sBools (map varName vs))
+    syms <- fmap (M.fromList . zip vs) (S.sBools (map show vs))
     dims <- fmap (M.fromList . zip ds) (S.sBools (map dimName ds))
     let look f = fromMaybe err (M.lookup f syms)
         lookd d = fromMaybe errd (M.lookup d dims)
