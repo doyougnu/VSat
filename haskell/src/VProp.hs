@@ -91,6 +91,7 @@ vPropNoShare = sized $ flip arbVProp genDim
 
 -- | Generate a random prop according to its arbritrary type class instance,
 -- this has a strong likelihood of sharing
+-- | generate with $ x <- genVProp :: (IO (VProp String))
 genVProp :: Arbitrary a => IO (VProp a)
 genVProp = generate arbitrary
 

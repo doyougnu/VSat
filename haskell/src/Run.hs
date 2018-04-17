@@ -3,6 +3,7 @@ module Run ( runEnv
            , Result
            , SatDict
            , Log
+           , test2
            ) where
 
 import qualified Data.Map.Strict as M
@@ -10,6 +11,7 @@ import Control.Monad.RWS.Strict
 import qualified Data.SBV.Internals  as I
 import qualified Data.SBV            as S
 import qualified Data.SBV.Control    as SC
+import Debug.Trace (trace)
 
 import qualified Data.Set            as Set
 
@@ -219,37 +221,57 @@ test xs = S.runSMT $
 test2 :: VProp String -> S.Symbolic (V Dim (Maybe I.SMTModel))
 test2 prop = do
   prop' <- traverse S.sBool prop -- phase 1, add all vars
-  loop prop'
+  SC.query $ loop1 prop' >>= resolve
   where
-    -- | perform the recursion so that semantically converts our And to SBV's &&&
-    loop1 :: VProp S.SBool -> S.SBool
-    loop1 (Ref a) = a
-    loop1 (Lit True)      = S.true
-    loop1 (Lit False)     = S.false
-    -- loop1 (Opn _ [])      = S.true
-    loop1 (Opn _ (s:ss))  = foldr (S.&&&) (loop1 s) (loop1 <$> ss)
+    bToSb True = S.true
+    bToSb False = S.false
 
-    -- | the outer loop, run the constraint and then get a model
-    -- loop :: VProp a -> S.Symbolic [V Dim (Maybe I.SMTModel)]
-    loop (Chc d l r) = SC.query $
-      do
-        SC.push 1
-        S.constrain (loop1 l)
-        cs <- SC.checkSat
-        case cs of
-          SC.Unk   -> error "Unknown!"
-          SC.Unsat -> return (Plain Nothing)
-          SC.Sat   -> do lmodel <- SC.getModel
-                         SC.pop 1
-                         SC.push 1
-                         S.constrain $ loop1 r
-                         csl <- SC.checkSat
-                         case csl of
-                           SC.Unk   -> error "Unknown!"
-                           SC.Unsat -> return (Plain Nothing)
-                           SC.Sat   -> do rmodel <- SC.getModel
-                                          SC.pop 1
-                                          return $ VChc d (Plain (Just lmodel)) (Plain (Just rmodel))
+    -- | perform the recursion so that semantically converts our And to SBV's &&&
+    loop1 :: VProp S.SBool -> SC.Query (V Dim S.SBool)
+    loop1 (Lit b)          = return . Plain $ if b then S.true else S.false
+    loop1 (Not ps)         = loop1 $ S.bnot ps
+    loop1 (Opn And [])     = return . Plain $ S.true
+    loop1 (Opn Or [])      = return . Plain $ S.false
+    loop1 (Opn And ss)     = foldr1 (S.&&&) $ loop1 <$> ss
+    loop1 (Opn Or ss)      = loop1 $ foldr1 (S.|||) ss
+    loop1 (Op2 Impl l r)   = loop1 $ l S.==> r
+    loop1 (Op2 BiImpl l r) = loop1 $ l S.<=> r
+    loop1 (Chc d l r)      = liftM2 (VChc d) (loop1 l) (loop1 r)
+    loop1 (Ref x)          = return $ Plain x
+
+    -- | get a model out given an S.SBool
+    getModel :: SC.Query (V Dim (Maybe I.SMTModel))
+    getModel = do cs <- SC.checkSat
+                  case cs of
+                    SC.Unk   -> error "Unknown!"
+                    SC.Unsat -> return (Plain Nothing)
+                    SC.Sat   -> (Plain . Just) <$> SC.getModel
+
+    -- | recurse over the structure only getting amodel on refs and lits
+    -- unbox :: VProp S.SBool -> SC.Query (V Dim (Maybe I.SMTModel))
+    -- unbox (Ref x) = getModel x
+    -- unbox (Lit b) = getModel $ bToSb b
+    -- unbox (Chc d l r) = do l' <- unbox l; r' <- unbox r; return $ VChc d l' r'
+    -- unbox x = unbox $ loop1 x
+
+    resolve :: V Dim S.SBool -> SC.Query (V Dim (Maybe I.SMTModel))
+    resolve (Plain x) = do S.constrain x
+                           getModel
+    resolve (VChc d l r) =
+      do SC.push 1
+         ml <- resolve l
+         SC.pop 1
+         SC.push 1
+         mr <- resolve r
+         SC.pop 1
+         return $ VChc d ml mr
+
+    -- loop (Opn _ (p:ps)) =  pure <$> unbox p
+    -- loop (Op2 _ l r) = do l' <- unbox l
+    --                       r' <- unbox r
+    --                       return $ [l', r']
+    -- loop x   = pure <$> unbox x
+
 
 
 -- -- | Given two models, if both are not nothing, combine them
