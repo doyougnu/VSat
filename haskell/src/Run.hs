@@ -221,23 +221,23 @@ test xs = S.runSMT $
 test2 :: VProp String -> S.Symbolic (V Dim (Maybe I.SMTModel))
 test2 prop = do
   prop' <- traverse S.sBool prop -- phase 1, add all vars
-  SC.query $ loop1 prop' >>= resolve
+  SC.query $ resolve $ loop1 prop'
   where
     bToSb True = S.true
     bToSb False = S.false
 
     -- | perform the recursion so that semantically converts our And to SBV's &&&
-    loop1 :: VProp S.SBool -> SC.Query (V Dim S.SBool)
-    loop1 (Lit b)          = return . Plain $ if b then S.true else S.false
+    loop1 :: VProp S.SBool -> V Dim S.SBool
+    loop1 (Lit b)          = Plain $ if b then S.true else S.false
     loop1 (Not ps)         = loop1 $ S.bnot ps
-    loop1 (Opn And [])     = return . Plain $ S.true
-    loop1 (Opn Or [])      = return . Plain $ S.false
-    loop1 (Opn And ss)     = foldr1 (S.&&&) $ loop1 <$> ss
+    loop1 (Opn And [])     = Plain S.true
+    loop1 (Opn Or [])      = Plain S.false
+    loop1 (Opn And ss)     = loop1 $ foldr1 (S.&&&) ss
     loop1 (Opn Or ss)      = loop1 $ foldr1 (S.|||) ss
     loop1 (Op2 Impl l r)   = loop1 $ l S.==> r
     loop1 (Op2 BiImpl l r) = loop1 $ l S.<=> r
-    loop1 (Chc d l r)      = liftM2 (VChc d) (loop1 l) (loop1 r)
-    loop1 (Ref x)          = return $ Plain x
+    loop1 (Chc d l r)      = VChc d (loop1 l) (loop1 r)
+    loop1 (Ref x)          = Plain x
 
     -- | get a model out given an S.SBool
     getModel :: SC.Query (V Dim (Maybe I.SMTModel))
