@@ -11,7 +11,6 @@ import Control.Monad.RWS.Strict
 import qualified Data.SBV.Internals  as I
 import qualified Data.SBV            as S
 import qualified Data.SBV.Control    as SC
-import Debug.Trace (trace)
 
 import qualified Data.Set            as Set
 
@@ -143,42 +142,6 @@ work prop = do
 incrementalSolve :: (Show a, Ord a) => VProp a -> [VProp a -> VProp a] -> IO [V Dim (Maybe I.SMTModel)]
 incrementalSolve prop opts = {-# SCC "choice_solver"#-} solveChoice prop
 
--- -- | convert a list of dims to symbolic dims, and keep the association
--- dimBoolMap :: [Dim] -> S.Symbolic [(Dim, S.SBool)]
--- dimBoolMap =  traverse (\x -> sequence (x, S.sBool $ dimName x))
-
--- -- | combine a list of dims and symbolic dims with a list of configs, this returns
--- -- a config with the symbolic dim in the snd position
--- mkPaths :: [(Dim, S.SBool)] -> [[(Dim, Bool)]] -> [[(Dim, S.SBool, Bool)]]
--- mkPaths dimBools pths = fmap (\(dim, bl) ->
---                                 (dim, fromJust $ lookup dim dimBools, bl)) <$> pths
-
--- | Given a 3 tuple use the symbolic dim and the boolean to set a query constraint
-cConstrain :: (Dim, S.SBool) -> Bool -> SC.Query ()
-cConstrain (_, sDim) bl = assocToConstraint (sDim, bl) >>= S.constrain
-
--- | perform a query with a choice expression. This assumes the query monad
--- knows about the dimension variables, the plain variables, and the expression
--- to solve. It then pushes teh assertion stack, constrains the dimension
--- variables according to its config, then pops the assertion stack and returns
--- the internal model
-_cQuery :: (Dim, S.SBool) -> Bool -> SC.Query (Maybe I.SMTModel)
-_cQuery x bl = do SC.push 1
-                  cConstrain x bl
-                  c <- SC.checkSat
-                  case c of
-                    SC.Unk   -> error "asdf"
-                    SC.Unsat -> return Nothing
-                    SC.Sat   -> do model' <- SC.getModel
-                                   SC.pop 1
-                                   return $ Just model'
-
-cQuery :: (Dim, S.SBool) -> SC.Query (V Dim (Maybe I.SMTModel))
-cQuery x@(dim, _) = do
-  trueModel <- Plain <$> _cQuery x True
-  falseModel <- Plain <$> _cQuery x False
-  return $ VChc dim trueModel falseModel
-
 -- | given a prop, check if it is plain, if so run SMT normally, if not run the
 -- | variational solver
 solveChoice :: (Show a, Ord a) => VProp a -> IO [V Dim (Maybe I.SMTModel)]
@@ -191,144 +154,70 @@ solveChoice prop
                       SC.Unk   -> error "SBV failed in plain solve Choice"
                       SC.Unsat -> return $ Plain Nothing
                       SC.Sat   -> SC.getModel >>= return . Plain . Just
-  | otherwise = S.runSMT $ do
-      (p, ds') <- symbolicPropExpr' prop
-      S.constrain p
-      let ds = M.toList ds'
-      res <- SC.query $ do mapM (cQuery) ds
-      return res
-
--- | This test is simulating recursively evaluating an And in our domain the
--- list of strings are considered to be And [String] in our data type
-test :: [String] -> IO (Maybe I.SMTModel)
-test xs = S.runSMT $
-  do
-  xs' <- traverse (\a -> sequence (a, S.sBool a)) xs -- phase 1, add all vars
-  loop xs' -- now the recursion
- where
-   -- | perform the recursion to that semantically converts our And to SBV's &&&
-   loop1 []           = S.true
-   loop1 ((s, sB):ss) = sB S.&&& loop1 ss
-
-   -- | the outer loop, run the constraint and then get a model
-   loop ys = SC.query $ do S.constrain $ loop1 ys
-                           cs <- SC.checkSat
-                           case cs of
-                             SC.Unk   -> error "Unknown!"
-                             SC.Unsat -> return Nothing
-                             SC.Sat   -> Just <$> SC.getModel
+  | otherwise = S.runSMT . test2 $ show <$> prop
 
 test2 :: VProp String -> S.Symbolic [V Dim (Maybe I.SMTModel)]
 test2 prop = do
-  prop' <- traverse S.sBool prop -- phase 1, add all vars
+  -- prop' <- traverse (\p -> sequence (p, S.sBool p)) prop -- phase 1, add all vars
+  prop' <- traverse S.sBool prop
   (_, models) <- SC.query $ loop prop' []
   return models
+
+bToSb True = S.true
+bToSb False = S.false
+
+-- | get a model out given an S.SBool
+getModel :: SC.Query (V Dim (Maybe I.SMTModel))
+getModel = do cs <- SC.checkSat
+              case cs of
+                SC.Unk   -> error "Unknown!"
+                SC.Unsat -> return (Plain Nothing)
+                SC.Sat   -> (Plain . Just) <$> SC.getModel
+
+constrainCheck :: String -> Set.Set String -> Bool
+constrainCheck = Set.member
+
+smartConstrain :: (String, S.SBool) -> Set.Set String -> SC.Query ()
+smartConstrain (s, sb) vs
+  | constrainCheck s vs = return ()
+  | otherwise = S.constrain sb
+
+loop :: VProp S.SBool -> [V Dim (Maybe I.SMTModel)]
+  -> SC.Query (S.SBool, [V Dim (Maybe I.SMTModel)])
+loop (Ref b) acc = do S.constrain b; return (b, acc)
+loop (Lit b) acc = do S.constrain (bToSb b); return (bToSb b, acc)
+loop (Not bs) acc = do (b, acc') <- loop (S.bnot <$> bs) acc
+                       S.constrain b
+                       return (b, acc' ++ acc)
+loop (Op2 Impl l r) acc = do (bl, al) <- loop l acc
+                             (br, ar) <- loop r al
+                             S.constrain $ bl S.==> br
+                             return (bl S.==> br, ar)
+loop (Op2 BiImpl l r) acc = do (bl, al) <- loop l acc
+                               (br, ar) <- loop r al
+                               S.constrain $ bl S.<=> br
+                               return (bl S.<=> br, ar)
+loop (Opn And ps) acc = do (bs, as) <- go ps S.true acc
+                           S.constrain bs
+                           return (bs, as)
   where
-    bToSb True = S.true
-    bToSb False = S.false
-
-    -- | perform the recursion so that semantically converts our And to SBV's &&&
-    loop1 :: VProp S.SBool -> V Dim S.SBool
-    loop1 (Lit b)          = Plain $ if b then S.true else S.false
-    loop1 (Not ps)         = loop1 $ S.bnot ps
-    loop1 (Opn And [])     = Plain S.true
-    loop1 (Opn Or [])      = Plain S.false
-    loop1 (Opn And ss)     = loop1 $ foldr1 (S.&&&) ss
-    loop1 (Opn Or ss)      = loop1 $ foldr1 (S.|||) ss
-    loop1 (Op2 Impl l r)   = loop1 $ l S.==> r
-    loop1 (Op2 BiImpl l r) = loop1 $ l S.<=> r
-    loop1 (Chc d l r)      = VChc d (loop1 l) (loop1 r)
-    loop1 (Ref x)          = Plain x
-
-    -- | get a model out given an S.SBool
-    getModel :: SC.Query (V Dim (Maybe I.SMTModel))
-    getModel = do cs <- SC.checkSat
-                  case cs of
-                    SC.Unk   -> error "Unknown!"
-                    SC.Unsat -> return (Plain Nothing)
-                    SC.Sat   -> (Plain . Just) <$> SC.getModel
-
-    -- | recurse over the structure only getting amodel on refs and lits
-    -- unbox :: VProp S.SBool -> SC.Query (V Dim (Maybe I.SMTModel))
-    -- unbox (Ref x) = getModel x
-    -- unbox (Lit b) = getModel $ bToSb b
-    -- unbox (Chc d l r) = do l' <- unbox l; r' <- unbox r; return $ VChc d l' r'
-    -- unbox x = unbox $ loop1 x
-
-    resolve :: V Dim S.SBool -> SC.Query (V Dim (Maybe I.SMTModel))
-    resolve (Plain x) = do S.constrain x
-                           getModel
-    resolve (VChc d l r) =
-      do SC.push 1
-         ml <- resolve l
-         SC.pop 1
-         SC.push 1
-         mr <- resolve r
-         SC.pop 1
-         return $ VChc d ml mr
-
-    loop :: VProp S.SBool -> [V Dim (Maybe I.SMTModel)] -> SC.Query (S.SBool, [V Dim (Maybe I.SMTModel)])
-    loop (Ref x) acc = do S.constrain x; return (x, acc)
-    loop (Lit b) acc = do S.constrain (bToSb b); return (bToSb b, acc)
-    loop (Not ps) acc = do (b, a) <- loop (S.bnot <$> ps) acc
-                           S.constrain b
-                           return (b, a ++ acc)
-    loop (Op2 Impl l r) acc = do (bl, al) <- loop l acc
-                                 (br, ar) <- loop r (al ++ acc)
-                                 S.constrain $ bl S.==> br
-                                 return (bl S.==> br, ar)
-    loop (Opn And ps) acc = do (bs, as) <- go ps S.true acc
-                               S.constrain bs
-                               return (bs, as)
-      where
-        go [] bacc ac = return (bacc, ac)
-        go (s:ss) bacc ac = do (sB, ac') <- loop s ac
-                               go ss (sB S.&&& bacc) (ac' ++ ac)
-    loop (Opn Or ps) acc = do (bs, as) <- go ps S.true acc
-                              S.constrain bs
-                              return (bs, as)
-      where
-        go [] bacc ac = return (bacc, ac)
-        go (s:ss) bacc ac = do (sB, ac') <- loop s ac
-                               go ss (sB S.||| bacc) (ac' ++ ac)
-    loop (Chc d l r) acc =
-      do SC.push 1
-         (_, acc') <- loop l acc
-         lmodel <- getModel
-         SC.pop 1
-         SC.push 1
-         (a, racc) <- loop r (acc' ++ acc)
-         rmodel <- getModel
-         SC.pop 1
-         return $ (a, (VChc d lmodel rmodel) : racc)
-
--- -- | Given two models, if both are not nothing, combine them
--- combineModels :: Maybe I.SMTModel -> Maybe I.SMTModel -> Maybe I.SMTModel
--- combineModels Nothing a = a
--- combineModels a Nothing = a
--- combineModels
---   (Just I.SMTModel{I.modelAssocs=aAs, I.modelObjectives=aOs})
---   (Just I.SMTModel{I.modelAssocs=bAs , I.modelObjectives=bOs}) =
---   (Just I.SMTModel{ I.modelAssocs= nub aAs ++ bAs
---                   , I.modelObjectives = aOs ++ bOs})
-
--- | Given an association between a symbolic bool variable and a normal bool,
--- add a representative constraint to the query monad
-assocToConstraint :: (S.SBool, Bool) -> SC.Query S.SBool
-assocToConstraint (var, val) = return $ var S..== (bToSb val)
-  where bToSb True = S.true
-        bToSb False = S.false
-
--- | Change a prop to a predicate, avoiding anything that has already been assigned
-symbolicPropExpr' :: (Show a, Ord a) => VProp a -> S.Symbolic (S.SBool, M.Map Dim S.SBool)
-symbolicPropExpr' prop = do
-    let vs = (Set.toList (vars prop))
-        ds = (Set.toList (dimensions prop))
-    syms <- fmap (M.fromList . zip vs) (S.sBools (map show vs))
-    dims <- fmap (M.fromList . zip ds) (S.sBools (map dimName ds))
-    let look f = fromMaybe err (M.lookup f syms)
-        lookd d = fromMaybe errd (M.lookup d dims)
-    return ((evalPropExpr lookd look prop), dims)
-
-  where err = error "symbolicPropExpr: Internal error, no symbol found."
-        errd = error "symbolicPropExpr: Internal error, no dimension found."
+    go [] bacc ac = return (bacc, ac)
+    go (s:ss) bacc ac = do (sB, ac') <- loop s ac
+                           go ss (sB S.&&& bacc) ac'
+loop (Opn Or ps) acc = do (bs, as) <- go ps S.true acc
+                          S.constrain bs
+                          return (bs, as)
+  where
+    go [] bacc ac = return (bacc, ac)
+    go (s:ss) bacc ac = do (sB, ac') <- loop s ac
+                           go ss (sB S.||| bacc) ac'
+loop (Chc d l r) acc =
+  do SC.push 1
+     (_, acc') <- loop l acc
+     lmodel <- getModel
+     SC.pop 1
+     SC.push 1
+     (a, racc) <- loop r (acc' ++ acc)
+     rmodel <- getModel
+     SC.pop 1
+     return $ (a, (VChc d lmodel rmodel) : racc)
