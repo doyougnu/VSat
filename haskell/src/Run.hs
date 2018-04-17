@@ -297,10 +297,10 @@ test2 prop = do
          lmodel <- getModel
          SC.pop 1
          SC.push 1
-         (_, racc) <- loop r (acc' ++ acc)
+         (a, racc) <- loop r (acc' ++ acc)
          rmodel <- getModel
          SC.pop 1
-         return $ VChc d lmodel rmodel
+         return $ (a, (VChc d lmodel rmodel) : racc)
 
 -- -- | Given two models, if both are not nothing, combine them
 -- combineModels :: Maybe I.SMTModel -> Maybe I.SMTModel -> Maybe I.SMTModel
