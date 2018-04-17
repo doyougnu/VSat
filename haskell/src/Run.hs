@@ -218,10 +218,11 @@ test xs = S.runSMT $
                              SC.Unsat -> return Nothing
                              SC.Sat   -> Just <$> SC.getModel
 
-test2 :: VProp String -> S.Symbolic (V Dim (Maybe I.SMTModel))
+test2 :: VProp String -> S.Symbolic [V Dim (Maybe I.SMTModel)]
 test2 prop = do
   prop' <- traverse S.sBool prop -- phase 1, add all vars
-  SC.query $ resolve $ loop1 prop'
+  (_, models) <- SC.query $ loop prop' []
+  return models
   where
     bToSb True = S.true
     bToSb False = S.false
@@ -266,13 +267,40 @@ test2 prop = do
          SC.pop 1
          return $ VChc d ml mr
 
-    -- loop (Opn _ (p:ps)) =  pure <$> unbox p
-    -- loop (Op2 _ l r) = do l' <- unbox l
-    --                       r' <- unbox r
-    --                       return $ [l', r']
-    -- loop x   = pure <$> unbox x
-
-
+    loop :: VProp S.SBool -> [V Dim (Maybe I.SMTModel)] -> SC.Query (S.SBool, [V Dim (Maybe I.SMTModel)])
+    loop (Ref x) acc = do S.constrain x; return (x, acc)
+    loop (Lit b) acc = do S.constrain (bToSb b); return (bToSb b, acc)
+    loop (Not ps) acc = do (b, a) <- loop (S.bnot <$> ps) acc
+                           S.constrain b
+                           return (b, a ++ acc)
+    loop (Op2 Impl l r) acc = do (bl, al) <- loop l acc
+                                 (br, ar) <- loop r (al ++ acc)
+                                 S.constrain $ bl S.==> br
+                                 return (bl S.==> br, ar)
+    loop (Opn And ps) acc = do (bs, as) <- go ps S.true acc
+                               S.constrain bs
+                               return (bs, as)
+      where
+        go [] bacc ac = return (bacc, ac)
+        go (s:ss) bacc ac = do (sB, ac') <- loop s ac
+                               go ss (sB S.&&& bacc) (ac' ++ ac)
+    loop (Opn Or ps) acc = do (bs, as) <- go ps S.true acc
+                              S.constrain bs
+                              return (bs, as)
+      where
+        go [] bacc ac = return (bacc, ac)
+        go (s:ss) bacc ac = do (sB, ac') <- loop s ac
+                               go ss (sB S.||| bacc) (ac' ++ ac)
+    loop (Chc d l r) acc =
+      do SC.push 1
+         (_, acc') <- loop l acc
+         lmodel <- getModel
+         SC.pop 1
+         SC.push 1
+         (_, racc) <- loop r (acc' ++ acc)
+         rmodel <- getModel
+         SC.pop 1
+         return $ VChc d lmodel rmodel
 
 -- -- | Given two models, if both are not nothing, combine them
 -- combineModels :: Maybe I.SMTModel -> Maybe I.SMTModel -> Maybe I.SMTModel
