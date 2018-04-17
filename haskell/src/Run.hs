@@ -182,13 +182,12 @@ smartConstrain (s, sb) vs
   | constrainCheck s vs = return ()
   | otherwise = S.constrain sb
 
-loop :: VProp S.SBool -> [V Dim (Maybe I.SMTModel)]
-  -> SC.Query (S.SBool, [V Dim (Maybe I.SMTModel)])
+loop :: VProp S.SBool -> [V Dim (Maybe I.SMTModel)] -> SC.Query (S.SBool, [V Dim (Maybe I.SMTModel)])
 loop (Ref b) acc = do S.constrain b; return (b, acc)
 loop (Lit b) acc = do S.constrain (bToSb b); return (bToSb b, acc)
 loop (Not bs) acc = do (b, acc') <- loop (S.bnot <$> bs) acc
                        S.constrain b
-                       return (b, acc' ++ acc)
+                       return (b, acc')
 loop (Op2 Impl l r) acc = do (bl, al) <- loop l acc
                              (br, ar) <- loop r al
                              S.constrain $ bl S.==> br
@@ -217,7 +216,7 @@ loop (Chc d l r) acc =
      lmodel <- getModel
      SC.pop 1
      SC.push 1
-     (a, racc) <- loop r (acc' ++ acc)
+     (a, racc) <- loop r acc'
      rmodel <- getModel
      SC.pop 1
-     return $ (a, (VChc d lmodel rmodel) : racc)
+     return $ (a, (VChc d lmodel rmodel) : racc) -- should this accumulator be racc and not acc' ++ acc ++ racc?
