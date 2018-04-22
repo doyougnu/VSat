@@ -12,7 +12,6 @@ import Control.Monad.State.Strict    as St
 import qualified Data.SBV.Internals  as I
 import qualified Data.SBV            as S
 import qualified Data.SBV.Control    as SC
-import Control.Monad                 (liftM3)
 
 import GHC.Generics
 import Control.DeepSeq               (NFData)
@@ -158,9 +157,8 @@ solveChoice prop
 
 test2 :: VProp String -> S.Symbolic [V Dim (Maybe I.SMTModel)]
 test2 prop = do
-  -- prop' <- traverse (\p -> sequence (p, S.sBool p)) prop -- phase 1, add all vars
   prop' <- traverse S.sBool prop
-  (_, models) <- SC.query $ loop prop' []
+  models <- SC.query $ St.execStateT (incrementalSolve prop') []
   return models
 
 bToSb :: S.Boolean p => Bool -> p
@@ -175,91 +173,50 @@ getModel = do cs <- SC.checkSat
                 SC.Unsat -> return (Plain Nothing)
                 SC.Sat   -> (Plain . Just) <$> SC.getModel
 
-type IncState = [V Dim (Maybe I.SMTModel)]
 
+type IncState = [V Dim (Maybe I.SMTModel)]
 type IncSolve a = StateT IncState SC.Query a
-type IncSolve2 a = SC.Query (State IncState a)
 
 instance I.SolverContext (StateT IncState SC.Query) where
   constrain = S.constrain
   namedConstraint = S.namedConstraint
   setOption = S.setOption
 
-loop' :: VProp S.SBool -> IncSolve S.SBool
-loop' (Ref b) = do S.constrain b; return b
-loop' (Lit b) = do S.constrain (bToSb b); return (bToSb b)
-loop' (Not bs)= do b <- loop' (S.bnot <$> bs)
-                   S.constrain b
-                   return b
-loop' (Op2 Impl l r) = do bl <- loop' l
-                          br <- loop' r
-                          S.constrain $ bl S.==> br
-                          return $ bl S.==> br
-loop' (Op2 BiImpl l r) = do bl <- loop' l
-                            br <- loop' r
-                            S.constrain $ bl S.<=> br
-                            return $ bl S.<=> br
-loop' (Opn And ps) = do b <- go S.true ps
-                        S.constrain b
-                        return b
+incrementalSolve :: VProp S.SBool -> IncSolve S.SBool
+incrementalSolve (Ref b) = do S.constrain b; return b
+incrementalSolve (Lit b) = do S.constrain (bToSb b); return (bToSb b)
+incrementalSolve (Not bs)= do b <- incrementalSolve (S.bnot <$> bs)
+                              S.constrain b
+                              return b
+incrementalSolve (Op2 Impl l r) = do bl <- incrementalSolve l
+                                     br <- incrementalSolve r
+                                     S.constrain $ bl S.==> br
+                                     return $ bl S.==> br
+incrementalSolve (Op2 BiImpl l r) = do bl <- incrementalSolve l
+                                       br <- incrementalSolve r
+                                       S.constrain $ bl S.<=> br
+                                       return $ bl S.<=> br
+incrementalSolve (Opn And ps) = do b <- go S.true ps
+                                   S.constrain b
+                                   return b
   where
     go :: S.SBool -> [VProp S.SBool] -> IncSolve S.SBool
     go acc []     = return acc
-    go acc (x:xs) = do b <- loop' x; go (b S.&&& acc) xs
-loop' (Opn Or ps) = do b <- go S.true ps
-                       S.constrain b
-                       return b
+    go acc (x:xs) = do b <- incrementalSolve x; go (b S.&&& acc) xs
+incrementalSolve (Opn Or ps) = do b <- go S.true ps
+                                  S.constrain b
+                                  return b
   where
     go :: S.SBool -> [VProp S.SBool] -> IncSolve S.SBool
     go acc []     = return acc
-    go acc (x:xs) = do b <- loop' x; go (b S.||| acc) xs
-loop' (Chc d l r) = do lift $ SC.push 1
-                       _ <- loop' l
-                       lmodel <- lift $ getModel
-                       lift $ SC.pop 1
-                       lift $ SC.push 1
-                       b <- loop' r
-                       rmodel <- lift $ getModel
-                       lift $ SC.pop 1
-                       St.modify ((:) (VChc d lmodel rmodel))
-                       return b
-
-
-loop :: VProp S.SBool -> [V Dim (Maybe I.SMTModel)] -> SC.Query (S.SBool, [V Dim (Maybe I.SMTModel)])
-loop (Ref b) acc = do S.constrain b; return (b, acc)
-loop (Lit b) acc = do S.constrain (bToSb b); return (bToSb b, acc)
-loop (Not bs) acc = do (b, acc') <- loop (S.bnot <$> bs) acc
-                       S.constrain b
-                       return (b, acc')
-loop (Op2 Impl l r) acc = do (bl, al) <- loop l acc
-                             (br, ar) <- loop r al
-                             S.constrain $ bl S.==> br
-                             return (bl S.==> br, ar)
-loop (Op2 BiImpl l r) acc = do (bl, al) <- loop l acc
-                               (br, ar) <- loop r al
-                               S.constrain $ bl S.<=> br
-                               return (bl S.<=> br, ar)
-loop (Opn And ps) acc = do (bs, as) <- go ps S.true acc
-                           S.constrain bs
-                           return (bs, as)
-  where
-    go [] bacc ac = return (bacc, ac)
-    go (s:ss) bacc ac = do (sB, ac') <- loop s ac
-                           go ss (sB S.&&& bacc) ac'
-loop (Opn Or ps) acc = do (bs, as) <- go ps S.true acc
-                          S.constrain bs
-                          return (bs, as)
-  where
-    go [] bacc ac = return (bacc, ac)
-    go (s:ss) bacc ac = do (sB, ac') <- loop s ac
-                           go ss (sB S.||| bacc) ac'
-loop (Chc d l r) acc =
-  do SC.push 1
-     (_, acc') <- loop l acc
-     lmodel <- getModel
-     SC.pop 1
-     SC.push 1
-     (a, racc) <- loop r acc'
-     rmodel <- getModel
-     SC.pop 1
-     return $ (a, (VChc d lmodel rmodel) : racc) -- should this accumulator be racc and not acc' ++ acc ++ racc?
+    go acc (x:xs) = do b <- incrementalSolve x; go (b S.||| acc) xs
+incrementalSolve (Chc d l r) = do lift $ SC.push 1
+                                  _ <- incrementalSolve l
+                                  lmodel <- lift $ getModel
+                                  lift $ SC.pop 1
+                                  lift $ SC.push 1
+                                  b <- incrementalSolve r
+                                  rmodel <- lift $ getModel
+                                  lift $ SC.pop 1
+                                  St.modify ((:) (VChc d lmodel rmodel))
+                                  return b
