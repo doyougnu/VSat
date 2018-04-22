@@ -2,7 +2,7 @@
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: a30ee8ce3aae79d8346b4e6f7153313c8641d7a49cae5c8cc7b06b4016df4cfb
+-- hash: b45d20a5498c0f4d0e94f8e6a46faf88de12ef19650402e17ab514bcee3899c9
 
 name:           vsat
 version:        0.1.0.0
@@ -34,7 +34,7 @@ library
       Paths_vsat
   hs-source-dirs:
       src
-  default-extensions: NamedFieldPuns OverloadedStrings FlexibleContexts DeriveFunctor DeriveGeneric BangPatterns GeneralizedNewtypeDeriving FlexibleInstances DeriveDataTypeable
+  default-extensions: NamedFieldPuns OverloadedStrings FlexibleContexts DeriveFunctor DeriveGeneric BangPatterns GeneralizedNewtypeDeriving DeriveTraversable FlexibleInstances DeriveDataTypeable
   build-depends:
       QuickCheck
     , base >=4.7 && <5
@@ -52,7 +52,7 @@ executable vsat
       Paths_vsat
   hs-source-dirs:
       app
-  default-extensions: NamedFieldPuns OverloadedStrings FlexibleContexts DeriveFunctor DeriveGeneric BangPatterns GeneralizedNewtypeDeriving FlexibleInstances DeriveDataTypeable
+  default-extensions: NamedFieldPuns OverloadedStrings FlexibleContexts DeriveFunctor DeriveGeneric BangPatterns GeneralizedNewtypeDeriving DeriveTraversable FlexibleInstances DeriveDataTypeable
   ghc-options: -threaded -rtsopts -with-rtsopts=-N -Wall -fno-warn-orphans
   build-depends:
       QuickCheck
@@ -74,7 +74,7 @@ test-suite vsat-test
       Paths_vsat
   hs-source-dirs:
       test
-  default-extensions: NamedFieldPuns OverloadedStrings FlexibleContexts DeriveFunctor DeriveGeneric BangPatterns GeneralizedNewtypeDeriving FlexibleInstances DeriveDataTypeable
+  default-extensions: NamedFieldPuns OverloadedStrings FlexibleContexts DeriveFunctor DeriveGeneric BangPatterns GeneralizedNewtypeDeriving DeriveTraversable FlexibleInstances DeriveDataTypeable
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       QuickCheck
@@ -95,7 +95,7 @@ benchmark vsat-bench
       Paths_vsat
   hs-source-dirs:
       bench, src
-  default-extensions: NamedFieldPuns OverloadedStrings FlexibleContexts DeriveFunctor DeriveGeneric BangPatterns GeneralizedNewtypeDeriving FlexibleInstances DeriveDataTypeable
+  default-extensions: NamedFieldPuns OverloadedStrings FlexibleContexts DeriveFunctor DeriveGeneric BangPatterns GeneralizedNewtypeDeriving DeriveTraversable FlexibleInstances DeriveDataTypeable
   ghc-options: -O2 -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       QuickCheck

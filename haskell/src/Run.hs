@@ -8,16 +8,16 @@ module Run ( runEnv
 
 import qualified Data.Map.Strict as M
 import Control.Monad.RWS.Strict
+import Control.Monad.State.Strict    as St
 import qualified Data.SBV.Internals  as I
 import qualified Data.SBV            as S
 import qualified Data.SBV.Control    as SC
-
-import qualified Data.Set            as Set
+import Control.Monad                 (liftM3)
 
 import GHC.Generics
 import Control.DeepSeq               (NFData)
 
-import Data.Maybe                    (fromMaybe, catMaybes)
+import Data.Maybe                    (catMaybes)
 
 import VProp
 import V
@@ -163,6 +163,7 @@ test2 prop = do
   (_, models) <- SC.query $ loop prop' []
   return models
 
+bToSb :: S.Boolean p => Bool -> p
 bToSb True = S.true
 bToSb False = S.false
 
@@ -174,13 +175,55 @@ getModel = do cs <- SC.checkSat
                 SC.Unsat -> return (Plain Nothing)
                 SC.Sat   -> (Plain . Just) <$> SC.getModel
 
-constrainCheck :: String -> Set.Set String -> Bool
-constrainCheck = Set.member
+type IncState = [V Dim (Maybe I.SMTModel)]
 
-smartConstrain :: (String, S.SBool) -> Set.Set String -> SC.Query ()
-smartConstrain (s, sb) vs
-  | constrainCheck s vs = return ()
-  | otherwise = S.constrain sb
+type IncSolve a = StateT IncState SC.Query a
+type IncSolve2 a = SC.Query (State IncState a)
+
+instance I.SolverContext (StateT IncState SC.Query) where
+  constrain = S.constrain
+  namedConstraint = S.namedConstraint
+  setOption = S.setOption
+
+loop' :: VProp S.SBool -> IncSolve S.SBool
+loop' (Ref b) = do S.constrain b; return b
+loop' (Lit b) = do S.constrain (bToSb b); return (bToSb b)
+loop' (Not bs)= do b <- loop' (S.bnot <$> bs)
+                   S.constrain b
+                   return b
+loop' (Op2 Impl l r) = do bl <- loop' l
+                          br <- loop' r
+                          S.constrain $ bl S.==> br
+                          return $ bl S.==> br
+loop' (Op2 BiImpl l r) = do bl <- loop' l
+                            br <- loop' r
+                            S.constrain $ bl S.<=> br
+                            return $ bl S.<=> br
+loop' (Opn And ps) = do b <- go S.true ps
+                        S.constrain b
+                        return b
+  where
+    go :: S.SBool -> [VProp S.SBool] -> IncSolve S.SBool
+    go acc []     = return acc
+    go acc (x:xs) = do b <- loop' x; go (b S.&&& acc) xs
+loop' (Opn Or ps) = do b <- go S.true ps
+                       S.constrain b
+                       return b
+  where
+    go :: S.SBool -> [VProp S.SBool] -> IncSolve S.SBool
+    go acc []     = return acc
+    go acc (x:xs) = do b <- loop' x; go (b S.||| acc) xs
+loop' (Chc d l r) = do lift $ SC.push 1
+                       _ <- loop' l
+                       lmodel <- lift $ getModel
+                       lift $ SC.pop 1
+                       lift $ SC.push 1
+                       b <- loop' r
+                       rmodel <- lift $ getModel
+                       lift $ SC.pop 1
+                       St.modify ((:) (VChc d lmodel rmodel))
+                       return b
+
 
 loop :: VProp S.SBool -> [V Dim (Maybe I.SMTModel)] -> SC.Query (S.SBool, [V Dim (Maybe I.SMTModel)])
 loop (Ref b) acc = do S.constrain b; return (b, acc)
