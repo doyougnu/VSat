@@ -93,7 +93,6 @@ runBruteForce prop = {-# SCC "brute_force"#-} do
   (_confs, _) <- get
   let confs = M.keys _confs
       plainProps = (\y -> sequence $ (y, selectVariant y prop)) <$> confs
-  -- this line is always throwing a Nothing
   plainModels <- lift $ mapM (S.sat . symbolicPropExpr . snd) $ catMaybes plainProps
   return plainModels
 
@@ -139,8 +138,7 @@ work prop = do
 incrementalSolve :: VProp String -> S.Symbolic [V Dim (Maybe I.SMTModel)]
 incrementalSolve prop = do
   prop' <- traverse S.sBool prop
-  models <- SC.query $ St.execStateT (incrementalSolve_ prop') []
-  return models
+  SC.query $ St.execStateT (incrementalSolve_ prop') []
 
 bToSb :: S.Boolean p => Bool -> p
 bToSb True = S.true
@@ -156,16 +154,17 @@ getModel = do cs <- SC.checkSat
 
 
 type IncState = [V Dim (Maybe I.SMTModel)]
-type IncSolve a = StateT IncState SC.Query a
+type IncSolve a = St.StateT IncState SC.Query a
 
-instance I.SolverContext (StateT IncState SC.Query) where
-  constrain = S.constrain
-  namedConstraint = S.namedConstraint
-  setOption = S.setOption
+instance (Monad m, I.SolverContext m) =>
+  I.SolverContext (StateT IncState m) where
+  constrain = lift . S.constrain
+  namedConstraint = (lift .) . S.namedConstraint
+  setOption = lift . S.setOption
 
 incrementalSolve_ :: VProp S.SBool -> IncSolve S.SBool
-incrementalSolve_ (Ref b) = do S.constrain b; return b
-incrementalSolve_ (Lit b) = do S.constrain (bToSb b); return (bToSb b)
+incrementalSolve_ (Ref b) = return b
+incrementalSolve_ (Lit b) = return (bToSb b)
 incrementalSolve_ (Not bs)= do b <- incrementalSolve_ (S.bnot <$> bs)
                                S.constrain b
                                return b
