@@ -3,7 +3,6 @@ module Run ( runEnv
            , Result
            , SatDict
            , Log
-           , test2
            ) where
 
 import qualified Data.Map.Strict as M
@@ -134,31 +133,13 @@ work prop = do
     runBruteForce prop >>= return . L
     else do
     opts <- asks optimizations
-    result <- lift $ incrementalSolve prop opts
+    result <- lift . S.runSMT $ incrementalSolve prop
     return $ Vr result
 
--- | given VProp a, incrementally solve it using variational tricks and SBV
-incrementalSolve :: (Show a, Ord a) => VProp a -> [VProp a -> VProp a] -> IO [V Dim (Maybe I.SMTModel)]
-incrementalSolve prop opts = {-# SCC "choice_solver"#-} solveChoice prop
-
--- | given a prop, check if it is plain, if so run SMT normally, if not run the
--- | variational solver
-solveChoice :: (Show a, Ord a) => VProp a -> IO [V Dim (Maybe I.SMTModel)]
-solveChoice prop
-  | isPlain prop = fmap pure $ S.runSMT $ do
-      p <- symbolicPropExpr prop
-      S.constrain p
-      SC.query $ do c <- SC.checkSat
-                    case c of
-                      SC.Unk   -> error "SBV failed in plain solve Choice"
-                      SC.Unsat -> return $ Plain Nothing
-                      SC.Sat   -> SC.getModel >>= return . Plain . Just
-  | otherwise = S.runSMT . test2 $ show <$> prop
-
-test2 :: VProp String -> S.Symbolic [V Dim (Maybe I.SMTModel)]
-test2 prop = do
+incrementalSolve :: VProp String -> S.Symbolic [V Dim (Maybe I.SMTModel)]
+incrementalSolve prop = do
   prop' <- traverse S.sBool prop
-  models <- SC.query $ St.execStateT (incrementalSolve prop') []
+  models <- SC.query $ St.execStateT (incrementalSolve_ prop') []
   return models
 
 bToSb :: S.Boolean p => Bool -> p
@@ -182,41 +163,41 @@ instance I.SolverContext (StateT IncState SC.Query) where
   namedConstraint = S.namedConstraint
   setOption = S.setOption
 
-incrementalSolve :: VProp S.SBool -> IncSolve S.SBool
-incrementalSolve (Ref b) = do S.constrain b; return b
-incrementalSolve (Lit b) = do S.constrain (bToSb b); return (bToSb b)
-incrementalSolve (Not bs)= do b <- incrementalSolve (S.bnot <$> bs)
-                              S.constrain b
-                              return b
-incrementalSolve (Op2 Impl l r) = do bl <- incrementalSolve l
-                                     br <- incrementalSolve r
-                                     S.constrain $ bl S.==> br
-                                     return $ bl S.==> br
-incrementalSolve (Op2 BiImpl l r) = do bl <- incrementalSolve l
-                                       br <- incrementalSolve r
-                                       S.constrain $ bl S.<=> br
-                                       return $ bl S.<=> br
-incrementalSolve (Opn And ps) = do b <- go S.true ps
+incrementalSolve_ :: VProp S.SBool -> IncSolve S.SBool
+incrementalSolve_ (Ref b) = do S.constrain b; return b
+incrementalSolve_ (Lit b) = do S.constrain (bToSb b); return (bToSb b)
+incrementalSolve_ (Not bs)= do b <- incrementalSolve_ (S.bnot <$> bs)
+                               S.constrain b
+                               return b
+incrementalSolve_ (Op2 Impl l r) = do bl <- incrementalSolve_ l
+                                      br <- incrementalSolve_ r
+                                      S.constrain $ bl S.==> br
+                                      return $ bl S.==> br
+incrementalSolve_ (Op2 BiImpl l r) = do bl <- incrementalSolve_ l
+                                        br <- incrementalSolve_ r
+                                        S.constrain $ bl S.<=> br
+                                        return $ bl S.<=> br
+incrementalSolve_ (Opn And ps) = do b <- go S.true ps
+                                    S.constrain b
+                                    return b
+  where
+    go :: S.SBool -> [VProp S.SBool] -> IncSolve S.SBool
+    go acc []     = return acc
+    go acc (x:xs) = do b <- incrementalSolve_ x; go (b S.&&& acc) xs
+incrementalSolve_ (Opn Or ps) = do b <- go S.true ps
                                    S.constrain b
                                    return b
   where
     go :: S.SBool -> [VProp S.SBool] -> IncSolve S.SBool
     go acc []     = return acc
-    go acc (x:xs) = do b <- incrementalSolve x; go (b S.&&& acc) xs
-incrementalSolve (Opn Or ps) = do b <- go S.true ps
-                                  S.constrain b
-                                  return b
-  where
-    go :: S.SBool -> [VProp S.SBool] -> IncSolve S.SBool
-    go acc []     = return acc
-    go acc (x:xs) = do b <- incrementalSolve x; go (b S.||| acc) xs
-incrementalSolve (Chc d l r) = do lift $ SC.push 1
-                                  _ <- incrementalSolve l
-                                  lmodel <- lift $ getModel
-                                  lift $ SC.pop 1
-                                  lift $ SC.push 1
-                                  b <- incrementalSolve r
-                                  rmodel <- lift $ getModel
-                                  lift $ SC.pop 1
-                                  St.modify ((:) (VChc d lmodel rmodel))
-                                  return b
+    go acc (x:xs) = do b <- incrementalSolve_ x; go (b S.||| acc) xs
+incrementalSolve_ (Chc d l r) = do lift $ SC.push 1
+                                   _ <- incrementalSolve_ l
+                                   lmodel <- lift $ getModel
+                                   lift $ SC.pop 1
+                                   lift $ SC.push 1
+                                   b <- incrementalSolve_ r
+                                   rmodel <- lift $ getModel
+                                   lift $ SC.pop 1
+                                   St.modify ((:) (VChc d lmodel rmodel))
+                                   return b
