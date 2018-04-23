@@ -16,6 +16,8 @@ import GHC.Generics
 import Control.DeepSeq               (NFData)
 
 import Data.Maybe                    (catMaybes)
+import Data.Set                      (Set, empty, member, insert)
+import Control.Arrow                 (first, second)
 
 import VProp
 import V
@@ -132,13 +134,18 @@ work prop = do
     runBruteForce prop >>= return . L
     else do
     opts <- asks optimizations
-    result <- lift . S.runSMT $ incrementalSolve prop
+    (_, result) <- lift . S.runSMT $ incrementalSolve prop
     return $ Vr result
 
-incrementalSolve :: VProp String -> S.Symbolic [V Dim (Maybe I.SMTModel)]
+type UsedVars a = Set a
+type IncState a = (UsedVars a, [V Dim (Maybe I.SMTModel)])
+type IncSolve a b = St.StateT (IncState a) SC.Query b
+type IncVar a = (a, S.SBool)
+
+incrementalSolve :: (Ord a, Show a) => VProp a -> S.Symbolic (IncState a)
 incrementalSolve prop = do
-  prop' <- traverse S.sBool prop
-  SC.query $ St.execStateT (incrementalSolve_ prop') []
+  prop' <- traverse (\p -> sequence (p, S.sBool p)) prop
+  SC.query $ St.execStateT (incrementalSolve_ prop') (empty, [])
 
 bToSb :: S.Boolean p => Bool -> p
 bToSb True = S.true
@@ -153,43 +160,50 @@ getModel = do cs <- SC.checkSat
                 SC.Sat   -> (Plain . Just) <$> SC.getModel
 
 
-type IncState = [V Dim (Maybe I.SMTModel)]
-type IncSolve a = St.StateT IncState SC.Query a
-
 instance (Monad m, I.SolverContext m) =>
-  I.SolverContext (StateT IncState m) where
+  I.SolverContext (StateT (IncState a) m) where
   constrain = lift . S.constrain
   namedConstraint = (lift .) . S.namedConstraint
   setOption = lift . S.setOption
 
-incrementalSolve_ :: VProp S.SBool -> IncSolve S.SBool
+incHelper :: Ord a => IncVar a -> [VProp (IncVar a)] ->
+  (S.SBool -> S.SBool -> S.SBool) -> IncSolve a (IncVar a)
+incHelper acc []     _ = return acc
+incHelper acc (x:xs) f = do b <- incrementalSolve_ x; incHelper (b `mrg` acc) xs f
+  where mrg (_, sb) (a, sb2) = (a, sb `f` sb2)
+
+smartConstrain :: Ord a => IncVar a -> IncSolve a ()
+smartConstrain (v, sb) = do (vs, _) <- get
+                            if v `elem` vs
+                              then return ()
+                              else do S.constrain sb
+                                      St.modify (first (insert v))
+
+incrementalSolve_ :: (Ord a) => VProp (IncVar a) -> IncSolve a (IncVar a)
 incrementalSolve_ (Ref b) = return b
-incrementalSolve_ (Lit b) = return (bToSb b)
+incrementalSolve_ (Lit b) = do b' <- S.sBool; S.constrain $ b' S..== if b then S.true else S.false
 incrementalSolve_ (Not bs)= do b <- incrementalSolve_ (S.bnot <$> bs)
-                               S.constrain b
+                               smartConstrain b
+                               -- S.constrain b
                                return b
 incrementalSolve_ (Op2 Impl l r) = do bl <- incrementalSolve_ l
                                       br <- incrementalSolve_ r
-                                      S.constrain $ bl S.==> br
+                                      -- S.constrain $ bl S.==> br
+                                      smartConstrain $ bl S.==> br
                                       return $ bl S.==> br
 incrementalSolve_ (Op2 BiImpl l r) = do bl <- incrementalSolve_ l
                                         br <- incrementalSolve_ r
-                                        S.constrain $ bl S.<=> br
+                                        -- S.constrain $ bl S.<=> br
+                                        smartConstrain $ bl S.<=> br
                                         return $ bl S.<=> br
-incrementalSolve_ (Opn And ps) = do b <- go S.true ps
-                                    S.constrain b
+incrementalSolve_ (Opn And ps) = do b <- incHelper S.true ps (S.&&&)
+                                    -- S.constrain b
+                                    smartConstrain b
                                     return b
-  where
-    go :: S.SBool -> [VProp S.SBool] -> IncSolve S.SBool
-    go acc []     = return acc
-    go acc (x:xs) = do b <- incrementalSolve_ x; go (b S.&&& acc) xs
-incrementalSolve_ (Opn Or ps) = do b <- go S.true ps
-                                   S.constrain b
+incrementalSolve_ (Opn Or ps) = do b <- incHelper S.true ps (S.|||)
+                                   -- S.constrain b
+                                   smartConstrain b
                                    return b
-  where
-    go :: S.SBool -> [VProp S.SBool] -> IncSolve S.SBool
-    go acc []     = return acc
-    go acc (x:xs) = do b <- incrementalSolve_ x; go (b S.||| acc) xs
 incrementalSolve_ (Chc d l r) = do lift $ SC.push 1
                                    _ <- incrementalSolve_ l
                                    lmodel <- lift $ getModel
@@ -198,5 +212,5 @@ incrementalSolve_ (Chc d l r) = do lift $ SC.push 1
                                    b <- incrementalSolve_ r
                                    rmodel <- lift $ getModel
                                    lift $ SC.pop 1
-                                   St.modify ((:) (VChc d lmodel rmodel))
+                                   St.modify (\(vs, cs) -> (vs, (VChc d lmodel rmodel):cs))
                                    return b
