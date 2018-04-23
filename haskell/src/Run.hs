@@ -186,26 +186,20 @@ incrementalSolve_ :: VProp S.SBool -> IncSolve S.SBool
 incrementalSolve_ (Ref b) = return b
 incrementalSolve_ (Lit b) = return (bToSb b)
 incrementalSolve_ (Not bs)= do b <- incrementalSolve_ (S.bnot <$> bs)
-                               -- smartConstrain b
                                S.constrain b
                                return b
 incrementalSolve_ (Op2 Impl l r) = do bl <- incrementalSolve_ l
                                       br <- incrementalSolve_ r
-                                      -- smartConstrain $ bl S.==> br
-                                      -- return $ (lstr ++ " ==> " ++ rstr, bl S.==> br)
                                       return $ (bl S.==> br)
 incrementalSolve_ (Op2 BiImpl l r) = do bl <- incrementalSolve_ l
                                         br <- incrementalSolve_ r
                                         S.constrain $ bl S.<=> br
-                                        -- smartConstrain $ bl S.<=> br
                                         return $ bl S.<=> br
 incrementalSolve_ (Opn And ps) = do b <- incHelper S.true ps (S.&&&)
                                     S.constrain b
-                                    -- smartConstrain b
                                     return b
 incrementalSolve_ (Opn Or ps) = do b <- incHelper S.true ps (S.|||)
                                    S.constrain b
-                                   -- smartConstrain b
                                    return b
 incrementalSolve_ (Chc d l r) = do lift $ SC.push 1
                                    _ <- incrementalSolve_ l
