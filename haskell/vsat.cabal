@@ -1,73 +1,110 @@
-name:                vsat
-version:             0.1.0.0
--- synopsis:
--- description:
-homepage:            https://github.com/githubuser/vsat#readme
-license:             BSD3
-license-file:        LICENSE
-author:              Jeffrey Young
-maintainer:          youngjef@oregonstate.edu
-copyright:           2017 Jeffrey Young
-category:            Experimental
-build-type:          Simple
-extra-source-files:  README.md
-cabal-version:       >=1.10
+-- This file has been generated from package.yaml by hpack version 0.28.2.
+--
+-- see: https://github.com/sol/hpack
+--
+-- hash: b45d20a5498c0f4d0e94f8e6a46faf88de12ef19650402e17ab514bcee3899c9
 
-library
-  hs-source-dirs:      src
-  exposed-modules:     VProp, Utils, Run, SAT, V
-  default-extensions:          NamedFieldPuns
-                             , OverloadedStrings
-                             , FlexibleContexts
-                             , DeriveFunctor
-                             , DeriveGeneric
-                             , BangPatterns
-                             , GeneralizedNewtypeDeriving
-                             , FlexibleInstances
-                             , DeriveDataTypeable
-                             , UnicodeSyntax
-
-  build-depends:       base >= 4.7 && < 5
-                     , containers >= 0.5
-                     , mtl
-                     , foldl
-                     , bifunctors
-                     , QuickCheck
-                     , deepseq
-                     , sbv
-
-  default-language:    Haskell2010
-
-executable vsat
-  hs-source-dirs:      app
-  main-is:             Main.hs
-  ghc-options:         -O2 -threaded -rtsopts -with-rtsopts=-N -Wall -fno-warn-orphans
-  build-depends:       base
-                     , vsat
-                     , criterion
-                     , QuickCheck
-  default-language:    Haskell2010
-
-benchmark baselines
-  type:                exitcode-stdio-1.0
-  hs-source-dirs:      bench
-  main-is:             Baselines.hs
-  build-depends:       base
-                     , vsat
-                     , criterion
-                     , QuickCheck
-  ghc-options:         -O2 -threaded -rtsopts -with-rtsopts=-N -fno-full-laziness
-  default-language:    Haskell2010
-
-test-suite vsat-test
-  type:                exitcode-stdio-1.0
-  hs-source-dirs:      test
-  main-is:             Spec.hs
-  build-depends:       base
-                     , vsat
-  ghc-options:         -threaded -rtsopts -with-rtsopts=-N
-  default-language:    Haskell2010
+name:           vsat
+version:        0.1.0.0
+description:    Please see the README on Github at <https://github.com/githubuser/my-app#readme>
+homepage:       https://github.com/doyougnu/vsat#readme
+bug-reports:    https://github.com/doyougnu/vsat/issues
+author:         Jeffrey Young
+maintainer:     youngjef@oregonstate.edu
+copyright:      2018 Author name here
+license:        BSD3
+license-file:   LICENSE
+build-type:     Simple
+cabal-version:  >= 1.10
+extra-source-files:
+    README.md
 
 source-repository head
-  type:     git
-  location: https://github.com/githubuser/vsat
+  type: git
+  location: https://github.com/doyougnu/vsat
+
+library
+  exposed-modules:
+      Run
+      SAT
+      Utils
+      V
+      VProp
+  other-modules:
+      Paths_vsat
+  hs-source-dirs:
+      src
+  default-extensions: NamedFieldPuns OverloadedStrings FlexibleContexts DeriveFunctor DeriveGeneric BangPatterns GeneralizedNewtypeDeriving DeriveTraversable FlexibleInstances DeriveDataTypeable
+  build-depends:
+      QuickCheck
+    , base >=4.7 && <5
+    , bifunctors
+    , containers >=0.5
+    , deepseq
+    , foldl
+    , mtl
+    , sbv
+  default-language: Haskell2010
+
+executable vsat
+  main-is: Main.hs
+  other-modules:
+      Paths_vsat
+  hs-source-dirs:
+      app
+  default-extensions: NamedFieldPuns OverloadedStrings FlexibleContexts DeriveFunctor DeriveGeneric BangPatterns GeneralizedNewtypeDeriving DeriveTraversable FlexibleInstances DeriveDataTypeable
+  ghc-options: -threaded -rtsopts -with-rtsopts=-N -Wall -fno-warn-orphans
+  build-depends:
+      QuickCheck
+    , base >=4.7 && <5
+    , bifunctors
+    , containers >=0.5
+    , deepseq
+    , foldl
+    , mtl
+    , sbv
+    , vsat
+  default-language: Haskell2010
+
+test-suite vsat-test
+  type: exitcode-stdio-1.0
+  main-is: Spec.hs
+  other-modules:
+      Gen
+      Paths_vsat
+  hs-source-dirs:
+      test
+  default-extensions: NamedFieldPuns OverloadedStrings FlexibleContexts DeriveFunctor DeriveGeneric BangPatterns GeneralizedNewtypeDeriving DeriveTraversable FlexibleInstances DeriveDataTypeable
+  ghc-options: -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      QuickCheck
+    , base >=4.7 && <5
+    , bifunctors
+    , containers >=0.5
+    , deepseq
+    , foldl
+    , mtl
+    , sbv
+    , vsat
+  default-language: Haskell2010
+
+benchmark vsat-bench
+  type: exitcode-stdio-1.0
+  main-is: Baselines.hs
+  other-modules:
+      Paths_vsat
+  hs-source-dirs:
+      bench, src
+  default-extensions: NamedFieldPuns OverloadedStrings FlexibleContexts DeriveFunctor DeriveGeneric BangPatterns GeneralizedNewtypeDeriving DeriveTraversable FlexibleInstances DeriveDataTypeable
+  ghc-options: -O2 -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      QuickCheck
+    , base >=4.7 && <5
+    , bifunctors
+    , containers >=0.5
+    , criterion
+    , deepseq
+    , foldl
+    , mtl
+    , sbv
+  default-language: Haskell2010

@@ -29,7 +29,7 @@ newtype Var = Var { varName :: String }
 newtype Dim = Dim { dimName :: String }
   deriving (Data,Eq,IsString,Ord,Show,Typeable,Generic,NFData,Arbitrary)
 
-type VConfig b = Var -> b
+type VConfig a b = a -> b
 type DimBool = Dim -> SBool
 type Config = Map.Map Dim Bool
 
@@ -38,14 +38,14 @@ type Config = Map.Map Dim Bool
 --
 
 -- | Boolean expressions over features.
-data VProp
+data VProp a
    = Lit Bool
-   | Ref Var
-   | Chc Dim VProp VProp
-   | Not VProp
-   | Opn Opn [VProp]
-   | Op2 Op2 VProp VProp
-  deriving (Data,Eq,Generic,Typeable)
+   | Ref a
+   | Chc Dim (VProp a) (VProp a)
+   | Not (VProp a)
+   | Opn Opn [(VProp a)]
+   | Op2 Op2 (VProp a) (VProp a)
+  deriving (Data,Eq,Generic,Typeable,Functor,Traversable,Foldable)
 
 -- | data constructor for binary operations
 data Op2 = Impl | BiImpl deriving (Eq,Generic,Data,Typeable, Show)
@@ -67,15 +67,15 @@ genSharedDim :: Gen Dim
 genSharedDim = elements $
   zipWith  (\a b -> Dim $ toUpper <$> [a, b]) ['a'..'f'] ['a'..'f']
 
-genVar :: Gen Var
-genVar = Var <$> genAlphaNumStr
+genVar :: Gen String
+genVar = genAlphaNumStr
 
 -- | Generate an Arbitrary VProp, given a generator and counter these
 -- frequencies can change for different depths. The counter is merely for a
 -- `sized` call
-arbVProp :: Int -> Gen Dim -> Gen VProp
-arbVProp 0 _    = Ref <$> genVar
-arbVProp n gDim = frequency [ (1, fmap Ref genVar)
+arbVProp :: Arbitrary a => Int -> Gen Dim -> Gen (VProp a)
+arbVProp 0 _    = Ref <$> arbitrary
+arbVProp n gDim = frequency [ (1, fmap Ref arbitrary)
                             , (5, liftM3 Chc gDim l l)
                             , (3, fmap Not l)
                             , (3, liftM2 (&&&) l l)
@@ -86,35 +86,36 @@ arbVProp n gDim = frequency [ (1, fmap Ref genVar)
   where l = arbVProp (n `div` 2) gDim
 
 -- | Generate a random prop term with no sharing among dimensions
-vPropNoShare :: Gen VProp
+vPropNoShare :: Arbitrary a => Gen (VProp a)
 vPropNoShare = sized $ flip arbVProp genDim
 
 -- | Generate a random prop according to its arbritrary type class instance,
 -- this has a strong likelihood of sharing
-genVProp :: IO VProp
+-- | generate with $ x <- genVProp :: (IO (VProp String))
+genVProp :: Arbitrary a => IO (VProp a)
 genVProp = generate arbitrary
 
-mkLargeVProp :: Gen VProp -> Gen VProp
+mkLargeVProp :: Gen (VProp a) -> Gen (VProp a)
 mkLargeVProp = scale (+100)
 
 ----------------------------- Predicates ---------------------------------------
-isPlain :: VProp -> Bool
+isPlain :: (VProp a) -> Bool
 isPlain (Chc _ _ _) = False
 isPlain (Not x)     = isPlain x
 isPlain (Opn _ ps)  = all isPlain ps
 isPlain (Op2 _ l r) = isPlain l && isPlain r
 isPlain _           = True
 
-isChc :: VProp -> Bool
+isChc :: (VProp a) -> Bool
 isChc = not . isPlain
 
 ----------------------------- Choice Manipulation ------------------------------
 -- | Wrapper around engine
-prune :: VProp -> VProp
+prune :: (VProp a) -> (VProp a)
 prune = pruneTagTree Map.empty
 
 -- | Given a config and variational expression remove redundant choices
-pruneTagTree :: Config -> VProp -> VProp
+pruneTagTree :: Config -> (VProp a) -> (VProp a)
 pruneTagTree _ (Ref d) = Ref d
 pruneTagTree _ (Lit b) = Lit b
 pruneTagTree tb (Chc t y n) = case Map.lookup t tb of
@@ -129,7 +130,7 @@ pruneTagTree tb (Opn a ps)  = Opn a (pruneTagTree tb <$> ps)
 
 -- | Given a config and a Variational VProp term select the element out that the
 -- config points to
-selectVariant :: Config -> VProp -> Maybe VProp
+selectVariant :: Config -> (VProp a) -> Maybe (VProp a)
 selectVariant _ (Ref a) = Just $ Ref a
 selectVariant _ (Lit a) = Just $ Lit a
 selectVariant tbs x@(Chc t y n) = case Map.lookup t tbs of
@@ -143,24 +144,24 @@ selectVariant tb (Op2 a l r) = liftM2 (Op2 a)
                                (selectVariant tb r)
 
 -- | Convert a dimension to a variable
-dimToVar :: Dim -> VProp
-dimToVar = Ref . Var . dimName
+dimToVar :: Show a => (Dim -> a) -> Dim -> (VProp a)
+dimToVar f = Ref . f
 
 -- | Perform andDecomposition, removing all choices from a proposition
-andDecomp :: VProp -> VProp
-andDecomp (Chc d l r) = (dimToVar d &&& andDecomp l) |||
-                        (bnot (dimToVar d) &&& andDecomp r)
-andDecomp (Not x)       = Not (andDecomp x)
-andDecomp (Op2 c l r) = Op2 c (andDecomp l) (andDecomp r)
-andDecomp (Opn c ps)  = Opn c (andDecomp <$> ps)
-andDecomp x             = x
+andDecomp :: Show a => (VProp a) -> (Dim -> a) -> (VProp a)
+andDecomp (Chc d l r) f = (dimToVar f d &&& andDecomp l f) |||
+                        (bnot (dimToVar f d) &&& andDecomp r f)
+andDecomp (Not x)     f = Not (andDecomp x f)
+andDecomp (Op2 c l r) f = Op2 c (andDecomp l f) (andDecomp r f)
+andDecomp (Opn c ps)  f = Opn c (flip andDecomp f <$> ps)
+andDecomp x           _ = x
 
 --------------------------- Descriptors ----------------------------------------
 -- | Count the terms in the expression
-numTerms :: VProp -> Integer
+numTerms :: (VProp a) -> Integer
 numTerms prop = go prop 0
   where
-    go :: VProp -> Integer -> Integer
+    go :: (VProp a) -> Integer -> Integer
     go (Not a) acc     = go a acc
     go (Op2 _ l r) acc = go r (go l acc)
     go (Opn _ ps) acc  = foldr' go acc ps
@@ -168,15 +169,15 @@ numTerms prop = go prop 0
 
 
 -- | Count the choices in a tree
-numChc :: VProp -> Int
+numChc :: (VProp a) -> Int
 numChc = Set.size . dimensions
 
 
 -- | Depth of the Term tree
-depth :: VProp -> Integer
+depth :: (VProp a) -> Integer
 depth prop = go prop 0
   where
-    go :: VProp -> Integer -> Integer
+    go :: (VProp a) -> Integer -> Integer
     go (Not a) acc     = go a (succ acc)
     go (Op2 _ l r) acc = max (go l (succ acc)) (go r (succ acc))
     go (Opn _ ps)  acc = maximum $ flip go acc <$> ps
@@ -184,9 +185,9 @@ depth prop = go prop 0
     go _ acc           = acc
 
 -- | Given a prop return the maximum number of times a given dimension was shared
-maxShared :: VProp -> Int
+maxShared :: (VProp a) -> Int
 maxShared = safeMaximum . fmap length . group . sort . go
-  where go :: VProp -> [String]
+  where go :: (VProp a) -> [String]
         go (Chc d l r) = (dimName d) : (go l) ++ (go r)
         go (Not l)     = go l
         go (Opn _ ps)  = foldMap go ps
@@ -198,7 +199,7 @@ maxShared = safeMaximum . fmap length . group . sort . go
 
 --------------------------- Destructors -----------------------------------------
 -- | The set of features referenced in a feature expression.
-vars :: VProp -> Set Var
+vars :: Ord a => (VProp a) -> Set a
 vars (Lit _)     = Set.empty
 vars (Ref f)     = Set.singleton f
 vars (Not e)     = vars e
@@ -207,7 +208,7 @@ vars (Opn _ ps)  = Set.unions $ vars <$> ps
 vars (Chc _ l r) = vars l `Set.union` vars r
 
 -- | The set of dimensions in a propositional expression
-dimensions :: VProp -> Set Dim
+dimensions :: (VProp a) -> Set Dim
 dimensions (Lit _)       = Set.empty
 dimensions (Ref _)       = Set.empty
 dimensions (Not e)       = dimensions e
@@ -216,33 +217,17 @@ dimensions (Opn _ ps)    = Set.unions $ dimensions <$> ps
 dimensions (Chc d l r)   = Set.singleton d `Set.union`
                            dimensions l `Set.union` dimensions r
 
--- | The set of all choices
-choices :: VProp -> [[(Dim, Bool)]]
-choices prop = go (length ds)
-  where ds = Set.toList $ dimensions prop
-        bs = [True, False]
-  -- its hideous, kill it with fire
-        go 0 = []
-        go 1 = pure $ (,) <$> ds <*> bs
-        go 2 = zip ds <$> bs'
-          where bs' = [[x, y] | x <- bs, y <- bs]
-        go 3 = zip ds <$> bs'
-          where bs' = [[x, y, z] | x <- bs, y <- bs, z <- bs]
-        go 4 = zip ds <$> bs'
-          where bs' = [[x, y, z, a] | x <- bs, y <- bs, z <- bs, a <- bs]
-        go 5 = zip ds <$> bs'
-          where bs' = [ [x, y, z, a, b] |
-                        x <- bs, y <- bs, z <- bs, a <- bs, b <- bs
-                      ]
-        go 6 = zip ds <$> bs'
-          where bs' = [ [x, y, z, a, b, c] |
-                        x <- bs, y <- bs, z <- bs, a <- bs, b <- bs, c <- bs
-                      ]
-
+-- -- | The set of all choices
+configs :: (VProp a) -> [[(Dim, Bool)]]
+configs prop = go (Set.toList $ dimensions prop)
+  where
+    go []     = [[]]
+    go (d:ds) = fmap ((d, True) :) cs ++ fmap ((d, False) :) cs
+          where cs = go ds
 
 
 -- | Given a Variational Prop term, get all possible paths in the choice tree
-paths :: VProp -> Set Config
+paths :: (VProp a) -> Set Config
 paths = Set.fromList . filter (not . Map.null) . go
   where go (Chc d l r) = do someL <- go l
                             someR <- go r
@@ -254,8 +239,8 @@ paths = Set.fromList . filter (not . Map.null) . go
 
 ------------------------------ Manipulation ------------------------------------
 -- | Given a tag tree, fmap over the tree with respect to a config
-replace :: Config -> String -> VProp -> VProp
-replace _    v (Ref _) = Ref . Var $ v
+replace :: Config -> a -> (VProp a) -> (VProp a)
+replace _    v (Ref _) = Ref v
 replace conf v (Chc d l r) =
   case Map.lookup d conf of
     Nothing    -> Chc d (replace conf v l) (replace conf v r)
@@ -266,21 +251,12 @@ replace conf v (Op2 a l r) = Op2 a (replace conf v l) (replace conf v r)
 replace conf v (Opn a ps)  = Opn a (replace conf v <$> ps)
 replace _    _ x           = x
 
-refToLit :: Var -> (Var -> Bool) -> VProp -> VProp
-refToLit v f a@(Ref x) | v == x = Lit $ f x
-                         | otherwise = a
-refToLit v f (Not x)     = Not $ refToLit v f x
-refToLit v f (Chc d l r) = Chc d (refToLit v f l) (refToLit v f r)
-refToLit v f (Opn a ps)  = Opn a $ refToLit v f <$> ps
-refToLit v f (Op2 a l r) = Op2 a (refToLit v f l) (refToLit v f r)
-refToLit _ _ x           = x
-
-recompile :: VProp -> [(Config, String)] -> VProp
+recompile :: (VProp a) -> [(Config, a)] -> (VProp a)
 recompile = foldr (\(conf, val) acc -> replace conf val acc)
 
 -- | Reduce the size of a feature expression by applying some basic
 --   simplification rules.
-shrinkPropExpr :: VProp -> VProp
+shrinkPropExpr :: (Show a, Ord a) => (VProp a) -> (VProp a)
 shrinkPropExpr e
     | unsatisfiable e           = Lit False
     | tautology e               = Lit True
@@ -290,7 +266,7 @@ shrinkPropExpr (Opn Or ps)   = Opn Or (filter (not . unsatisfiable) ps)
 shrinkPropExpr e = e
 
 -- | remove implications from propositional terms
-eliminateImpl :: VProp -> VProp
+eliminateImpl :: (VProp a) -> (VProp a)
 eliminateImpl (Op2 Impl l r)   = (Not . eliminateImpl $ l) ||| (eliminateImpl r)
 eliminateImpl (Op2 BiImpl l r) = (Not l' ||| r') &&& (l' ||| (Not r'))
   where l' = eliminateImpl l
@@ -301,7 +277,7 @@ eliminateImpl (Chc d l r)   = Chc d (eliminateImpl l) (eliminateImpl r)
 eliminateImpl e             = e
 
 -- | Move nots inward as much as possible
-moveNotIn :: VProp -> VProp
+moveNotIn :: (VProp a) -> (VProp a)
 moveNotIn (Not p) = case p of
   Opn And ps -> Opn Or (moveNotIn . Not <$> ps)
   Opn Or  ps -> Opn And (moveNotIn . Not <$> ps)
@@ -314,7 +290,7 @@ moveNotIn (Chc d l r) = Chc d (moveNotIn l) (moveNotIn r)
 moveNotIn x = x
 
 -- | distribute ands over ors
-distributeAndOr :: VProp -> VProp
+distributeAndOr :: (VProp a) -> (VProp a)
 distributeAndOr (Opn Or ps) = foldr1 distribute $ distributeAndOr <$> ps
   where distribute (Opn And vs) p = Opn And $ distributeAndOr <$> [ v ||| p | v <- vs]
         distribute p (Opn And vs) = Opn And $ distributeAndOr <$> [ v ||| p | v <- vs]
@@ -327,7 +303,7 @@ distributeAndOr (Chc d l r) = Chc d (distributeAndOr l) (distributeAndOr r)
 distributeAndOr (Not p)     = Not . distributeAndOr $ p
 distributeAndOr p           = p
 
-flatten :: VProp -> VProp
+flatten :: (VProp a) -> (VProp a)
 flatten (Opn And ps) = Opn And $ foldr' helper [] $ flatten <$> ps
   where helper (Opn And vs) xs = vs <> xs
         helper e          xs   = e : xs
@@ -339,17 +315,17 @@ flatten (Chc d l r) = Chc d (flatten l) (flatten r)
 flatten (Not p)     = Not (flatten p)
 flatten e           = e
 
-toCNF :: VProp -> VProp
+toCNF :: (VProp a) -> (VProp a)
 toCNF (Chc d l r) = true &&& Chc d (toCNF l) (toCNF r)
 toCNF x           = _toCNF x
 
-_toCNF :: VProp -> VProp
+_toCNF :: (VProp a) -> (VProp a)
 _toCNF p
   | isCNF p = p
   | otherwise = toCNF $ fs p
   where fs = flatten . distributeAndOr . moveNotIn . eliminateImpl
 
-isCNF :: VProp -> Bool
+isCNF :: (VProp a) -> Bool
 isCNF (Opn And ps) = True && all isCNF' ps
 isCNF (Chc _ l r)  = True && isCNF l && isCNF r
 isCNF (Opn Or ps)  = True && all isCNF ps
@@ -359,30 +335,34 @@ isCNF (Not (Lit _)) = True
 isCNF (Not (Ref _)) = True
 isCNF _            = False
 
-isCNF' :: VProp -> Bool
+isCNF' :: (VProp a) -> Bool
 isCNF' (Opn And _) = False
 isCNF' _            = True
 
 ------------------------------ Evaluation --------------------------------------
 -- TODO fix this repetition
 -- | Evaluate a feature expression against a configuration.
-evalPropExpr :: (Boolean b, Mergeable b) => DimBool -> VConfig b -> VProp -> b
-evalPropExpr _ _ (Lit b)   = if b then true else false
-evalPropExpr _ c (Ref f)   = c f
-evalPropExpr d c (Not e)   = bnot (evalPropExpr d c e)
-evalPropExpr d c (Opn And ps)     = foldr1 (&&&) $ evalPropExpr d c <$> ps
-evalPropExpr d c (Opn Or ps)      = foldr1 (|||) $ evalPropExpr d c <$> ps
-evalPropExpr d c (Op2 Impl l r)   = evalPropExpr d c l ==> evalPropExpr d c r
-evalPropExpr d c (Op2 BiImpl l r) = evalPropExpr d c l <=> evalPropExpr d c r
-evalPropExpr d c (Chc dim l r)    = ite (d dim)
-                                    (evalPropExpr d c l)
-                                    (evalPropExpr d c r)
+evalPropExpr :: (Boolean b, Mergeable b) =>
+  DimBool -> VConfig a b -> (VProp a) -> b
+evalPropExpr _ _  (Lit b)   = if b then true else false
+evalPropExpr _ c  (Ref f)   = c f
+evalPropExpr d c  (Not e)   = bnot (evalPropExpr d c  e)
+evalPropExpr d c  (Opn And ps)
+  = foldr1 (&&&) $ evalPropExpr d c  <$> ps
+evalPropExpr d c  (Opn Or ps)
+  = foldr1 (|||) $ evalPropExpr d c <$> ps
+evalPropExpr d c  (Op2 Impl l r)
+  = evalPropExpr d c  l ==> evalPropExpr d c r
+evalPropExpr d c  (Op2 BiImpl l r)
+  = evalPropExpr d c  l <=> evalPropExpr d c r
+evalPropExpr d c  (Chc dim l r)
+  = ite (d dim) (evalPropExpr d c l) (evalPropExpr d c r)
 
 -- | Pretty print a feature expression.
-prettyPropExpr :: VProp -> String
+prettyPropExpr :: (Show a) => (VProp a) -> String
 prettyPropExpr = top
   where
-    top :: VProp -> String
+    top :: Show a => (VProp a) -> String
     top (Opn Or ps)     = intercalate " ∨ " $ sub <$> ps
     top (Opn And ps)    = intercalate " ∧ " $ sub <$> ps
     top (Op2 Impl l r)   = sub l ++ " → " ++ sub r
@@ -390,18 +370,18 @@ prettyPropExpr = top
     top (Chc d ls rs) = show (dimName d) ++ "<" ++ top ls ++ ", " ++ top rs++ ">"
     top e           = sub e
 
-    sub :: VProp -> String
+    sub :: (Show a) => (VProp a) -> String
     sub (Lit b) = if b then "#T" else "#F"
-    sub (Ref f) = varName f
+    sub (Ref f) = show f
     sub (Not e) = "¬" ++ sub e
     sub e       = "(" ++ top e ++ ")"
 
 -- | Generate a symbolic predicate for a feature expression.
-symbolicPropExpr :: VProp -> Predicate
+symbolicPropExpr :: (Show a, Ord a) => (VProp a) -> Predicate
 symbolicPropExpr e = do
     let vs = Set.toList (vars e)
         ds = Set.toList (dimensions e)
-    syms <- fmap (Map.fromList . zip vs) (sBools (map varName vs))
+    syms <- fmap (Map.fromList . zip vs) (sBools (show <$> vs))
     dims <- fmap (Map.fromList . zip ds) (sBools (map dimName ds))
     let look f = fromMaybe err (Map.lookup f syms)
         lookd d = fromMaybe errd (Map.lookup d dims)
@@ -409,7 +389,7 @@ symbolicPropExpr e = do
   where err = error "symbolicPropExpr: Internal error, no symbol found."
         errd = error "symbolicPropExpr: Internal error, no dimension found."
 
-instance Boolean VProp where
+instance Boolean (VProp a) where
   true  = Lit True
   false = Lit False
   bnot  = Not
@@ -418,23 +398,23 @@ instance Boolean VProp where
   (==>) = Op2 Impl
   (<=>) = Op2 BiImpl
 
-instance SAT VProp where
+instance (Show a, Ord a) => SAT (VProp a) where
   toPredicate = symbolicPropExpr
 
-instance Show VProp where
+instance Show a => Show (VProp a) where
   show = prettyPropExpr
 
 -- | make prop mergeable so choices can use symbolic conditionals
-instance Mergeable VProp where
+instance Mergeable (VProp a) where
   symbolicMerge _ b thn els
     | Just result <- unliteral b = if result then thn else els
   symbolicMerge _ _ _ _ = undefined -- quite -WALL
 
 -- | arbritrary instance for the generator monad
-instance Arbitrary VProp where
+instance Arbitrary a => Arbitrary (VProp a) where
   arbitrary = sized $ flip arbVProp genSharedDim
 
 -- | Deep Seq instances for Criterion Benchmarking
-instance NFData VProp
+instance NFData a => NFData (VProp a)
 instance NFData Op2
 instance NFData Opn

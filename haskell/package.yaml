@@ -39,6 +39,7 @@ default-extensions:
   - DeriveGeneric
   - BangPatterns
   - GeneralizedNewtypeDeriving
+  - DeriveTraversable
   - FlexibleInstances
   - DeriveDataTypeable
 
@@ -58,7 +59,9 @@ executables:
 benchmarks:
   vsat-bench:
     main:                Baselines.hs
-    source-dirs:         bench, src
+    source-dirs:
+      - bench
+      - src
     ghc-options:
     - -O2
     - -threaded
