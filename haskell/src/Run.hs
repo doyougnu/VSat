@@ -142,7 +142,7 @@ type IncState a = (UsedVars a, [V Dim (Maybe I.SMTModel)])
 type IncSolve a b = St.StateT (IncState a) SC.Query b
 type IncVar a = (a, S.SBool)
 
-incrementalSolve :: (Ord a, Show a) => VProp a -> S.Symbolic (IncState a)
+incrementalSolve :: VProp String -> S.Symbolic (IncState String)
 incrementalSolve prop = do
   prop' <- traverse (\p -> sequence (p, S.sBool p)) prop
   SC.query $ St.execStateT (incrementalSolve_ prop') (empty, [])
@@ -166,31 +166,34 @@ instance (Monad m, I.SolverContext m) =>
   namedConstraint = (lift .) . S.namedConstraint
   setOption = lift . S.setOption
 
-incHelper :: Ord a => IncVar a -> [VProp (IncVar a)] ->
-  (S.SBool -> S.SBool -> S.SBool) -> IncSolve a (IncVar a)
+incHelper :: IncVar String -> [VProp (IncVar String)] ->
+  (S.SBool -> S.SBool -> S.SBool) -> IncSolve String (IncVar String)
 incHelper acc []     _ = return acc
 incHelper acc (x:xs) f = do b <- incrementalSolve_ x; incHelper (b `mrg` acc) xs f
   where mrg (_, sb) (a, sb2) = (a, sb `f` sb2)
 
-smartConstrain :: Ord a => IncVar a -> IncSolve a ()
-smartConstrain (v, sb) = do (vs, _) <- get
-                            if v `elem` vs
-                              then return ()
-                              else do S.constrain sb
-                                      St.modify (first (insert v))
+smartConstrain :: IncVar String -> IncVar String -> (S.SBool -> S.SBool -> S.SBool) -> IncSolve String ()
+smartConstrain (a, ab) (b, bb) f = do (vs, _) <- get
+  where aConstrained = a `elem` vs
+        bConstrained = b `elem` vs
+        decide (x, xb) (y, yb)
+          | x && y = return ()
+          | x == True && y == False = S.constrain
 
-incrementalSolve_ :: (Ord a) => VProp (IncVar a) -> IncSolve a (IncVar a)
+
+                                                -- St.modify (first (insert v))
+
+incrementalSolve_ :: VProp (IncVar String) -> IncSolve String (IncVar String)
 incrementalSolve_ (Ref b) = return b
-incrementalSolve_ (Lit b) = do b' <- S.sBool; S.constrain $ b' S..== if b then S.true else S.false
-incrementalSolve_ (Not bs)= do b <- incrementalSolve_ (S.bnot <$> bs)
+incrementalSolve_ (Lit b) = return ("", bToSb b)
+incrementalSolve_ (Not bs)= do b <- incrementalSolve_ ((second S.bnot) <$> bs)
                                smartConstrain b
                                -- S.constrain b
                                return b
-incrementalSolve_ (Op2 Impl l r) = do bl <- incrementalSolve_ l
-                                      br <- incrementalSolve_ r
-                                      -- S.constrain $ bl S.==> br
+incrementalSolve_ (Op2 Impl l r) = do (lstr, bl) <- incrementalSolve_ l
+                                      (rstr, br) <- incrementalSolve_ r
                                       smartConstrain $ bl S.==> br
-                                      return $ bl S.==> br
+                                      return $ (lstr ++ " ==> " ++ rstr, bl S.==> br)
 incrementalSolve_ (Op2 BiImpl l r) = do bl <- incrementalSolve_ l
                                         br <- incrementalSolve_ r
                                         -- S.constrain $ bl S.<=> br
