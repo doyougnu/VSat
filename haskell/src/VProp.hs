@@ -12,7 +12,6 @@ import           Data.Maybe          (fromMaybe)
 import           Data.Set            (Set)
 import qualified Data.Set            as Set
 
-import           Data.SBV
 import           GHC.Generics
 import           SAT
 
@@ -70,6 +69,13 @@ genSharedDim = elements $
 genVar :: Gen String
 genVar = genAlphaNumStr
 
+newtype Readable = Re { readStr :: String }
+instance Show Readable where
+  show = show . readStr
+
+instance Arbitrary Readable where
+  arbitrary = Re <$> genAlphaNumStr
+
 -- | Generate an Arbitrary VProp, given a generator and counter these
 -- frequencies can change for different depths. The counter is merely for a
 -- `sized` call
@@ -95,8 +101,8 @@ vPropNoShare = sized $ flip arbVProp genDim
 genVProp :: Arbitrary a => IO (VProp a)
 genVProp = generate arbitrary
 
-mkLargeVProp :: Gen (VProp a) -> Gen (VProp a)
-mkLargeVProp = scale (+100)
+mkLargeVProp :: Int -> Gen (VProp a) -> Gen (VProp a)
+mkLargeVProp = scale . (+)
 
 ----------------------------- Predicates ---------------------------------------
 isPlain :: (VProp a) -> Bool

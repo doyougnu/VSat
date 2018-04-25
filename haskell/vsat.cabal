@@ -1,8 +1,8 @@
--- This file has been generated from package.yaml by hpack version 0.28.2.
+-- This file has been generated from package.yaml by hpack version 0.27.0.
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: b45d20a5498c0f4d0e94f8e6a46faf88de12ef19650402e17ab514bcee3899c9
+-- hash: 4073341a69e010a144551f88356044b132dbf334dad2c944ab9443aa7ebb559f
 
 name:           vsat
 version:        0.1.0.0
@@ -16,6 +16,7 @@ license:        BSD3
 license-file:   LICENSE
 build-type:     Simple
 cabal-version:  >= 1.10
+
 extra-source-files:
     README.md
 
@@ -92,9 +93,15 @@ benchmark vsat-bench
   type: exitcode-stdio-1.0
   main-is: Baselines.hs
   other-modules:
+      Run
+      SAT
+      Utils
+      V
+      VProp
       Paths_vsat
   hs-source-dirs:
-      bench, src
+      bench
+      src
   default-extensions: NamedFieldPuns OverloadedStrings FlexibleContexts DeriveFunctor DeriveGeneric BangPatterns GeneralizedNewtypeDeriving DeriveTraversable FlexibleInstances DeriveDataTypeable
   ghc-options: -O2 -threaded -rtsopts -with-rtsopts=-N
   build-depends:

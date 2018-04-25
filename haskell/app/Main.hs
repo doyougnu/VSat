@@ -1,8 +1,8 @@
 module Main where
 
 import Run
-import VProp (vPropNoShare, mkLargeVProp, genVProp, maxShared)
-import Test.QuickCheck (generate, arbitrary)
+import VProp (vPropNoShare)
+import Test.QuickCheck (generate)
 
 main :: IO (Result, SatDict String, Log)
 main = do
