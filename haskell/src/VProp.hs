@@ -70,10 +70,12 @@ genSharedDim = elements $
 genVar :: Gen String
 genVar = genAlphaNumStr
 
-newtype Readable = R { readStr :: String }
+newtype Readable = Re { readStr :: String }
+instance Show Readable where
+  show = show . readStr
 
 instance Arbitrary Readable where
-  arbitrary = R <$> genAlphaNumStr
+  arbitrary = Re <$> genAlphaNumStr
 
 -- | Generate an Arbitrary VProp, given a generator and counter these
 -- frequencies can change for different depths. The counter is merely for a
@@ -101,7 +103,7 @@ genVProp :: Arbitrary a => IO (VProp a)
 genVProp = generate arbitrary
 
 mkLargeVProp :: Int -> Gen (VProp a) -> Gen (VProp a)
-mkLargeVProp n = scale (+n)
+mkLargeVProp = scale . (+)
 
 ----------------------------- Predicates ---------------------------------------
 isPlain :: (VProp a) -> Bool

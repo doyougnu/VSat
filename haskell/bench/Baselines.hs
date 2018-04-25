@@ -1,18 +1,25 @@
 import Criterion.Main as C
 
 import Run
-import VProp (vPropNoShare, mkLargeVProp, genVProp, maxShared)
+import Criterion.Types
+import VProp (VProp, Readable, readStr, vPropNoShare, mkLargeVProp, genVProp, maxShared)
 import Test.QuickCheck (generate, arbitrary)
+
+myConfig = C.defaultConfig { resamples = 10 }
 
 -- run with $ stack bench --benchmark-arguments "--output <benchmark-file>.html"
 main :: IO ()
 main = do
-  noShProp <- generate vPropNoShare
-  prop <- genVProp
-  noShLrgeProp <- generate $ mkLargeVProp vPropNoShare
-  largeProp <- generate $ mkLargeVProp arbitrary
-  print $ maxShared largeProp
-  C.defaultMain
+  noShProp <- fmap readStr <$> (generate vPropNoShare :: IO (VProp Readable))
+  prop <- fmap readStr <$> (genVProp :: IO (VProp Readable))
+  noShLrgeProp <- fmap readStr <$> (generate $ mkLargeVProp 5 vPropNoShare :: IO (VProp Readable))
+  largeProp <- fmap readStr <$> (generate $ mkLargeVProp 5 arbitrary :: IO (VProp Readable))
+  print $ "no Share Large Prop:    "
+  print noShLrgeProp
+
+  print $ "Large Prop:    "
+  print largeProp
+  C.defaultMainWith myConfig
     [ C.bgroup "Baselines, no Sharing"
       [ bench "Brute Force" $ C.nfIO (runEnv True False False [] noShProp)
       , bench "And Decomposition" $ C.nfIO (runEnv True True False [] noShProp)
