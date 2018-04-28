@@ -14,6 +14,7 @@ import qualified Data.Set            as Set
 
 import           GHC.Generics
 import           SAT
+import           Data.SBV
 
 import           Control.DeepSeq     (NFData)
 import           Data.Char           (toUpper)
@@ -163,21 +164,42 @@ andDecomp (Opn c ps)  f = Opn c (flip andDecomp f <$> ps)
 andDecomp x           _ = x
 
 --------------------------- Descriptors ----------------------------------------
--- | Count the terms in the expression
-numTerms :: (VProp a) -> Integer
-numTerms prop = go prop 0
+-- | TODO fix all this redundancy by abstracting the dimensions and instancing Bifoldable
+-- | Convert a prop into a list of Terms
+toList :: VProp a -> [VProp a]
+toList prop = go prop []
   where
-    go :: (VProp a) -> Integer -> Integer
-    go (Not a) acc     = go a acc
-    go (Op2 _ l r) acc = go r (go l acc)
-    go (Opn _ ps) acc  = foldr' go acc ps
-    go _       acc     = succ acc
+    go :: VProp a -> [VProp a] -> [VProp a]
+    go x@(Not a) acc     = go a $ x:acc
+    go x@(Opn _ ps) acc  = foldr' go (x:acc) ps
+    go x@(Chc _ l r) acc = go r . go l $ x:acc
+    go x@(Op2 _ l r) acc = go r . go l $ x:acc
+    go a acc = a:acc
 
+numTerms :: (VProp a) -> Integer
+numTerms = toInteger. length . toList
 
 -- | Count the choices in a tree
-numChc :: (VProp a) -> Int
-numChc = Set.size . dimensions
+numChc :: VProp a -> Integer
+numChc = toInteger . length . filter isChc . toList
 
+-- | Count the plain values in a tree
+numPlain :: VProp a -> Integer
+numPlain = toInteger . length . filter isPlain . toList
+
+-- | Given a vprop how many shared dimensions were there
+numSharedDims :: VProp a -> Integer
+numSharedDims = toInteger . length . filter (flip (>=) 2 . length) . group . flip go []
+  where
+    go :: VProp a -> [Dim] -> [Dim]
+    go (Not a) acc = go a acc
+    go (Op2 _ l r) acc = go l (go r acc)
+    go (Opn _ ps) acc = foldr go acc ps
+    go (Chc d l r) acc = go l (go r $ d:acc)
+    go _    acc = acc
+
+numSharedPlain :: Eq a => VProp a -> Integer
+numSharedPlain = toInteger . length . filter (flip (>=) 2 . length) . group . filter isPlain . toList
 
 -- | Depth of the Term tree
 depth :: (VProp a) -> Integer
