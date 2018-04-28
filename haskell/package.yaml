@@ -26,6 +26,12 @@ dependencies:
 - bifunctors
 - QuickCheck
 - deepseq
+- sbv
+- cassava
+- bytestring
+- criterion
+- text
+- vector
 
 library:
   source-dirs: src
