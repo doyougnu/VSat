@@ -8,6 +8,7 @@ import Data.Csv
 import qualified Data.Text as T
 import qualified Data.Vector as V
 import Prelude hiding (writeFile, appendFile)
+import GHC.Generics (Generic)
 import Data.ByteString.Char8 (pack)
 import Data.ByteString.Lazy (writeFile, appendFile, empty)
 import VProp ( VProp
@@ -27,32 +28,57 @@ import Test.QuickCheck (generate, arbitrary)
 
 myConfig = C.defaultConfig { resamples = 10 }
 
-data RunData = RunData { scale          :: !T.Text
-                       , numTerms       :: !T.Text
-                       , numChc         :: !T.Text
-                       , numPlain       :: !T.Text
-                       , numSharedPlain :: !T.Text
-                       , maxShared      :: !T.Text
-                       }
+data RunData = RunData { scale_          :: !Integer
+                       , numTerms_       :: !Integer
+                       , numChc_         :: !Integer
+                       , numPlain_       :: !Integer
+                       , numSharedDims_  :: !Integer
+                       , numSharedPlain_ :: !Integer
+                       , maxShared_      :: !Integer
+                       } deriving (Generic, Show)
+
+instance ToNamedRecord RunData
 
 -- run with $ stack bench --benchmark-arguments "--output <benchmark-file>.html"
 main :: IO ()
-main = mapM_ benchAndInc [1..2]
+main = do
+  writeFile "test_Desc.csv" ""
+  mapM_ benchAndInc [1..2]
 
 benchAll n = do
-  noShProp <- fmap readStr <$> (generate $ mkLargeVProp n vPropNoShare :: IO (VProp Readable))
-  prop <- fmap readStr <$> (generate $ mkLargeVProp n arbitrary :: IO (VProp Readable))
-  let descriptorsFs = [numTerms, numChc, numPlain, numSharedDims, numSharedPlain, maxShared]
-      descriptorsNoSh = show n : (fmap show $ descriptorsFs <*> pure noShProp)
-      descriptors = show n : (fmap show $ descriptorsFs <*> pure prop)
+  noShProp <- fmap readStr <$>
+              (generate $ mkLargeVProp n vPropNoShare :: IO (VProp Readable))
+  prop <- fmap readStr <$>
+          (generate $ mkLargeVProp n arbitrary :: IO (VProp Readable))
+  let descriptorsFs = [ numTerms
+                      , numChc
+                      , numPlain
+                      , numSharedDims
+                      , numSharedPlain
+                      , maxShared
+                      ]
+
+  -- there must be a better way
+      [s,t,c,p,sd,sp,ms] = toInteger n : (descriptorsFs <*> pure noShProp)
+      [s2,t2,c2,p2,sd2,sp2,ms2] = toInteger n : (descriptorsFs <*> pure prop)
+
+      noShPropRecord = RunData s t c p sd sp ms
+      propRecord = RunData s2 t2 c2 p2 sd2 sp2 ms2
 
       headers :: Header
-      headers = V.fromList $ pack <$> [show n, "numTerms", "numChc", "numPlain", "numSharedDims", "numSharedPlain", "maxShared"]
+      headers = V.fromList $ pack <$>
+                [show n
+                , "numTerms"
+                , "numChc"
+                , "numPlain"
+                , "numSharedDims"
+                , "numSharedPlain"
+                , "maxShared"
+                ]
 
-  writeFile "test_Desc.csv" ""
-  appendFile "test_Desc.csv" $ headers
-  appendFile "test_Desc.csv" $ encodeByName $ fmap pack descriptorsNoSh
-  appendFile "test_Desc.csv" $ encode $ fmap pack descriptors
+  -- write out to descriptor csv file
+  appendFile "test_Desc.csv" $ encodeByName headers $ pure noShPropRecord
+  appendFile "test_Desc.csv" $ encodeByName headers $ pure propRecord
 
   C.defaultMainWith myConfig
     [ C.bgroup ("Baselines, Unique Dimensions, scaled: " ++ show n)
@@ -68,22 +94,46 @@ benchAll n = do
     ]
 
 benchAndInc n = do
-  noShProp <- fmap readStr <$> (generate $ mkLargeVProp n vPropNoShare :: IO (VProp Readable))
-  prop <- fmap readStr <$> (generate $ mkLargeVProp n arbitrary :: IO (VProp Readable))
-  let descriptors = [numTerms, numChc, numPlain, numSharedDims, numSharedPlain, maxShared]
-      headers = [show n, "numTerms", "numChc", "numPlain", "numSharedDims", "numSharedPlain", "maxShared"]
+  noShProp <- fmap readStr <$>
+              (generate $ mkLargeVProp n vPropNoShare :: IO (VProp Readable))
+  prop <- fmap readStr <$>
+          (generate $ mkLargeVProp n arbitrary :: IO (VProp Readable))
+  let descriptorsFs = [ numTerms
+                      , numChc
+                      , numPlain
+                      , numSharedDims
+                      , numSharedPlain
+                      , maxShared
+                      ]
 
-  writeFile "test_Desc.csv" empty
-  appendFile "test_Desc.csv" $ encode headers
-  appendFile "test_Desc.csv" $ encode $ show n : (fmap show $ descriptors <*> pure noShProp)
-  appendFile "test_Desc.csv" $ encode $ show n :  (fmap show $ descriptors <*> pure prop)
+  -- there must be a better way
+      [s,t,c,p,sd,sp,ms] = toInteger n : (descriptorsFs <*> pure noShProp)
+      [s2,t2,c2,p2,sd2,sp2,ms2] = toInteger n : (descriptorsFs <*> pure prop)
+
+      noShPropRecord = RunData s t c p sd sp ms
+      propRecord = RunData s2 t2 c2 p2 sd2 sp2 ms2
+
+      headers :: Header
+      headers = V.fromList $ pack <$>
+                [show n
+                , "numTerms"
+                , "numChc"
+                , "numPlain"
+                , "numSharedDims"
+                , "numSharedPlain"
+                , "maxShared"
+                ]
+
+  -- write out to descriptor csv file
+  appendFile "test_Desc.csv" $ encodeByName headers $ pure noShPropRecord
+  appendFile "test_Desc.csv" $ encodeByName headers $ pure propRecord
 
   C.defaultMainWith myConfig
-    [ C.bgroup ("Unique Dimensions, scaled: " ++ show n)
+    [ C.bgroup ("Baselines, Unique Dimensions, scaled: " ++ show n)
       [ bench "And Decomposition" $ C.nfIO (runEnv True True False [] noShProp)
       , bench "Variational Solve" $ C.nfIO (runEnv False False False [] noShProp)
       ]
-    , C.bgroup ("Shared Dimensions, scaled: " ++ show n)
+    , C.bgroup ("Baselines, scaled: " ++ show n)
       [ bench "And Decomposition" $ C.nfIO (runEnv True True False [] prop)
       , bench "Variational Solve" $ C.nfIO (runEnv False False False [] prop)
       ]
