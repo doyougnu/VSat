@@ -33,7 +33,8 @@ timings <- timings %>% filter(!is.na(Mean))
 
 ## tidy up the data, each column is a variable and each row is an observation
 timings <- timings %>%
-  separate(Name, into = c("shared", "scale", "Operation"), sep = "\\/")
+  separate(Name, into = c("shared", "scale", "Operation"), sep = "\\/") %>%
+  mutate(scale = as.numeric(scale))
 
 ## Read in descriptor table
 dfDesc <- read.csv(file=descriptorResults)
