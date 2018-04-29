@@ -27,7 +27,8 @@ import Test.QuickCheck (generate, arbitrary)
 myConfig = C.defaultConfig { resamples = 10 }
 
 -- | Required field namings for cassava csv library
-data RunData = RunData { scale_          :: !Integer
+data RunData = RunData { shared_         :: !T.Text
+                       , scale_          :: !Integer
                        , numTerms_       :: !Integer
                        , numChc_         :: !Integer
                        , numPlain_       :: !Integer
@@ -70,12 +71,13 @@ benchAll n = do
       [s,t,c,p,sd,sp,ms] = toInteger n : (descriptorsFs <*> pure noShProp)
       [s2,t2,c2,p2,sd2,sp2,ms2] = toInteger n : (descriptorsFs <*> pure prop)
 
-      noShPropRecord = RunData s t c p sd sp ms
-      propRecord = RunData s2 t2 c2 p2 sd2 sp2 ms2
+      noShPropRecord = RunData "Unique" s t c p sd sp ms
+      propRecord = RunData "Shared" s2 t2 c2 p2 sd2 sp2 ms2
 
       headers :: Header
       headers = V.fromList $ pack <$>
-                ["scale_"
+                [ "shared_"
+                , "scale_"
                 , "numTerms_"
                 , "numChc_"
                 , "numPlain_"
@@ -89,12 +91,12 @@ benchAll n = do
   appendFile timingFile $ encodeByName headers $ pure propRecord
 
   C.defaultMainWith myConfig
-    [ C.bgroup ("Unique/scaled/" ++ show n)
+    [ C.bgroup ("Unique/" ++ show n)
       [ bench "Brute Force" $ C.nfIO (runEnv True False False [] noShProp)
       , bench "And Decomposition" $ C.nfIO (runEnv True True False [] noShProp)
       , bench "Variational Solve" $ C.nfIO (runEnv False False False [] noShProp)
       ]
-    , C.bgroup ("Shared/scaled/" ++ show n)
+    , C.bgroup ("Shared/" ++ show n)
       [ bench "Brute Force" $ C.nfIO (runEnv True False False [] prop)
       , bench "And Decomposition" $ C.nfIO (runEnv True True False [] prop)
       , bench "Variational Solve" $ C.nfIO (runEnv False False False [] prop)
@@ -118,12 +120,13 @@ benchAndInc n = do
       [s,t,c,p,sd,sp,ms] = toInteger n : (descriptorsFs <*> pure noShProp)
       [s2,t2,c2,p2,sd2,sp2,ms2] = toInteger n : (descriptorsFs <*> pure prop)
 
-      noShPropRecord = RunData s t c p sd sp ms
-      propRecord = RunData s2 t2 c2 p2 sd2 sp2 ms2
+      noShPropRecord = RunData "Unique" s t c p sd sp ms
+      propRecord = RunData "Shared" s2 t2 c2 p2 sd2 sp2 ms2
 
       headers :: Header
       headers = V.fromList $ pack <$>
-                [ "scale_"
+                [ "shared_"
+                , "scale_"
                 , "numTerms_"
                 , "numChc_"
                 , "numPlain_"
@@ -137,11 +140,11 @@ benchAndInc n = do
   appendFile timingFile $ encodeByName headers $ pure propRecord
 
   C.defaultMainWith myConfig
-    [ C.bgroup ("Unique/scaled/" ++ show n)
+    [ C.bgroup ("Unique/" ++ show n)
       [ bench "And Decomposition" $ C.nfIO (runEnv True True False [] noShProp)
       , bench "Variational Solve" $ C.nfIO (runEnv False False False [] noShProp)
       ]
-    , C.bgroup ("Shared/scaled/" ++ show n)
+    , C.bgroup ("Shared/" ++ show n)
       [ bench "And Decomposition" $ C.nfIO (runEnv True True False [] prop)
       , bench "Variational Solve" $ C.nfIO (runEnv False False False [] prop)
       ]

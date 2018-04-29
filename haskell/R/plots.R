@@ -31,15 +31,40 @@ timings <- dfTimings[,2:7] %>% apply(2, as.numeric) %>% as.data.frame
 timings$Name <- nmCol
 timings <- timings %>% filter(!is.na(Mean))
 
+## tidy up the data, each column is a variable and each row is an observation
+timings <- timings %>%
+  separate(Name, into = c("shared", "scale", "Operation"), sep = "\\/")
+
 ## Read in descriptor table
 dfDesc <- read.csv(file=descriptorResults)
+
+## Clean up the trailing "_" in the column names
+names(dfDesc) <- gsub(pattern = "_", "", x = names(dfDesc))
 
 ## criterion adds a header for every test, this means we must drop every even
 ## row because the first header is counted as a head in fread, which means our
 ## data begins on row 1
 
-## define a sequence of odds (the rows we want to keep)
-toDelete <- seq(1, length(dfDesc), 2)
+## define a sequence of evens (the rows we want to drop)
+toDelete <- seq(0, length(dfDesc), 2)
 
 ## subset the table using the sequence and convert to numeric
-dfDesc <- dfDesc[toDelete,] %>% apply(2, as.numeric) %>% as.data.frame
+dfDesc <- dfDesc[-toDelete,,drop=F]
+
+## save the shared column
+shared <- dfDesc$shared
+
+## coerce the numbers to numbers
+dfDesc <- dfDesc[,2:7] %>% apply(2, as.numeric) %>% as.data.frame
+
+## add it back to the data frame
+dfDesc$shared <- shared
+
+## now merge the tables to a data frame
+df <- merge(timings, dfDesc)
+
+############################## Plotting ########################################
+plot <- ggplot(df, aes(x=scale, y=Mean, color=Operation)) +
+  geom_point() +
+  geom_smooth(method=lm, se=T) +
+  ylab("Mean [s]")
