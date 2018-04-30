@@ -23,7 +23,7 @@ import VProp ( VProp
              )
 import Test.QuickCheck (generate, arbitrary)
 
-myConfig = C.defaultConfig { resamples = 5 }
+myConfig = C.defaultConfig { resamples = 1 }
 
 -- | Required field namings for cassava csv library
 data RunData = RunData { shared_         :: !Text
@@ -38,7 +38,7 @@ data RunData = RunData { shared_         :: !Text
 
 instance ToNamedRecord RunData
 
--- run with $ stack bench --benchmark-arguments "--output results.html --csv results.csv"
+-- run with $ stack bench --benchmark-arguments "--output results.html --csv timing_results.csv"
 resDescFile :: FilePath
 resDescFile = "resDesc.csv"
 
@@ -51,7 +51,7 @@ eraseFile = flip writeFile ""
 main :: IO ()
 main = do
   mapM_ eraseFile [resDescFile, bfDescFile]
-  mapM_ benchAll $ [1..5] >>= replicate 3
+  mapM_ benchAll $ [0..4] >>= replicate 3
 
 benchAll n = do
   noShProp <- fmap readStr <$>
