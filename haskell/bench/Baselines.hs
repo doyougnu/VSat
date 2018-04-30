@@ -3,18 +3,17 @@ import Criterion.Main as C
 import Run
 import Criterion.Types
 import Data.Csv
-import qualified Data.Text as T
+import Data.Text (Text)
 import qualified Data.Vector as V
 import Prelude hiding (writeFile, appendFile)
 import GHC.Generics (Generic)
 import Data.ByteString.Char8 (pack)
-import Data.ByteString.Lazy (writeFile, appendFile, empty)
+import Data.ByteString.Lazy (writeFile, appendFile)
 import VProp ( VProp
              , Readable
              , readStr
              , vPropNoShare
              , mkLargeVProp
-             , genVProp
              , numTerms
              , numChc
              , numPlain
@@ -27,7 +26,7 @@ import Test.QuickCheck (generate, arbitrary)
 myConfig = C.defaultConfig { resamples = 5 }
 
 -- | Required field namings for cassava csv library
-data RunData = RunData { shared_         :: !T.Text
+data RunData = RunData { shared_         :: !Text
                        , scale_          :: !Integer
                        , numTerms_       :: !Integer
                        , numChc_         :: !Integer
@@ -40,19 +39,19 @@ data RunData = RunData { shared_         :: !T.Text
 instance ToNamedRecord RunData
 
 -- run with $ stack bench --benchmark-arguments "--output results.html --csv results.csv"
-timingFile :: FilePath
-timingFile = "timings.csv"
+resDescFile :: FilePath
+resDescFile = "resDesc.csv"
 
-resultsFile :: FilePath
-resultsFile = "results.csv"
+bfDescFile :: FilePath
+bfDescFile = "bfDesc.csv"
 
 eraseFile :: FilePath -> IO ()
 eraseFile = flip writeFile ""
 
 main :: IO ()
 main = do
-  mapM_ eraseFile [timingFile, resultsFile]
-  mapM_ benchAndInc $ [1..2] >>= replicate 5
+  mapM_ eraseFile [resDescFile, bfDescFile]
+  mapM_ benchAll $ [1..5] >>= replicate 3
 
 benchAll n = do
   noShProp <- fmap readStr <$>
@@ -87,8 +86,8 @@ benchAll n = do
                 ]
 
   -- write out to descriptor csv file
-  appendFile timingFile $ encodeByName headers $ pure noShPropRecord
-  appendFile timingFile $ encodeByName headers $ pure propRecord
+  appendFile bfDescFile $ encodeByName headers $ pure noShPropRecord
+  appendFile bfDescFile $ encodeByName headers $ pure propRecord
 
   C.defaultMainWith myConfig
     [ C.bgroup ("Unique/" ++ show n)
@@ -136,8 +135,8 @@ benchAndInc n = do
                 ]
 
   -- write out to descriptor csv file
-  appendFile timingFile $ encodeByName headers $ pure noShPropRecord
-  appendFile timingFile $ encodeByName headers $ pure propRecord
+  appendFile resDescFile $ encodeByName headers $ pure noShPropRecord
+  appendFile resDescFile $ encodeByName headers $ pure propRecord
 
   C.defaultMainWith myConfig
     [ C.bgroup ("Unique/" ++ show n)
