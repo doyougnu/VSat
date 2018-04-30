@@ -82,13 +82,13 @@ instance Arbitrary Readable where
 -- `sized` call
 arbVProp :: Arbitrary a => Int -> Gen Dim -> Gen (VProp a)
 arbVProp 0 _    = Ref <$> arbitrary
-arbVProp n gDim = frequency [ (1, fmap Ref arbitrary)
-                            , (5, liftM3 Chc gDim l l)
-                            , (3, fmap Not l)
-                            , (3, liftM2 (&&&) l l)
-                            , (3, liftM2 (|||) l l)
-                            , (3, liftM2 (==>) l l)
-                            , (3, liftM2 (<=>) l l)
+arbVProp n gDim = frequency [ (6, fmap Ref arbitrary)
+                            , (4, liftM3 Chc gDim l l)
+                            , (2, fmap Not l)
+                            , (2, liftM2 (&&&) l l)
+                            , (2, liftM2 (|||) l l)
+                            , (2, liftM2 (==>) l l)
+                            , (2, liftM2 (<=>) l l)
                             ]
   where l = arbVProp (n `div` 2) gDim
 
@@ -103,7 +103,8 @@ genVProp :: Arbitrary a => IO (VProp a)
 genVProp = generate arbitrary
 
 mkLargeVProp :: Int -> Gen (VProp a) -> Gen (VProp a)
-mkLargeVProp = scale . (+)
+-- mkLargeVProp = resize . (+)
+mkLargeVProp = resize
 
 ----------------------------- Predicates ---------------------------------------
 isPlain :: (VProp a) -> Bool
