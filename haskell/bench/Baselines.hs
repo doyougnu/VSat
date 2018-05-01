@@ -30,7 +30,7 @@ myConfig = C.defaultConfig { resamples = 6 }
 
 -- | Required field namings for cassava csv library
 data RunData = RunData { shared_         :: !Text
-                       , runNum          :: !Integer
+                       , runNum_          :: !Integer
                        , scale_          :: !Integer
                        , numTerms_       :: !Integer
                        , numChc_         :: !Integer
@@ -55,7 +55,7 @@ eraseFile = flip writeFile ""
 main :: IO ()
 main = do
   mapM_ eraseFile [resDescFile, bfDescFile]
-  mapM_ benchAll $ zip [1..] [0..90] >>= replicate 6
+  mapM_ benchAndInc $ zip [1..] [0..50] >>= replicate 6
 
 -- | The run number, used to join descriptor and timing data later
 type RunNum = Integer
@@ -84,7 +84,7 @@ benchAll (rn, n) = do
       headers :: Header
       headers = V.fromList $ pack <$>
                 [ "shared_"
-                , "run_"
+                , "runNum_"
                 , "scale_"
                 , "numTerms_"
                 , "numChc_"
@@ -136,7 +136,7 @@ benchAndInc (rn, n) = do
       headers :: Header
       headers = V.fromList $ pack <$>
                 [ "shared_"
-                , "run_"
+                , "runNum_"
                 , "scale_"
                 , "numTerms_"
                 , "numChc_"
