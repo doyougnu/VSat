@@ -17,13 +17,13 @@ library(ggmosaic)
 ## variables for each file, this is hard coded to correspond to criterion
 ## output, check app/main.hs the timing results are the actual measurements
 ## taken by criterion and the recorded bgroup names
-timingsResultsFile <- "../timing_results.csv"
+timingsResultsFile <- "../data/2018-05-01_timing_results.csv"
 
 ## the descriptor results are the hand crafted descriptor functions for each
 ## measurement that are recorded to a csv via cassava, these are things like
 ## number of choices in the prop, number of terms etc.
 andIncDesc <- "../timing_results.csv"
-descriptorsFile <- "../timing_desc.csv"
+descriptorsFile <- "../data/2018-05-01_bfDesc_results.csv"
 
 ## Given a dataframe that assumes the output structure of criterion's --csv call
 ## clean up the data frame by converting numerics to numerics while maintaining
@@ -59,11 +59,10 @@ cleanDesc <- function(df_) {
   ## data begins on row 1
 
   ## define a sequence of evens (the rows we want to drop)
-  toDelete <- seq(0, length(df_), 2)
+  toDelete <- seq(0, nrow(df_), 2)
 
   ## subset the table using the sequence and convert to numeric
   df_ <- df_[-toDelete,,drop=F]
-
   ## save the shared column
   shared <- df_$shared
 
@@ -73,11 +72,13 @@ cleanDesc <- function(df_) {
   ## add it back to the data frame
   df_$shared <- shared
 
+  ## return
+  df_
 }
 
 ## helper function, given a file name, read in the data table and then apply a
 ## unary function that works on tables to it
-readAndClean <- function(fname, f) {read.csv(file=fname) %>% f}
+readAndClean <- function(fname, f) { read.csv(file=fname) %>% f }
 
 ## Read in the Timings table
 timings <- readAndClean(timingsResultsFile, cleanTimings)
