@@ -42,7 +42,7 @@ instance ToNamedRecord RunData
 -- run with $ stack bench --benchmark-arguments "--output <benchmark-file>.html"
 main :: IO ()
 main = do
-  writeFile "test_Desc.csv" ""
+  writeFile "timing_desc.csv" ""
   mapM_ benchAndInc [1..2]
 
 benchAll n = do

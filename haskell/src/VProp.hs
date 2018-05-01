@@ -82,13 +82,13 @@ instance Arbitrary Readable where
 -- `sized` call
 arbVProp :: Arbitrary a => Int -> Gen Dim -> Gen (VProp a)
 arbVProp 0 _    = Ref <$> arbitrary
-arbVProp n gDim = frequency [ (6, fmap Ref arbitrary)
-                            , (4, liftM3 Chc gDim l l)
-                            , (2, fmap Not l)
-                            , (2, liftM2 (&&&) l l)
-                            , (2, liftM2 (|||) l l)
-                            , (2, liftM2 (==>) l l)
-                            , (2, liftM2 (<=>) l l)
+arbVProp n gDim = frequency [ (1, fmap Ref arbitrary)
+                            , (1, liftM3 Chc gDim l l)
+                            , (1, fmap Not l)
+                            , (1, liftM2 (&&&) l l)
+                            , (1, liftM2 (|||) l l)
+                            , (1, liftM2 (==>) l l)
+                            , (1, liftM2 (<=>) l l)
                             ]
   where l = arbVProp (n `div` 2) gDim
 

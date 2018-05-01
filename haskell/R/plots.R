@@ -16,13 +16,13 @@ library(ggmosaic)
 ## variables for each file, this is hard coded to correspond to criterion
 ## output, check app/main.hs the timing results are the actual measurements
 ## taken by criterion and the recorded bgroup names
-timingsResultsFile <- "../results.csv"
+timingsResultsFile <- "../timing_results.csv"
 
 ## the descriptor results are the hand crafted descriptor functions for each
 ## measurement that are recorded to a csv via cassava, these are things like
 ## number of choices in the prop, number of terms etc.
-andIncDesc <- "../andIncDesc.csv"
-bfDesc <- "../bfDesc.csv"
+andIncDesc <- "../timing_results.csv"
+descriptorsFile <- "../timing_desc.csv"
 
 ## Given a dataframe that assumes the output structure of criterion's --csv call
 ## clean up the data frame by converting numerics to numerics while maintaining
@@ -82,13 +82,13 @@ readAndClean <- function(fname, f) {read.csv(file=fname) %>% f}
 timings <- readAndClean(timingsResultsFile, cleanTimings)
 
 ## Read in descriptor table
-descriptors <- readAndClean(descriptorResults, cleanDesc)
+descriptors <- readAndClean(descriptorsFile, cleanDesc)
 
 ## now merge the tables to a data frame
 df <- merge(timings, descriptors)
 
 ############################## Plotting ########################################
-plot <- ggplot(df, aes(x=scale, y=Mean, color=Operation)) +
+p <- ggplot(df, aes(x=scale, y=(Mean * 100), color=Operation)) +
   geom_point() +
   geom_smooth(method=lm, se=T) +
   ylab("Mean [s]")
