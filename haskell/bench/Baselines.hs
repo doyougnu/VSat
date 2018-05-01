@@ -22,6 +22,8 @@ import VProp ( VProp
              , maxShared
              )
 import Test.QuickCheck (generate, arbitrary)
+import Data.Time.Clock
+import Data.Time.Calendar
 
 myConfig :: Config
 myConfig = C.defaultConfig { resamples = 6 }
@@ -45,7 +47,7 @@ resDescFile :: FilePath
 resDescFile = "andIncDesc.csv"
 
 bfDescFile :: FilePath
-bfDescFile = "bfDesc.csv"
+bfDescFile = "desc_results.csv"
 
 eraseFile :: FilePath -> IO ()
 eraseFile = flip writeFile ""

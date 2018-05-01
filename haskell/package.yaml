@@ -32,6 +32,7 @@ dependencies:
 - criterion
 - text
 - vector
+- time
 
 library:
   source-dirs: src
