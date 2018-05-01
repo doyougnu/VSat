@@ -23,6 +23,7 @@ import VProp ( VProp
              )
 import Test.QuickCheck (generate, arbitrary)
 
+myConfig :: Config
 myConfig = C.defaultConfig { resamples = 3 }
 
 -- | Required field namings for cassava csv library
@@ -51,8 +52,9 @@ eraseFile = flip writeFile ""
 main :: IO ()
 main = do
   mapM_ eraseFile [resDescFile, bfDescFile]
-  mapM_ benchAll $ [0..100] >>= replicate 3
+  mapM_ benchAll $ [0..20] >>= replicate 4
 
+benchAll :: Int -> IO ()
 benchAll n = do
   noShProp <- fmap readStr <$>
               (generate $ mkLargeVProp n vPropNoShare :: IO (VProp Readable))
@@ -102,6 +104,7 @@ benchAll n = do
       ]
     ]
 
+benchAndInc :: Int -> IO ()
 benchAndInc n = do
   noShProp <- fmap readStr <$>
               (generate $ mkLargeVProp n vPropNoShare :: IO (VProp Readable))
