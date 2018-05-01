@@ -17,13 +17,14 @@ library(ggmosaic)
 ## variables for each file, this is hard coded to correspond to criterion
 ## output, check app/main.hs the timing results are the actual measurements
 ## taken by criterion and the recorded bgroup names
-timingsResultsFile <- "../data/2018-05-01_timing_results.csv"
+## timingsResultsFile <- "../data/2018-05-01_timing_results.csv"
+timingsResultsFile <- "../timing_results.csv"
 
 ## the descriptor results are the hand crafted descriptor functions for each
 ## measurement that are recorded to a csv via cassava, these are things like
 ## number of choices in the prop, number of terms etc.
-andIncDesc <- "../timing_results.csv"
-descriptorsFile <- "../data/2018-05-01_bfDesc_results.csv"
+## descriptorsFile <- "../data/2018-05-01_desc_results.csv"
+descriptorsFile <- "../desc_results.csv"
 
 ## Given a dataframe that assumes the output structure of criterion's --csv call
 ## clean up the data frame by converting numerics to numerics while maintaining
@@ -34,7 +35,7 @@ cleanTimings <- function(df_) {
   nmCol <- df_$Name
 
   ## mutate the numerics from characters to numerics
-  df_ <- df_[,2:7] %>% apply(2, as.numeric) %>% as.data.frame
+  df_ <- df_[,2:(ncol(df_))] %>% apply(2, as.numeric) %>% as.data.frame
 
   ## Reconstruct the data frame
   df_$Name <- nmCol
@@ -42,8 +43,10 @@ cleanTimings <- function(df_) {
 
   ## tidy up the data, each column is a variable and each row is an observation
   df_ <- df_ %>%
-    separate(Name, into = c("shared", "scale", "Operation"), sep = "\\/") %>%
-    mutate(scale = as.numeric(scale))
+    separate(Name, into = c("shared", "runNum", "scale", "Operation"), sep = "\\/") %>%
+    mutate(  scale = as.numeric(scale)
+           , runNum = as.numeric(runNum)
+           , shared = as.factor(shared))
 
   ## return
   df_
@@ -59,7 +62,7 @@ cleanDesc <- function(df_) {
   ## data begins on row 1
 
   ## define a sequence of evens (the rows we want to drop)
-  toDelete <- seq(0, nrow(df_), 2)
+  toDelete <- seq(2, nrow(df_), 2)
 
   ## subset the table using the sequence and convert to numeric
   df_ <- df_[-toDelete,,drop=F]
@@ -67,7 +70,7 @@ cleanDesc <- function(df_) {
   shared <- df_$shared
 
   ## coerce the numbers to numbers
-  df_ <- df_[,2:7] %>% apply(2, as.numeric) %>% as.data.frame
+  df_ <- df_[,2:(ncol(df_))] %>% apply(2, as.numeric) %>% as.data.frame
 
   ## add it back to the data frame
   df_$shared <- shared
@@ -87,20 +90,20 @@ timings <- readAndClean(timingsResultsFile, cleanTimings)
 descriptors <- readAndClean(descriptorsFile, cleanDesc)
 
 ## now merge the tables to a data frame
-df <- merge(timings, descriptors)
+df <- merge(timings, descriptors, by=c("runNum", "shared","scale"))
 
 ############################## Plotting ########################################
-p <- ggplot(df, aes(x=scale, y=Mean, color=Operation)) +
-  geom_point() +
-  geom_smooth(method="lm") +
-  ylab("Mean [ms]")
+## p <- ggplot(df, aes(x=scale, y=Mean, color=Operation)) +
+##   geom_point() +
+##   geom_smooth(method="lm") +
+##   ylab("Mean [ms]")
 
-ggsave(file = "plots/all3resamples4replics.pdf"
-     , device = "pdf"
-     , dpi = 300
-     , limitsize = TRUE
-     , scale = 1
-     , width = NA
-     , height = NA
-     , units = c("in", "cm", "mm")
-     , plot = p)
+## ggsave(file = "plots/all3resamples4replics.pdf"
+##      , device = "pdf"
+##      , dpi = 300
+##      , limitsize = TRUE
+##      , scale = 1
+##      , width = NA
+##      , height = NA
+##      , units = c("in", "cm", "mm")
+##      , plot = p)
