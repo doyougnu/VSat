@@ -16,8 +16,6 @@ import GHC.Generics
 import Control.DeepSeq               (NFData)
 
 import Data.Maybe                    (catMaybes)
-import Data.Set                      (Set, empty, member, insert)
-import Control.Arrow                 (first, second)
 
 import VProp
 import V

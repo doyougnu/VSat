@@ -28,6 +28,7 @@ myConfig = C.defaultConfig { resamples = 6 }
 
 -- | Required field namings for cassava csv library
 data RunData = RunData { shared_         :: !Text
+                       , runNum          :: !Integer
                        , scale_          :: !Integer
                        , numTerms_       :: !Integer
                        , numChc_         :: !Integer
@@ -52,14 +53,17 @@ eraseFile = flip writeFile ""
 main :: IO ()
 main = do
   mapM_ eraseFile [resDescFile, bfDescFile]
-  mapM_ benchAll $ [0..90] >>= replicate 6
+  mapM_ benchAll $ zip [1..] [0..90] >>= replicate 6
 
-benchAll :: Int -> IO ()
-benchAll n = do
+-- | The run number, used to join descriptor and timing data later
+type RunNum = Integer
+
+benchAll :: (RunNum, Integer) -> IO ()
+benchAll (rn, n) = do
   noShProp <- fmap readStr <$>
-              (generate $ mkLargeVProp n vPropNoShare :: IO (VProp Readable))
+              (generate $ mkLargeVProp (fromInteger n) vPropNoShare :: IO (VProp Readable))
   prop <- fmap readStr <$>
-          (generate $ mkLargeVProp n arbitrary :: IO (VProp Readable))
+          (generate $ mkLargeVProp (fromInteger n) arbitrary :: IO (VProp Readable))
   let descriptorsFs = [ numTerms
                       , numChc
                       , numPlain
@@ -69,15 +73,16 @@ benchAll n = do
                       ]
 
   -- there must be a better way
-      [s,t,c,p,sd,sp,ms] = toInteger n : (descriptorsFs <*> pure noShProp)
-      [s2,t2,c2,p2,sd2,sp2,ms2] = toInteger n : (descriptorsFs <*> pure prop)
+      [s,c,p,sd,sp,ms] = descriptorsFs <*> pure noShProp
+      [s2,c2,p2,sd2,sp2,ms2] = descriptorsFs <*> pure prop
 
-      noShPropRecord = RunData "Unique" s t c p sd sp ms
-      propRecord = RunData "Shared" s2 t2 c2 p2 sd2 sp2 ms2
+      noShPropRecord = RunData "Unique" s rn n c p sd sp ms
+      propRecord = RunData "Shared" s2 rn n c2 p2 sd2 sp2 ms2
 
       headers :: Header
       headers = V.fromList $ pack <$>
                 [ "shared_"
+                , "run_"
                 , "scale_"
                 , "numTerms_"
                 , "numChc_"
@@ -87,9 +92,10 @@ benchAll n = do
                 , "maxShared_"
                 ]
 
-  -- write out to descriptor csv file
-  appendFile bfDescFile $ encodeByName headers $ pure noShPropRecord
-  appendFile bfDescFile $ encodeByName headers $ pure propRecord
+  -- write out to descriptor csv file duplicated just to make the data frame
+  -- merge in R easier
+  appendFile bfDescFile $ encodeByName headers $ replicate 3 noShPropRecord
+  appendFile bfDescFile $ encodeByName headers $ replicate 3 propRecord
 
   C.defaultMainWith myConfig
     [ C.bgroup ("Unique/" ++ show n)
@@ -104,12 +110,12 @@ benchAll n = do
       ]
     ]
 
-benchAndInc :: Int -> IO ()
-benchAndInc n = do
+benchAndInc :: (RunNum, Integer) -> IO ()
+benchAndInc (rn, n) = do
   noShProp <- fmap readStr <$>
-              (generate $ mkLargeVProp n vPropNoShare :: IO (VProp Readable))
+              (generate $ mkLargeVProp (fromInteger n) vPropNoShare :: IO (VProp Readable))
   prop <- fmap readStr <$>
-          (generate $ mkLargeVProp n arbitrary :: IO (VProp Readable))
+          (generate $ mkLargeVProp (fromInteger n) arbitrary :: IO (VProp Readable))
   let descriptorsFs = [ numTerms
                       , numChc
                       , numPlain
@@ -119,15 +125,16 @@ benchAndInc n = do
                       ]
 
   -- there must be a better way
-      [s,t,c,p,sd,sp,ms] = toInteger n : (descriptorsFs <*> pure noShProp)
-      [s2,t2,c2,p2,sd2,sp2,ms2] = toInteger n : (descriptorsFs <*> pure prop)
+      [s,c,p,sd,sp,ms] = descriptorsFs <*> pure noShProp
+      [s2,c2,p2,sd2,sp2,ms2] = descriptorsFs <*> pure prop
 
-      noShPropRecord = RunData "Unique" s t c p sd sp ms
-      propRecord = RunData "Shared" s2 t2 c2 p2 sd2 sp2 ms2
+      noShPropRecord = RunData "Unique" s rn n c p sd sp ms
+      propRecord = RunData "Shared" s2 rn n c2 p2 sd2 sp2 ms2
 
       headers :: Header
       headers = V.fromList $ pack <$>
                 [ "shared_"
+                , "run_"
                 , "scale_"
                 , "numTerms_"
                 , "numChc_"
@@ -138,8 +145,8 @@ benchAndInc n = do
                 ]
 
   -- write out to descriptor csv file
-  appendFile resDescFile $ encodeByName headers $ pure noShPropRecord
-  appendFile resDescFile $ encodeByName headers $ pure propRecord
+  appendFile bfDescFile $ encodeByName headers $ pure noShPropRecord
+  appendFile bfDescFile $ encodeByName headers $ pure propRecord
 
   C.defaultMainWith myConfig
     [ C.bgroup ("Unique/" ++ show n)
