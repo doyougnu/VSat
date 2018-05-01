@@ -1,6 +1,7 @@
 library(ggplot2)
 library(scales)
 library(dplyr)
+library(svglite)
 library(tidyr)
 library(gridExtra)
 require(data.table)
@@ -88,7 +89,17 @@ descriptors <- readAndClean(descriptorsFile, cleanDesc)
 df <- merge(timings, descriptors)
 
 ############################## Plotting ########################################
-p <- ggplot(df, aes(x=scale, y=(Mean * 100), color=Operation)) +
+p <- ggplot(df, aes(x=scale, y=Mean, color=Operation)) +
   geom_point() +
-  geom_smooth(method=lm, se=T) +
-  ylab("Mean [s]")
+  geom_smooth(method="lm") +
+  ylab("Mean [ms]")
+
+ggsave(file = "plots/all3resamples4replics.pdf"
+     , device = "pdf"
+     , dpi = 300
+     , limitsize = TRUE
+     , scale = 1
+     , width = NA
+     , height = NA
+     , units = c("in", "cm", "mm")
+     , plot = p)
