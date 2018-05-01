@@ -21,7 +21,8 @@ timingsResultsFile <- "../results.csv"
 ## the descriptor results are the hand crafted descriptor functions for each
 ## measurement that are recorded to a csv via cassava, these are things like
 ## number of choices in the prop, number of terms etc.
-descriptorResults <- "../timings.csv"
+andIncDesc <- "../andIncDesc.csv"
+bfDesc <- "../bfDesc.csv"
 
 ## Given a dataframe that assumes the output structure of criterion's --csv call
 ## clean up the data frame by converting numerics to numerics while maintaining

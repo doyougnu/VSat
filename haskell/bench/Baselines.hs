@@ -40,7 +40,7 @@ instance ToNamedRecord RunData
 
 -- run with $ stack bench --benchmark-arguments "--output results.html --csv timing_results.csv"
 resDescFile :: FilePath
-resDescFile = "resDesc.csv"
+resDescFile = "andIncDesc.csv"
 
 bfDescFile :: FilePath
 bfDescFile = "bfDesc.csv"
