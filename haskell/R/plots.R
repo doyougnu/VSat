@@ -4,6 +4,7 @@ library(dplyr)
 library(svglite)
 library(tidyr)
 library(gridExtra)
+library(plyr)
 require(data.table)
 # for mosaic plots
 library(ggmosaic)
@@ -90,20 +91,58 @@ timings <- readAndClean(timingsResultsFile, cleanTimings)
 descriptors <- readAndClean(descriptorsFile, cleanDesc)
 
 ## now merge the tables to a data frame
-df <- merge(timings, descriptors, by=c("runNum", "shared","scale"))
+df <- join(timings, descriptors)
+
+save <- function(name, plot) {
+  ggsave(file = paste("plots/", name, ".pdf", sep="")
+       , device = "pdf"
+       , dpi = 300
+       , limitsize = TRUE
+       , scale = 1
+       , width = NA
+       , height = NA
+       , units = c("in", "cm", "mm")
+       , plot = plot)}
 
 ############################## Plotting ########################################
-## p <- ggplot(df, aes(x=scale, y=Mean, color=Operation)) +
-##   geom_point() +
-##   geom_smooth(method="lm") +
-##   ylab("Mean [ms]")
+noPlains <- df %>% filter(numChc > 0)
 
-## ggsave(file = "plots/all3resamples4replics.pdf"
-##      , device = "pdf"
-##      , dpi = 300
-##      , limitsize = TRUE
-##      , scale = 1
-##      , width = NA
-##      , height = NA
-##      , units = c("in", "cm", "mm")
-##      , plot = p)
+bfComparison <- ggplot(noPlains, aes(x=scale, y=Mean, color=Operation)) +
+  geom_point() +
+  geom_smooth(method="lm") +
+  ylab("Mean Solution Time [s]") +
+  xlab("Term size") +
+  scale_y_log10(breaks = trans_breaks("log10", function(x) 10^x),
+                labels = trans_format("log10", math_format(10^.x))) +
+  labs(title= "Comparison of Brute Force Solve vs Other Methods",
+       subtitle="Data generated with 5 resamples, and 5 replications")
+
+# save
+save("bfcomparison", bfComparison)
+
+## filter out all brute force data
+noBF <- noPlains %>% filter(Operation != "Brute Force")
+
+andIncComp <- ggplot(noBF, aes(x=scale, y=Mean, color=Operation)) +
+  geom_point() +
+  geom_smooth(method="lm") +
+  ylab("Mean Solution Time [s]") +
+  xlab("Term size") +
+  scale_y_log10(breaks = trans_breaks("log10", function(x) 10^x),
+                labels = trans_format("log10", math_format(10^.x))) +
+  labs(title="And Decomposition vs Incremental Solve",
+       subtitle="Data generated with 5 resamples, and 5 replications")
+
+save("andIncComparison", andIncComp)
+
+andIncCompByChc <- ggplot(noBF, aes(x=numChc, y=Mean, color=Operation)) +
+  geom_point() +
+  geom_smooth(method="lm") +
+  ylab("Mean Solution Time [s]") +
+  xlab("Number of Choices") +
+  scale_y_log10(breaks = trans_breaks("log10", function(x) 10^x),
+                labels = trans_format("log10", math_format(10^.x))) +
+  labs(title="And Decomposition vs Incremental Solve",
+       subtitle="Data generated with 5 resamples, and 5 replications")
+
+save("andIncComparisonByChoice", andIncCompByChc)
