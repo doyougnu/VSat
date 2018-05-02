@@ -1,1 +1,4 @@
 *.html
+*.Rhistory
+*.prof
+R/plots/*
