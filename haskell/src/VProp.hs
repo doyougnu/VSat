@@ -157,12 +157,12 @@ dimToVar f = Ref . f
 
 -- | Perform andDecomposition, removing all choices from a proposition
 andDecomp :: Show a => (VProp a) -> (Dim -> a) -> (VProp a)
-andDecomp (Chc d l r) f = (dimToVar f d &&& andDecomp l f) |||
-                        (bnot (dimToVar f d) &&& andDecomp r f)
-andDecomp (Not x)     f = Not (andDecomp x f)
-andDecomp (Op2 c l r) f = Op2 c (andDecomp l f) (andDecomp r f)
-andDecomp (Opn c ps)  f = Opn c (flip andDecomp f <$> ps)
-andDecomp x           _ = x
+andDecomp !(Chc d l r) f = (dimToVar f d &&& andDecomp l f) |||
+                          (bnot (dimToVar f d) &&& andDecomp r f)
+andDecomp !(Not x)     f = Not (andDecomp x f)
+andDecomp !(Op2 c l r) f = Op2 c (andDecomp l f) (andDecomp r f)
+andDecomp !(Opn c ps)  f = Opn c (flip andDecomp f <$> ps)
+andDecomp !x           _ = x
 
 --------------------------- Descriptors ----------------------------------------
 -- | TODO fix all this redundancy by abstracting the dimensions and instancing Bifoldable
