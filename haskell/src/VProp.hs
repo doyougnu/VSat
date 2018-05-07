@@ -40,11 +40,11 @@ type Config = Map.Map Dim Bool
 -- | Boolean expressions over features.
 data VProp a
    = Lit Bool
-   | Ref a
-   | Chc Dim (VProp a) (VProp a)
-   | Not (VProp a)
-   | Opn Opn [(VProp a)]
-   | Op2 Op2 (VProp a) (VProp a)
+   | Ref !a
+   | Chc Dim !(VProp a) !(VProp a)
+   | Not !(VProp a)
+   | Opn Opn ![(VProp a)]
+   | Op2 Op2 !(VProp a) !(VProp a)
   deriving (Data,Eq,Generic,Typeable,Functor,Traversable,Foldable)
 
 -- | data constructor for binary operations
