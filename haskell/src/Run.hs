@@ -1,6 +1,6 @@
 module Run ( runEnv
            , Opts (..)
-           , Result
+           , Result (..)
            , SatDict
            , Log
            ) where
