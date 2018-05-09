@@ -5,7 +5,6 @@ import Criterion.Main as C
 import Run
 import Criterion.Types
 import Data.Csv
-import Text.Printf
 import Data.Text (Text,pack)
 import qualified Data.Vector as V
 import Prelude hiding (writeFile, appendFile)
@@ -68,7 +67,7 @@ eraseFile = flip writeFile ""
 main :: IO ()
 main = do
   mapM_ eraseFile [descFile, timingFile]
-  mapM_ benchAndInc $ zip [1..] $ [10,20..3000] >>= replicate 10
+  mapM_ benchAndInc $ zip [1..] $ [1400,1420..3000] >>= replicate 10
 
 -- | The run number, used to join descriptor and timing data later
 type RunNum = Integer
