@@ -178,8 +178,8 @@ benchAndInc metrics@(rn, n) = do
   writeDesc "Shared" metrics prop
 
   -- | run incremental solve
-  (tm1, _) <- time $! runEnv False False False [] (toReadable noShProp)
-  (tm2, _) <- time $! runEnv False False False [] (toReadable prop)
+  (tm1, _) <- time $! runEnvFirst False False False [] (toReadable noShProp)
+  (tm2, _) <- time $! runEnvFirst False False False [] (toReadable prop)
 
   -- | run and decomp
   (tm3, _) <- time $! runEnv True True False [] (toReadable noShProp)

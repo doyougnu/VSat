@@ -3,11 +3,12 @@ module Run ( runEnv
            , Result (..)
            , SatDict
            , Log
+           , runEnvFirst
            ) where
 
 import qualified Data.Map.Strict as M
 import Control.Monad.RWS.Strict
-import Control.Monad.State.Strict    as St
+import Control.Monad.State    as St
 import qualified Data.SBV.Internals  as I
 import qualified Data.SBV            as S
 import qualified Data.SBV.Control    as SC
@@ -66,6 +67,10 @@ runEnv base bAD bOpt opts x = _runEnv
                              (_setOpts base bAD bOpt opts)
                              (initSt x)
 
+runEnvFirst :: Bool -> Bool -> Bool -> [VProp String -> VProp String] -> VProp String -> IO (V Dim (Maybe I.SMTModel))
+runEnvFirst base bAD bOpt opts x = (head . unbox . fst') <$> _runEnv (work x) (_setOpts base bAD bOpt opts) (initSt x)
+  where fst' (y,_,_)  = y
+        unbox (Vr xs) = xs
 
 -- | Given a VProp a term generate the satisfiability map
 initSt :: (Show a, Ord a) => VProp a -> (SatDict a)
