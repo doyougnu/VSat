@@ -68,7 +68,7 @@ eraseFile = flip writeFile ""
 main :: IO ()
 main = do
   mapM_ eraseFile [descFile, timingFile]
-  mapM_ benchAndInc $ zip [1..] $ [100,200..3000] >>= replicate 2
+  mapM_ benchAndInc $ zip [1..] $ [10,20..3000] >>= replicate 10
 
 -- | The run number, used to join descriptor and timing data later
 type RunNum = Integer
