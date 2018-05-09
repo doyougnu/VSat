@@ -99,7 +99,7 @@ names(timings) <- gsub(pattern = "_", "", x = names(timings))
 ## timings <- readAndClean(timingsResultsFile, cleanDesc)
 
 ## Read in descriptor table
-descriptors <- readAndClean(descriptorsFile, cleanDesc)
+descriptors <- readAndClean(descriptorsFile, clean)
 
 ## now merge the tables to a data frame
 df <- join(timings, descriptors)
@@ -134,26 +134,28 @@ noPlains <- df %>% filter(numChc > 0)
 ## filter out all brute force data
 noBF <- noPlains %>% filter(Operation != "Brute Force")
 
-andIncComp <- ggplot(noBF, aes(x=scale, y=time, color=Operation)) +
-  geom_point() +
-  geom_smooth(method="lm", formula = y ~ exp(x), se = FALSE) +
+andIncComp <- ggplot(noBF, aes(x=scale, y=time
+                             , color=shared, shape=Operation)) +
+  geom_point(size=2) +
+  ## geom_smooth(method="lm", se = FALSE) +
   ylab("CPU Solution Time [s]") +
   xlab("Term size") +
   ## scale_y_log10(breaks = trans_breaks("log10", function(x) 10^x),
   ##               labels = trans_format("log10", math_format(10^.x))) +
   labs(title="And Decomposition vs Incremental Solve",
-       subtitle="Data generated with 5 resamples, and 5 replications")
+       subtitle="")
 
-## save("andIncComparison", andIncComp)
+save("andIncComparisonFirstChc", andIncComp)
 
-andIncCompByChc <- ggplot(noBF, aes(x=numChc, y=time, color=Operation)) +
-  geom_point() +
-  geom_smooth(method="lm") +
-  ylab("Mean Solution Time [s]") +
+andIncCompByChc <- ggplot(noBF, aes(x=numChc, y=time
+                                  , color=shared, shape=Operation)) +
+  geom_point(size=2) +
+  geom_smooth() +
+  ylab("CPU Solution Time [s]") +
   xlab("Number of Choices") +
   ## scale_y_log10(breaks = trans_breaks("log10", function(x) 10^x),
   ##               labels = trans_format("log10", math_format(10^.x))) +
   labs(title="And Decomposition vs Incremental Solve",
-       subtitle="Data generated with 5 resamples, and 5 replications")
+       subtitle="Criterion not used, Each Point is a solution, 10 replicants")
 
-## save("andIncComparisonByChoice", andIncCompByChc)
+save("andIncComparisonByChoiceFirstChc", andIncCompByChc)
