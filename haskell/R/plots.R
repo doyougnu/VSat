@@ -19,18 +19,19 @@ library(ggmosaic)
 ## output, check app/main.hs the timing results are the actual measurements
 ## taken by criterion and the recorded bgroup names
 ## timingsResultsFile <- "../data/2018-05-01_timing_results.csv"
-timingsResultsFile <- "../timing_results.csv"
+timingsResultsFile <- "../data/2018-05-08_timing_result_noCrit.csv"
 
 ## the descriptor results are the hand crafted descriptor functions for each
 ## measurement that are recorded to a csv via cassava, these are things like
 ## number of choices in the prop, number of terms etc.
 ## descriptorsFile <- "../data/2018-05-01_desc_results.csv"
-descriptorsFile <- "../desc_results.csv"
+descriptorsFile <- "../data/2018-05-08_desc_result_noCrit.csv"
 
 ## Given a dataframe that assumes the output structure of criterion's --csv call
 ## clean up the data frame by converting numerics to numerics while maintaining
 ## the names columns and tidy up the data set
-cleanTimings <- function(df_) {
+## This function is meant to clean the output from criterion
+cleanCriterionOutput <- function(df_) {
 
   ## grab the naming column
   nmCol <- df_$Name
@@ -53,7 +54,8 @@ cleanTimings <- function(df_) {
   df_
 }
 
-cleanDesc <- function(df_) {
+## This function is tuned to clean the output from the haskell cassava library
+clean <- function(df_) {
 
   ## Clean up the trailing "_" in the column names
   names(df_) <- gsub(pattern = "_", "", x = names(df_))
@@ -85,7 +87,16 @@ cleanDesc <- function(df_) {
 readAndClean <- function(fname, f) { read.csv(file=fname) %>% f }
 
 ## Read in the Timings table
-timings <- readAndClean(timingsResultsFile, cleanTimings)
+timings_<- read.csv(file=timingsResultsFile)
+
+toDel <- seq(2, nrow(timings_), 2)
+
+timings <- timings_[-toDel,,drop=F] %>%
+  separate(name__, into = c("shared", "Operation"), sep = "\\/")
+timings <- data.frame(timings[1:2], apply(timings[3:ncol(timings)], 2, as.numeric))
+names(timings) <- gsub(pattern = "_", "", x = names(timings))
+
+## timings <- readAndClean(timingsResultsFile, cleanDesc)
 
 ## Read in descriptor table
 descriptors <- readAndClean(descriptorsFile, cleanDesc)
@@ -107,42 +118,42 @@ save <- function(name, plot) {
 ############################## Plotting ########################################
 noPlains <- df %>% filter(numChc > 0)
 
-bfComparison <- ggplot(noPlains, aes(x=scale, y=Mean, color=Operation)) +
-  geom_point() +
-  geom_smooth(method="lm") +
-  ylab("Mean Solution Time [s]") +
-  xlab("Term size") +
-  scale_y_log10(breaks = trans_breaks("log10", function(x) 10^x),
-                labels = trans_format("log10", math_format(10^.x))) +
-  labs(title= "Comparison of Brute Force Solve vs Other Methods",
-       subtitle="Data generated with 5 resamples, and 5 replications")
+## bfComparison <- ggplot(noPlains, aes(x=scale, y=Mean, color=Operation)) +
+##   geom_point() +
+##   geom_smooth(method="lm") +
+##   ylab("Mean Solution Time [s]") +
+##   xlab("Term size") +
+##   scale_y_log10(breaks = trans_breaks("log10", function(x) 10^x),
+##                 labels = trans_format("log10", math_format(10^.x))) +
+##   labs(title= "Comparison of Brute Force Solve vs Other Methods",
+##        subtitle="Data generated with 5 resamples, and 5 replications")
 
 # save
-save("bfcomparison", bfComparison)
+## save("bfcomparison", bfComparison)
 
 ## filter out all brute force data
 noBF <- noPlains %>% filter(Operation != "Brute Force")
 
-andIncComp <- ggplot(noBF, aes(x=scale, y=Mean, color=Operation)) +
+andIncComp <- ggplot(noBF, aes(x=scale, y=time, color=Operation)) +
   geom_point() +
-  geom_smooth(method="lm") +
-  ylab("Mean Solution Time [s]") +
+  geom_smooth(method="lm", formula = y ~ exp(x), se = FALSE) +
+  ylab("CPU Solution Time [s]") +
   xlab("Term size") +
-  scale_y_log10(breaks = trans_breaks("log10", function(x) 10^x),
-                labels = trans_format("log10", math_format(10^.x))) +
+  ## scale_y_log10(breaks = trans_breaks("log10", function(x) 10^x),
+  ##               labels = trans_format("log10", math_format(10^.x))) +
   labs(title="And Decomposition vs Incremental Solve",
        subtitle="Data generated with 5 resamples, and 5 replications")
 
-save("andIncComparison", andIncComp)
+## save("andIncComparison", andIncComp)
 
-andIncCompByChc <- ggplot(noBF, aes(x=numChc, y=Mean, color=Operation)) +
+andIncCompByChc <- ggplot(noBF, aes(x=numChc, y=time, color=Operation)) +
   geom_point() +
   geom_smooth(method="lm") +
   ylab("Mean Solution Time [s]") +
   xlab("Number of Choices") +
-  scale_y_log10(breaks = trans_breaks("log10", function(x) 10^x),
-                labels = trans_format("log10", math_format(10^.x))) +
+  ## scale_y_log10(breaks = trans_breaks("log10", function(x) 10^x),
+  ##               labels = trans_format("log10", math_format(10^.x))) +
   labs(title="And Decomposition vs Incremental Solve",
        subtitle="Data generated with 5 resamples, and 5 replications")
 
-save("andIncComparisonByChoice", andIncCompByChc)
+## save("andIncComparisonByChoice", andIncCompByChc)
