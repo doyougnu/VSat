@@ -186,8 +186,8 @@ instance (Monad m, I.SolverContext m) =>
 
 incHelper :: S.SBool -> [VProp S.SBool] ->
   (S.SBool -> S.SBool -> S.SBool) -> IncSolve S.SBool
-incHelper acc []     _ = return acc
-incHelper acc (x:xs) f = do b <- incrementalSolve_ x; incHelper (b `f` acc) xs f
+incHelper acc ![]     _ = {-# SCC "incHelper" #-} return acc
+incHelper acc !(x:xs) f = {-# SCC "incHelper" #-} do b <- incrementalSolve_ x; incHelper (b `f` acc) xs f
 
 incrementalSolve_ :: VProp S.SBool -> IncSolve S.SBool
 incrementalSolve_ (Ref b) = return b
@@ -208,21 +208,22 @@ incrementalSolve_ (Opn And ps) = do b <- incHelper S.true ps (S.&&&)
 incrementalSolve_ (Opn Or ps) = do b <- incHelper S.true ps (S.|||)
                                    S.constrain b
                                    return b
-incrementalSolve_ (Chc d l r) = do (_, used) <- get
-                                   case M.lookup d used of
-                                     Just True  -> incrementalSolve_ l
-                                     Just False -> incrementalSolve_ r
-                                     Nothing    -> do St.modify . second $ M.insert d True
-                                                      lift $ SC.push 1
-                                                      _ <- incrementalSolve_ l
-                                                      lmodel <- lift $ getModel
-                                                      lift $ SC.pop 1
+incrementalSolve_ (Chc d l r) = {-# SCC "Choice_Solve"#-}
+  do (_, used) <- get
+     case M.lookup d used of
+       Just True  -> incrementalSolve_ l
+       Just False -> incrementalSolve_ r
+       Nothing    -> do St.modify . second $ M.insert d True
+                        lift $ SC.push 1
+                        _ <- incrementalSolve_ l
+                        lmodel <- lift $ getModel
+                        lift $ SC.pop 1
 
-                                                      St.modify . second $ M.adjust (const False) d
-                                                      lift $ SC.push 1
-                                                      b <- incrementalSolve_ r
-                                                      rmodel <- lift $ getModel
-                                                      lift $ SC.pop 1
+                        St.modify . second $ M.adjust (const False) d
+                        lift $ SC.push 1
+                        b <- incrementalSolve_ r
+                        rmodel <- lift $ getModel
+                        lift $ SC.pop 1
 
-                                                      St.modify . first $ ((:) (VChc d lmodel rmodel))
-                                                      return b
+                        St.modify . first $ ((:) (VChc d lmodel rmodel))
+                        return b
