@@ -13,6 +13,8 @@ import qualified Data.SBV.Internals  as I
 import qualified Data.SBV            as S
 import qualified Data.SBV.Control    as SC
 
+import Control.Arrow (first, second)
+
 import GHC.Generics
 import Control.DeepSeq               (NFData)
 
@@ -27,10 +29,10 @@ type SatDict a = (M.Map Config Bool, M.Map a Bool) -- keys may incur perf penalt
 
 -- | The optimizations that could be set
 data Opts a = Opts { runBaselines :: Bool              -- ^ Run baselines?
-                 , runAD :: Bool                     -- ^ run anddecomp baseline? else Brute Force
-                 , runOpts :: Bool                   -- ^ Run optimizations or not?
-                 , optimizations :: [(VProp a) -> (VProp a)] -- ^ a list of optimizations
-                 }
+                   , runAD :: Bool                     -- ^ run anddecomp baseline? else Brute Force
+                   , runOpts :: Bool                   -- ^ Run optimizations or not?
+                   , optimizations :: [VProp a -> VProp a] -- ^ a list of optimizations
+                   }
 
 -- | Type convenience for Log
 type Log = String
@@ -137,17 +139,19 @@ work prop = do
     runBruteForce prop >>= return . L
     else do
     opts <- asks optimizations
-    result <- lift . S.runSMT . incrementalSolve $ St.evalStateT (propToSBool prop) M.empty
+    (result,_) <- lift . S.runSMT . incrementalSolve $ St.evalStateT (propToSBool prop) M.empty
     return $ Vr result
 
 type UsedVars a = M.Map a S.SBool
 type IncPack a b = St.StateT (UsedVars a) S.Symbolic b
-type IncState = [V Dim (Maybe I.SMTModel)]
+
+type UsedDims a = M.Map a Bool
+type IncState = ([V Dim (Maybe I.SMTModel)], UsedDims Dim)
 type IncSolve a = St.StateT IncState SC.Query a
 
 incrementalSolve :: S.Symbolic (VProp S.SBool) -> S.Symbolic IncState
 incrementalSolve prop = do prop' <- prop
-                           SC.query $ St.execStateT (incrementalSolve_ prop') []
+                           SC.query $ St.execStateT (incrementalSolve_ prop') ([], M.empty)
 
 propToSBool :: VProp String -> IncPack String (VProp S.SBool)
 propToSBool = traverse smtBool
@@ -204,13 +208,21 @@ incrementalSolve_ (Opn And ps) = do b <- incHelper S.true ps (S.&&&)
 incrementalSolve_ (Opn Or ps) = do b <- incHelper S.true ps (S.|||)
                                    S.constrain b
                                    return b
-incrementalSolve_ (Chc d l r) = do lift $ SC.push 1
-                                   _ <- incrementalSolve_ l
-                                   lmodel <- lift $ getModel
-                                   lift $ SC.pop 1
-                                   lift $ SC.push 1
-                                   b <- incrementalSolve_ r
-                                   rmodel <- lift $ getModel
-                                   lift $ SC.pop 1
-                                   St.modify ((:) (VChc d lmodel rmodel))
-                                   return b
+incrementalSolve_ (Chc d l r) = do (_, used) <- get
+                                   case M.lookup d used of
+                                     Just True  -> incrementalSolve_ l
+                                     Just False -> incrementalSolve_ r
+                                     Nothing    -> do St.modify . second $ M.insert d True
+                                                      lift $ SC.push 1
+                                                      _ <- incrementalSolve_ l
+                                                      lmodel <- lift $ getModel
+                                                      lift $ SC.pop 1
+
+                                                      St.modify . second $ M.adjust (const False) d
+                                                      lift $ SC.push 1
+                                                      b <- incrementalSolve_ r
+                                                      rmodel <- lift $ getModel
+                                                      lift $ SC.pop 1
+
+                                                      St.modify . first $ ((:) (VChc d lmodel rmodel))
+                                                      return b
