@@ -67,6 +67,10 @@ genSharedDim :: Gen Dim
 genSharedDim = elements $
   zipWith  (\a b -> Dim $ toUpper <$> [a, b]) ['a'..'f'] ['a'..'f']
 
+genSharedVar :: Gen Var
+genSharedVar = elements $
+  zipWith  (\a b -> Var $ [a, b]) ['a'..'z'] ['a'..'z']
+
 genVar :: Gen String
 genVar = genAlphaNumStr
 
@@ -102,9 +106,7 @@ vPropNoShare = sized $ flip arbVProp genDim
 genVProp :: Arbitrary a => IO (VProp a)
 genVProp = generate arbitrary
 
-mkLargeVProp :: Int -> Gen (VProp a) -> Gen (VProp a)
--- mkLargeVProp = resize . (+)
-mkLargeVProp = resize
+-- vPropChoicesOverRefs = sized $ flip arbProp
 
 ----------------------------- Predicates ---------------------------------------
 isPlain :: (VProp a) -> Bool
