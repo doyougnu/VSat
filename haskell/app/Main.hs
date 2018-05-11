@@ -15,7 +15,7 @@ import VProp ( VProp
              , Readable
              , readStr
              , vPropNoShare
-             , mkLargeVProp
+             , genVPropAtSize
              , numTerms
              , numChc
              , numPlain
@@ -67,7 +67,7 @@ eraseFile = flip writeFile ""
 main :: IO ()
 main = do
   mapM_ eraseFile [descFile, timingFile]
-  mapM_ benchAndInc $ zip [1..] $ [1400,1420..3000] >>= replicate 10
+  mapM_ benchAndInc $ zip [1..] $ [10,20..2000] >>= replicate 10
 
 -- | The run number, used to join descriptor and timing data later
 type RunNum = Integer
@@ -76,57 +76,6 @@ type RunNum = Integer
 type TermSize = Integer
 
 type RunMetric = (RunNum, TermSize)
-
--- benchAll :: (RunNum, Integer) -> IO ()
--- benchAll (rn, n) = do
---   noShProp <- fmap readStr <$>
---               (generate $ mkLargeVProp (fromInteger n) vPropNoShare :: IO (VProp Readable))
---   prop <- fmap readStr <$>
---           (generate $ mkLargeVProp (fromInteger n) arbitrary :: IO (VProp Readable))
---   let descriptorsFs = [ numTerms
---                       , numChc
---                       , numPlain
---                       , numSharedDims
---                       , numSharedPlain
---                       , maxShared
---                       ]
-
---   -- there must be a better way
---       [s,c,p,sd,sp,ms] = descriptorsFs <*> pure noShProp
---       [s2,c2,p2,sd2,sp2,ms2] = descriptorsFs <*> pure prop
-
---       noShPropRecord = RunData "Unique" rn n s  c  p  sd  sp  ms
---       propRecord =     RunData "Shared" rn n s2 c2 p2 sd2 sp2 ms2
-
---       headers :: Header
---       headers = V.fromList $ BS.pack <$>
---                 [ "shared_"
---                 , "runNum_"
---                 , "scale_"
---                 , "numTerms_"
---                 , "numChc_"
---                 , "numPlain_"
---                 , "numSharedDims_"
---                 , "numSharedPlain_"
---                 , "maxShared_"
---                 ]
-
---   -- write out to descriptor csv file
---   appendFile descFile $ encodeByName headers $ pure noShPropRecord
---   appendFile descFile $ encodeByName headers $ pure propRecord
-
---   C.defaultMainWith myConfig
---     [ C.bgroup ("Unique/" ++ show rn ++ "/" ++ show n)
---       [ bench "Brute Force" $ C.nfIO (runEnv True False False [] noShProp)
---       , bench "And Decomposition" $ C.nfIO (runEnv True True False [] noShProp)
---       , bench "Variational Solve" $ C.nfIO (runEnv False False False [] noShProp)
---       ]
---     , C.bgroup ("Shared/" ++ show rn ++ "/" ++ show n)
---       [ bench "Brute Force" $ C.nfIO (runEnv True False False [] prop)
---       , bench "And Decomposition" $ C.nfIO (runEnv True True False [] prop)
---       , bench "Variational Solve" $ C.nfIO (runEnv False False False [] prop)
---       ]
---     ]
 
 -- | Give a descriptor, run metrics, and a prop, generate the descriptor metrics
 -- for the prop and write them out to a csv
@@ -171,14 +120,14 @@ toReadable = fmap readStr
 -- generate the prop with and log the run
 benchAndInc :: RunMetric -> IO ()
 benchAndInc metrics@(rn, n) = do
-  noShProp <- generate $ mkLargeVProp (fromInteger n) vPropNoShare :: IO (VProp Readable)
-  prop <- generate $ mkLargeVProp (fromInteger n) arbitrary :: IO (VProp Readable)
+  noShProp <- generate $ genVPropAtSize (fromInteger n) vPropNoShare :: IO (VProp Readable)
+  prop <- generate $ genVPropAtSize (fromInteger n) arbitrary :: IO (VProp Readable)
   writeDesc "Unique" metrics noShProp
   writeDesc "Shared" metrics prop
 
   -- | run incremental solve
-  (tm1, _) <- time $! runEnvFirst False False False [] (toReadable noShProp)
-  (tm2, _) <- time $! runEnvFirst False False False [] (toReadable prop)
+  (tm1, _) <- time $! runEnv False False False [] (toReadable noShProp)
+  (tm2, _) <- time $! runEnv False False False [] (toReadable prop)
 
   -- | run and decomp
   (tm3, _) <- time $! runEnv True True False [] (toReadable noShProp)
@@ -192,17 +141,6 @@ benchAndInc metrics@(rn, n) = do
 
   print $ "Run: " ++ show rn ++ " Scale: " ++ show n ++ " | " ++ " Times: " ++
     "VSolve: " ++ show tm1 ++ " | " ++ show tm2 ++ " | " ++ "AndDecomp: " ++ show tm3 ++ " | " ++ show tm4
-
-  -- C.defaultMainWith myConfig
-  --   [ C.bgroup ("Unique/" ++ show rn ++ "/" ++ show n)
-  --     [ bench "Variational Solve" $ C.nfIO (runEnv False False False [] noShProp)
-  --     , bench "And Decomposition" $ C.nfIO (runEnv True True False [] noShProp)
-  --     ]
-  --   , C.bgroup ("Shared/" ++ show rn ++ "/" ++ show n)
-  --     [ bench "Variational Solve" $ C.nfIO (runEnv False False False [] prop)
-  --     , bench "And Decomposition" $ C.nfIO (runEnv True True False [] prop)
-  --     ]
-  --   ]
 
 time :: IO t -> IO (Double, t)
 time a = do
