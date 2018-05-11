@@ -108,6 +108,9 @@ genVProp = generate arbitrary
 
 -- vPropChoicesOverRefs = sized $ flip arbProp
 
+genVPropAtSize :: Arbitrary a => Int -> Gen (VProp a) -> Gen (VProp a)
+genVPropAtSize = resize
+
 ----------------------------- Predicates ---------------------------------------
 isPlain :: (VProp a) -> Bool
 isPlain (Chc _ _ _) = False

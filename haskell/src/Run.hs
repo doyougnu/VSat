@@ -8,7 +8,7 @@ module Run ( runEnv
 
 import qualified Data.Map.Strict as M
 import Control.Monad.RWS.Strict
-import Control.Monad.State    as St
+import Control.Monad.State.Strict    as St
 import qualified Data.SBV.Internals  as I
 import qualified Data.SBV            as S
 import qualified Data.SBV.Control    as SC
