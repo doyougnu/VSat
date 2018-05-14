@@ -24,7 +24,7 @@ import           Test.QuickCheck.Gen
 
 -- | A feature is a named, boolean configuration option.
 newtype Var = Var { varName :: String }
-  deriving (Data,Eq,IsString,Ord,Show,Typeable,Generic,NFData,Arbitrary)
+  deriving (Data,Eq,IsString,Ord,Typeable,Generic,NFData,Arbitrary)
 
 newtype Dim = Dim { dimName :: String }
   deriving (Data,Eq,IsString,Ord,Show,Typeable,Generic,NFData,Arbitrary)
@@ -65,14 +65,16 @@ genDim = Dim <$> (fmap . fmap) toUpper genAlphaNumStr
 
 genSharedDim :: Gen Dim
 genSharedDim = elements $
-  zipWith  (\a b -> Dim $ toUpper <$> [a, b]) ['a'..'f'] ['a'..'f']
+  zipWith  (\a b -> Dim $ toUpper <$> [a, b]) ['a'..'z'] ['a'..'z']
 
 genSharedVar :: Gen Var
-genSharedVar = elements $
-  zipWith  (\a b -> Var $ [a, b]) ['a'..'z'] ['a'..'z']
+genSharedVar = elements $ Var . show <$> ['a'..'j']
 
-genVar :: Gen String
-genVar = genAlphaNumStr
+genVar :: Gen Var
+genVar = Var <$> genAlphaNumStr
+
+frequencies :: Gen Int
+frequencies = elements [1..10]
 
 newtype Readable = Re { readStr :: String }
 instance Show Readable where
@@ -84,21 +86,24 @@ instance Arbitrary Readable where
 -- | Generate an Arbitrary VProp, given a generator and counter these
 -- frequencies can change for different depths. The counter is merely for a
 -- `sized` call
-arbVProp :: Arbitrary a => Int -> Gen Dim -> Gen (VProp a)
-arbVProp 0 _    = Ref <$> arbitrary
-arbVProp n gDim = frequency [ (1, fmap Ref arbitrary)
-                            , (3, liftM3 Chc gDim l l)
-                            , (3, fmap Not l)
-                            , (3, liftM2 (&&&) l l)
-                            , (3, liftM2 (|||) l l)
-                            , (3, liftM2 (==>) l l)
-                            , (3, liftM2 (<=>) l l)
-                            ]
-  where l = arbVProp (n `div` 2) gDim
+arbVProp :: Arbitrary a => Gen Dim -> Gen a -> [Int] -> Int -> Gen (VProp a)
+arbVProp _  gv _     0 = Ref <$> gv
+arbVProp gd gv freqs n = frequency $ zip freqs [ (fmap Ref gv)
+                                               , (liftM3 Chc gd l l)
+                                               , (fmap Not l)
+                                               , (liftM2 (&&&) l l)
+                                               , (liftM2 (|||) l l)
+                                               , (liftM2 (==>) l l)
+                                               , (liftM2 (<=>) l l)
+                                               ]
+  where l = arbVProp gd gv freqs (n `div` 2)
 
 -- | Generate a random prop term with no sharing among dimensions
-vPropNoShare :: Arbitrary a => Gen (VProp a)
-vPropNoShare = sized $ flip arbVProp genDim
+vPropNoShare :: [Int] -> Gen (VProp Var)
+vPropNoShare = sized . arbVProp genDim genVar
+
+vPropShare :: [Int] -> Gen (VProp Var)
+vPropShare = sized . arbVProp genSharedDim genSharedVar
 
 -- | Generate a random prop according to its arbritrary type class instance,
 -- this has a strong likelihood of sharing
@@ -423,6 +428,9 @@ symbolicPropExpr e = do
   where err = error "symbolicPropExpr: Internal error, no symbol found."
         errd = error "symbolicPropExpr: Internal error, no dimension found."
 
+instance Show Var where
+  show = varName
+
 instance Boolean (VProp a) where
   true  = Lit True
   false = Lit False
@@ -446,7 +454,7 @@ instance Mergeable (VProp a) where
 
 -- | arbritrary instance for the generator monad
 instance Arbitrary a => Arbitrary (VProp a) where
-  arbitrary = sized $ flip arbVProp genSharedDim
+  arbitrary = sized $ arbVProp genSharedDim arbitrary (repeat 3)
 
 -- | Deep Seq instances for Criterion Benchmarking
 instance NFData a => NFData (VProp a)
