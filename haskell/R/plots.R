@@ -19,13 +19,13 @@ library(ggmosaic)
 ## output, check app/main.hs the timing results are the actual measurements
 ## taken by criterion and the recorded bgroup names
 ## timingsResultsFile <- "../data/2018-05-01_timing_results.csv"
-timingsResultsFile <- "../data/2018-05-09_timing_result_noCrit_FstSolve.csv"
+timingsResultsFile <- "../data/2018-05-10-timing_results.csv"
 
 ## the descriptor results are the hand crafted descriptor functions for each
 ## measurement that are recorded to a csv via cassava, these are things like
 ## number of choices in the prop, number of terms etc.
 ## descriptorsFile <- "../data/2018-05-01_desc_results.csv"
-descriptorsFile <- "../data/2018-05-09_desc_result_noCrit_FstSolve.csv"
+descriptorsFile <- "../data/2018-05-10-desc-results.csv"
 
 ## Given a dataframe that assumes the output structure of criterion's --csv call
 ## clean up the data frame by converting numerics to numerics while maintaining
@@ -135,27 +135,25 @@ noPlains <- df %>% filter(numChc > 0)
 noBF <- noPlains %>% filter(Operation != "Brute Force")
 
 andIncComp <- ggplot(noBF, aes(x=numTerms, y=time
-                             , color=shared, shape=Operation)) +
+                             , color=shared, shape=Operation
+                               , alpha = shared)) +
   geom_point(size=2) +
-  ## geom_smooth(method="lm", se = FALSE) +
+  scale_alpha_discrete(range = c(0.9, 0.5)) +
   ylab("CPU Solution Time [s]") +
   xlab("Term size") +
-  ## geom_line(formula = y ~ x^2) +
-  ## scale_y_log10(breaks = trans_breaks("log10", function(x) 10^x),
-  ##               labels = trans_format("log10", math_format(10^.x))) +
   labs(title="And Decomposition vs Incremental Solve",
-       subtitle="Criterion not used, 10 replicants, Only return first Solution")
+       subtitle="10 replicants, All Solutions")
 
-save("andIncComparisonFstSol", andIncComp)
+save("andIncComparison", andIncComp)
 
 andIncCompByChc <- ggplot(noBF, aes(x=numChc, y=time
-                                  , color=shared, shape=Operation)) +
+                                  , color=shared, shape=Operation
+                                    , alpha = shared)) +
   geom_point(size=2) +
+  scale_alpha_discrete(range = c(0.9, 0.5)) +
   ylab("CPU Solution Time [s]") +
   xlab("Number of Choices") +
-  ## scale_y_log10(breaks = trans_breaks("log10", function(x) 10^x),
-  ##               labels = trans_format("log10", math_format(10^.x))) +
   labs(title="And Decomposition vs Incremental Solve",
-       subtitle="Criterion not used, 10 replicants, Only return first Solution")
+       subtitle="10 replicants, All Solutions")
 
-save("andIncComparisonByChoiceFstSol", andIncCompByChc)
+save("andIncComparisonByChoice", andIncCompByChc)
