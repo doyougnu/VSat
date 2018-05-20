@@ -123,22 +123,22 @@ benchRandomSample metrics@(_, n) = do
   writeDesc "Unique" metrics noShprop
 
   -- | run brute force solve
-  time "Shared/BForce" metrics $! runEnv True False False [] prop `seq` return ()
-  time "Unique/BForce" metrics $! runEnv True False False [] noShprop `seq` return ()
+  time "Shared/BForce" metrics $! runEnv True False False [] prop
+  time "Unique/BForce" metrics $! runEnv True False False [] noShprop
 
   -- | run incremental solve
-  time "Shared/VSolve" metrics $! runEnv False False False [] prop `seq` return ()
-  time "Unique/VSolve" metrics $! runEnv False False False [] noShprop `seq` return ()
+  time "Shared/VSolve" metrics $! runEnv False False False [] prop
+  time "Unique/VSolve" metrics $! runEnv False False False [] noShprop
 
   -- | run and decomp
-  time "Shared/ChcDecomp" metrics $! runEnv True True False [] prop `seq` return ()
-  time "Unique/ChcDecomp" metrics $! runEnv True True False [] noShprop `seq` return ()
+  time "Shared/ChcDecomp" metrics $! runEnv True True False [] prop
+  time "Unique/ChcDecomp" metrics $! runEnv True True False [] noShprop
 
 time :: Text -> RunMetric -> IO a -> IO ()
-time desc metrics@(rn, n) a = do
+time !desc !metrics@(rn, n) !a = do
   start <- getCPUTime
-  v <- a `seq` return ()
+  v <- a
   end <- getCPUTime
   let diff = (fromIntegral (end - start)) / (10 ^ 12)
-  print $ "Run: " ++ show rn ++ " Scale: " ++ show n ++ " TC: " ++ (unpack desc)
+  print $ "Run: " ++ show rn ++ " Scale: " ++ show n ++ " TC: " ++ (unpack desc) ++ "Time: " ++ show diff
   writeTime desc metrics diff
