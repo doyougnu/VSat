@@ -109,32 +109,6 @@ writeTime str (rn, n) time_ = appendFile timingFile $ encodeByName headers $ pur
   where row = TimeData str rn n time_
         headers = V.fromList $ BS.pack <$> ["name__", "runNum__", "scale__", "time__"]
 
--- -- | Bench only and decomposition and Incremental Solve given run metrics to
--- -- generate the prop with and log the run
--- benchAndInc :: RunMetric -> IO ()
--- benchAndInc metrics@(rn, n) = do
---   noShProp <- generate $ genVPropAtSize (fromInteger n) vPropNoShare :: IO (VProp Readable)
---   prop <- generate $ genVPropAtSize (fromInteger n) arbitrary :: IO (VProp Readable)
---   writeDesc "Unique" metrics noShProp
---   writeDesc "Shared" metrics prop
-
---   -- | run incremental solve
---   (tm1, _) <- time $! runEnv False False False [] (toReadable noShProp)
---   (tm2, _) <- time $! runEnv False False False [] (toReadable prop)
-
---   -- | run and decomp
---   (tm3, _) <- time $! runEnv True True False [] (toReadable noShProp)
---   (tm4, _) <- time $! runEnv True True False [] (toReadable prop)
-
---   -- | log the times
---   writeTime "Unique/VSolve" metrics tm1
---   writeTime "Shared/VSolve" metrics tm2
---   writeTime "Unique/AndDecomp" metrics tm3
---   writeTime "Shared/AndDecomp" metrics tm4
-
---   print $ "Run: " ++ show rn ++ " Scale: " ++ show n ++ " | " ++ " Times: " ++
---     "VSolve: " ++ show tm1 ++ " | " ++ show tm2 ++ " | " ++ "AndDecomp: " ++ show tm3 ++ " | " ++ show tm4
-
 -- | Given run metrics, benchmark a data where the frequency of terms is randomly distributed from 0 to 10, dimensions and variables are sampled from a bound pool so sharing is also very possible.
 benchRandomSample :: RunMetric -> IO ()
 benchRandomSample metrics@(_, n) = do
@@ -148,13 +122,17 @@ benchRandomSample metrics@(_, n) = do
   writeDesc "Shared" metrics prop
   writeDesc "Unique" metrics noShprop
 
+  -- | run brute force solve
+  time "Shared/BForce" metrics $! runEnv True False False [] prop `seq` return ()
+  time "Unique/BForce" metrics $! runEnv True False False [] noShprop `seq` return ()
+
   -- | run incremental solve
   time "Shared/VSolve" metrics $! runEnv False False False [] prop `seq` return ()
   time "Unique/VSolve" metrics $! runEnv False False False [] noShprop `seq` return ()
 
   -- | run and decomp
-  time "Shared/AndDecomp" metrics $! runEnv True True False [] prop `seq` return ()
-  time "Unique/AndDecomp" metrics $! runEnv True True False [] noShprop `seq` return ()
+  time "Shared/ChcDecomp" metrics $! runEnv True True False [] prop `seq` return ()
+  time "Unique/ChcDecomp" metrics $! runEnv True True False [] noShprop `seq` return ()
 
 time :: Text -> RunMetric -> IO a -> IO ()
 time desc metrics@(rn, n) a = do
@@ -162,5 +140,5 @@ time desc metrics@(rn, n) a = do
   v <- a `seq` return ()
   end <- getCPUTime
   let diff = (fromIntegral (end - start)) / (10 ^ 12)
-  print $ "Run: " ++ show rn ++ " Scale: " ++ show n ++ " TC: " ++ (unpack desc) ++ " Sol Length: "
+  print $ "Run: " ++ show rn ++ " Scale: " ++ show n ++ " TC: " ++ (unpack desc)
   writeTime desc metrics diff
