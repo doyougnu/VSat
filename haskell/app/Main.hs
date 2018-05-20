@@ -12,8 +12,6 @@ import GHC.Generics (Generic)
 import qualified Data.ByteString.Char8 as BS (pack)
 import Data.ByteString.Lazy (writeFile, appendFile)
 import VProp ( VProp
-             , Readable
-             , readStr
              , vPropNoShare
              , genVPropAtSize
              , vPropShare
@@ -24,7 +22,7 @@ import VProp ( VProp
              , numSharedPlain
              , maxShared
              )
-import Test.QuickCheck (generate, arbitrary, choose)
+import Test.QuickCheck (generate, choose)
 
 import System.CPUTime
 -- import
@@ -92,9 +90,7 @@ writeDesc desc (rn, n) prop' = do
       prop = show <$> prop'
       [s,c,p,sd,sp,ms] = descriptorsFs <*> pure prop
       row = RunData (pack desc) rn n s c p sd sp ms
-
   appendFile descFile $ encodeByName headers $ pure row
-
   where
     headers = V.fromList $ BS.pack <$>
               [ "shared_"
@@ -144,15 +140,21 @@ benchRandomSample :: RunMetric -> IO ()
 benchRandomSample metrics@(_, n) = do
   prop' <- generate (sequence $ repeat $ choose (0, 10)) >>=
           generate . genVPropAtSize n .  vPropShare
+  noShprop' <- generate (sequence $ repeat $ choose (0, 10)) >>=
+               generate . genVPropAtSize n .  vPropNoShare
   let prop = fmap show prop'
+      noShprop = fmap show noShprop'
 
   writeDesc "Shared" metrics prop
+  writeDesc "Unique" metrics noShprop
 
   -- | run incremental solve
   time "Shared/VSolve" metrics $! runEnv False False False [] prop `seq` return ()
+  time "Unique/VSolve" metrics $! runEnv False False False [] noShprop `seq` return ()
 
   -- | run and decomp
   time "Shared/AndDecomp" metrics $! runEnv True True False [] prop `seq` return ()
+  time "Unique/AndDecomp" metrics $! runEnv True True False [] noShprop `seq` return ()
 
 time :: Text -> RunMetric -> IO a -> IO ()
 time desc metrics@(rn, n) a = do
