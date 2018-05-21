@@ -99,8 +99,8 @@ runBruteForce :: (Show a, Ord a) =>
 runBruteForce prop = {-# SCC "brute_force"#-} do
   (_confs, _) <- get
   let confs = M.keys _confs
-      plainProps = (\y -> sequence $ (y, selectVariant y prop)) <$> confs
-  plainModels <- lift $ mapM (S.sat . symbolicPropExpr . snd) $ catMaybes plainProps
+      plainProps = (\y -> sequence $! (y, selectVariant y prop)) <$> confs
+  plainModels <- lift $ mapM (S.sat . symbolicPropExpr . snd) $! catMaybes plainProps
   return plainModels
 
 -- | Run the and decomposition baseline case, that is deconstruct every choice

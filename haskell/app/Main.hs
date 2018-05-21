@@ -1,9 +1,7 @@
 module Main where
 
-import Criterion.Main as C
 
 import Run
-import Criterion.Types
 import Data.Csv
 import Data.Text (Text,pack, unpack)
 import qualified Data.Vector as V
@@ -29,9 +27,6 @@ import System.CPUTime
 -- import Data.Time.Clock
 -- import Data.Time.Calendar
 
-myConfig :: Config
-myConfig = C.defaultConfig { resamples = 2 }
-
 -- | Required field namings for cassava csv library
 data RunData = RunData { shared_         :: !Text
                        , runNum_         :: !Int
@@ -53,7 +48,6 @@ data TimeData = TimeData { name__   :: !Text
 instance ToNamedRecord RunData
 instance ToNamedRecord TimeData
 
--- run with $ stack bench --benchmark-arguments "--output results.html --csv timing_results.csv"
 descFile :: FilePath
 descFile = "desc_results.csv"
 
@@ -66,7 +60,7 @@ eraseFile = flip writeFile ""
 main :: IO ()
 main = do
   mapM_ eraseFile [descFile, timingFile]
-  mapM_ benchRandomSample $ zip [1..] $ [10,20..2000] >>= replicate 100
+  mapM_ benchRandomSample $ zip [1..] $ [10,20..100] >>= replicate 100
 
 -- | The run number, used to join descriptor and timing data later
 type RunNum = Int
