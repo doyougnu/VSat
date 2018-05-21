@@ -1,19 +1,15 @@
-import Criterion.Main as C
-
 import Run
-import Criterion.Types
 import Data.Csv
-import Data.Text (Text)
+import Data.Text (Text,pack)
 import qualified Data.Vector as V
 import Prelude hiding (writeFile, appendFile)
 import GHC.Generics (Generic)
-import Data.ByteString.Char8 (pack)
+import qualified Data.ByteString.Char8 as BS (pack)
 import Data.ByteString.Lazy (writeFile, appendFile)
 import VProp ( VProp
-             , Readable
-             , readStr
              , vPropNoShare
-             , mkLargeVProp
+             , genVPropAtSize
+             , vPropShare
              , numTerms
              , numChc
              , numPlain
@@ -21,17 +17,18 @@ import VProp ( VProp
              , numSharedPlain
              , maxShared
              )
-import Test.QuickCheck (generate, arbitrary)
+import Test.QuickCheck (generate, choose)
+
+import System.CPUTime
+import System.Environment
+-- import
 -- import Data.Time.Clock
 -- import Data.Time.Calendar
 
-myConfig :: Config
-myConfig = C.defaultConfig { resamples = 20 }
-
 -- | Required field namings for cassava csv library
 data RunData = RunData { shared_         :: !Text
-                       , runNum_          :: !Integer
-                       , scale_          :: !Integer
+                       , runNum_         :: !Int
+                       , scale_          :: !Int
                        , numTerms_       :: !Integer
                        , numChc_         :: !Integer
                        , numPlain_       :: !Integer
@@ -40,33 +37,37 @@ data RunData = RunData { shared_         :: !Text
                        , maxShared_      :: !Integer
                        } deriving (Generic, Show)
 
+data TimeData = TimeData { name__   :: !Text
+                         , runNum__ :: !Int
+                         , scale__  :: !Int
+                         , time__   :: !Double
+                         } deriving (Generic,Show)
+
 instance ToNamedRecord RunData
-
--- run with $ stack bench --benchmark-arguments "--output results.html --csv timing_results.csv"
-descFile :: FilePath
-descFile = "desc_results.csv"
-
-timingFile :: FilePath
-timingFile = "timing_results.csv"
-
+instance ToNamedRecord TimeData
 
 eraseFile :: FilePath -> IO ()
 eraseFile = flip writeFile ""
 
+-- run with stack build; stack bench --benchmark-arguments "timing_file desc_file"
 main :: IO ()
 main = do
+  (timingFile:descFile:_) <- getArgs >>= return . fmap (flip (++) ".csv")
   mapM_ eraseFile [descFile, timingFile]
-  mapM_ benchAndInc $ zip [1..] $ [0,15..85] >>= replicate 3
+  mapM_ (benchRandomSample descFile timingFile) $ zip [1..] $ [10,20..100] >>= replicate 100
 
 -- | The run number, used to join descriptor and timing data later
-type RunNum = Integer
+type RunNum = Int
 
-benchAll :: (RunNum, Integer) -> IO ()
-benchAll (rn, n) = do
-  noShProp <- fmap readStr <$>
-              (generate $ mkLargeVProp (fromInteger n) vPropNoShare :: IO (VProp Readable))
-  prop <- fmap readStr <$>
-          (generate $ mkLargeVProp (fromInteger n) arbitrary :: IO (VProp Readable))
+-- | The Term size used to generate an arbitrary VProp of size TermSize
+type TermSize = Int
+
+type RunMetric = (RunNum, TermSize)
+
+-- | Give a descriptor, run metrics, and a prop, generate the descriptor metrics
+-- for the prop and write them out to a csv
+writeDesc :: Show a => String -> RunMetric -> VProp a -> FilePath -> IO ()
+writeDesc desc (rn, n) prop' descFile = do
   let descriptorsFs = [ numTerms
                       , numChc
                       , numPlain
@@ -74,90 +75,58 @@ benchAll (rn, n) = do
                       , numSharedPlain
                       , maxShared
                       ]
+      prop = show <$> prop'
+      [s,c,p,sd,sp,ms] = descriptorsFs <*> pure prop
+      row = RunData (pack desc) rn n s c p sd sp ms
+  appendFile descFile $ encodeByName headers $ pure row
+  where
+    headers = V.fromList $ BS.pack <$>
+              [ "shared_"
+              , "runNum_"
+              , "scale_"
+              , "numTerms_"
+              , "numChc_"
+              , "numPlain_"
+              , "numSharedDims_"
+              , "numSharedPlain_"
+              , "maxShared_"
+              ]
 
-  -- there must be a better way
-      [s,c,p,sd,sp,ms] = descriptorsFs <*> pure noShProp
-      [s2,c2,p2,sd2,sp2,ms2] = descriptorsFs <*> pure prop
+writeTime :: Text -> RunMetric -> Double -> FilePath -> IO ()
+writeTime str (rn, n) time_ timingFile = appendFile timingFile $ encodeByName headers $ pure row
+  where row = TimeData str rn n time_
+        headers = V.fromList $ BS.pack <$> ["name__", "runNum__", "scale__", "time__"]
 
-      noShPropRecord = RunData "Unique" rn n s  c  p  sd  sp  ms
-      propRecord =     RunData "Shared" rn n s2 c2 p2 sd2 sp2 ms2
+-- | Given run metrics, benchmark a data where the frequency of terms is randomly distributed from 0 to 10, dimensions and variables are sampled from a bound pool so sharing is also very possible.
+benchRandomSample :: FilePath -> FilePath -> RunMetric -> IO ()
+benchRandomSample descfp timefp metrics@(_, n) = do
+  prop' <- generate (sequence $ repeat $ choose (0, 10)) >>=
+          generate . genVPropAtSize n .  vPropShare
+  noShprop' <- generate (sequence $ repeat $ choose (0, 10)) >>=
+               generate . genVPropAtSize n .  vPropNoShare
+  let prop = fmap show prop'
+      noShprop = fmap show noShprop'
 
-      headers :: Header
-      headers = V.fromList $ pack <$>
-                [ "shared_"
-                , "runNum_"
-                , "scale_"
-                , "numTerms_"
-                , "numChc_"
-                , "numPlain_"
-                , "numSharedDims_"
-                , "numSharedPlain_"
-                , "maxShared_"
-                ]
+  writeDesc "Shared" metrics prop descfp
+  writeDesc "Unique" metrics noShprop descfp
 
-  -- write out to descriptor csv file
-  appendFile descFile $ encodeByName headers $ pure noShPropRecord
-  appendFile descFile $ encodeByName headers $ pure propRecord
+  -- | run brute force solve
+  time "Shared/BForce" metrics timefp $! runEnv True False False [] prop
+  time "Unique/BForce" metrics timefp $! runEnv True False False [] noShprop
 
-  C.defaultMainWith myConfig
-    [ C.bgroup ("Unique/" ++ show rn ++ "/" ++ show n)
-      [ bench "Brute Force" $ C.nfIO (runEnv True False False [] noShProp)
-      , bench "And Decomposition" $ C.nfIO (runEnv True True False [] noShProp)
-      , bench "Variational Solve" $ C.nfIO (runEnv False False False [] noShProp)
-      ]
-    , C.bgroup ("Shared/" ++ show rn ++ "/" ++ show n)
-      [ bench "Brute Force" $ C.nfIO (runEnv True False False [] prop)
-      , bench "And Decomposition" $ C.nfIO (runEnv True True False [] prop)
-      , bench "Variational Solve" $ C.nfIO (runEnv False False False [] prop)
-      ]
-    ]
+  -- | run incremental solve
+  time "Shared/VSolve" metrics timefp $! runEnv False False False [] prop
+  time "Unique/VSolve" metrics timefp $! runEnv False False False [] noShprop
 
+  -- | run and decomp
+  time "Shared/ChcDecomp" metrics timefp $! runEnv True True False [] prop
+  time "Unique/ChcDecomp" metrics timefp $! runEnv True True False [] noShprop
 
-benchAndInc :: (RunNum, Integer) -> IO ()
-benchAndInc (rn, n) = do
-  noShProp <- fmap readStr <$>
-              (generate $ mkLargeVProp (fromInteger n) vPropNoShare :: IO (VProp Readable))
-  prop <- fmap readStr <$>
-          (generate $ mkLargeVProp (fromInteger n) arbitrary :: IO (VProp Readable))
-  let descriptorsFs = [ numTerms
-                      , numChc
-                      , numPlain
-                      , numSharedDims
-                      , numSharedPlain
-                      , maxShared
-                      ]
-
-  -- there must be a better way
-      [s,c,p,sd,sp,ms] = descriptorsFs <*> pure noShProp
-      [s2,c2,p2,sd2,sp2,ms2] = descriptorsFs <*> pure prop
-
-      noShPropRecord = RunData "Unique" rn n s  c  p  sd  sp  ms
-      propRecord =     RunData "Shared" rn n s2 c2 p2 sd2 sp2 ms2
-
-      headers :: Header
-      headers = V.fromList $ pack <$>
-                [ "shared_"
-                , "runNum_"
-                , "scale_"
-                , "numTerms_"
-                , "numChc_"
-                , "numPlain_"
-                , "numSharedDims_"
-                , "numSharedPlain_"
-                , "maxShared_"
-                ]
-
-  -- write out to descriptor csv file
-  appendFile descFile $ encodeByName headers $ pure noShPropRecord
-  appendFile descFile $ encodeByName headers $ pure propRecord
-
-  C.defaultMainWith myConfig
-    [ C.bgroup ("Unique/" ++ show rn ++ "/" ++ show n)
-      [ bench "And Decomposition" $ C.nfIO (runEnv True True False [] noShProp)
-      , bench "Variational Solve" $ C.nfIO (runEnv False False False [] noShProp)
-      ]
-    , C.bgroup ("Shared/" ++ show rn ++ "/" ++ show n)
-      [ bench "And Decomposition" $ C.nfIO (runEnv True True False [] prop)
-      , bench "Variational Solve" $ C.nfIO (runEnv False False False [] prop)
-      ]
-    ]
+time :: Text -> RunMetric -> FilePath -> IO a -> IO ()
+time !desc !metrics@(rn, n) timefp !a = do
+  start <- getCPUTime
+  v <- a
+  end <- getCPUTime
+  let diff = (fromIntegral (end - start)) / (10 ^ 12)
+  -- print $ "Run: " ++ show rn ++ " Scale: " ++ show n ++ " TC: " ++ (unpack desc) ++ "Time: " ++ show diff
+  writeTime desc metrics diff timefp
