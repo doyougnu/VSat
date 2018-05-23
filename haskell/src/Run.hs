@@ -226,4 +226,6 @@ incrementalSolve_ (Chc d l r) = {-# SCC "Choice_Solve"#-}
                         lift $ SC.pop 1
 
                         St.modify . first $ ((:) (VChc d lmodel rmodel))
+
+                        St.modify . second $ M.delete d
                         return b
