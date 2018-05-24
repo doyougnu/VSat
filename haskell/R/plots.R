@@ -1,8 +1,8 @@
 library(ggplot2)
 library(scales)
 library(dplyr)
-library(svglite)
 library(tidyr)
+library(wesanderson)
 library(gridExtra)
 library(plyr)
 require(data.table)
@@ -19,13 +19,13 @@ library(ggmosaic)
 ## output, check app/main.hs the timing results are the actual measurements
 ## taken by criterion and the recorded bgroup names
 ## timingsResultsFile <- "../data/2018-05-01_timing_results.csv"
-timingsResultsFile <- "../data/2018-05-16-timing_results.csv"
+timingsResultsFile <- "../data/2018-05-22-timing_results_wBF.csv"
 
 ## the descriptor results are the hand crafted descriptor functions for each
 ## measurement that are recorded to a csv via cassava, these are things like
 ## number of choices in the prop, number of terms etc.
 ## descriptorsFile <- "../data/2018-05-01_desc_results.csv"
-descriptorsFile <- "../data/2018-05-16-desc_results.csv"
+descriptorsFile <- "../data/2018-05-22-desc-results_wBF.csv"
 
 ## Given a dataframe that assumes the output structure of criterion's --csv call
 ## clean up the data frame by converting numerics to numerics while maintaining
@@ -137,31 +137,29 @@ noBF <- noPlains %>% filter(Operation != "Brute Force")
 ## add the ratio of choices to Terms
 noBF <- noBF %>% mutate(ChcRatio = numSharedDims / numChc)
 
-andIncComp <- ggplot(noBF, aes(x=ChcRatio, y=time
+plt <- ggplot(noBF, aes(x=numChc, y=time
                              , color=Operation)) +
-  geom_point(size=2) +
+  ## geom_point(mapping = aes(size = time)) +
+  geom_point(size = 2) +
+  ## scale_color_gradientn(colours = wes_palette("Zissou", 100, type = "continuous")) +
+  ## scale_size(breaks = seq(0, 200, 25)) +
   ## scale_alpha_discrete(range = c(0.9, 0.5)) +
-  ## ylab("CPU Solution Time [s]") +
+  ylab("CPU Solution Time [s]") +
   ## scale_y_log10() +
   ## scale_x_log10() +
-  scale_y_continuous(breaks = seq(0, 200, 25), limits = c(0,200)) +
+  scale_y_continuous(breaks = seq(0, 200, 25), limits = c(0,25)) +
   facet_grid(~ Operation) +
-  ## xlab("Term size") +
-  labs(title="Number Plains by Number Choices",
-       subtitle="200 replicants, All Solutions, No Uniques")
+  theme(legend.text = element_text(size=15)
+      , legend.title = element_blank()
+      , strip.text.x = element_text(size = 15)
+      , axis.text = element_text(size=13)
+      , axis.title = element_text(size = 15)
+      , plot.title = element_text(size = 25)
+      , plot.subtitle = element_text(size = 20)
+      ## , legend.position = "none"
+        ) +
+  xlab("Number of Choices") +
+  labs(title="ChcDecomp vs VSolve vs Brute Force",
+       subtitle="100 replicants, All Solutions, only Shared Dimensions")
 
 ## save("numChcvsnumPlain", andIncComp)
-
-andIncCompByChc <- ggplot(noBF, aes(x=numTerms, y=time
-                                  , color=Operation)) +
-  geom_point(size=2) +
-  scale_alpha_discrete(range = c(0.9, 0.5)) +
-  ylab("CPU Solution Time [s]") +
-  scale_y_log10() +
-  scale_x_log10() +
-  ## xlab("Number of Choices") +
-  ## facet_grid(ChcRatio ~ PlainRatio) +
-  labs(title="And Decomposition vs Incremental Solve",
-       subtitle="200 replicants, All Solutions, No Uniques")
-
-## save("andIncComparisonByChoiceShared", andIncCompByChc)
