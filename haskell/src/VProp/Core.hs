@@ -196,18 +196,19 @@ replace conf v (Op2 a l r) = Op2 a (replace conf v l) (replace conf v r)
 replace conf v (Opn a ps)  = Opn a (replace conf v <$> ps)
 replace _    _ x           = x
 
--- | Given a
+-- | Given a Vprop term with an associated list of elements with their
+-- configurations, replace each dimension with its associated value
 recompile :: VProp a -> [(Config, a)] -> VProp a
 recompile = foldr' (\(conf, val) acc -> replace conf val acc)
 
-flatten :: VProp a -> VProp a
-flatten (Opn And ps) = Opn And $ foldr' helper [] $ flatten <$> ps
-  where helper (Opn And vs) xs = vs <> xs
-        helper e          xs   = e : xs
-flatten (Opn Or ps) = Opn Or $ foldr' helper [] $ flatten <$> ps
-  where helper (Opn Or vs) xs = vs <> xs
-        helper e          xs  = e : xs
-flatten (Op2 a l r) = Op2 a (flatten l) (flatten r)
-flatten (Chc d l r) = Chc d (flatten l) (flatten r)
-flatten (Not p)     = Not (flatten p)
-flatten e           = e
+-- flatten :: VProp a -> VProp a
+-- flatten (Opn And ps) = Opn And $ foldr' helper [] $ flatten <$> ps
+--   where helper (Opn And vs) xs = vs <> xs
+--         helper e          xs   = e : xs
+-- flatten (Opn Or ps) = Opn Or $ foldr' helper [] $ flatten <$> ps
+--   where helper (Opn Or vs) xs = vs <> xs
+--         helper e          xs  = e : xs
+-- flatten (Op2 a l r) = Op2 a (flatten l) (flatten r)
+-- flatten (Chc d l r) = Chc d (flatten l) (flatten r)
+-- flatten (Not p)     = Not (flatten p)
+-- flatten e           = e

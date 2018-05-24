@@ -8,25 +8,16 @@ import Prelude hiding (writeFile, appendFile)
 import GHC.Generics (Generic)
 import qualified Data.ByteString.Char8 as BS (pack)
 import Data.ByteString.Lazy (writeFile, appendFile)
-import VProp ( VProp
-             , vPropNoShare
-             , genVPropAtSize
-             , vPropShare
-             , numTerms
-             , numChc
-             , numPlain
-             , numSharedDims
-             , numSharedPlain
-             , maxShared
-             )
+import VProp.Core
+import VProp.Types
+import VProp.Gen
 import Test.QuickCheck (generate, choose)
 import Control.DeepSeq (deepseq, NFData)
 
 import System.CPUTime
 import System.Environment
--- import
--- import Data.Time.Clock
--- import Data.Time.Calendar
+import Data.Time.Clock
+import Data.Time.Calendar
 
 -- | Required field namings for cassava csv library
 data RunData = RunData { shared_         :: !Text
@@ -55,7 +46,7 @@ eraseFile = flip writeFile ""
 -- run with stack build; stack bench --benchmark-arguments "timing_file desc_file"
 main :: IO ()
 main = do
-  (timingFile:descFile:_) <- getArgs >>= return . fmap (flip (++) ".csv")
+  (timingFile:descFile:_) <- getArgs >>= traverse (prependDate . (flip (++) ".csv"))
   mapM_ eraseFile [descFile, timingFile]
   mapM_ (benchRandomSample descFile timingFile) $ zip [1..] $ [10,20..500] >>= replicate 100
 
@@ -65,6 +56,7 @@ type RunNum = Int
 -- | The Term size used to generate an arbitrary VProp of size TermSize
 type TermSize = Int
 
+-- | The Run Number and TermSize used to generate the prop for the run
 type RunMetric = (RunNum, TermSize)
 
 -- | Give a descriptor, run metrics, and a prop, generate the descriptor metrics
@@ -95,12 +87,23 @@ writeDesc desc (rn, n) prop' descFile = do
               , "maxShared_"
               ]
 
+-- | Given a file path, get the year, date and time of the run and prepend it to
+-- the filepath
+prependDate :: FilePath -> IO FilePath
+prependDate str = do (year, month, day) <- getCurrentTime >>= return . toGregorian . utctDay
+                     return $ mconcat [show year, "-", show month, "-", show day, "-", str]
+
+
+-- | Given some string, a run metric (the parameters for the run) a time and a
+-- file path, perform the IO effect
 writeTime :: Text -> RunMetric -> Double -> FilePath -> IO ()
-writeTime str (rn, n) time_ timingFile = appendFile timingFile $ encodeByName headers $ pure row
+writeTime str (rn, n) time_ timingFile = appendFile timingFile . encodeByName headers $ pure row
   where row = TimeData str rn n time_
         headers = V.fromList $ BS.pack <$> ["name__", "runNum__", "scale__", "time__"]
 
--- | Given run metrics, benchmark a data where the frequency of terms is randomly distributed from 0 to 10, dimensions and variables are sampled from a bound pool so sharing is also very possible.
+-- | Given run metrics, benchmark a data where the frequency of terms is
+-- randomly distributed from 0 to 10, dimensions and variables are sampled from
+-- a bound pool so sharing is also very possible.
 benchRandomSample :: FilePath -> FilePath -> RunMetric -> IO ()
 benchRandomSample descfp timefp metrics@(_, n) = do
   prop' <- generate (sequence $ repeat $ choose (0, 10)) >>=
