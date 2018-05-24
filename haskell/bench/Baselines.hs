@@ -54,7 +54,7 @@ main :: IO ()
 main = do
   (timingFile:descFile:_) <- getArgs >>= return . fmap (flip (++) ".csv")
   mapM_ eraseFile [descFile, timingFile]
-  mapM_ (benchRandomSample descFile timingFile) $ zip [1..] $ [10,20..100] >>= replicate 100
+  mapM_ (benchRandomSample descFile timingFile) $ zip [1..] $ [10,20..200] >>= replicate 100
 
 -- | The run number, used to join descriptor and timing data later
 type RunNum = Int
