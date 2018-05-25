@@ -20,7 +20,9 @@ import Control.DeepSeq               (NFData)
 
 import Data.Maybe                    (catMaybes)
 
-import VProp
+import VProp.Types
+import VProp.SBV
+import VProp.Core
 import V
 
 -- | The satisfiable dictionary, this is actually the "state" keys are configs
