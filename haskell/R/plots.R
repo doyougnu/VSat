@@ -19,13 +19,13 @@ library(ggmosaic)
 ## output, check app/main.hs the timing results are the actual measurements
 ## taken by criterion and the recorded bgroup names
 ## timingsResultsFile <- "../data/2018-05-01_timing_results.csv"
-timingsResultsFile <- "../data/2018-05-22-timing_results_wBF.csv"
+timingsResultsFile <- "../data/2018-5-25-timing_results_wBF.csv"
 
 ## the descriptor results are the hand crafted descriptor functions for each
 ## measurement that are recorded to a csv via cassava, these are things like
 ## number of choices in the prop, number of terms etc.
 ## descriptorsFile <- "../data/2018-05-01_desc_results.csv"
-descriptorsFile <- "../data/2018-05-22-desc-results_wBF.csv"
+descriptorsFile <- "../data/2018-5-25-desc-results_wBF.csv"
 
 ## Given a dataframe that assumes the output structure of criterion's --csv call
 ## clean up the data frame by converting numerics to numerics while maintaining
@@ -137,7 +137,7 @@ noBF <- noPlains %>% filter(Operation != "Brute Force")
 ## add the ratio of choices to Terms
 noBF <- noBF %>% mutate(ChcRatio = numSharedDims / numChc)
 
-plt <- ggplot(noBF, aes(x=numChc, y=time
+plt <- ggplot(transform(noBF, fct = cut(ChcRatio, seq(0, 1.0, 0.1))), aes(x=numTerms, y=time
                              , color=Operation)) +
   ## geom_point(mapping = aes(size = time)) +
   geom_point(size = 2) +
@@ -147,8 +147,8 @@ plt <- ggplot(noBF, aes(x=numChc, y=time
   ylab("CPU Solution Time [s]") +
   ## scale_y_log10() +
   ## scale_x_log10() +
-  scale_y_continuous(breaks = seq(0, 200, 25), limits = c(0,25)) +
-  facet_grid(~ Operation) +
+  ## scale_y_continuous(breaks = seq(0, 200, 25), limits = c(0,100)) +
+  facet_grid(Operation ~ fct, scales = "free") +
   theme(legend.text = element_text(size=15)
       , legend.title = element_blank()
       , strip.text.x = element_text(size = 15)
