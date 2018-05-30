@@ -15,6 +15,7 @@ import           Data.Char           (toUpper)
 
 import VProp.Types
 import VProp.SBV
+import VProp.Core (maxShared)
 
 -- | A wrapper to represent readable strings
 newtype Readable = Re { readStr :: String }
@@ -85,3 +86,6 @@ genVProp = generate arbitrary
 
 genVPropAtSize :: Arbitrary a => Int -> Gen (VProp a) -> Gen (VProp a)
 genVPropAtSize = resize
+
+genVPropAtShare :: Arbitrary a => Integer -> Gen (VProp a) -> Gen (VProp a)
+genVPropAtShare n = flip suchThat $ (==n) . maxShared

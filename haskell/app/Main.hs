@@ -16,6 +16,8 @@ import Control.DeepSeq (deepseq, NFData)
 
 import System.CPUTime
 import System.Environment
+import System.Timeout
+
 import Data.Time.Clock
 import Data.Time.Calendar
 
@@ -43,14 +45,14 @@ instance ToNamedRecord TimeData
 eraseFile :: FilePath -> IO ()
 eraseFile = flip writeFile ""
 
--- run with stack build; stack bench --benchmark-arguments "timing_file desc_file"
+-- run with stack build; stack exec -- vsat data timing_results desc_results
 main :: IO ()
 main = do
   (folder:timingFile_:descFile_:_) <- getArgs
   timingFile <- format timingFile_ folder
   descFile   <- format descFile_ folder
   mapM_ eraseFile [descFile, timingFile]
-  mapM_ (benchRandomSample descFile timingFile) $ zip [1..] $ [10,20..500] >>= replicate 200
+  mapM_ (benchRandomSample descFile timingFile) $ zip [1..] $ [10,20..500] >>= replicate 100
 
 -- | The run number, used to join descriptor and timing data later
 type RunNum = Int
@@ -121,8 +123,8 @@ benchRandomSample descfp timefp metrics@(_, n) = do
   writeDesc "Unique" metrics noShprop descfp
 
   -- | run brute force solve
-  time "Shared/BForce" metrics timefp $! runEnv True False False [] prop
-  time "Unique/BForce" metrics timefp $! runEnv True False False [] noShprop
+  -- time "Shared/BForce" metrics timefp $! runEnv True False False [] prop
+  -- time "Unique/BForce" metrics timefp $! runEnv True False False [] noShprop
 
   -- | run incremental solve
   time "Shared/VSolve" metrics timefp $! runEnv False False False [] prop
@@ -136,7 +138,8 @@ time :: NFData a => Text -> RunMetric -> FilePath -> IO a -> IO ()
 time !desc !metrics@(rn, n) timefp !a = do
   start <- getCPUTime
   v <- a
-  end <- v `deepseq` getCPUTime
-  let diff = (fromIntegral (end - start)) / (10 ^ 12)
+  end' <- timeout 600000000 (v `deepseq` getCPUTime)
+  let end = maybe (10^13) id end'
+      diff = (fromIntegral (end - start)) / (10 ^ 12)
   print $ "Run: " ++ show rn ++ " Scale: " ++ show n ++ " TC: " ++ (unpack desc) ++ "Time: " ++ show diff
   writeTime desc metrics diff timefp
