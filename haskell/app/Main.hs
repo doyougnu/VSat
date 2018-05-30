@@ -72,7 +72,7 @@ writeDesc desc (rn, n) prop' descFile = do
                       , numPlain
                       , numSharedDims
                       , numSharedPlain
-                      , maxShared
+                      , toInteger . maxShared
                       ]
       prop = show <$> prop'
       [s,c,p,sd,sp,ms] = descriptorsFs <*> pure prop
@@ -113,7 +113,7 @@ writeTime str (rn, n) time_ timingFile = appendFile timingFile . encodeByName he
 benchRandomSample :: FilePath -> FilePath -> RunMetric -> IO ()
 benchRandomSample descfp timefp metrics@(_, n) = do
   prop' <- generate (sequence $ repeat $ choose (0, 10)) >>=
-          generate . genVPropAtSize n .  vPropShare
+          generate . genVPropAtShare n . genVPropAtSize n .  vPropShare
   noShprop' <- generate (sequence $ repeat $ choose (0, 10)) >>=
                generate . genVPropAtSize n .  vPropNoShare
   let prop = fmap show prop'
