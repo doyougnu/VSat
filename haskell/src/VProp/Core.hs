@@ -130,8 +130,8 @@ depth prop = go prop 0
     go _ acc           = acc
 
 -- | Given a prop return the maximum number of times a given dimension was shared
-maxShared :: (VProp a) -> Integer
-maxShared = toInteger . safeMaximum . fmap length . group . sort . go
+maxShared :: (VProp a) -> Int
+maxShared = safeMaximum . fmap length . group . sort . go
   where go :: (VProp a) -> [String]
         go (Chc d l r) = (dimName d) : (go l) ++ (go r)
         go (Not l)     = go l

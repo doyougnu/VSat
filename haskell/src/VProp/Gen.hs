@@ -87,5 +87,5 @@ genVProp = generate arbitrary
 genVPropAtSize :: Arbitrary a => Int -> Gen (VProp a) -> Gen (VProp a)
 genVPropAtSize = resize
 
-genVPropAtShare :: Arbitrary a => Integer -> Gen (VProp a) -> Gen (VProp a)
+genVPropAtShare :: Arbitrary a => Int -> Gen (VProp a) -> Gen (VProp a)
 genVPropAtShare n = flip suchThat $ (==n) . maxShared
