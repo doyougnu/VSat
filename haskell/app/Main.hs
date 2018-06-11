@@ -52,7 +52,7 @@ main = do
   timingFile <- format timingFile_ folder
   descFile   <- format descFile_ folder
   mapM_ eraseFile [descFile, timingFile]
-  mapM_ (benchRandomSample descFile timingFile) $ zip [1..] $ [10,20..500] >>= replicate 100
+  mapM_ (benchRandomSample descFile timingFile) $ zip [1..] $ [10,20..200] >>= replicate 100
 
 -- | The run number, used to join descriptor and timing data later
 type RunNum = Int
@@ -112,15 +112,15 @@ writeTime str (rn, n) time_ timingFile = appendFile timingFile . encodeByName he
 -- a bound pool so sharing is also very possible.
 benchRandomSample :: FilePath -> FilePath -> RunMetric -> IO ()
 benchRandomSample descfp timefp metrics@(_, n) = do
-  prop' <- generate (sequence $ repeat $ choose (0, 10)) >>=
-          generate . genVPropAtShare n . genVPropAtSize n .  vPropShare
-  noShprop' <- generate (sequence $ repeat $ choose (0, 10)) >>=
-               generate . genVPropAtSize n .  vPropNoShare
+  prop' <- generate (sequence $ repeat $ choose (10, 10)) >>=
+          generate . genVPropAtShare n . vPropShare
+  -- noShprop' <- generate (sequence $ repeat $ choose (0, 10)) >>=
+  --              generate . genVPropAtSize n .  vPropNoShare
   let prop = fmap show prop'
-      noShprop = fmap show noShprop'
+      -- noShprop = fmap show noShprop'
 
   writeDesc "Shared" metrics prop descfp
-  writeDesc "Unique" metrics noShprop descfp
+  -- writeDesc "Unique" metrics noShprop descfp
 
   -- | run brute force solve
   -- time "Shared/BForce" metrics timefp $! runEnv True False False [] prop
@@ -128,18 +128,18 @@ benchRandomSample descfp timefp metrics@(_, n) = do
 
   -- | run incremental solve
   time "Shared/VSolve" metrics timefp $! runEnv False False False [] prop
-  time "Unique/VSolve" metrics timefp $! runEnv False False False [] noShprop
+  -- time "Unique/VSolve" metrics timefp $! runEnv False False False [] noShprop
 
   -- | run and decomp
   time "Shared/ChcDecomp" metrics timefp $! runEnv True True False [] prop
-  time "Unique/ChcDecomp" metrics timefp $! runEnv True True False [] noShprop
+  -- time "Unique/ChcDecomp" metrics timefp $! runEnv True True False [] noShprop
 
 time :: NFData a => Text -> RunMetric -> FilePath -> IO a -> IO ()
 time !desc !metrics@(rn, n) timefp !a = do
   start <- getCPUTime
   v <- a
-  end' <- timeout 600000000 (v `deepseq` getCPUTime)
-  let end = maybe (10^13) id end'
+  end' <- timeout 300000000 (v `seq` getCPUTime)
+  let end = maybe (300 * 10^12) id end'
       diff = (fromIntegral (end - start)) / (10 ^ 12)
   print $ "Run: " ++ show rn ++ " Scale: " ++ show n ++ " TC: " ++ (unpack desc) ++ "Time: " ++ show diff
   writeTime desc metrics diff timefp

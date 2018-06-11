@@ -43,7 +43,7 @@ genDim = Dim <$> (fmap . fmap) toUpper genAlphaNumStr
 
 genSharedDim :: Gen Dim
 genSharedDim = elements $
-  zipWith  (\a b -> Dim $ toUpper <$> [a, b]) ['a'..'f'] ['a'..'f']
+  zipWith  (\a b -> Dim $ toUpper <$> [a, b]) ['a'..'d'] ['a'..'d']
 
 genSharedVar :: Gen Var
 genSharedVar = elements $ Var . show <$> ['a'..'j']

@@ -53,10 +53,10 @@ _emptyOpts = Opts { runBaselines = False
 
 _setOpts :: Bool -> Bool -> Bool -> [VProp a -> VProp a] -> Opts a
 _setOpts base bAD bOpt opts = Opts { runBaselines = base
-                                  , runAD = bAD
-                                  , runOpts = bOpt
-                                  , optimizations = opts
-                                  }
+                                   , runAD = bAD
+                                   , runOpts = bOpt
+                                   , optimizations = opts
+                                   }
 
 
 
@@ -66,10 +66,10 @@ _runEnv m opts st = runRWST m opts st
 
 -- TODO use configurate and load the config from a file
 runEnv :: Bool -> Bool -> Bool -> [VProp String -> VProp String] -> VProp String -> IO (Result, (SatDict String), Log)
-runEnv base bAD bOpt opts x = _runEnv
-                             (work x)
-                             (_setOpts base bAD bOpt opts)
-                             (initSt x)
+runEnv !base !bAD !bOpt !opts !x = _runEnv
+                                   (work x)
+                                   (_setOpts base bAD bOpt opts)
+                                   (initSt x)
 
 runEnvFirst :: Bool -> Bool -> Bool -> [VProp String -> VProp String] -> VProp String -> IO (V Dim (Maybe I.SMTModel))
 runEnvFirst base bAD bOpt opts x = (head . unbox . fst') <$> _runEnv (work x) (_setOpts base bAD bOpt opts) (initSt x)
