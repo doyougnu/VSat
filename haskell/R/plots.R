@@ -19,13 +19,13 @@ library(ggmosaic)
 ## output, check app/main.hs the timing results are the actual measurements
 ## taken by criterion and the recorded bgroup names
 ## timingsResultsFile <- "../data/2018-05-01_timing_results.csv"
-timingsResultsFile <- "../data/2018-5-25-timing_results_wBF.csv"
+timingsResultsFile <- "../data/2018-5-30-timing_results_byChc.csv"
 
 ## the descriptor results are the hand crafted descriptor functions for each
 ## measurement that are recorded to a csv via cassava, these are things like
 ## number of choices in the prop, number of terms etc.
 ## descriptorsFile <- "../data/2018-05-01_desc_results.csv"
-descriptorsFile <- "../data/2018-5-25-desc-results_wBF.csv"
+descriptorsFile <- "../data/2018-5-30-desc-results_byChc.csv"
 
 ## Given a dataframe that assumes the output structure of criterion's --csv call
 ## clean up the data frame by converting numerics to numerics while maintaining
@@ -135,11 +135,13 @@ noPlains <- df %>% filter(numChc > 0)
 noBF <- noPlains %>% filter(Operation != "Brute Force")
 
 ## add the ratio of choices to Terms
-noBF <- noBF %>% mutate(ChcRatio = numSharedDims / numChc)
+noBF <- noBF %>% mutate(ChcRatio = maxShared / numChc)
 
-plt <- ggplot(transform(noBF, fct = cut(ChcRatio, seq(0, 1.0, 0.1))), aes(x=numTerms, y=time
-                             , color=Operation)) +
-  ## geom_point(mapping = aes(size = time)) +
+plt <- ggplot(transform(noBF
+                      , fct = cut(ChcRatio, seq(0, 1.0, 0.1)))
+                      , aes(x=numTerms, y=time
+                          , color=Operation)) +
+  ## geom_point(mapping = aes(size = ChcRatio)) +
   geom_point(size = 2) +
   ## scale_color_gradientn(colours = wes_palette("Zissou", 100, type = "continuous")) +
   ## scale_size(breaks = seq(0, 200, 25)) +
@@ -147,11 +149,12 @@ plt <- ggplot(transform(noBF, fct = cut(ChcRatio, seq(0, 1.0, 0.1))), aes(x=numT
   ylab("CPU Solution Time [s]") +
   ## scale_y_log10() +
   ## scale_x_log10() +
-  ## scale_y_continuous(breaks = seq(0, 200, 25), limits = c(0,100)) +
-  facet_grid(Operation ~ fct, scales = "free") +
+  ## scale_y_continuous(breaks = seq(0, 200, 25), limits = c(0,200)) +
+  facet_grid(Operation ~ fct) +
   theme(legend.text = element_text(size=15)
       , legend.title = element_blank()
       , strip.text.x = element_text(size = 15)
+      , strip.text.y = element_text(size = 15)
       , axis.text = element_text(size=13)
       , axis.title = element_text(size = 15)
       , plot.title = element_text(size = 25)
@@ -159,7 +162,36 @@ plt <- ggplot(transform(noBF, fct = cut(ChcRatio, seq(0, 1.0, 0.1))), aes(x=numT
       ## , legend.position = "none"
         ) +
   xlab("Number of Choices") +
-  labs(title="ChcDecomp vs VSolve vs Brute Force",
-       subtitle="100 replicants, All Solutions, only Shared Dimensions")
+  labs(title="ChcDecomp vs VSolve",
+       subtitle="100 replicants, Equal frequency of terms")
 
 ## save("numChcvsnumPlain", andIncComp)
+
+diffDF <- noBF %>% filter(shared == "Shared") %>% spread(Operation, time) %>% mutate(diff = VSolve - ChcDecomp)
+
+plt2 <- ggplot(diffDF, aes(x=ChcRatio, y=diff)) +
+  geom_point(size = 2) +
+  geom_smooth() +
+  ## geom_point(mapping = aes(size = ChcRatio)) +
+  scale_color_gradientn(colours = wes_palette("Zissou", 100, type = "continuous")) +
+  scale_size(breaks = seq(0, 1, .05)) +
+  ## scale_alpha_discrete(range = c(0.9, 0.5)) +
+  ylab("(VSolve - ChcDecomp) CPU Solution Time [s]") +
+  ## scale_y_log10() +
+  ## scale_x_log10() +
+  ## scale_y_continuous(breaks = seq(0, 200, 25), limits = c(0,200)) +
+  ## scale_x_continuous(breaks = seq(0, 1, 0.05)) +
+  ## facet_grid(shared~.) +
+  theme(legend.text = element_text(size=15)
+      ## , legend.title = element_blank()
+      , strip.text.x = element_text(size = 15)
+      , strip.text.y = element_text(size = 15)
+      , axis.text = element_text(size=13)
+      , axis.title = element_text(size = 15)
+      , plot.title = element_text(size = 25)
+      , plot.subtitle = element_text(size = 20)
+      ## , legend.position = "none"
+        ) +
+  xlab("Choice Ratio: maxShared / numChc") +
+  labs(title="ChcDecomp vs VSolve by solution time difference",
+       subtitle="100 replicants, No Unique Dimensions")
