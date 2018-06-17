@@ -1,0 +1,34 @@
+#+AUTHOR: Jeffrey Young
+#+TITLE: VSat Troubles and Relations
+#+DATE: June 17, 2018
+
+# Fix the margins
+#+LATEX_HEADER: \usepackage[margin=1in]{geometry}
+#+LATEX_HEADER: \usepackage{amssymb}
+
+# Remove section numbers, no table of contents
+#+OPTIONS: toc:nil
+#+options: num:nil
+
+# Set the article class
+#+LaTeX_CLASS: article
+#+LaTeX_CLASS_OPTIONS: [10pt, letterpaper]
+
+* What
+  This document is the debriefing document regarding the feedback I received
+  from the VSAT presentation at the FOSD 2018 conference
+
+* Direct Feedback
+  - How many SAT calls are being made in actuality
+  - What is the memory foot print like?
+  - Read the original minisat paper for description of modern incremental SAT solving
+  - Check out the presence condition simplification by sven: https://ieeexplore.ieee.org/document/7194572/
+  - Could perhaps fork typeChef and integrate with VSAT
+  - Choice decomposition is called variability encoding or configuration lifting depending on the domain.
+
+* Applications
+  - old covarity with static analysis. This is a paper from the early 2000s on
+    how to encode C programs into Sat
+  - Data Flow analysis may be a good application for VSAT
+  - Monotone frameworks for static analysis
+  - Chip solvers
