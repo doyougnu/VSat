@@ -32,3 +32,9 @@
   - Data Flow analysis may be a good application for VSAT
   - Monotone frameworks for static analysis
   - Chip solvers
+
+* Papers to checkout
+  - Minisat: http://minisat.se/downloads/MiniSat.pdf
+  - Covarity: https://player.vimeo.com/video/231028428?wmode=opaque
+  - Variability Encoding: https://www.sciencedirect.com/science/article/pii/S2352220815000577
+  - Config Lifting: https://dl.acm.org/citation.cfm?id=1642931.1642971
