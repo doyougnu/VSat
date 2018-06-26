@@ -48,5 +48,5 @@ data VProp a
 data Prim = B Bool | I Int deriving (Eq,Generic,Data,Typeable,Show,Ord)
 -- TODO is ORD appropriate here?
 data Op2 = Impl | BiImpl | VLT | VLTE | VGT | VGTE | VEQ
-  deriving (Eq,Generic,Data,Typeable, Show,Ord)
-data Opn = And | Or deriving (Eq,Generic,Data,Typeable, Show,Ord)
+  deriving (Eq,Generic,Data,Typeable,Show,Ord)
+data Opn = And | Or deriving (Eq,Generic,Data,Typeable,Show,Ord)
