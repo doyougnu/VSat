@@ -21,6 +21,11 @@ prettyPropExpr = top
     top (Opn And ps)    = intercalate " ∧ " $ sub <$> ps
     top (Op2 Impl l r)   = sub l ++ " → " ++ sub r
     top (Op2 BiImpl l r) = sub l ++ " ↔ " ++ sub r
+    top (Op2 VLT l r)   = sub l ++ " < " ++ sub r
+    top (Op2 VGT l r) = sub l ++ " > " ++ sub r
+    top (Op2 VLTE l r)   = sub l ++ " ≤ " ++ sub r
+    top (Op2 VGTE l r) = sub l ++ " ≥ " ++ sub r
+    top (Op2 VEQ l r) = sub l ++ " = " ++ sub r
     top (Chc d ls rs) = show (dimName d) ++ "<" ++ top ls ++ ", " ++ top rs++ ">"
     top e           = sub e
 
