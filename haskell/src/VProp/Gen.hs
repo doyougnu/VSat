@@ -1,7 +1,7 @@
 module VProp.Gen where
 
 import           Control.Monad       (liftM2, liftM3)
-import           Test.QuickCheck     ( Arbitrary
+import           Test.QuickCheck     (oneof, arbitrarySizedIntegral,  Arbitrary
                                      , Gen
                                      , arbitrary
                                      , suchThat
@@ -51,6 +51,18 @@ genSharedVar = elements $ Var . show <$> ['a'..'j']
 genVar :: Gen Var
 genVar = Var <$> genAlphaNumStr
 
+genBool :: Gen Prim
+genBool = B <$> arbitrary
+
+genInt :: Gen Prim
+genInt = I <$> arbitrarySizedIntegral
+
+genPrim :: Gen Prim
+genPrim = oneof [genBool, genInt]
+
+genLit :: Gen (VProp a)
+genLit = Lit <$> genPrim
+
 frequencies :: Gen Int
 frequencies = elements [1..10]
 
@@ -59,15 +71,21 @@ frequencies = elements [1..10]
 -- `sized` call
 arbVProp :: Arbitrary a => Gen Dim -> Gen a -> [Int] -> Int -> Gen (VProp a)
 arbVProp _  gv _     0 = Ref <$> gv
-arbVProp gd gv freqs n = frequency $ zip freqs [ (fmap Ref gv)
+arbVProp gd gv freqs n = frequency $ zip freqs [ Lit <$> genPrim
+                                               , (fmap Ref gv)
                                                , (liftM3 Chc gd l l)
                                                , (fmap Not l)
                                                , (liftM2 (&&&) l l)
                                                , (liftM2 (|||) l l)
                                                , (liftM2 (==>) l l)
                                                , (liftM2 (<=>) l l)
+                                               , op2 l l
                                                ]
   where l = arbVProp gd gv freqs (n `div` 2)
+        op2 l' r' = do e <- elements [VLT, VLTE, VGT, VGTE, VEQ]
+                       l'' <- l'
+                       r'' <- r'
+                       return $ Op2 e l'' r''
 
 -- | Generate a random prop term with no sharing among dimensions
 vPropNoShare :: [Int] -> Gen (VProp Var)
