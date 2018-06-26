@@ -26,7 +26,7 @@ newtype Var = Var { varName :: String }
 newtype Dim = Dim { dimName :: String }
   deriving (Data,Eq,IsString,Ord,Show,Typeable,Generic,NFData,Arbitrary)
 
-type VConfig a b = a -> b
+type VConfig a = a -> SBool
 type DimBool = Dim -> SBool
 type Config = Map Dim Bool
 
@@ -38,13 +38,15 @@ type Config = Map Dim Bool
 data VProp a
    = Lit Prim
    | Ref !a
-   | Chc Dim !(VProp a) !(VProp a)
    | Not !(VProp a)
-   | Opn Opn ![(VProp a)]
    | Op2 Op2 !(VProp a) !(VProp a)
-  deriving (Data,Eq,Generic,Typeable,Functor,Traversable,Foldable)
+   | Opn Opn ![(VProp a)]
+   | Chc Dim !(VProp a) !(VProp a)
+  deriving (Data,Eq,Generic,Typeable,Functor,Traversable,Foldable,Ord)
 
 -- | data constructor for binary operations
-data Prim = B Bool | I Int deriving (Eq,Generic,Data,Typeable, Show)
-data Op2 = Impl | BiImpl | VLT | VLTE | VGT | VGTE deriving (Eq,Generic,Data,Typeable, Show)
-data Opn = And | Or deriving (Eq,Generic,Data,Typeable, Show)
+data Prim = B Bool | I Int deriving (Eq,Generic,Data,Typeable,Show,Ord)
+-- TODO is ORD appropriate here?
+data Op2 = Impl | BiImpl | VLT | VLTE | VGT | VGTE | VEQ
+  deriving (Eq,Generic,Data,Typeable, Show,Ord)
+data Opn = And | Or deriving (Eq,Generic,Data,Typeable, Show,Ord)
