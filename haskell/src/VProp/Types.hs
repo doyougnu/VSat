@@ -28,7 +28,7 @@ type Config = Map Dim Bool
 
 -- | Boolean expressions over features.
 data VProp a
-   = Lit Bool
+   = Lit Prim
    | Ref !a
    | Chc Dim !(VProp a) !(VProp a)
    | Not !(VProp a)
@@ -37,5 +37,6 @@ data VProp a
   deriving (Data,Eq,Generic,Typeable,Functor,Traversable,Foldable)
 
 -- | data constructor for binary operations
-data Op2 = Impl | BiImpl deriving (Eq,Generic,Data,Typeable, Show)
+data Prim = Bool | Int deriving (Eq,Generic,Data,Typeable, Show)
+data Op2 = Impl | BiImpl | VLT | VLTE | VGT | VGTE deriving (Eq,Generic,Data,Typeable, Show)
 data Opn = And | Or deriving (Eq,Generic,Data,Typeable, Show)
