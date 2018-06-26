@@ -1,4 +1,12 @@
-module VProp.Types where
+module VProp.Types ( Var(..)
+                   , Dim(..)
+                   , VConfig
+                   , DimBool
+                   , Config
+                   , VProp(..)
+                   , Prim(..)
+                   , Op2(..)
+                   , Opn(..)) where
 
 
 import           Data.Data           (Data, Typeable)
@@ -37,6 +45,6 @@ data VProp a
   deriving (Data,Eq,Generic,Typeable,Functor,Traversable,Foldable)
 
 -- | data constructor for binary operations
-data Prim = Bool | Int deriving (Eq,Generic,Data,Typeable, Show)
+data Prim = B Bool | I Int deriving (Eq,Generic,Data,Typeable, Show)
 data Op2 = Impl | BiImpl | VLT | VLTE | VGT | VGTE deriving (Eq,Generic,Data,Typeable, Show)
 data Opn = And | Or deriving (Eq,Generic,Data,Typeable, Show)

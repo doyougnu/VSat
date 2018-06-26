@@ -25,7 +25,8 @@ prettyPropExpr = top
     top e           = sub e
 
     sub :: Show a => VProp a -> String
-    sub (Lit b) = if b then "#T" else "#F"
+    sub (Lit (B b)) = if b then "#T" else "#F"
+    sub (Lit (I n)) = show n
     sub (Ref f) = show f
     sub (Not e) = "¬" ++ sub e
     sub e       = "(" ++ top e ++ ")"
@@ -200,15 +201,3 @@ replace _    _ x           = x
 -- configurations, replace each dimension with its associated value
 recompile :: VProp a -> [(Config, a)] -> VProp a
 recompile = foldr' (\(conf, val) acc -> replace conf val acc)
-
--- flatten :: VProp a -> VProp a
--- flatten (Opn And ps) = Opn And $ foldr' helper [] $ flatten <$> ps
---   where helper (Opn And vs) xs = vs <> xs
---         helper e          xs   = e : xs
--- flatten (Opn Or ps) = Opn Or $ foldr' helper [] $ flatten <$> ps
---   where helper (Opn Or vs) xs = vs <> xs
---         helper e          xs  = e : xs
--- flatten (Op2 a l r) = Op2 a (flatten l) (flatten r)
--- flatten (Chc d l r) = Chc d (flatten l) (flatten r)
--- flatten (Not p)     = Not (flatten p)
--- flatten e           = e
