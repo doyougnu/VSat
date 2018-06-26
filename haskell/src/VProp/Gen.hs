@@ -15,7 +15,7 @@ import           Data.Char           (toUpper)
 
 import VProp.Types
 import VProp.SBV
-import VProp.Core (maxShared)
+import VProp.Core (maxShared, prettyPropExpr)
 
 -- | A wrapper to represent readable strings
 newtype Readable = Re { readStr :: String }
@@ -66,6 +66,9 @@ genLit = Lit <$> genPrim
 frequencies :: Gen Int
 frequencies = elements [1..10]
 
+genOp2 :: Gen Op2
+genOp2 = elements [VLT, VLTE, VGT, VGTE, VEQ]
+
 -- | Generate an Arbitrary VProp, given a generator and counter these
 -- frequencies can change for different depths. The counter is merely for a
 -- `sized` call
@@ -79,13 +82,12 @@ arbVProp gd gv freqs n = frequency $ zip freqs [ Lit <$> genPrim
                                                , (liftM2 (|||) l l)
                                                , (liftM2 (==>) l l)
                                                , (liftM2 (<=>) l l)
-                                               , op2 l l
+                                               , oneof [ (liftM3 Op2 genOp2 lit l)
+                                                       , (liftM3 Op2 genOp2 l lit)
+                                                       ]
                                                ]
   where l = arbVProp gd gv freqs (n `div` 2)
-        op2 l' r' = do e <- elements [VLT, VLTE, VGT, VGTE, VEQ]
-                       l'' <- l'
-                       r'' <- r'
-                       return $ Op2 e l'' r''
+        lit = Lit <$> genPrim
 
 -- | Generate a random prop term with no sharing among dimensions
 vPropNoShare :: [Int] -> Gen (VProp Var)
@@ -96,7 +98,7 @@ vPropShare = sized . arbVProp genSharedDim genSharedVar
 
 -- | Generate a random prop according to its arbritrary type class instance,
 -- this has a strong likelihood of sharing
--- | generate with $ x <- genVProp :: (IO (VProp String))
+-- | generate with $ x <- genVProp :: (IO (VProp Readable))
 genVProp :: Arbitrary a => IO (VProp a)
 genVProp = generate arbitrary
 
