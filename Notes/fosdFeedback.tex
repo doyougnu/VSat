@@ -1,0 +1,58 @@
+% Created 2018-06-20 Wed 13:08
+% Intended LaTeX compiler: pdflatex
+\documentclass[10pt, letterpaper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{graphicx}
+\usepackage{grffile}
+\usepackage{longtable}
+\usepackage{wrapfig}
+\usepackage{rotating}
+\usepackage[normalem]{ulem}
+\usepackage{amsmath}
+\usepackage{textcomp}
+\usepackage{amssymb}
+\usepackage{capt-of}
+\usepackage{hyperref}
+\usepackage[margin=1in]{geometry}
+\usepackage{amssymb}
+\author{Jeffrey Young}
+\date{June 17, 2018}
+\title{VSat Troubles and Relations}
+\hypersetup{
+ pdfauthor={Jeffrey Young},
+ pdftitle={VSat Troubles and Relations},
+ pdfkeywords={},
+ pdfsubject={},
+ pdfcreator={Emacs 25.3.1 (Org mode 9.1.13)},
+ pdflang={English}}
+\begin{document}
+
+\maketitle
+
+\section*{What}
+\label{sec:orgb9f2865}
+This document is the debriefing document regarding the feedback I received
+from the VSAT presentation at the FOSD 2018 conference
+
+\section*{Direct Feedback}
+\label{sec:org8a52ab8}
+\begin{itemize}
+\item How many SAT calls are being made in actuality
+\item What is the memory foot print like?
+\item Read the original minisat paper for description of modern incremental SAT solving
+\item Check out the presence condition simplification by sven: \url{https://ieeexplore.ieee.org/document/7194572/}
+\item Could perhaps fork typeChef and integrate with VSAT
+\item Choice decomposition is called variability encoding or configuration lifting depending on the domain.
+\end{itemize}
+
+\section*{Applications}
+\label{sec:orgfcdf840}
+\begin{itemize}
+\item old covarity with static analysis. This is a paper from the early 2000s on
+how to encode C programs into Sat
+\item Data Flow analysis may be a good application for VSAT
+\item Monotone frameworks for static analysis
+\item Chip solvers
+\end{itemize}
+\end{document}
