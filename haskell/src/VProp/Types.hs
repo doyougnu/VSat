@@ -1,27 +1,23 @@
-module VProp.Types ( Var(..)
+module VProp.Types ( module Prelude
+                   , Var(..)
                    , Dim(..)
                    , VConfig
                    , DimBool
                    , Config
                    , VProp(..)
+                   , VIExpr(..)
                    , B_B(..), BB_B(..)
                    , N_N(..), NN_N(..)
                    , NN_B(..)
                    , NPrim(..)
                    , Opn(..)
+                   , Literal(..)
                    , (.<)
                    , (.<=)
                    , (.==)
                    , (./=)
                    , (.>=)
                    , (.>)
-                   , fromInteger
-                   , abs
-                   , negate
-                   , signum
-                   , (+)
-                   , (-)
-                   , (*)
                    , S.true
                    , S.false
                    , S.bnot
@@ -31,22 +27,9 @@ module VProp.Types ( Var(..)
                    , (S.==>)
                    , (S.<=>)
                    , (./)
-                   , (.%)) where
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+                   , (.%)
+                   , iRef
+                   , ref) where
 
 import           Data.Data           (Data, Typeable)
 import           Data.Fixed          (mod')
@@ -102,19 +85,19 @@ data NPrim = I Int | D Double
   deriving (Eq,Generic,Typeable,Ord)
 
 -- | Unary Numeric Operator
-data N_N = Neg | Abs | Sign deriving (Eq,Generic,Data,Typeable,Show,Ord)
+data N_N = Neg | Abs | Sign deriving (Eq,Generic,Data,Typeable,Ord)
 
 -- | Binary Boolean operators
-data B_B = Not deriving (Eq,Generic,Data,Typeable,Show,Ord)
+data B_B = Not deriving (Eq,Generic,Data,Typeable,Ord)
 
 -- | Binary Numeric Operators
-data NN_N = Add | Sub | Mult | Div | Mod deriving (Eq,Generic,Data,Typeable,Show,Ord)
+data NN_N = Add | Sub | Mult | Div | Mod deriving (Eq,Generic,Data,Typeable,Ord)
 
 -- | Binary Boolean operators
-data BB_B = Impl | BiImpl | XOr deriving (Eq,Generic,Data,Typeable,Show,Ord)
+data BB_B = Impl | BiImpl | XOr deriving (Eq,Generic,Data,Typeable,Ord)
 
 -- | Binary Numeric predicate operators
-data NN_B = LT | LTE | GT | GTE | EQ | NEQ deriving (Eq,Generic,Data,Typeable,Show,Ord)
+data NN_B = LT | LTE | GT | GTE | EQ | NEQ deriving (Eq,Generic,Data,Typeable,Ord)
 
 -- | N-ary logical operators
 data Opn = And | Or deriving (Eq,Generic,Data,Typeable,Show,Ord)
@@ -129,6 +112,20 @@ class (S.Boolean b, PrimN n) => Prim b n where
 
 infix 4 .<, .<=, .==, ./=, .>=, .>
 infixl 7 ./, .%
+
+class (PrimN n) => Literal a n where lit :: a -> n
+
+-- instance Literal Int (VIExpr a) where lit = ILit . I
+-- instance Literal Double (VIExpr a) where lit = ILit . D
+-- instance Literal Bool (VProp a) where lit = BLit
+
+-- | some not so smart constructors, pinning a to string because we will be
+-- using String the most
+iRef :: String -> VIExpr String
+iRef = RefI
+
+ref :: a -> VProp a
+ref = RefB
 
 -- | Begin primitive instances
 
