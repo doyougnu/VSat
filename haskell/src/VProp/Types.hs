@@ -8,7 +8,44 @@ module VProp.Types ( Var(..)
                    , N_N(..), NN_N(..)
                    , NN_B(..)
                    , NPrim(..)
-                   , Opn(..)) where
+                   , Opn(..)
+                   , (.<)
+                   , (.<=)
+                   , (.==)
+                   , (./=)
+                   , (.>=)
+                   , (.>)
+                   , fromInteger
+                   , abs
+                   , negate
+                   , signum
+                   , (+)
+                   , (-)
+                   , (*)
+                   , S.true
+                   , S.false
+                   , S.bnot
+                   , (S.&&&)
+                   , (S.|||)
+                   , (S.<+>)
+                   , (S.==>)
+                   , (S.<=>)
+                   , (./)
+                   , (.%)) where
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 import           Data.Data           (Data, Typeable)
@@ -205,7 +242,7 @@ instance Num (NPrim) where
 -- | We can treat Variational integer expressions like nums
 instance Num (VIExpr a) where
   fromInteger = ILit . fromInteger
-  abs = OpI Abs
+  abs    = OpI Abs
   negate = OpI Neg
   signum = OpI Sign
   (+)    = OpII Add
