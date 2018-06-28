@@ -3,7 +3,7 @@ module VProp.Types ( Var(..)
                    , VConfig
                    , DimBool
                    , Config
-                   , VProp(..)
+                   -- , VProp(..)
                    , NPrim(..)
                    , Op2(..)
                    , Opn(..)) where
@@ -35,23 +35,35 @@ type Config = Map Dim Bool
 -- * Syntax
 --
 
--- | Boolean expressions over features.
+-- | Boolean expressions with choices
 data VProp a
-   = Lit Bool
-   | Not !(VProp a)
-   | Op1 (Op1 (NPrim a))
-   | Op2B BB_B !(VProp a) !(VProp a)
-   | Op2 (Op2 (NPrim a))
-   | Opn Opn ![(VProp a)]
-   | Chc Dim !(VProp a) !(VProp a)
+   = BLit Bool
+   | RefB a
+   | OpB  B_B  !(VProp a)
+   | OpBB BB_B !(VProp a)  !(VProp a)
+   | OpIB NN_B !(VIExpr a) !(VIExpr a)
+   | Opn  Opn  ![(VProp a)]
+   | ChcB Dim  !(VProp a)  !(VProp a)
+  deriving (Eq,Generic,Typeable,Functor,Traversable,Foldable,Ord)
+
+-- | Integer Expressions with Choices
+data VIExpr a
+  = ILit NPrim
+  | RefI a
+  | OpI  N_N  !(VIExpr a)
+  | OpII NN_N !(VIExpr a) !(VIExpr a)
+  | ChcI Dim  !(VIExpr a) !(VIExpr a)
   deriving (Eq,Generic,Typeable,Functor,Traversable,Foldable,Ord)
 
 -- | data constructor for Numeric operations
-data NPrim a = I Int | F Float | Ref a
-  deriving (Eq,Generic,Typeable,Functor,Traversable,Foldable,Ord)
+data NPrim = I Int | F Float
+  deriving (Eq,Generic,Typeable,Ord)
 
 -- | Unary Numeric Operator
 data N_N = Neg | Abs deriving (Eq,Generic,Data,Typeable,Show,Ord)
+
+-- | Binary Boolean operators
+data B_B = Not deriving (Eq,Generic,Data,Typeable,Show,Ord)
 
 -- | Binary Numeric Operators
 data NN_N = Add | Sub | Mult | Div deriving (Eq,Generic,Data,Typeable,Show,Ord)
@@ -73,14 +85,12 @@ data Op1 a = N_N N_N a
 data Op2 a = NN_B NN_B (Op2I a) (Op2I a)
   deriving (Eq,Generic,Typeable,Functor,Traversable,Foldable,Ord)
 
-data Op2I a = Unit a
-            | NN_N NN_N a a
+data Op2I a = NN_N NN_N a a
   deriving (Eq,Generic,Typeable,Functor,Traversable,Foldable,Ord)
 
 x :: VProp String
-x = Op2 (NN_B LT
-    (Unit (Ref "a"))
-    (NN_N Add
-     (Ref "b") (I 4)))
-
-y = Opn And [x, x]
+x = Opn And [RefB "a", OpIB LT
+                       (ChcI "A"
+                         (OpI Neg (ILit $ I 5))
+                         (OpII Add (ILit $ F 3.0) (RefI "c")))
+                       (ChcI "C" (RefI "d") (RefI "a"))]
