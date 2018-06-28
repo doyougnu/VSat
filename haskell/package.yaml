@@ -48,6 +48,7 @@ default-extensions:
   - DeriveTraversable
   - FlexibleInstances
   - DeriveDataTypeable
+  - MultiParamTypeClasses
 
 executables:
   vsat:

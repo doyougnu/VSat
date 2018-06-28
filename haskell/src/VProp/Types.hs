@@ -3,19 +3,22 @@ module VProp.Types ( Var(..)
                    , VConfig
                    , DimBool
                    , Config
-                   -- , VProp(..)
+                   , VProp(..)
+                   , B_B(..), BB_B(..)
+                   , N_N(..), NN_N(..)
+                   , NN_B(..)
                    , NPrim(..)
-                   , Op2(..)
                    , Opn(..)) where
 
 
 import           Data.Data           (Data, Typeable)
+import           Data.Fixed          (mod')
 import           Test.QuickCheck     (Arbitrary)
 import           Test.QuickCheck.Gen
 import           GHC.Generics        (Generic)
 import           Data.String         (IsString)
 import           Control.DeepSeq     (NFData)
-import           Data.SBV            (SBool)
+import qualified Data.SBV as S
 import           Data.Map            (Map)
 import           Prelude  hiding     (LT, GT, EQ)
 
@@ -27,13 +30,15 @@ newtype Var = Var { varName :: String }
 newtype Dim = Dim { dimName :: String }
   deriving (Data,Eq,IsString,Ord,Show,Typeable,Generic,NFData,Arbitrary)
 
-type VConfig a = a -> SBool
-type DimBool = Dim -> SBool
+type VConfig a = a -> S.SBool
+type DimBool = Dim -> S.SBool
 type Config = Map Dim Bool
 
 --
 -- * Syntax
 --
+
+-- | This Design taken from Eric Walkingshaw with great respect :)
 
 -- | Boolean expressions with choices
 data VProp a
@@ -56,41 +61,166 @@ data VIExpr a
   deriving (Eq,Generic,Typeable,Functor,Traversable,Foldable,Ord)
 
 -- | data constructor for Numeric operations
-data NPrim = I Int | F Float
+data NPrim = I Int | D Double
   deriving (Eq,Generic,Typeable,Ord)
 
 -- | Unary Numeric Operator
-data N_N = Neg | Abs deriving (Eq,Generic,Data,Typeable,Show,Ord)
+data N_N = Neg | Abs | Sign deriving (Eq,Generic,Data,Typeable,Show,Ord)
 
 -- | Binary Boolean operators
 data B_B = Not deriving (Eq,Generic,Data,Typeable,Show,Ord)
 
 -- | Binary Numeric Operators
-data NN_N = Add | Sub | Mult | Div deriving (Eq,Generic,Data,Typeable,Show,Ord)
+data NN_N = Add | Sub | Mult | Div | Mod deriving (Eq,Generic,Data,Typeable,Show,Ord)
 
 -- | Binary Boolean operators
-data BB_B = Impl | BiImpl deriving (Eq,Generic,Data,Typeable,Show,Ord)
+data BB_B = Impl | BiImpl | XOr deriving (Eq,Generic,Data,Typeable,Show,Ord)
 
 -- | Binary Numeric predicate operators
-data NN_B = LT | LTE | GT | GTE | EQ deriving (Eq,Generic,Data,Typeable,Show,Ord)
+data NN_B = LT | LTE | GT | GTE | EQ | NEQ deriving (Eq,Generic,Data,Typeable,Show,Ord)
 
 -- | N-ary logical operators
 data Opn = And | Or deriving (Eq,Generic,Data,Typeable,Show,Ord)
 
--- | Unary Operators
-data Op1 a = N_N N_N a
-  deriving (Eq,Generic,Typeable,Functor,Traversable,Foldable,Ord)
+-- | add div and mod to num
+class Num n => PrimN n where
+  (./), (.%) :: n -> n -> n
 
--- | Binary Operators
-data Op2 a = NN_B NN_B (Op2I a) (Op2I a)
-  deriving (Eq,Generic,Typeable,Functor,Traversable,Foldable,Ord)
+-- | Overload the primitive operators
+class (S.Boolean b, PrimN n) => Prim b n where
+  (.<), (.<=), (.==), (./=), (.>=), (.>) :: n -> n -> b
 
-data Op2I a = NN_N NN_N a a
-  deriving (Eq,Generic,Typeable,Functor,Traversable,Foldable,Ord)
+infix 4 .<, .<=, .==, ./=, .>=, .>
+infixl 7 ./, .%
 
-x :: VProp String
-x = Opn And [RefB "a", OpIB LT
-                       (ChcI "A"
-                         (OpI Neg (ILit $ I 5))
-                         (OpII Add (ILit $ F 3.0) (RefI "c")))
-                       (ChcI "C" (RefI "d") (RefI "a"))]
+-- | Begin primitive instances
+
+instance PrimN Int where
+  (./) = div
+  (.%) = mod
+
+instance PrimN Double where
+  (./) = (/)
+  (.%) = mod'
+
+instance Prim Bool Int where
+  (.<)  = (<)
+  (.<=) = (<=)
+  (.==) = (==)
+  (./=) = (/=)
+  (.>=) = (>=)
+  (.>)  = (>)
+
+instance Prim Bool Double where
+  (.<)  = (<)
+  (.<=) = (<=)
+  (.==) = (==)
+  (./=) = (/=)
+  (.>=) = (>=)
+  (.>)  = (>)
+
+-- | SBV instances
+
+instance PrimN S.SInteger where
+  (./)  = S.sDiv
+  (.%)  = S.sMod
+
+instance PrimN S.SInt8 where
+  (./)  = S.sDiv
+  (.%)  = S.sMod
+
+instance PrimN S.SInt16 where
+  (./)  = S.sDiv
+  (.%)  = S.sMod
+
+instance PrimN S.SInt32 where
+  (./)  = S.sDiv
+  (.%)  = S.sMod
+
+instance PrimN S.SInt64 where
+  (./)  = S.sDiv
+  (.%)  = S.sMod
+
+instance Prim S.SBool S.SInteger where
+  (.<)  = (S..<)
+  (.<=) = (S..<=)
+  (.==) = (S..==)
+  (./=) = (S../=)
+  (.>=) = (S..>=)
+  (.>)  = (S..>)
+
+instance Prim S.SBool S.SInt8 where
+  (.<)  = (S..<)
+  (.<=) = (S..<=)
+  (.==) = (S..==)
+  (./=) = (S../=)
+  (.>=) = (S..>=)
+  (.>)  = (S..>)
+
+instance Prim S.SBool S.SInt16 where
+  (.<)  = (S..<)
+  (.<=) = (S..<=)
+  (.==) = (S..==)
+  (./=) = (S../=)
+  (.>=) = (S..>=)
+  (.>)  = (S..>)
+
+instance Prim S.SBool S.SInt32 where
+  (.<)  = (S..<)
+  (.<=) = (S..<=)
+  (.==) = (S..==)
+  (./=) = (S../=)
+  (.>=) = (S..>=)
+  (.>)  = (S..>)
+
+instance Prim S.SBool S.SInt64 where
+  (.<)  = (S..<)
+  (.<=) = (S..<=)
+  (.==) = (S..==)
+  (./=) = (S../=)
+  (.>=) = (S..>=)
+  (.>)  = (S..>)
+
+-- | We can treat a variational proposition as a boolean formulae
+instance S.Boolean (VProp a) where
+  true  = BLit True
+  false = BLit True
+  bnot  = OpB Not
+  l &&& r = Opn And [l,r]
+  l ||| r = Opn Or  [l,r]
+  (<+>) = OpBB XOr
+  (==>) = OpBB Impl
+  (<=>) = OpBB BiImpl
+
+-- | Boilerplate to make Num (VIExpr a) work out
+instance Num (NPrim) where
+  fromInteger = I . fromInteger
+  abs = abs
+  negate = negate
+  signum = signum
+  (+) = (+)
+  (-) = (-)
+  (*) = (*)
+
+-- | We can treat Variational integer expressions like nums
+instance Num (VIExpr a) where
+  fromInteger = ILit . fromInteger
+  abs = OpI Abs
+  negate = OpI Neg
+  signum = OpI Sign
+  (+)    = OpII Add
+  (-)    = OpII Sub
+  (*)    = OpII Mult
+
+-- | the other num instances
+instance PrimN (VIExpr a) where
+  (./) = OpII Div
+  (.%) = OpII Mod
+
+instance Prim (VProp a) (VIExpr a) where
+  (.<)  = OpIB LT
+  (.<=) = OpIB LTE
+  (.==) = OpIB EQ
+  (./=) = OpIB NEQ
+  (.>=) = OpIB GTE
+  (.>)  = OpIB GT
