@@ -29,14 +29,14 @@ instance Show NN_B where show LT  = "<"
                          show GT  = ">"
                          show GTE = "≥"
                          show EQ  = "="
-                         show NEQ  = "≠"
+                         show NEQ = "≠"
 
 instance Show BB_B where show Impl   = "→"
                          show BiImpl = "↔"
                          show XOr    = "⊻"
 
 instance Show a => Show (VIExpr a) where
-  show (ILit a) = show a
+  show (LitI a) = show a
   show (RefI a) = show a
   show (OpI Neg a) = "¬" <> show a
   show (OpI Abs a) = "|" <> show a <> "|"
@@ -58,7 +58,7 @@ prettyPropExpr = top
     top e           = sub e
 
     sub :: Show a => VProp a -> String
-    sub (BLit b) = if b then "#T" else "#F"
+    sub (LitB b) = if b then "#T" else "#F"
     sub (RefB f) = show f
     sub (OpB b e) = show b <> sub e
     sub e       = "(" ++ top e ++ ")"
@@ -112,9 +112,9 @@ x =  ref "A" &&& ((iRef "b") .< (5 + (iRef "c")))
 --                                (selectVariant tb l)
 --                                (selectVariant tb r)
 
--- -- | Convert a dimension to a variable
--- dimToVar :: Show a => (Dim -> a) -> Dim -> (VProp a)
--- dimToVar f = Ref . f
+-- | Convert a dimension to a variable
+dimToVar :: Show a => (Dim -> a) -> Dim -> (VProp a)
+dimToVar f = RefB . f
 
 -- --------------------------- Descriptors ----------------------------------------
 -- -- | TODO fix all this redundancy by abstracting the dimensions and instancing Bifoldable
@@ -179,32 +179,49 @@ x =  ref "A" &&& ((iRef "b") .< (5 + (iRef "c")))
 --         safeMaximum xs = maximum xs
 
 -- --------------------------- Destructors -----------------------------------------
--- -- | The set of features referenced in a feature expression.
--- vars :: Ord a => (VProp a) -> Set.Set a
--- vars (Lit _)     = Set.empty
--- vars (Ref f)     = Set.singleton f
--- vars (Not e)     = vars e
--- vars (Op2 _ l r) = vars l `Set.union` vars r
--- vars (Opn _ ps)  = Set.unions $ vars <$> ps
--- vars (Chc _ l r) = vars l `Set.union` vars r
+-- | The set of features referenced in a feature expression.
+vars :: Ord a => (VProp a) -> Set.Set a
+vars (LitB _)     = Set.empty
+vars (RefB f)     = Set.singleton f
+vars (OpB _ e)    = vars e
+vars (OpBB _ l r) = vars l `Set.union` vars r
+vars (OpIB _ l r) = vars' l `Set.union` vars' r
+vars (Opn _ ps)   = Set.unions $ vars <$> ps
+vars (ChcB _ l r) = vars l `Set.union` vars r
+
+vars' :: Ord a => (VIExpr a) -> Set.Set a
+vars' (LitI _) = Set.empty
+vars' (RefI f) = Set.singleton f
+vars' (OpI _ e) = vars' e
+vars' (OpII _ l r) = vars' l `Set.union` vars' r
+vars' (ChcI _ l r) = vars' l `Set.union` vars' r
 
 -- -- | The set of dimensions in a propositional expression
--- dimensions :: (VProp a) -> Set.Set Dim
--- dimensions (Lit _)       = Set.empty
--- dimensions (Ref _)       = Set.empty
--- dimensions (Not e)       = dimensions e
--- dimensions (Op2 _ l r)   = dimensions l `Set.union` dimensions r
--- dimensions (Opn _ ps)    = Set.unions $ dimensions <$> ps
--- dimensions (Chc d l r)   = Set.singleton d `Set.union`
---                            dimensions l `Set.union` dimensions r
+dimensions :: (VProp a) -> Set.Set Dim
+dimensions (LitB _)       = Set.empty
+dimensions (RefB _)       = Set.empty
+dimensions (OpB _ e)      = dimensions e
+dimensions (OpBB _ l r)   = dimensions l `Set.union` dimensions r
+dimensions (OpIB _ l r)   = dimensions' l `Set.union` dimensions' r
+dimensions (Opn _ ps)    = Set.unions $ dimensions <$> ps
+dimensions (ChcB d l r)   = Set.singleton d `Set.union`
+                           dimensions l `Set.union` dimensions r
+
+dimensions' :: (VIExpr a) -> Set.Set Dim
+dimensions' (LitI _)       = Set.empty
+dimensions' (RefI _)       = Set.empty
+dimensions' (OpI _ e)      = dimensions' e
+dimensions' (OpII _ l r)   = dimensions' l `Set.union` dimensions' r
+dimensions' (ChcI d l r)   = Set.singleton d `Set.union`
+                             dimensions' l `Set.union` dimensions' r
 
 -- -- -- | The set of all choices
--- configs :: VProp a -> [[(Dim, Bool)]]
--- configs prop = go (Set.toList $ dimensions prop)
---   where
---     go []     = [[]]
---     go (d:ds) = fmap ((d, True) :) cs ++ fmap ((d, False) :) cs
---           where cs = go ds
+configs :: VProp a -> [[(Dim, Bool)]]
+configs prop = go (Set.toList $ dimensions prop)
+  where
+    go []     = [[]]
+    go (d:ds) = fmap ((d, True) :) cs ++ fmap ((d, False) :) cs
+          where cs = go ds
 
 
 -- -- | Given a Variational Prop term, get all possible paths in the choice tree
