@@ -11,7 +11,6 @@ module VProp.Types ( module Prelude
                    , NN_B(..)
                    , NPrim(..)
                    , Opn(..)
-                   , Literal(..)
                    , (.<)
                    , (.<=)
                    , (.==)
@@ -62,7 +61,7 @@ type Config = Map Dim Bool
 
 -- | Boolean expressions with choices
 data VProp a
-   = BLit Bool
+   = LitB Bool
    | RefB a
    | OpB  B_B  !(VProp a)
    | OpBB BB_B !(VProp a)  !(VProp a)
@@ -73,7 +72,7 @@ data VProp a
 
 -- | Integer Expressions with Choices
 data VIExpr a
-  = ILit NPrim
+  = LitI NPrim
   | RefI a
   | OpI  N_N  !(VIExpr a)
   | OpII NN_N !(VIExpr a) !(VIExpr a)
@@ -112,12 +111,6 @@ class (S.Boolean b, PrimN n) => Prim b n where
 
 infix 4 .<, .<=, .==, ./=, .>=, .>
 infixl 7 ./, .%
-
-class (PrimN n) => Literal a n where lit :: a -> n
-
--- instance Literal Int (VIExpr a) where lit = ILit . I
--- instance Literal Double (VIExpr a) where lit = ILit . D
--- instance Literal Bool (VProp a) where lit = BLit
 
 -- | some not so smart constructors, pinning a to string because we will be
 -- using String the most
@@ -217,8 +210,8 @@ instance Prim S.SBool S.SInt64 where
 
 -- | We can treat a variational proposition as a boolean formulae
 instance S.Boolean (VProp a) where
-  true  = BLit True
-  false = BLit True
+  true  = LitB True
+  false = LitB True
   bnot  = OpB Not
   l &&& r = Opn And [l,r]
   l ||| r = Opn Or  [l,r]
@@ -238,7 +231,7 @@ instance Num (NPrim) where
 
 -- | We can treat Variational integer expressions like nums
 instance Num (VIExpr a) where
-  fromInteger = ILit . fromInteger
+  fromInteger = LitI . fromInteger
   abs    = OpI Abs
   negate = OpI Neg
   signum = OpI Sign
