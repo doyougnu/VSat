@@ -41,7 +41,7 @@ instance Show a => Show (VIExpr a) where
   show (OpI Abs a) = "|" <> show a <> "|"
   show (OpI Sign a) = "signum " <> show a
   show (OpII f l r) = mconcat [show l, " ", show f, " ", show r]
-  show (ChcI d l r) = mconcat [show $ dimName d, "<", show l, ", ", show r, ">"]
+  show (ChcI d l r) = mconcat [dimName d, "≺", show l, ", ", show r, "≻"]
 
 instance Show B_B where show Not = "¬"
 
@@ -53,7 +53,7 @@ prettyPropExpr = top
     top (Opn And ps)    = intercalate " ∧ " $ sub <$> ps
     top (OpBB b l r)    = mconcat [sub l, " ", show b, " ", sub r]
     top (OpIB nb l r)    = mconcat [show l, " ", show nb, " ", show r]
-    top (ChcB d ls rs) = show (dimName d) ++ "<" ++ top ls ++ ", " ++ top rs++ ">"
+    top (ChcB d ls rs) = dimName d ++ "≺" ++ top ls ++ " , " ++ top rs++ "≻"
     top e           = sub e
 
     sub :: (Show a, Show b) => VProp a b -> String
