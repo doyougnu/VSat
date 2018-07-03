@@ -12,6 +12,7 @@ import           Test.QuickCheck     (oneof, arbitrarySizedIntegral,  Arbitrary
                                      , generate
                                      , resize)
 import           Data.Char           (toUpper)
+import Prelude hiding (LT,EQ,GT)
 
 import VProp.Types
 import VProp.SBV
@@ -28,7 +29,7 @@ instance Arbitrary Readable where
 
 -- | arbritrary instance for the generator monad
 instance Arbitrary a => Arbitrary (VProp a) where
-  arbitrary = sized $ arbVProp genSharedDim arbitrary (repeat 3)
+  arbitrary = sized $ arbVProp genSharedDim arbitrary (repeat 3, repeat 3)
 
 -- | Generate only alphabetical characters
 genAlphaNum :: Gen Char
@@ -51,49 +52,75 @@ genSharedVar = elements $ Var . show <$> ['a'..'j']
 genVar :: Gen Var
 genVar = Var <$> genAlphaNumStr
 
-genBool :: Gen Prim
-genBool = B <$> arbitrary
+genDouble :: Gen NPrim
+genDouble = D <$> arbitrary
 
-genInt :: Gen Prim
+genInt :: Gen NPrim
 genInt = I <$> arbitrarySizedIntegral
 
-genPrim :: Gen Prim
-genPrim = oneof [genBool, genInt]
+genPrim :: Gen NPrim
+genPrim = oneof [genDouble, genInt]
 
 genLit :: Gen (VProp a)
-genLit = Lit <$> genPrim
+genLit = LitB <$> arbitrary
 
 frequencies :: Gen Int
 frequencies = elements [1..10]
 
-genOp2 :: Gen Op2
-genOp2 = elements [VLT, VLTE, VGT, VGTE, VEQ]
+-- | Data constructor generators
+genN_N :: Gen N_N
+genN_N = elements [Neg, Abs, Sign]
+
+genB_B :: Gen B_B
+genB_B = elements [Not]
+
+genNN_N :: Gen NN_N
+genNN_N = elements [Add, Sub, Mult, Div, Mod]
+
+genBB_B :: Gen BB_B
+genBB_B = elements [Impl, BiImpl, XOr]
+
+genNN_B :: Gen NN_B
+genNN_B = elements [LT, LTE, GT, GTE, EQ, NEQ]
+
+genOpn :: Gen Opn
+genOpn = elements [And, Or]
 
 -- | Generate an Arbitrary VProp, given a generator and counter these
 -- frequencies can change for different depths. The counter is merely for a
 -- `sized` call
-arbVProp :: Arbitrary a => Gen Dim -> Gen a -> [Int] -> Int -> Gen (VProp a)
-arbVProp _  gv _     0 = Ref <$> gv
-arbVProp gd gv freqs n = frequency $ zip freqs [ Lit <$> genPrim
-                                               , (fmap Ref gv)
-                                               , (liftM3 Chc gd l l)
-                                               , (fmap Not l)
-                                               , (liftM2 (&&&) l l)
-                                               , (liftM2 (|||) l l)
-                                               , (liftM2 (==>) l l)
-                                               , (liftM2 (<=>) l l)
-                                               , oneof [ (liftM3 Op2 genOp2 lit l)
-                                                       , (liftM3 Op2 genOp2 l lit)
-                                                       ]
-                                               ]
-  where l = arbVProp gd gv freqs (n `div` 2)
-        lit = Lit <$> genPrim
+arbVProp :: Arbitrary a =>
+  Gen Dim -> Gen a -> ([Int], [Int]) -> Int -> Gen (VProp a)
+arbVProp _  gv _     0 = RefB <$> gv
+arbVProp gd gv fs@(bfreqs, ifreqs) n
+  = frequency $ zip bfreqs [ LitB <$> arbitrary
+                           , RefB <$> gv
+                           , (liftM3 ChcB gd l l)
+                           , liftM2 OpB genB_B l
+                           , (liftM2 (&&&) l l)
+                           , (liftM2 (|||) l l)
+                           , liftM3 OpBB genBB_B l l
+                           , liftM3 OpIB genNN_B l' l'
+                           ]
+  where l = arbVProp gd gv fs (n `div` 2)
+        l' = arbVIExpr gd gv ifreqs (n `div` 2)
+
+arbVIExpr :: Arbitrary a =>
+  Gen Dim -> Gen a -> [Int] -> Int -> Gen (VIExpr a)
+arbVIExpr _ gv _ 0 = RefI <$> gv
+arbVIExpr gd gv ifreqs n = frequency $ zip ifreqs [ LitI <$> genPrim
+                                                  , RefI <$> gv
+                                                  , liftM2 OpI genN_N l
+                                                  , liftM3 OpII genNN_N l l
+                                                  , liftM3 ChcI gd l l
+                                                  ]
+  where l = arbVIExpr gd gv ifreqs (n `div` 2)
 
 -- | Generate a random prop term with no sharing among dimensions
-vPropNoShare :: [Int] -> Gen (VProp Var)
+vPropNoShare :: ([Int], [Int]) -> Gen (VProp Var)
 vPropNoShare = sized . arbVProp genDim genVar
 
-vPropShare :: [Int] -> Gen (VProp Var)
+vPropShare :: ([Int], [Int]) -> Gen (VProp Var)
 vPropShare = sized . arbVProp genSharedDim genSharedVar
 
 -- | Generate a random prop according to its arbritrary type class instance,
