@@ -27,6 +27,10 @@ module VProp.Types ( module Prelude
                    , (S.<=>)
                    , (./)
                    , (.%)
+                   , bifoldMap
+                   , bimap
+                   , bifoldr
+                   , bitraverse
                    , iRef
                    , ref) where
 
@@ -43,7 +47,7 @@ import           Data.SBV.Internals (liftQRem, liftDMod)
 import           Data.Map            (Map)
 import           Data.Bifunctor      (Bifunctor, bimap)
 import           Data.Bitraversable  (Bitraversable, bitraverse)
-import           Data.Bifoldable     (Bifoldable, bifoldMap)
+import           Data.Bifoldable     (Bifoldable, bifoldMap, bifoldr)
 import           Prelude  hiding     (LT, GT, EQ, lookup)
 
 

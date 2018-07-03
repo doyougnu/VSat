@@ -52,7 +52,7 @@ _emptyOpts = Opts { runBaselines = False
                   }
 
 
-_setOpts :: Bool -> Bool -> Bool -> [VProp a b -> VProp a b] -> Opts a
+_setOpts :: Bool -> Bool -> Bool -> [VProp a a -> VProp a a] -> Opts a
 _setOpts base bAD bOpt opts = Opts { runBaselines = base
                                    , runAD = bAD
                                    , runOpts = bOpt
@@ -142,11 +142,11 @@ work prop = do
     runBruteForce prop >>= return . L
     else do
     opts <- asks optimizations
-    (result,_) <- lift . S.runSMT . incrementalSolve $ St.evalStateT (propToSBool prop) M.empty
+    (result,_) <- lift . S.runSMT . incrementalSolve $ St.evalStateT (propToSBool prop) (M.empty, M.empty)
     return $ Vr result
 
-type UsedVars a = M.Map a S.SBool
-type IncPack a b = St.StateT (UsedVars a) S.Symbolic b
+type UsedVars a b = M.Map a b
+type IncPack a b = St.StateT ((UsedVars a S.SBool, UsedVars a S.SDouble)) S.Symbolic b
 
 type UsedDims a = M.Map a Bool
 type IncState = ([V Dim (Maybe I.SMTModel)], UsedDims Dim)
@@ -162,13 +162,21 @@ incrementalSolve prop = do prop' <- prop
 propToSBool :: VProp String String -> IncPack String (VProp S.SBool S.SDouble)
 propToSBool = bitraverse smtBool smtDouble
 
-smtPack :: String -> IncPack String S.SBool
-smtPack str = do st <- get
+smtBool :: String -> IncPack String S.SBool
+smtBool str = do (st,_) <- get
                  case str `M.lookup` st of
                    Nothing -> do b <- lift $ S.sBool str
-                                 St.modify (M.insert str b)
+                                 St.modify (first $ M.insert str b)
                                  return b
                    Just x  -> return x
+
+smtDouble :: String -> IncPack String S.SDouble
+smtDouble str = do (_,st) <- get
+                   case str `M.lookup` st of
+                     Nothing -> do b <- lift $ S.sDouble str
+                                   St.modify (second $ M.insert str b)
+                                   return b
+                     Just x  -> return x
 
 -- bToSb :: S.Boolean p => Bool -> p
 -- bToSb True = S.true
@@ -200,7 +208,7 @@ incHelper acc !(x:xs) f = {-# SCC "incHelper" #-} do b <- incrementalSolve_ x; i
 incrementalSolve_ :: VProp S.SBool S.SDouble -> IncSolve S.SBool
 incrementalSolve_ (RefB b) = return b
 incrementalSolve_ (LitB b) = return $ S.literal b
-incrementalSolve_ (OpB Not bs)= do b <- incrementalSolve_ (S.bnot <$> bs)
+incrementalSolve_ (OpB Not bs)= do b <- incrementalSolve_ (S.bnot bs)
                                    S.constrain b
                                    return b
 incrementalSolve_ (OpBB op l r) = do bl <- incrementalSolve_ l
