@@ -15,8 +15,7 @@ import           Data.Char           (toUpper)
 import Prelude hiding (LT,EQ,GT)
 
 import VProp.Types
-import VProp.SBV
-import VProp.Core (maxShared, prettyPropExpr)
+import VProp.Core (maxShared)
 
 -- | A wrapper to represent readable strings
 newtype Readable = Re { readStr :: String }
