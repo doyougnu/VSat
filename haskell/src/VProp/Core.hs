@@ -196,24 +196,42 @@ vars' (OpI _ e) = vars' e
 vars' (OpII _ l r) = vars' l `Set.union` vars' r
 vars' (ChcI _ l r) = vars' l `Set.union` vars' r
 
--- -- | The set of dimensions in a propositional expression
+-- | The set of dimensions in a propositional expression
 dimensions :: (VProp a) -> Set.Set Dim
-dimensions (LitB _)       = Set.empty
-dimensions (RefB _)       = Set.empty
-dimensions (OpB _ e)      = dimensions e
-dimensions (OpBB _ l r)   = dimensions l `Set.union` dimensions r
-dimensions (OpIB _ l r)   = dimensions' l `Set.union` dimensions' r
-dimensions (Opn _ ps)    = Set.unions $ dimensions <$> ps
-dimensions (ChcB d l r)   = Set.singleton d `Set.union`
-                           dimensions l `Set.union` dimensions r
+dimensions (LitB _)     = Set.empty
+dimensions (RefB _)     = Set.empty
+dimensions (OpB _ e)    = dimensions e
+dimensions (OpBB _ l r) = dimensions l `Set.union` dimensions r
+dimensions (OpIB _ l r) = dimensions' l `Set.union` dimensions' r
+dimensions (Opn _ ps)   = Set.unions $ dimensions <$> ps
+dimensions (ChcB d l r) = Set.singleton d `Set.union`
+                            dimensions l `Set.union` dimensions r
 
 dimensions' :: (VIExpr a) -> Set.Set Dim
-dimensions' (LitI _)       = Set.empty
-dimensions' (RefI _)       = Set.empty
-dimensions' (OpI _ e)      = dimensions' e
-dimensions' (OpII _ l r)   = dimensions' l `Set.union` dimensions' r
-dimensions' (ChcI d l r)   = Set.singleton d `Set.union`
+dimensions' (LitI _)     = Set.empty
+dimensions' (RefI _)     = Set.empty
+dimensions' (OpI _ e)    = dimensions' e
+dimensions' (OpII _ l r) = dimensions' l `Set.union` dimensions' r
+dimensions' (ChcI d l r) = Set.singleton d `Set.union`
                              dimensions' l `Set.union` dimensions' r
+
+-- | The set of integar variable references for an expression
+ivars :: Ord a => VProp a -> Set.Set a
+ivars (LitB _)     = Set.empty
+ivars (RefB _)     = Set.empty
+ivars (OpB _ e)    = ivars e
+ivars (OpBB _ l r) = ivars l `Set.union` ivars r
+ivars (OpIB _ l r) = ivars' l `Set.union` ivars' r
+ivars (Opn _ ps)   = Set.unions $ ivars <$> ps
+ivars (ChcB _ l r) = ivars l `Set.union` ivars r
+
+ivars' :: Ord a => VIExpr a -> Set.Set a
+ivars' (LitI _)     = Set.empty
+ivars' (RefI a)     = Set.singleton a
+ivars' (OpI _ e)    = ivars' e
+ivars' (OpII _ l r) = ivars' l `Set.union` ivars' r
+ivars' (ChcI _ l r) = ivars' l `Set.union` ivars' r
+
 
 -- -- -- | The set of all choices
 configs :: VProp a -> [[(Dim, Bool)]]

@@ -38,8 +38,9 @@ import           GHC.Generics        (Generic)
 import           Data.String         (IsString)
 import           Control.DeepSeq     (NFData)
 import qualified Data.SBV as S
+import           Data.SBV.Internals (liftQRem, liftDMod)
 import           Data.Map            (Map)
-import           Prelude  hiding     (LT, GT, EQ)
+import           Prelude  hiding     (LT, GT, EQ, lookup)
 
 
 -- | A feature is a named, boolean configuration option.
@@ -49,7 +50,7 @@ newtype Var = Var { varName :: String }
 newtype Dim = Dim { dimName :: String }
   deriving (Data,Eq,IsString,Ord,Show,Typeable,Generic,NFData,Arbitrary)
 
-type VConfig a = a -> S.SBool
+type VConfig a b = a -> b
 type DimBool = Dim -> S.SBool
 type Config = Map Dim Bool
 
@@ -80,7 +81,7 @@ data VIExpr a
   deriving (Eq,Generic,Typeable,Functor,Traversable,Foldable,Ord)
 
 -- | data constructor for Numeric operations
-data NPrim = I Int | D Double
+data NPrim = I Integer | D Double
   deriving (Eq,Generic,Typeable,Ord)
 
 -- | Unary Numeric Operator
@@ -122,7 +123,7 @@ ref = RefB
 
 -- | Begin primitive instances
 
-instance PrimN Int where
+instance PrimN Integer where
   (./) = div
   (.%) = mod
 
@@ -130,7 +131,7 @@ instance PrimN Double where
   (./) = (/)
   (.%) = mod'
 
-instance Prim Bool Int where
+instance Prim Bool Integer where
   (.<)  = (<)
   (.<=) = (<=)
   (.==) = (==)
@@ -149,6 +150,20 @@ instance Prim Bool Double where
 -- | SBV instances
 
 instance PrimN S.SInteger where
+  (./)  = S.sDiv
+  (.%)  = S.sMod
+
+instance S.SDivisible Double where
+  sQuotRem x 0.0 = (0.0, x)
+  sQuotRem x y = x `S.sQuotRem` y
+  sDivMod  x 0.0 = (0.0, x)
+  sDivMod  x y = x `S.sDivMod` y
+
+instance S.SDivisible S.SDouble where
+  sQuotRem = liftQRem
+  sDivMod  = liftDMod
+
+instance PrimN S.SDouble where
   (./)  = S.sDiv
   (.%)  = S.sMod
 
@@ -201,6 +216,14 @@ instance Prim S.SBool S.SInt32 where
   (.>)  = (S..>)
 
 instance Prim S.SBool S.SInt64 where
+  (.<)  = (S..<)
+  (.<=) = (S..<=)
+  (.==) = (S..==)
+  (./=) = (S../=)
+  (.>=) = (S..>=)
+  (.>)  = (S..>)
+
+instance Prim S.SBool S.SDouble where
   (.<)  = (S..<)
   (.<=) = (S..<=)
   (.==) = (S..==)
