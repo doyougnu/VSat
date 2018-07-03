@@ -27,7 +27,7 @@ instance Arbitrary Readable where
   arbitrary = Re <$> genAlphaNumStr
 
 -- | arbritrary instance for the generator monad
-instance Arbitrary a => Arbitrary (VProp a) where
+instance Arbitrary a => Arbitrary (VProp a a) where
   arbitrary = sized $ arbVProp genSharedDim arbitrary (repeat 3, repeat 3)
 
 -- | Generate only alphabetical characters
@@ -60,7 +60,7 @@ genInt = I <$> arbitrarySizedIntegral
 genPrim :: Gen NPrim
 genPrim = oneof [genDouble, genInt]
 
-genLit :: Gen (VProp a)
+genLit :: Gen (VProp a b)
 genLit = LitB <$> arbitrary
 
 frequencies :: Gen Int
@@ -89,7 +89,7 @@ genOpn = elements [And, Or]
 -- frequencies can change for different depths. The counter is merely for a
 -- `sized` call
 arbVProp :: Arbitrary a =>
-  Gen Dim -> Gen a -> ([Int], [Int]) -> Int -> Gen (VProp a)
+  Gen Dim -> Gen a -> ([Int], [Int]) -> Int -> Gen (VProp a a)
 arbVProp _  gv _     0 = RefB <$> gv
 arbVProp gd gv fs@(bfreqs, ifreqs) n
   = frequency $ zip bfreqs [ LitB <$> arbitrary
@@ -116,22 +116,22 @@ arbVIExpr gd gv ifreqs n = frequency $ zip ifreqs [ LitI <$> genPrim
   where l = arbVIExpr gd gv ifreqs (n `div` 2)
 
 -- | Generate a random prop term with no sharing among dimensions
-vPropNoShare :: ([Int], [Int]) -> Gen (VProp Var)
+vPropNoShare :: ([Int], [Int]) -> Gen (VProp Var Var)
 vPropNoShare = sized . arbVProp genDim genVar
 
-vPropShare :: ([Int], [Int]) -> Gen (VProp Var)
+vPropShare :: ([Int], [Int]) -> Gen (VProp Var Var)
 vPropShare = sized . arbVProp genSharedDim genSharedVar
 
 -- | Generate a random prop according to its arbritrary type class instance,
 -- this has a strong likelihood of sharing
 -- | generate with $ x <- genVProp :: (IO (VProp Readable))
-genVProp :: Arbitrary a => IO (VProp a)
+genVProp :: (Arbitrary a) => IO (VProp a a)
 genVProp = generate arbitrary
 
 -- vPropChoicesOverRefs = sized $ flip arbProp
 
-genVPropAtSize :: Arbitrary a => Int -> Gen (VProp a) -> Gen (VProp a)
+genVPropAtSize :: (Arbitrary a, Arbitrary b) => Int -> Gen (VProp a b) -> Gen (VProp a b)
 genVPropAtSize = resize
 
-genVPropAtShare :: Arbitrary a => Int -> Gen (VProp a) -> Gen (VProp a)
+genVPropAtShare :: (Arbitrary a, Arbitrary b) => Int -> Gen (VProp a b) -> Gen (VProp a b)
 genVPropAtShare n = flip suchThat $ (==n) . maxShared
