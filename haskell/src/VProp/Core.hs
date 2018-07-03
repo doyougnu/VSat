@@ -12,7 +12,7 @@ import           Prelude hiding      (LT, GT, EQ)
 import VProp.Types
 
 instance Show Var where show = varName
-instance Show a => Show (VProp a) where show = prettyPropExpr
+instance (Show a, Show b) => Show (VProp a b) where show = prettyPropExpr
 
 -- | Pretty print a feature expression.
 instance Show NPrim where show (I i) = show i
@@ -46,10 +46,10 @@ instance Show a => Show (VIExpr a) where
 
 instance Show B_B where show Not = "¬"
 
-prettyPropExpr :: Show a => VProp a -> String
+prettyPropExpr :: (Show a, Show b) => VProp a b -> String
 prettyPropExpr = top
   where
-    top :: Show a => VProp a -> String
+    top :: (Show a, Show b) => VProp a b -> String
     top (Opn Or ps)     = intercalate " ∨ " $ sub <$> ps
     top (Opn And ps)    = intercalate " ∧ " $ sub <$> ps
     top (OpBB b l r)    = mconcat [sub l, " ", show b, " ", sub r]
@@ -57,13 +57,13 @@ prettyPropExpr = top
     top (ChcB d ls rs) = show (dimName d) ++ "<" ++ top ls ++ ", " ++ top rs++ ">"
     top e           = sub e
 
-    sub :: Show a => VProp a -> String
+    sub :: (Show a, Show b) => VProp a b -> String
     sub (LitB b) = if b then "#T" else "#F"
     sub (RefB f) = show f
     sub (OpB b e) = show b <> sub e
     sub e       = "(" ++ top e ++ ")"
 
-x :: VProp String
+x :: VProp String String
 x =  ref "A" &&& ((iRef "b") .< (5 + (iRef "c")))
 
 ----------------------------- Predicates ---------------------------------------
@@ -113,7 +113,7 @@ x =  ref "A" &&& ((iRef "b") .< (5 + (iRef "c")))
 --                                (selectVariant tb r)
 
 -- | Convert a dimension to a variable
-dimToVar :: Show a => (Dim -> a) -> Dim -> (VProp a)
+dimToVar :: Show a => (Dim -> a) -> Dim -> (VProp a b)
 dimToVar f = RefB . f
 
 -- --------------------------- Descriptors ----------------------------------------
@@ -166,9 +166,9 @@ dimToVar f = RefB . f
 --     go _ acc           = acc
 
 -- | Given a prop return the maximum number of times a given dimension was shared
-maxShared :: VProp a -> Int
+maxShared :: VProp a b -> Int
 maxShared = safeMaximum . fmap length . group . sort . go
-  where go :: VProp a -> [String]
+  where go :: VProp a b -> [String]
         go (ChcB d l r) = (dimName d) : go l ++ go r
         go (OpB _ l)     = go l
         go (Opn _ ps)  = foldMap go ps
@@ -187,7 +187,7 @@ maxShared = safeMaximum . fmap length . group . sort . go
 
 -- --------------------------- Destructors -----------------------------------------
 -- | The set of features referenced in a feature expression.
-vars :: Ord a => (VProp a) -> Set.Set a
+vars :: Ord a => (VProp a a) -> Set.Set a
 vars (LitB _)     = Set.empty
 vars (RefB f)     = Set.singleton f
 vars (OpB _ e)    = vars e
@@ -204,7 +204,7 @@ vars' (OpII _ l r) = vars' l `Set.union` vars' r
 vars' (ChcI _ l r) = vars' l `Set.union` vars' r
 
 -- | The set of dimensions in a propositional expression
-dimensions :: (VProp a) -> Set.Set Dim
+dimensions :: (VProp a b) -> Set.Set Dim
 dimensions (LitB _)     = Set.empty
 dimensions (RefB _)     = Set.empty
 dimensions (OpB _ e)    = dimensions e
@@ -223,7 +223,7 @@ dimensions' (ChcI d l r) = Set.singleton d `Set.union`
                              dimensions' l `Set.union` dimensions' r
 
 -- | The set of integar variable references for an expression
-ivars :: Ord a => VProp a -> Set.Set a
+ivars :: (Ord a, Ord b) => VProp a b -> Set.Set b
 ivars (LitB _)     = Set.empty
 ivars (RefB _)     = Set.empty
 ivars (OpB _ e)    = ivars e
@@ -240,8 +240,8 @@ ivars' (OpII _ l r) = ivars' l `Set.union` ivars' r
 ivars' (ChcI _ l r) = ivars' l `Set.union` ivars' r
 
 
--- -- -- | The set of all choices
-configs :: VProp a -> [[(Dim, Bool)]]
+-- | The set of all choices
+configs :: VProp a b -> [[(Dim, Bool)]]
 configs prop = go (Set.toList $ dimensions prop)
   where
     go []     = [[]]

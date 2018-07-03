@@ -3,7 +3,7 @@ module Run ( runEnv
            , Result (..)
            , SatDict
            , Log
-           , runEnvFirst
+           -- , runEnvFirst
            ) where
 
 import qualified Data.Map.Strict as M
@@ -12,6 +12,7 @@ import Control.Monad.State.Strict    as St
 import qualified Data.SBV.Internals  as I
 import qualified Data.SBV            as S
 import qualified Data.SBV.Control    as SC
+import           Prelude hiding (LT, GT, EQ)
 
 import Control.Arrow (first, second)
 
@@ -33,7 +34,7 @@ type SatDict a = (M.Map Config Bool, M.Map a Bool) -- keys may incur perf penalt
 data Opts a = Opts { runBaselines :: Bool              -- ^ Run baselines?
                    , runAD :: Bool                     -- ^ run anddecomp baseline? else Brute Force
                    , runOpts :: Bool                   -- ^ Run optimizations or not?
-                   , optimizations :: [VProp a -> VProp a] -- ^ a list of optimizations
+                   , optimizations :: [VProp a a -> VProp a a] -- ^ a list of optimizations
                    }
 
 -- | Type convenience for Log
@@ -51,7 +52,7 @@ _emptyOpts = Opts { runBaselines = False
                   }
 
 
-_setOpts :: Bool -> Bool -> Bool -> [VProp a -> VProp a] -> Opts a
+_setOpts :: Bool -> Bool -> Bool -> [VProp a b -> VProp a b] -> Opts a
 _setOpts base bAD bOpt opts = Opts { runBaselines = base
                                    , runAD = bAD
                                    , runOpts = bOpt
@@ -65,19 +66,19 @@ _runEnv :: Env a r -> Opts a -> (SatDict a) -> IO (r, (SatDict a),  Log)
 _runEnv m opts st = runRWST m opts st
 
 -- TODO use configurate and load the config from a file
-runEnv :: Bool -> Bool -> Bool -> [VProp String -> VProp String] -> VProp String -> IO (Result, (SatDict String), Log)
+runEnv :: Bool -> Bool -> Bool -> [VProp String String -> VProp String String] -> VProp String String -> IO (Result, (SatDict String), Log)
 runEnv !base !bAD !bOpt !opts !x = _runEnv
                                    (work x)
                                    (_setOpts base bAD bOpt opts)
                                    (initSt x)
 
-runEnvFirst :: Bool -> Bool -> Bool -> [VProp String -> VProp String] -> VProp String -> IO (V Dim (Maybe I.SMTModel))
-runEnvFirst base bAD bOpt opts x = (head . unbox . fst') <$> _runEnv (work x) (_setOpts base bAD bOpt opts) (initSt x)
-  where fst' (y,_,_)  = y
-        unbox (Vr xs) = xs
+-- runEnvFirst :: Bool -> Bool -> Bool -> [VProp String -> VProp String] -> VProp String -> IO (V Dim (Maybe I.SMTModel))
+-- runEnvFirst base bAD bOpt opts x = (head . unbox . fst') <$> _runEnv (work x) (_setOpts base bAD bOpt opts) (initSt x)
+--   where fst' (y,_,_)  = y
+--         unbox (Vr xs) = xs
 
 -- | Given a VProp a term generate the satisfiability map
-initSt :: (Show a, Ord a) => VProp a -> (SatDict a)
+initSt :: (Show a, Ord a) => VProp a a -> (SatDict a)
 initSt prop = (sats, vs)
   where sats = M.fromList . fmap (\x -> (x, False)) $ M.fromList <$> configs prop
         vs = M.fromSet (const False) (vars prop)
@@ -97,7 +98,7 @@ _logResult x = tell $ "Got result: " ++ show x
 -- | Run the brute force baseline case, that is select every plain variant and
 -- run them to the sat solver
 runBruteForce :: (Show a, Ord a) =>
-  (MonadTrans t, MonadState (SatDict a) (t IO)) => VProp a -> t IO [S.SatResult]
+  (MonadTrans t, MonadState (SatDict a) (t IO)) => VProp a a -> t IO [S.SatResult]
 runBruteForce prop = {-# SCC "brute_force"#-} do
   (_confs, _) <- get
   let confs = M.keys _confs
@@ -107,7 +108,7 @@ runBruteForce prop = {-# SCC "brute_force"#-} do
 
 -- | Run the and decomposition baseline case, that is deconstruct every choice
 -- and then run the sat solver
-runAndDecomp :: VProp String -> IO (Maybe I.SMTModel)
+runAndDecomp :: VProp String String -> IO (Maybe I.SMTModel)
 runAndDecomp prop = {-# SCC "andDecomp" #-} S.runSMT $ do
   p <- symbolicPropExpr $ (andDecomp prop dimName)
   S.constrain p
@@ -129,7 +130,7 @@ instance NFData Result
 
 work :: ( MonadTrans t
         , MonadState (SatDict String) (t IO)
-        , MonadReader (Opts String) (t IO)) => VProp String -> t IO Result
+        , MonadReader (Opts String) (t IO)) => VProp String String -> t IO Result
 work prop = do
   baselines <- asks runBaselines
   bAD <- asks runAD
@@ -151,25 +152,27 @@ type UsedDims a = M.Map a Bool
 type IncState = ([V Dim (Maybe I.SMTModel)], UsedDims Dim)
 type IncSolve a = St.StateT IncState SC.Query a
 
-incrementalSolve :: S.Symbolic (VProp S.SBool) -> S.Symbolic IncState
+incrementalSolve :: S.Symbolic (VProp S.SBool S.SDouble) -> S.Symbolic IncState
 incrementalSolve prop = do prop' <- prop
                            SC.query $ St.execStateT (incrementalSolve_ prop') ([], M.empty)
 
-propToSBool :: VProp String -> IncPack String (VProp S.SBool)
-propToSBool = traverse smtBool
+-- | This ensures two things: 1st we need all variables to be symbolic before
+-- starting query mode. 2nd we cannot allow any duplicates to be called on a
+-- string -> symbolic a function or missiles will launch.
+propToSBool :: VProp String String -> IncPack String (VProp S.SBool S.SDouble)
+propToSBool = bitraverse smtBool smtDouble
 
-smtBool :: String -> IncPack String S.SBool
-smtBool str = do st <- get
+smtPack :: String -> IncPack String S.SBool
+smtPack str = do st <- get
                  case str `M.lookup` st of
                    Nothing -> do b <- lift $ S.sBool str
                                  St.modify (M.insert str b)
                                  return b
                    Just x  -> return x
 
-
-bToSb :: S.Boolean p => Bool -> p
-bToSb True = S.true
-bToSb False = S.false
+-- bToSb :: S.Boolean p => Bool -> p
+-- bToSb True = S.true
+-- bToSb False = S.false
 
 -- | get a model out given an S.SBool
 getModel :: SC.Query (V Dim (Maybe I.SMTModel))
@@ -186,31 +189,45 @@ instance (Monad m, I.SolverContext m) =>
   namedConstraint = (lift .) . S.namedConstraint
   setOption = lift . S.setOption
 
-incHelper :: S.SBool -> [VProp S.SBool] ->
+-- | A helper function for folding over the n-ary special cases
+incHelper :: S.SBool -> [VProp S.SBool S.SDouble] ->
   (S.SBool -> S.SBool -> S.SBool) -> IncSolve S.SBool
 incHelper acc ![]     _ = {-# SCC "incHelper" #-} return acc
 incHelper acc !(x:xs) f = {-# SCC "incHelper" #-} do b <- incrementalSolve_ x; incHelper (b `f` acc) xs f
 
-incrementalSolve_ :: VProp S.SBool -> IncSolve S.SBool
-incrementalSolve_ (Ref b) = return b
-incrementalSolve_ (Lit b) = return (bToSb b)
-incrementalSolve_ (Not bs)= do b <- incrementalSolve_ (S.bnot <$> bs)
-                               S.constrain b
-                               return b
-incrementalSolve_ (Op2 Impl l r) = do bl <- incrementalSolve_ l
-                                      br <- incrementalSolve_ r
-                                      return $ (bl S.==> br)
-incrementalSolve_ (Op2 BiImpl l r) = do bl <- incrementalSolve_ l
-                                        br <- incrementalSolve_ r
-                                        S.constrain $ bl S.<=> br
-                                        return $ bl S.<=> br
+-- | The main solver algorithm. You can think of this as the sem function for
+-- the dsl
+incrementalSolve_ :: VProp S.SBool S.SDouble -> IncSolve S.SBool
+incrementalSolve_ (RefB b) = return b
+incrementalSolve_ (LitB b) = return $ S.literal b
+incrementalSolve_ (OpB Not bs)= do b <- incrementalSolve_ (S.bnot <$> bs)
+                                   S.constrain b
+                                   return b
+incrementalSolve_ (OpBB op l r) = do bl <- incrementalSolve_ l
+                                     br <- incrementalSolve_ r
+                                     let op' = handler op
+                                     S.constrain $ bl `op'` br
+                                     return $ bl `op'` br
+  where handler Impl   = (==>)
+        handler BiImpl = (<=>)
+incrementalSolve_ (OpIB op l r) = do bl <- incrementalSolve'_ l
+                                     br <- incrementalSolve'_ r
+                                     let op' = handler op
+                                     S.constrain $ bl `op'` br
+                                     return $ bl `op'` br
+  where handler LT = (.<)
+        handler LTE = (.<=)
+        handler GTE = (.>=)
+        handler GT = (.>)
+        handler EQ = (.==)
+        handler NEQ = (./=)
 incrementalSolve_ (Opn And ps) = do b <- incHelper S.true ps (S.&&&)
                                     S.constrain b
                                     return b
 incrementalSolve_ (Opn Or ps) = do b <- incHelper S.true ps (S.|||)
                                    S.constrain b
                                    return b
-incrementalSolve_ (Chc d l r) = {-# SCC "Choice_Solve"#-}
+incrementalSolve_ (ChcB d l r) = {-# SCC "Choice_Solve"#-}
   do (_, used) <- get
      case M.lookup d used of
        Just True  -> incrementalSolve_ l
@@ -231,3 +248,6 @@ incrementalSolve_ (Chc d l r) = {-# SCC "Choice_Solve"#-}
 
                         St.modify . second $ M.delete d
                         return b
+
+incrementalSolve'_ :: VIExpr S.SDouble -> IncSolve S.SDouble
+incrementalSolve'_ (RefI i) = return i

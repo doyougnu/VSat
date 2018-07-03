@@ -31,6 +31,7 @@ module VProp.Types ( module Prelude
                    , ref) where
 
 import           Data.Data           (Data, Typeable)
+import           Data.Monoid         ((<>))
 import           Data.Fixed          (mod')
 import           Test.QuickCheck     (Arbitrary)
 import           Test.QuickCheck.Gen
@@ -40,6 +41,9 @@ import           Control.DeepSeq     (NFData)
 import qualified Data.SBV as S
 import           Data.SBV.Internals (liftQRem, liftDMod)
 import           Data.Map            (Map)
+import           Data.Bifunctor      (Bifunctor, bimap)
+import           Data.Bitraversable  (Bitraversable, bitraverse)
+import           Data.Bifoldable     (Bifoldable, bifoldMap)
 import           Prelude  hiding     (LT, GT, EQ, lookup)
 
 
@@ -61,14 +65,14 @@ type Config = Map Dim Bool
 -- | This Design taken from Eric Walkingshaw with great respect :)
 
 -- | Boolean expressions with choices
-data VProp a
+data VProp a b
    = LitB Bool
    | RefB a
-   | OpB  B_B  !(VProp a)
-   | OpBB BB_B !(VProp a)  !(VProp a)
-   | OpIB NN_B !(VIExpr a) !(VIExpr a)
-   | Opn  Opn  ![(VProp a)]
-   | ChcB Dim  !(VProp a)  !(VProp a)
+   | OpB  B_B  !(VProp a b)
+   | OpBB BB_B !(VProp a b)  !(VProp a b)
+   | OpIB NN_B !(VIExpr b) !(VIExpr b)
+   | Opn  Opn  ![(VProp a b)]
+   | ChcB Dim  !(VProp a b)  !(VProp a b)
   deriving (Eq,Generic,Typeable,Functor,Traversable,Foldable,Ord)
 
 -- | Integer Expressions with Choices
@@ -118,7 +122,7 @@ infixl 7 ./, .%
 iRef :: String -> VIExpr String
 iRef = RefI
 
-ref :: a -> VProp a
+ref :: a -> VProp a b
 ref = RefB
 
 -- | Begin primitive instances
@@ -147,7 +151,7 @@ instance Prim Bool Double where
   (.>=) = (>=)
   (.>)  = (>)
 
--- | SBV instances
+-- * SBV instances
 
 instance PrimN S.SInteger where
   (./)  = S.sDiv
@@ -232,7 +236,7 @@ instance Prim S.SBool S.SDouble where
   (.>)  = (S..>)
 
 -- | We can treat a variational proposition as a boolean formulae
-instance S.Boolean (VProp a) where
+instance S.Boolean (VProp a b) where
   true  = LitB True
   false = LitB True
   bnot  = OpB Not
@@ -267,10 +271,40 @@ instance PrimN (VIExpr a) where
   (./) = OpII Div
   (.%) = OpII Mod
 
-instance Prim (VProp a) (VIExpr a) where
+instance Prim (VProp a b) (VIExpr b) where
   (.<)  = OpIB LT
   (.<=) = OpIB LTE
   (.==) = OpIB EQ
   (./=) = OpIB NEQ
   (.>=) = OpIB GTE
   (.>)  = OpIB GT
+
+
+-- * structural instances
+instance Bifunctor VProp where
+  bimap f _ (RefB v)      = RefB $ f v
+  bimap f g (OpB op e)    = OpB op (bimap f g e)
+  bimap f g (OpBB op l r) = OpBB op (bimap f g l) (bimap f g r)
+  bimap _ g (OpIB op l r) = OpIB op (g <$> l) (g <$> r)
+  bimap f g (ChcB d l r)  = ChcB d (bimap f g l) (bimap f g r)
+  bimap f g (Opn op l)    = Opn op $ fmap (bimap f g) l
+  bimap _ _ (LitB b)      = LitB b
+
+instance Bifoldable VProp where
+  bifoldMap f _ (RefB a)     = f a
+  bifoldMap f g (OpB _ e)    = bifoldMap f g e
+  bifoldMap f g (OpBB _ l r) = bifoldMap f g l <> bifoldMap f g r
+  bifoldMap _ g (OpIB _ l r) = foldMap g l <> foldMap g r
+  bifoldMap f g (ChcB _ l r) = bifoldMap f g l <> bifoldMap f g r
+  bifoldMap f g (Opn _ l)    = foldMap (bifoldMap f g) l
+  bifoldMap _ _ (LitB _)     = mempty
+
+
+instance Bitraversable VProp where
+  bitraverse f _ (RefB v) = RefB <$> f v
+  bitraverse f g (OpB op e) = OpB op <$> bitraverse f g e
+  bitraverse f g (OpBB op l r) = OpBB op <$> bitraverse f g l <*> bitraverse f g r
+  bitraverse _ g (OpIB op l r) = OpIB op <$> traverse g l <*> traverse g r
+  bitraverse f g (Opn op ls) = Opn op <$> traverse (bitraverse f g) ls
+  bitraverse f g (ChcB d l r) = ChcB d <$> bitraverse f g l <*> bitraverse f g r
+  bitraverse _ _ (LitB x)    = pure $ LitB x

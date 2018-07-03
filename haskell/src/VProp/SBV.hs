@@ -38,11 +38,11 @@ import VProp.Types
 import VProp.Core
 import SAT
 
-instance (Show a, Ord a) => SAT (VProp a) where
+instance (Show a, Ord a) => SAT (VProp a a) where
   toPredicate = symbolicPropExpr
 
 -- | make prop mergeable so choices can use symbolic conditionals
-instance Mergeable (VProp a) where
+instance Mergeable (VProp a b) where
   symbolicMerge _ b thn els
     | Just result <- unliteral b = if result then thn else els
   symbolicMerge _ _ _ _ = undefined -- quite -WALL
@@ -57,7 +57,7 @@ instance Mergeable (VProp a) where
 
 -- TODO fix this repetition
 -- | Evaluate a feature expression against a configuration.
-evalPropExpr :: DimBool -> VConfig a SDouble -> VConfig a SBool -> VProp a -> SBool
+evalPropExpr :: DimBool -> VConfig a SDouble -> VConfig a SBool -> VProp a a -> SBool
 evalPropExpr _ _ _ (LitB b)   =  literal b
 evalPropExpr _ _ c (RefB f)   = c f
 evalPropExpr d i c (OpB Not e)   = bnot (evalPropExpr d i c e)
@@ -94,7 +94,7 @@ evalPropExpr' d i (ChcI dim l r)
 
 
 -- | Generate a symbolic predicate for a feature expression.
-symbolicPropExpr :: (Show a, Ord a) => VProp a -> Predicate
+symbolicPropExpr :: (Show a, Ord a) => VProp a a -> Predicate
 symbolicPropExpr e = do
     let vs = Set.toList (vars e)
         is = Set.toList (ivars e)
@@ -111,7 +111,7 @@ symbolicPropExpr e = do
         erri = error "symbolicPropExpr: Internal error, no int symbol found."
 
 -- | Perform andDecomposition, removing all choices from a proposition
-andDecomp :: Show a => (VProp a) -> (Dim -> a) -> (VProp a)
+andDecomp :: (Show a) => (VProp a a) -> (Dim -> a) -> (VProp a a)
 andDecomp !(ChcB d l r) f = (dimToVar f d &&& andDecomp l f) |||
                             (bnot (dimToVar f d) &&& andDecomp r f)
 andDecomp !(OpB op x)    f = OpB  op (andDecomp x f)
