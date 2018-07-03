@@ -145,16 +145,34 @@ work prop = do
     (result,_) <- lift . S.runSMT . incrementalSolve $ St.evalStateT (propToSBool prop) (M.empty, M.empty)
     return $ Vr result
 
+-- | wrapper around map to keep track of the variable references we've seen, a,
+-- and their symbolic type, b
 type UsedVars a b = M.Map a b
+
+-- | A state monad transformer that holds two usedvar maps, one for booleans and
+-- one for doubles
 type IncPack a b = St.StateT ((UsedVars a S.SBool, UsedVars a S.SDouble)) S.Symbolic b
 
+-- | a map to keep track if a dimension has been seen before
 type UsedDims a = M.Map a Bool
+
+-- | the internal state for the incremental solve algorithm, it holds a result
+-- list, and the used dims map
 type IncState = ([V Dim (Maybe I.SMTModel)], UsedDims Dim)
+
+-- | the incremental solve monad, with the base monad being the query monad so
+-- we can pull out sbv modals
 type IncSolve a = St.StateT IncState SC.Query a
 
+-- | Given a VProp with references at the boolean level as SBools, and at the
+-- number level as SDoubles, recur through the proposition loading terms into
+-- SBV. When we hit a choice we manipulate the assertion stack to maximize reuse
+-- of non-variational terms and then cons the resultant model for each branch of
+-- the choice onto the result list.
 incrementalSolve :: S.Symbolic (VProp S.SBool S.SDouble) -> S.Symbolic IncState
 incrementalSolve prop = do prop' <- prop
-                           SC.query $ St.execStateT (incrementalSolve_ prop') ([], M.empty)
+                           SC.query $
+                             St.execStateT (incrementalSolve_ prop') ([], M.empty)
 
 -- | This ensures two things: 1st we need all variables to be symbolic before
 -- starting query mode. 2nd we cannot allow any duplicates to be called on a
