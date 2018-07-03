@@ -162,6 +162,7 @@ incrementalSolve prop = do prop' <- prop
 propToSBool :: VProp String String -> IncPack String (VProp S.SBool S.SDouble)
 propToSBool = bitraverse smtBool smtDouble
 
+-- | convert every reference to a boolean, keeping track of what you've seen before
 smtBool :: String -> IncPack String S.SBool
 smtBool str = do (st,_) <- get
                  case str `M.lookup` st of
@@ -170,6 +171,7 @@ smtBool str = do (st,_) <- get
                                  return b
                    Just x  -> return x
 
+-- | convert every reference to a double, keeping track of what you've seen before
 smtDouble :: String -> IncPack String S.SDouble
 smtDouble str = do (_,st) <- get
                    case str `M.lookup` st of
@@ -177,10 +179,6 @@ smtDouble str = do (_,st) <- get
                                    St.modify (second $ M.insert str b)
                                    return b
                      Just x  -> return x
-
--- bToSb :: S.Boolean p => Bool -> p
--- bToSb True = S.true
--- bToSb False = S.false
 
 -- | get a model out given an S.SBool
 getModel :: SC.Query (V Dim (Maybe I.SMTModel))
@@ -190,7 +188,7 @@ getModel = do cs <- SC.checkSat
                 SC.Unsat -> return (Plain Nothing)
                 SC.Sat   -> (Plain . Just) <$> SC.getModel
 
-
+-- | type class needed to avoid lifting for constraints in the IncSolve monad
 instance (Monad m, I.SolverContext m) =>
   I.SolverContext (StateT IncState m) where
   constrain = lift . S.constrain
@@ -258,6 +256,7 @@ incrementalSolve_ (ChcB d l r) = {-# SCC "Choice_Solve"#-}
                         St.modify . second $ M.delete d
                         return b
 
+-- | The incremental solve algorithm just for VIExprs
 incrementalSolve'_ :: VIExpr S.SDouble -> IncSolve S.SDouble
 incrementalSolve'_ (RefI i) = return i
 incrementalSolve'_ (LitI (I i)) = return . S.literal . fromIntegral $ i
