@@ -165,18 +165,25 @@ dimToVar f = RefB . f
 --     go (Chc _ l r) acc = max (go l acc) (go r acc)
 --     go _ acc           = acc
 
--- -- | Given a prop return the maximum number of times a given dimension was shared
--- maxShared :: (VProp a) -> Int
--- maxShared = safeMaximum . fmap length . group . sort . go
---   where go :: (VProp a) -> [String]
---         go (Chc d l r) = (dimName d) : (go l) ++ (go r)
---         go (Not l)     = go l
---         go (Opn _ ps)  = foldMap go ps
---         go (Op2 _ l r) = go l ++ go r
---         go _           = []
+-- | Given a prop return the maximum number of times a given dimension was shared
+maxShared :: VProp a -> Int
+maxShared = safeMaximum . fmap length . group . sort . go
+  where go :: VProp a -> [String]
+        go (ChcB d l r) = (dimName d) : go l ++ go r
+        go (OpB _ l)     = go l
+        go (Opn _ ps)  = foldMap go ps
+        go (OpBB _ l r) = go l ++ go r
+        go (OpIB _ l r) = go' l ++ go' r
+        go _           = []
 
---         safeMaximum [] = 0
---         safeMaximum xs = maximum xs
+        go' :: VIExpr a -> [String]
+        go' (ChcI d l r) = (dimName d) : go' l ++ go' r
+        go' (OpI _ l)    = go' l
+        go' (OpII _ l r) = go' l ++ go' r
+        go' _            = []
+
+        safeMaximum [] = 0
+        safeMaximum xs = maximum xs
 
 -- --------------------------- Destructors -----------------------------------------
 -- | The set of features referenced in a feature expression.
