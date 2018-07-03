@@ -9,7 +9,7 @@ import GHC.Generics (Generic)
 import qualified Data.ByteString.Char8 as BS (pack)
 import Data.ByteString.Lazy (writeFile, appendFile)
 import VProp.Core
-import VProp.Types
+import VProp.Types hiding (appendFile)
 import VProp.Gen
 import Test.QuickCheck (generate, choose)
 import Control.DeepSeq (deepseq, NFData)

@@ -4,7 +4,6 @@ import           Control.Monad       (liftM, liftM2)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import           Data.List           (intercalate,group,sort)
-import           Data.Foldable       (foldr')
 import           Data.Monoid         ((<>))
 import           Prelude hiding      (LT, GT, EQ)
 
@@ -97,20 +96,30 @@ xxx =  ref "A" &&& ((iRef "b") .< (5 + (iRef "c")))
 -- pruneTagTree tb (Op2 a l r)  = Op2 a (pruneTagTree tb l) (pruneTagTree tb r)
 -- pruneTagTree tb (Opn a ps)  = Opn a (pruneTagTree tb <$> ps)
 
--- -- | Given a config and a Variational VProp term select the element out that the
--- -- config points to
--- selectVariant :: Config -> (VProp a) -> Maybe (VProp a)
--- selectVariant _ (Ref a) = Just $ Ref a
--- selectVariant _ (Lit a) = Just $ Lit a
--- selectVariant tbs x@(Chc t y n) = case Map.lookup t tbs of
---                                     Nothing    -> Just x
---                                     Just True  -> selectVariant tbs y
---                                     Just False -> selectVariant tbs n
--- selectVariant tb (Not x)     = Not <$> selectVariant tb x
--- selectVariant tb (Opn a ps)  = liftM (Opn a) (sequence $ selectVariant tb <$> ps)
--- selectVariant tb (Op2 a l r) = liftM2 (Op2 a)
---                                (selectVariant tb l)
---                                (selectVariant tb r)
+-- | Given a config and a Variational VProp term select the element out that the
+-- config points to
+selectVariant :: Config -> VProp a b -> Maybe (VProp a b)
+selectVariant tbs x@(ChcB t y n) = case Map.lookup t tbs of
+                                     Nothing    -> Just x
+                                     Just True  -> selectVariant tbs y
+                                     Just False -> selectVariant tbs n
+selectVariant tb (OpB op x)    = OpB op <$> selectVariant tb x
+selectVariant tb (Opn a ps)    = liftM (Opn a) (sequence $ selectVariant tb <$> ps)
+selectVariant tb (OpBB a l r)  = liftM2 (OpBB a)
+                                (selectVariant tb l)
+                                (selectVariant tb r)
+selectVariant tb (OpIB op l r) = OpIB op <$> selectVariant' tb l <*> selectVariant' tb r
+selectVariant _  x             = Just x
+
+selectVariant' :: Config -> VIExpr a -> Maybe (VIExpr a)
+selectVariant' tb x@(ChcI t y n) = case Map.lookup t tb of
+                                     Nothing    -> Just x
+                                     Just True  -> selectVariant' tb y
+                                     Just False -> selectVariant' tb n
+selectVariant' tb (OpI op e)    = OpI op <$> selectVariant' tb e
+selectVariant' tb (OpII op l r) = liftM2 (OpII op) (selectVariant' tb l) (selectVariant' tb r)
+selectVariant' _  x             = Just x
+
 
 -- | Convert a dimension to a variable
 dimToVar :: Show a => (Dim -> a) -> Dim -> (VProp a b)
