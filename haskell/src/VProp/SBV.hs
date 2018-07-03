@@ -1,5 +1,5 @@
 module VProp.SBV ( module Data.SBV
-                 -- , andDecomp
+                 , andDecomp
                  -- , shrinkPropExpr
                  , evalPropExpr
                  , symbolicPropExpr) where
@@ -110,17 +110,17 @@ symbolicPropExpr e = do
         errd = error "symbolicPropExpr: Internal error, no dimension found."
         erri = error "symbolicPropExpr: Internal error, no int symbol found."
 
--- -- | Perform andDecomposition, removing all choices from a proposition
--- andDecomp :: Show a => (VProp a) -> (Dim -> a) -> (VProp a)
--- andDecomp !(Chc d l r) f = (dimToVar f d &&& andDecomp l f) |||
---                           (bnot (dimToVar f d) &&& andDecomp r f)
--- andDecomp !(Not x)     f = Not (andDecomp x f)
--- andDecomp !(Op2 c l r) f = Op2 c (andDecomp l f) (andDecomp r f)
--- andDecomp !(Opn c ps)  f = Opn c (flip andDecomp f <$> ps)
--- andDecomp !x           _ = x
+-- | Perform andDecomposition, removing all choices from a proposition
+andDecomp :: Show a => (VProp a) -> (Dim -> a) -> (VProp a)
+andDecomp !(ChcB d l r) f = (dimToVar f d &&& andDecomp l f) |||
+                            (bnot (dimToVar f d) &&& andDecomp r f)
+andDecomp !(OpB op x)    f = OpB  op (andDecomp x f)
+andDecomp !(OpBB op l r) f = OpBB op (andDecomp l f) (andDecomp r f)
+andDecomp !(Opn op ps)   f = Opn  op (flip andDecomp f <$> ps)
+andDecomp !x           _ = x
 
--- -- | Reduce the size of a feature expression by applying some basic
--- --   simplification rules.
+-- | Reduce the size of a feature expression by applying some basic
+--   simplification rules.
 -- shrinkPropExpr :: (Show a, Ord a) => VProp a -> VProp a
 -- shrinkPropExpr e
 --     | unsatisfiable e           = Lit $ B False
