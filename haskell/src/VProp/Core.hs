@@ -28,7 +28,7 @@ instance Show NN_B where show LT  = "<"
                          show LTE = "≤"
                          show GT  = ">"
                          show GTE = "≥"
-                         show EQ  = "="
+                         show EQ  = "=="
                          show NEQ = "≠"
 
 instance Show BB_B where show Impl   = "→"
