@@ -63,8 +63,8 @@ prettyPropExpr = top
     sub (OpB b e) = show b <> sub e
     sub e       = "(" ++ top e ++ ")"
 
-x :: VProp String String
-x =  ref "A" &&& ((iRef "b") .< (5 + (iRef "c")))
+xxx :: VProp String String
+xxx =  ref "A" &&& ((iRef "b") .< (5 + (iRef "c")))
 
 ----------------------------- Predicates ---------------------------------------
 -- | true if a propositions has no chcs whatsoever

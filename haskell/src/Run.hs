@@ -218,16 +218,17 @@ incrementalSolve_ (OpBB op l r) = do bl <- incrementalSolve_ l
                                      return $ bl `op'` br
   where handler Impl   = (==>)
         handler BiImpl = (<=>)
+        handler XOr    = (<+>)
 incrementalSolve_ (OpIB op l r) = do bl <- incrementalSolve'_ l
                                      br <- incrementalSolve'_ r
                                      let op' = handler op
                                      S.constrain $ bl `op'` br
                                      return $ bl `op'` br
-  where handler LT = (.<)
+  where handler LT  = (.<)
         handler LTE = (.<=)
         handler GTE = (.>=)
-        handler GT = (.>)
-        handler EQ = (.==)
+        handler GT  = (.>)
+        handler EQ  = (.==)
         handler NEQ = (./=)
 incrementalSolve_ (Opn And ps) = do b <- incHelper S.true ps (S.&&&)
                                     S.constrain b
@@ -259,3 +260,39 @@ incrementalSolve_ (ChcB d l r) = {-# SCC "Choice_Solve"#-}
 
 incrementalSolve'_ :: VIExpr S.SDouble -> IncSolve S.SDouble
 incrementalSolve'_ (RefI i) = return i
+incrementalSolve'_ (LitI (I i)) = return . S.literal . fromIntegral $ i
+incrementalSolve'_ (LitI (D d)) = return . S.literal $ d
+incrementalSolve'_ (OpI op e) = do e' <- incrementalSolve'_ e
+                                   return $ (handler op) e'
+  where handler Neg  = negate
+        handler Abs  = abs
+        handler Sign = signum
+incrementalSolve'_ (OpII op l r) = do l' <- incrementalSolve'_ l
+                                      r' <- incrementalSolve'_ r
+                                      return $ handler op l' r'
+  where handler Add  = (+)
+        handler Sub  = (-)
+        handler Mult = (*)
+        handler Div  = (./)
+        handler Mod  = (.%)
+incrementalSolve'_ (ChcI d l r) =
+  do (_, used) <- get
+     case M.lookup d used of
+       Just True  -> incrementalSolve'_ l
+       Just False -> incrementalSolve'_ r
+       Nothing    -> do St.modify . second $ M.insert d True
+                        lift $ SC.push 1
+                        _ <- incrementalSolve'_ l
+                        lmodel <- lift $ getModel
+                        lift $ SC.pop 1
+
+                        St.modify . second $ M.adjust (const False) d
+                        lift $ SC.push 1
+                        b <- incrementalSolve'_ r
+                        rmodel <- lift $ getModel
+                        lift $ SC.pop 1
+
+                        St.modify . first $ ((:) (VChc d lmodel rmodel))
+
+                        St.modify . second $ M.delete d
+                        return b
