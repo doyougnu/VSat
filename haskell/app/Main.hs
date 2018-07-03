@@ -9,7 +9,7 @@ import GHC.Generics (Generic)
 import qualified Data.ByteString.Char8 as BS (pack)
 import Data.ByteString.Lazy (writeFile, appendFile)
 import VProp.Core
-import VProp.Types hiding (appendFile)
+import VProp.Types hiding (appendFile, writeFile)
 import VProp.Gen
 import Test.QuickCheck (generate, choose)
 import Control.DeepSeq (deepseq, NFData)
@@ -65,7 +65,7 @@ type RunMetric = (RunNum, TermSize)
 
 -- | Give a descriptor, run metrics, and a prop, generate the descriptor metrics
 -- for the prop and write them out to a csv
-writeDesc :: Show a => String -> RunMetric -> VProp a -> FilePath -> IO ()
+writeDesc :: (Show a, Show b) => String -> RunMetric -> VProp a b -> FilePath -> IO ()
 writeDesc desc (rn, n) prop' descFile = do
   let descriptorsFs = [ numTerms
                       , numChc
