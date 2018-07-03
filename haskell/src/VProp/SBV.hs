@@ -1,6 +1,6 @@
 module VProp.SBV ( module Data.SBV
-                 , andDecomp
-                 , shrinkPropExpr
+                 -- , andDecomp
+                 -- , shrinkPropExpr
                  , evalPropExpr
                  , symbolicPropExpr) where
 
@@ -20,13 +20,17 @@ import           Data.SBV            ( (&&&)
                                      , EqSymbolic
                                      , OrdSymbolic
                                      , SBool
+                                     , SInteger
+                                     , SDouble
                                      , true
                                      , false
                                      , bnot
                                      , symbolicMerge
                                      , unliteral
+                                     , literal
                                      , sBools
                                      , sInteger
+                                     , sDoubles
                                      , uninterpret
                                      , ite
                                      , fromBool)
@@ -38,15 +42,6 @@ import qualified Data.Set as Set     (toList)
 import VProp.Types
 import VProp.Core
 import SAT
-
-instance Boolean (VProp a) where
-  true    = Lit $ B True
-  false   = Lit $ B False
-  bnot    = Not
-  l &&& r = Opn And [l, r]
-  l ||| r = Opn Or [l, r]
-  (==>)   = Op2 Impl
-  (<=>)   = Op2 BiImpl
 
 instance (Show a, Ord a) => SAT (VProp a) where
   toPredicate = symbolicPropExpr
@@ -67,53 +62,66 @@ instance Ord a => OrdSymbolic (VProp a) where
 
 -- TODO fix this repetition
 -- | Evaluate a feature expression against a configuration.
-evalPropExpr :: DimBool -> VConfig a -> VProp a -> SBool
-evalPropExpr _ _  (Lit (B b))   = if b then true else false
-evalPropExpr _ _  (Lit (I n))   = uninterpret $ show n
-evalPropExpr _ c  (Ref f)   = c f
-evalPropExpr d c  (Not e)   = bnot (evalPropExpr d c  e)
-evalPropExpr d c  (Opn And ps) = foldr1 (&&&) $ evalPropExpr d c  <$> ps
-evalPropExpr d c  (Opn Or ps) = foldr1 (|||) $ evalPropExpr d c <$> ps
-evalPropExpr d c  (Op2 Impl l r) = evalPropExpr d c  l ==> evalPropExpr d c r
-evalPropExpr d c  (Op2 BiImpl l r) = evalPropExpr d c  l <=> evalPropExpr d c r
-evalPropExpr d c  (Op2 VLT l r) = evalPropExpr d c l .< evalPropExpr d c r
-evalPropExpr d c  (Op2 VLTE l r) = evalPropExpr d c l .<= evalPropExpr d c r
-evalPropExpr d c  (Op2 VGT l r) = evalPropExpr d c l .> evalPropExpr d c r
-evalPropExpr d c  (Op2 VGTE l r) = evalPropExpr d c l .>= evalPropExpr d c r
-evalPropExpr d c  (Op2 VEQ l r) = evalPropExpr d c l .== evalPropExpr d c r
-evalPropExpr d c  (Chc dim l r)
-  = ite (d dim) (evalPropExpr d c l) (evalPropExpr d c r)
+evalPropExpr :: DimBool -> VConfig a c -> VConfig a SBool -> VProp a -> SBool
+evalPropExpr _ i _ (LitB b)   =  literal b
+evalPropExpr _ i c (RefB f)   = c f
+evalPropExpr d i c (OpB Not e)   = bnot (evalPropExpr d i c e)
+evalPropExpr d i c (Opn And ps)  = foldr1 (&&&) $ evalPropExpr d i c <$> ps
+evalPropExpr d i c (Opn Or ps)   = foldr1 (|||) $ evalPropExpr d i c <$> ps
+evalPropExpr d i c (OpBB Impl l r)   = evalPropExpr d i c l ==> evalPropExpr d i c r
+evalPropExpr d i c (OpBB BiImpl l r) = evalPropExpr d i c l <=> evalPropExpr d i c r
+evalPropExpr d i c a@(OpIB d' l r) = undefined
+evalPropExpr d i c (ChcB dim l r)
+  = ite (d dim) (evalPropExpr d i c l) (evalPropExpr d i c r)
+
+evalPropExpr' :: DimBool -> VConfig a SDouble -> VIExpr a -> SDouble
+evalPropExpr' _ _ (LitI (I i)) =  literal $ fromIntegral i
+evalPropExpr' _ _ (LitI (D d)) =  literal d
+evalPropExpr' _ i (RefI f) = i f
+evalPropExpr' d i (OpI Neg e) = negate $ evalPropExpr' d i e
+evalPropExpr' d i (OpI Abs e) = abs $ evalPropExpr' d i e
+evalPropExpr' d i (OpI Sign e) = signum $ evalPropExpr' d i e
+evalPropExpr' d i (OpII Add l r)  = evalPropExpr' d i l +  evalPropExpr' d i r
+evalPropExpr' d i (OpII Sub l r)  = evalPropExpr' d i l -  evalPropExpr' d i r
+evalPropExpr' d i (OpII Mult l r) = evalPropExpr' d i l *  evalPropExpr' d i r
+evalPropExpr' d i (OpII Div l r)  = evalPropExpr' d i l ./ evalPropExpr' d i r
+evalPropExpr' d i (OpII Mod l r)  = evalPropExpr' d i l .% evalPropExpr' d i r
+
 
 
 -- | Generate a symbolic predicate for a feature expression.
 symbolicPropExpr :: (Show a, Ord a) => VProp a -> Predicate
 symbolicPropExpr e = do
     let vs = Set.toList (vars e)
+        is = Set.toList (ivars e)
         ds = Set.toList (dimensions e)
-    syms <- fmap (fromList . zip vs) (sBools (show <$> vs))
-    dims <- fmap (fromList . zip ds) (sBools (map dimName ds))
+    syms  <- fmap (fromList . zip vs) (sBools (show <$> vs))
+    dims  <- fmap (fromList . zip ds) (sBools (map dimName ds))
+    isyms <- fmap (fromList . zip is) (sDoubles (show <$> is))
     let look f = fromMaybe err (lookup f syms)
         lookd d = fromMaybe errd (lookup d dims)
-    return (evalPropExpr lookd look e)
+        looki i = fromMaybe erri (lookup i isyms)
+    return (evalPropExpr lookd looki look e)
   where err = error "symbolicPropExpr: Internal error, no symbol found."
         errd = error "symbolicPropExpr: Internal error, no dimension found."
+        erri = error "symbolicPropExpr: Internal error, no int symbol found."
 
--- | Perform andDecomposition, removing all choices from a proposition
-andDecomp :: Show a => (VProp a) -> (Dim -> a) -> (VProp a)
-andDecomp !(Chc d l r) f = (dimToVar f d &&& andDecomp l f) |||
-                          (bnot (dimToVar f d) &&& andDecomp r f)
-andDecomp !(Not x)     f = Not (andDecomp x f)
-andDecomp !(Op2 c l r) f = Op2 c (andDecomp l f) (andDecomp r f)
-andDecomp !(Opn c ps)  f = Opn c (flip andDecomp f <$> ps)
-andDecomp !x           _ = x
+-- -- | Perform andDecomposition, removing all choices from a proposition
+-- andDecomp :: Show a => (VProp a) -> (Dim -> a) -> (VProp a)
+-- andDecomp !(Chc d l r) f = (dimToVar f d &&& andDecomp l f) |||
+--                           (bnot (dimToVar f d) &&& andDecomp r f)
+-- andDecomp !(Not x)     f = Not (andDecomp x f)
+-- andDecomp !(Op2 c l r) f = Op2 c (andDecomp l f) (andDecomp r f)
+-- andDecomp !(Opn c ps)  f = Opn c (flip andDecomp f <$> ps)
+-- andDecomp !x           _ = x
 
--- | Reduce the size of a feature expression by applying some basic
---   simplification rules.
-shrinkPropExpr :: (Show a, Ord a) => VProp a -> VProp a
-shrinkPropExpr e
-    | unsatisfiable e           = Lit $ B False
-    | tautology e               = Lit $ B True
-shrinkPropExpr (Not (Not e))    = shrinkPropExpr e
-shrinkPropExpr (Opn And ps)  = Opn And (filter (not . tautology) ps)
-shrinkPropExpr (Opn Or ps)   = Opn Or (filter (not . unsatisfiable) ps)
-shrinkPropExpr e = e
+-- -- | Reduce the size of a feature expression by applying some basic
+-- --   simplification rules.
+-- shrinkPropExpr :: (Show a, Ord a) => VProp a -> VProp a
+-- shrinkPropExpr e
+--     | unsatisfiable e           = Lit $ B False
+--     | tautology e               = Lit $ B True
+-- shrinkPropExpr (Not (Not e))    = shrinkPropExpr e
+-- shrinkPropExpr (Opn And ps)  = Opn And (filter (not . tautology) ps)
+-- shrinkPropExpr (Opn Or ps)   = Opn Or (filter (not . unsatisfiable) ps)
+-- shrinkPropExpr e = e
