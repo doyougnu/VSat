@@ -8,11 +8,6 @@ import           Data.SBV            ( (&&&)
                                      , (|||)
                                      , (==>)
                                      , (<=>)
-                                     , (.==)
-                                     , (.<)
-                                     , (.>)
-                                     , (.<=)
-                                     , (.>=)
                                      , Boolean
                                      , Mergeable
                                      , Predicate
@@ -34,7 +29,7 @@ import           Data.SBV            ( (&&&)
                                      , uninterpret
                                      , ite
                                      , fromBool)
-import           Prelude    hiding   (lookup)
+import           Prelude    hiding   (lookup,LT,EQ,GT)
 import           Data.Maybe          (fromMaybe)
 import           Data.Map            (fromList, lookup)
 import qualified Data.Set as Set     (toList)
@@ -52,25 +47,32 @@ instance Mergeable (VProp a) where
     | Just result <- unliteral b = if result then thn else els
   symbolicMerge _ _ _ _ = undefined -- quite -WALL
 
-instance Eq a => EqSymbolic (VProp a) where
-  (.==) l r | l == r = true
-            | otherwise = false
+-- instance Eq a => EqSymbolic (VProp a) where
+--   (.==) l r | l == r = true
+--             | otherwise = false
 
-instance Ord a => OrdSymbolic (VProp a) where
-  (.<) l r | l < r = true
-           | otherwise = false
+-- instance Ord a => OrdSymbolic (VProp a) where
+--   (.<) l r | l < r = true
+--            | otherwise = false
 
 -- TODO fix this repetition
 -- | Evaluate a feature expression against a configuration.
-evalPropExpr :: DimBool -> VConfig a c -> VConfig a SBool -> VProp a -> SBool
-evalPropExpr _ i _ (LitB b)   =  literal b
-evalPropExpr _ i c (RefB f)   = c f
+evalPropExpr :: DimBool -> VConfig a SDouble -> VConfig a SBool -> VProp a -> SBool
+evalPropExpr _ _ _ (LitB b)   =  literal b
+evalPropExpr _ _ c (RefB f)   = c f
 evalPropExpr d i c (OpB Not e)   = bnot (evalPropExpr d i c e)
 evalPropExpr d i c (Opn And ps)  = foldr1 (&&&) $ evalPropExpr d i c <$> ps
 evalPropExpr d i c (Opn Or ps)   = foldr1 (|||) $ evalPropExpr d i c <$> ps
 evalPropExpr d i c (OpBB Impl l r)   = evalPropExpr d i c l ==> evalPropExpr d i c r
 evalPropExpr d i c (OpBB BiImpl l r) = evalPropExpr d i c l <=> evalPropExpr d i c r
-evalPropExpr d i c a@(OpIB d' l r) = undefined
+evalPropExpr d i c (OpBB XOr l r) = evalPropExpr d i c l <+> evalPropExpr d i c r
+evalPropExpr d i _ (OpIB op l r) = (handler op) (evalPropExpr' d i l) (evalPropExpr' d i r)
+  where handler LT  = (.<)
+        handler LTE = (.<=)
+        handler GT  = (.>)
+        handler GTE = (.>=)
+        handler EQ  = (.==)
+        handler NEQ = (./=)
 evalPropExpr d i c (ChcB dim l r)
   = ite (d dim) (evalPropExpr d i c l) (evalPropExpr d i c r)
 
@@ -86,6 +88,8 @@ evalPropExpr' d i (OpII Sub l r)  = evalPropExpr' d i l -  evalPropExpr' d i r
 evalPropExpr' d i (OpII Mult l r) = evalPropExpr' d i l *  evalPropExpr' d i r
 evalPropExpr' d i (OpII Div l r)  = evalPropExpr' d i l ./ evalPropExpr' d i r
 evalPropExpr' d i (OpII Mod l r)  = evalPropExpr' d i l .% evalPropExpr' d i r
+evalPropExpr' d i (ChcI dim l r)
+  = ite (d dim) (evalPropExpr' d i l) (evalPropExpr' d i r)
 
 
 
