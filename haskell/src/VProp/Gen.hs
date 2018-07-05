@@ -13,6 +13,7 @@ import           Test.QuickCheck     (oneof, arbitrarySizedIntegral,  Arbitrary
                                      , resize)
 import           Data.Char           (toUpper)
 import Prelude hiding (LT,EQ,GT)
+import qualified Control.Arrow as A ((&&&))
 
 import VProp.Types
 import VProp.Core (maxShared)
@@ -116,11 +117,11 @@ arbVIExpr gd gv ifreqs n = frequency $ zip ifreqs [ LitI <$> genPrim
   where l = arbVIExpr gd gv ifreqs (n `div` 2)
 
 -- | Generate a random prop term with no sharing among dimensions
-vPropNoShare :: ([Int], [Int]) -> Gen (VProp Var Var)
-vPropNoShare = sized . arbVProp genDim genVar
+vPropNoShare :: [Int] -> Gen (VProp Var Var)
+vPropNoShare = sized . arbVProp genDim genVar . (id A.&&& id)
 
-vPropShare :: ([Int], [Int]) -> Gen (VProp Var Var)
-vPropShare = sized . arbVProp genSharedDim genSharedVar
+vPropShare :: [Int] -> Gen (VProp Var Var)
+vPropShare = sized . arbVProp genSharedDim genSharedVar . (id A.&&& id)
 
 -- | Generate a random prop according to its arbritrary type class instance,
 -- this has a strong likelihood of sharing
@@ -130,8 +131,10 @@ genVProp = generate arbitrary
 
 -- vPropChoicesOverRefs = sized $ flip arbProp
 
-genVPropAtSize :: (Arbitrary a, Arbitrary b) => Int -> Gen (VProp a b) -> Gen (VProp a b)
+genVPropAtSize :: (Arbitrary a, Arbitrary b) =>
+  Int -> Gen (VProp a b) -> Gen (VProp a b)
 genVPropAtSize = resize
 
-genVPropAtShare :: (Arbitrary a, Arbitrary b) => Int -> Gen (VProp a b) -> Gen (VProp a b)
+genVPropAtShare :: (Arbitrary a, Arbitrary b) =>
+  Int -> Gen (VProp a b) -> Gen (VProp a b)
 genVPropAtShare n = flip suchThat $ (==n) . maxShared
