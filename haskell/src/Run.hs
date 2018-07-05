@@ -144,7 +144,7 @@ work prop = do
     runBruteForce prop >>= return . L
     else do
     opts <- asks optimizations
-    (result,_) <- lift . S.runSMT . incrementalSolve $ St.evalStateT (propToSBool prop) (M.empty, M.empty)
+    (result,_) <- lift . S.runSMT . vSolve $ St.evalStateT (propToSBool prop) (M.empty, M.empty)
     return $ Vr result
 
 -- | wrapper around map to keep track of the variable references we've seen, a,
@@ -171,10 +171,13 @@ type IncSolve a = St.StateT IncState SC.Query a
 -- SBV. When we hit a choice we manipulate the assertion stack to maximize reuse
 -- of non-variational terms and then cons the resultant model for each branch of
 -- the choice onto the result list.
-incrementalSolve :: S.Symbolic (VProp S.SBool S.SDouble) -> S.Symbolic IncState
-incrementalSolve prop = do prop' <- prop
-                           SC.query $
-                             St.execStateT (incrementalSolve_ prop') ([], M.empty)
+vSolve :: S.Symbolic (VProp S.SBool S.SDouble) -> S.Symbolic IncState
+vSolve prop = do prop' <- prop
+                 SC.query $ St.execStateT (vSolve_ prop') ([], M.empty)
+
+vSMTSolve :: S.Symbolic (VProp S.SBool S.SDouble) -> S.Symbolic IncState
+vSMTSolve prop = do prop' <- prop
+                    SC.query $ St.execStateT (vSMTSolve_ prop') ([], M.empty)
 
 -- | This ensures two things: 1st we need all variables to be symbolic before
 -- starting query mode. 2nd we cannot allow any duplicates to be called on a
@@ -216,58 +219,58 @@ instance (Monad m, I.SolverContext m) =>
   setOption = lift . S.setOption
 
 -- | A helper function for folding over the n-ary special cases
-incHelper :: S.SBool -> [VProp S.SBool S.SDouble] ->
+solveHelper :: S.SBool -> [VProp S.SBool S.SDouble] ->
   (S.SBool -> S.SBool -> S.SBool) -> IncSolve S.SBool
-incHelper acc ![]     _ = {-# SCC "incHelper" #-} return acc
-incHelper acc !(x:xs) f = {-# SCC "incHelper" #-} do b <- incrementalSolve_ x; incHelper (b `f` acc) xs f
+solveHelper acc ![]     _ = return acc
+solveHelper acc !(x:xs) f = do b <- vSMTSolve_ x; solveHelper (b `f` acc) xs f
 
 -- | The main solver algorithm. You can think of this as the sem function for
 -- the dsl
-incrementalSolve_ :: VProp S.SBool S.SDouble -> IncSolve S.SBool
-incrementalSolve_ (RefB b) = return b
-incrementalSolve_ (LitB b) = return $ S.literal b
-incrementalSolve_ (OpB Not bs)= do b <- incrementalSolve_ (S.bnot bs)
-                                   S.constrain b
-                                   return b
-incrementalSolve_ (OpBB op l r) = do bl <- incrementalSolve_ l
-                                     br <- incrementalSolve_ r
-                                     let op' = handler op
-                                     S.constrain $ bl `op'` br
-                                     return $ bl `op'` br
+vSMTSolve_ :: VProp S.SBool S.SDouble -> IncSolve S.SBool
+vSMTSolve_ (RefB b) = return b
+vSMTSolve_ (LitB b) = return $ S.literal b
+vSMTSolve_ (OpB Not bs)= do b <- vSMTSolve_ (S.bnot bs)
+                            S.constrain b
+                            return b
+vSMTSolve_ (OpBB op l r) = do bl <- vSMTSolve_ l
+                              br <- vSMTSolve_ r
+                              let op' = handler op
+                              S.constrain $ bl `op'` br
+                              return $ bl `op'` br
   where handler Impl   = (==>)
         handler BiImpl = (<=>)
         handler XOr    = (<+>)
-incrementalSolve_ (OpIB op l r) = do bl <- incrementalSolve'_ l
-                                     br <- incrementalSolve'_ r
-                                     let op' = handler op
-                                     S.constrain $ bl `op'` br
-                                     return $ bl `op'` br
+vSMTSolve_ (OpIB op l r) = do bl <- vSMTSolve'_ l
+                              br <- vSMTSolve'_ r
+                              let op' = handler op
+                              S.constrain $ bl `op'` br
+                              return $ bl `op'` br
   where handler LT  = (.<)
         handler LTE = (.<=)
         handler GTE = (.>=)
         handler GT  = (.>)
         handler EQ  = (.==)
         handler NEQ = (./=)
-incrementalSolve_ (Opn And ps) = do b <- incHelper S.true ps (S.&&&)
-                                    S.constrain b
-                                    return b
-incrementalSolve_ (Opn Or ps) = do b <- incHelper S.true ps (S.|||)
-                                   S.constrain b
-                                   return b
-incrementalSolve_ (ChcB d l r) = {-# SCC "Choice_Solve"#-}
+vSMTSolve_ (Opn And ps) = do b <- solveHelper S.true ps (S.&&&)
+                             S.constrain b
+                             return b
+vSMTSolve_ (Opn Or ps) = do b <- solveHelper S.true ps (S.|||)
+                            S.constrain b
+                            return b
+vSMTSolve_ (ChcB d l r) = {-# SCC "Choice_Solve"#-}
   do (_, used) <- get
      case M.lookup d used of
-       Just True  -> incrementalSolve_ l
-       Just False -> incrementalSolve_ r
+       Just True  -> vSMTSolve_ l
+       Just False -> vSMTSolve_ r
        Nothing    -> do St.modify . second $ M.insert d True
                         lift $ SC.push 1
-                        _ <- incrementalSolve_ l
+                        _ <- vSMTSolve_ l
                         lmodel <- lift $ getModel
                         lift $ SC.pop 1
 
                         St.modify . second $ M.adjust (const False) d
                         lift $ SC.push 1
-                        b <- incrementalSolve_ r
+                        b <- vSMTSolve_ r
                         rmodel <- lift $ getModel
                         lift $ SC.pop 1
 
@@ -277,37 +280,82 @@ incrementalSolve_ (ChcB d l r) = {-# SCC "Choice_Solve"#-}
                         return b
 
 -- | The incremental solve algorithm just for VIExprs
-incrementalSolve'_ :: VIExpr S.SDouble -> IncSolve S.SDouble
-incrementalSolve'_ (RefI i) = return i
-incrementalSolve'_ (LitI (I i)) = return . S.literal . fromIntegral $ i
-incrementalSolve'_ (LitI (D d)) = return . S.literal $ d
-incrementalSolve'_ (OpI op e) = do e' <- incrementalSolve'_ e
-                                   return $ (handler op) e'
+vSMTSolve'_ :: VIExpr S.SDouble -> IncSolve S.SDouble
+vSMTSolve'_ (RefI i) = return i
+vSMTSolve'_ (LitI (I i)) = return . S.literal . fromIntegral $ i
+vSMTSolve'_ (LitI (D d)) = return . S.literal $ d
+vSMTSolve'_ (OpI op e) = do e' <- vSMTSolve'_ e
+                            return $ (handler op) e'
   where handler Neg  = negate
         handler Abs  = abs
         handler Sign = signum
-incrementalSolve'_ (OpII op l r) = do l' <- incrementalSolve'_ l
-                                      r' <- incrementalSolve'_ r
-                                      return $ handler op l' r'
+vSMTSolve'_ (OpII op l r) = do l' <- vSMTSolve'_ l
+                               r' <- vSMTSolve'_ r
+                               return $ handler op l' r'
   where handler Add  = (+)
         handler Sub  = (-)
         handler Mult = (*)
         handler Div  = (./)
         handler Mod  = (.%)
-incrementalSolve'_ (ChcI d l r) =
+vSMTSolve'_ (ChcI d l r) =
   do (_, used) <- get
      case M.lookup d used of
-       Just True  -> incrementalSolve'_ l
-       Just False -> incrementalSolve'_ r
+       Just True  -> vSMTSolve'_ l
+       Just False -> vSMTSolve'_ r
        Nothing    -> do St.modify . second $ M.insert d True
                         lift $ SC.push 1
-                        _ <- incrementalSolve'_ l
+                        _ <- vSMTSolve'_ l
                         lmodel <- lift $ getModel
                         lift $ SC.pop 1
 
                         St.modify . second $ M.adjust (const False) d
                         lift $ SC.push 1
-                        b <- incrementalSolve'_ r
+                        b <- vSMTSolve'_ r
+                        rmodel <- lift $ getModel
+                        lift $ SC.pop 1
+
+                        St.modify . first $ ((:) (VChc d lmodel rmodel))
+
+                        St.modify . second $ M.delete d
+                        return b
+
+-- | The main solver algorithm. You can think of this as the sem function for
+-- the dsl
+vSolve_ :: VProp S.SBool S.SDouble -> IncSolve S.SBool
+vSolve_ (RefB b) = return b
+vSolve_ (LitB b) = return $ S.literal b
+vSolve_ (OpB Not bs)= do b <- vSolve_ (S.bnot bs)
+                         S.constrain b
+                         return b
+vSolve_ (OpBB op l r) = do bl <- vSolve_ l
+                           br <- vSolve_ r
+                           let op' = handler op
+                           S.constrain $ bl `op'` br
+                           return $ bl `op'` br
+  where handler Impl   = (==>)
+        handler BiImpl = (<=>)
+        handler XOr    = (<+>)
+vSolve_ (OpIB op l r) = error "You called the SAT Solver with SMT Exprs! Launching the missiles like you asked!"
+vSolve_ (Opn And ps) = do b <- solveHelper S.true ps (S.&&&)
+                          S.constrain b
+                          return b
+vSolve_ (Opn Or ps) = do b <- solveHelper S.true ps (S.|||)
+                         S.constrain b
+                         return b
+vSolve_ (ChcB d l r) = {-# SCC "Choice_Solve"#-}
+  do (_, used) <- get
+     case M.lookup d used of
+       Just True  -> vSolve_ l
+       Just False -> vSolve_ r
+       Nothing    -> do St.modify . second $ M.insert d True
+                        lift $ SC.push 1
+                        _ <- vSolve_ l
+                        lmodel <- lift $ getModel
+                        lift $ SC.pop 1
+
+                        St.modify . second $ M.adjust (const False) d
+                        lift $ SC.push 1
+                        b <- vSolve_ r
                         rmodel <- lift $ getModel
                         lift $ SC.pop 1
 
