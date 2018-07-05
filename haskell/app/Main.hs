@@ -65,7 +65,8 @@ type RunMetric = (RunNum, TermSize)
 
 -- | Give a descriptor, run metrics, and a prop, generate the descriptor metrics
 -- for the prop and write them out to a csv
-writeDesc :: (Show a, Show b) => String -> RunMetric -> VProp a b -> FilePath -> IO ()
+writeDesc :: (Show a, Show b, Eq a, Eq b) =>
+  String -> RunMetric -> VProp a b -> FilePath -> IO ()
 writeDesc desc (rn, n) prop' descFile = do
   let descriptorsFs = [ numTerms
                       , numChc
