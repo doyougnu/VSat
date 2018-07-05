@@ -94,8 +94,10 @@ writeDesc desc (rn, n) prop' descFile = do
 -- | Given a file path, get the year, date and time of the run and prepend it to
 -- the filepath
 prependDate :: FilePath -> IO FilePath
-prependDate str = do (year, month, day) <- getCurrentTime >>= return . toGregorian . utctDay
-                     return $ mconcat [show year, "-", show month, "-", show day, "-", str]
+prependDate str = do (year, month, day) <- getCurrentTime >>=
+                                           return . toGregorian . utctDay
+                     return $ mconcat [show year, "-", show month
+                                      , "-", show day, "-", str]
 
 format :: FilePath -> FilePath -> IO FilePath
 format fp fldr = prependDate (fp ++ ".csv") >>= return . ((++) (fldr ++ "/"))
@@ -116,7 +118,7 @@ benchRandomSample descfp timefp metrics@(_, n) = do
           generate . genVPropAtShare n . vPropShare
   -- noShprop' <- generate (sequence $ repeat $ choose (0, 10)) >>=
   --              generate . genVPropAtSize n .  vPropNoShare
-  let prop = fmap show prop'
+  let prop = bimap show show prop'
       -- noShprop = fmap show noShprop'
 
   writeDesc "Shared" metrics prop descfp

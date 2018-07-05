@@ -66,7 +66,9 @@ _runEnv :: Env a r -> Opts a -> (SatDict a) -> IO (r, (SatDict a),  Log)
 _runEnv m opts st = runRWST m opts st
 
 -- TODO use configurate and load the config from a file
-runEnv :: Bool -> Bool -> Bool -> [VProp String String -> VProp String String] -> VProp String String -> IO (Result, (SatDict String), Log)
+runEnv :: Bool -> Bool -> Bool
+  -> [VProp String String -> VProp String String]
+  -> VProp String String -> IO (Result, (SatDict String), Log)
 runEnv !base !bAD !bOpt !opts !x = _runEnv
                                    (work x)
                                    (_setOpts base bAD bOpt opts)
