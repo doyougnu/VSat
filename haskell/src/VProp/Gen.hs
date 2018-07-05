@@ -20,12 +20,11 @@ import VProp.Core (maxShared)
 
 -- | A wrapper to represent readable strings
 newtype Readable = Re { readStr :: String }
+instance Show Readable where show = show . readStr
 
-instance Show Readable where
-  show = show . readStr
+instance Arbitrary Readable where arbitrary = Re <$> genAlphaNumStr
+instance Arbitrary Var where arbitrary = Var <$> genAlphaNumStr
 
-instance Arbitrary Readable where
-  arbitrary = Re <$> genAlphaNumStr
 
 -- | arbritrary instance for the generator monad
 instance Arbitrary a => Arbitrary (VProp a a) where
@@ -125,7 +124,7 @@ vPropShare = sized . arbVProp genSharedDim genSharedVar . (id A.&&& id)
 
 -- | Generate a random prop according to its arbritrary type class instance,
 -- this has a strong likelihood of sharing
--- | generate with $ x <- genVProp :: (IO (VProp Readable))
+-- | generate with $ x <- genVProp :: (IO (VProp Var Var))
 genVProp :: (Arbitrary a) => IO (VProp a a)
 genVProp = generate arbitrary
 

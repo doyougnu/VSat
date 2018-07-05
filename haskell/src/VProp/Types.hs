@@ -53,7 +53,7 @@ import           Prelude  hiding     (LT, GT, EQ, lookup)
 
 -- | A feature is a named, boolean configuration option.
 newtype Var = Var { varName :: String }
-  deriving (Data,Eq,IsString,Ord,Typeable,Generic,NFData,Arbitrary)
+  deriving (Data,Eq,IsString,Ord,Typeable,Generic,NFData)
 
 newtype Dim = Dim { dimName :: String }
   deriving (Data,Eq,IsString,Ord,Show,Typeable,Generic,NFData,Arbitrary)
