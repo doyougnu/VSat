@@ -160,22 +160,25 @@ type UsedDims a = M.Map a Bool
 
 -- | the internal state for the incremental solve algorithm, it holds a result
 -- list, and the used dims map
-type IncState = ([V Dim (Maybe I.SMTModel)], UsedDims Dim)
+type IncState a = ([V Dim (Maybe a)], UsedDims Dim)
 
 -- | the incremental solve monad, with the base monad being the query monad so
--- we can pull out sbv modals
-type IncSolve a = St.StateT IncState SC.Query a
+-- we can pull out sbv models Hardcoding so that I don't have to write the mtl
+-- typeclass. I do not expect these to change much
+type IncVSolve a    = St.StateT (IncState I.SMTModel)  SC.Query a
+type IncVSMTSolve a = St.StateT (IncState I.SMTResult) SC.Query a
 
 -- | Given a VProp with references at the boolean level as SBools, and at the
 -- number level as SDoubles, recur through the proposition loading terms into
 -- SBV. When we hit a choice we manipulate the assertion stack to maximize reuse
 -- of non-variational terms and then cons the resultant model for each branch of
 -- the choice onto the result list.
-vSolve :: S.Symbolic (VProp S.SBool S.SDouble) -> S.Symbolic IncState
+vSolve :: S.Symbolic (VProp S.SBool S.SDouble) -> S.Symbolic (IncState I.SMTModel)
 vSolve prop = do prop' <- prop
                  SC.query $ St.execStateT (vSolve_ prop') ([], M.empty)
 
-vSMTSolve :: S.Symbolic (VProp S.SBool S.SDouble) -> S.Symbolic IncState
+-- | Solve a VSMT proposition
+vSMTSolve :: S.Symbolic (VProp S.SBool S.SDouble) -> S.Symbolic (IncState I.SMTResult)
 vSMTSolve prop = do prop' <- prop
                     SC.query $ St.execStateT (vSMTSolve_ prop') ([], M.empty)
 
@@ -204,29 +207,37 @@ smtDouble str = do (_,st) <- get
                      Just x  -> return x
 
 -- | get a model out given an S.SBool
-getModel :: SC.Query (V Dim (Maybe I.SMTModel))
-getModel = do cs <- SC.checkSat
-              case cs of
-                SC.Unk   -> error "Unknown!"
-                SC.Unsat -> return (Plain Nothing)
-                SC.Sat   -> (Plain . Just) <$> SC.getModel
+-- getModel :: SC.Query (V Dim (Maybe I.SMTModel))
+getModel_ f = do cs <- SC.checkSat
+                 case cs of
+                   SC.Unk   -> error "Unknown!"
+                   SC.Unsat -> return (Plain Nothing)
+                   SC.Sat   -> (Plain . Just) <$> f
+
+getVModel = getModel_ SC.getModel
+getVSMTModel = getModel_ SC.getSMTResult
 
 -- | type class needed to avoid lifting for constraints in the IncSolve monad
 instance (Monad m, I.SolverContext m) =>
-  I.SolverContext (StateT IncState m) where
+  I.SolverContext (StateT (IncState a) m) where
   constrain = lift . S.constrain
   namedConstraint = (lift .) . S.namedConstraint
   setOption = lift . S.setOption
 
--- | A helper function for folding over the n-ary special cases
-solveHelper :: S.SBool -> [VProp S.SBool S.SDouble] ->
-  (S.SBool -> S.SBool -> S.SBool) -> IncSolve S.SBool
-solveHelper acc ![]     _ = return acc
-solveHelper acc !(x:xs) f = do b <- vSMTSolve_ x; solveHelper (b `f` acc) xs f
+-- | Helper functoins for the n-ary cases
+vSolveHelper :: S.SBool -> [VProp S.SBool S.SDouble] ->
+  (S.SBool -> S.SBool -> S.SBool) -> IncVSolve S.SBool
+vSolveHelper acc ![]     _ = return acc
+vSolveHelper acc !(x:xs) f = do b <- vSolve_ x; vSolveHelper (b `f` acc) xs f
+
+vSMTSolveHelper :: S.SBool -> [VProp S.SBool S.SDouble] ->
+  (S.SBool -> S.SBool -> S.SBool) -> IncVSMTSolve S.SBool
+vSMTSolveHelper acc ![]     _ = return acc
+vSMTSolveHelper acc !(x:xs) f = do b <- vSMTSolve_ x; vSMTSolveHelper (b `f` acc) xs f
 
 -- | The main solver algorithm. You can think of this as the sem function for
 -- the dsl
-vSMTSolve_ :: VProp S.SBool S.SDouble -> IncSolve S.SBool
+vSMTSolve_ :: VProp S.SBool S.SDouble -> IncVSMTSolve S.SBool
 vSMTSolve_ (RefB b) = return b
 vSMTSolve_ (LitB b) = return $ S.literal b
 vSMTSolve_ (OpB Not bs)= do b <- vSMTSolve_ (S.bnot bs)
@@ -251,10 +262,10 @@ vSMTSolve_ (OpIB op l r) = do bl <- vSMTSolve'_ l
         handler GT  = (.>)
         handler EQ  = (.==)
         handler NEQ = (./=)
-vSMTSolve_ (Opn And ps) = do b <- solveHelper S.true ps (S.&&&)
+vSMTSolve_ (Opn And ps) = do b <- vSMTSolveHelper S.true ps (S.&&&)
                              S.constrain b
                              return b
-vSMTSolve_ (Opn Or ps) = do b <- solveHelper S.true ps (S.|||)
+vSMTSolve_ (Opn Or ps) = do b <- vSMTSolveHelper S.true ps (S.|||)
                             S.constrain b
                             return b
 vSMTSolve_ (ChcB d l r) = {-# SCC "Choice_Solve"#-}
@@ -265,13 +276,13 @@ vSMTSolve_ (ChcB d l r) = {-# SCC "Choice_Solve"#-}
        Nothing    -> do St.modify . second $ M.insert d True
                         lift $ SC.push 1
                         _ <- vSMTSolve_ l
-                        lmodel <- lift $ getModel
+                        lmodel <- lift $ getVSMTModel
                         lift $ SC.pop 1
 
                         St.modify . second $ M.adjust (const False) d
                         lift $ SC.push 1
                         b <- vSMTSolve_ r
-                        rmodel <- lift $ getModel
+                        rmodel <- lift $ getVSMTModel
                         lift $ SC.pop 1
 
                         St.modify . first $ ((:) (VChc d lmodel rmodel))
@@ -280,7 +291,7 @@ vSMTSolve_ (ChcB d l r) = {-# SCC "Choice_Solve"#-}
                         return b
 
 -- | The incremental solve algorithm just for VIExprs
-vSMTSolve'_ :: VIExpr S.SDouble -> IncSolve S.SDouble
+vSMTSolve'_ :: VIExpr S.SDouble -> IncVSMTSolve S.SDouble
 vSMTSolve'_ (RefI i) = return i
 vSMTSolve'_ (LitI (I i)) = return . S.literal . fromIntegral $ i
 vSMTSolve'_ (LitI (D d)) = return . S.literal $ d
@@ -305,13 +316,13 @@ vSMTSolve'_ (ChcI d l r) =
        Nothing    -> do St.modify . second $ M.insert d True
                         lift $ SC.push 1
                         _ <- vSMTSolve'_ l
-                        lmodel <- lift $ getModel
+                        lmodel <- lift $ getVSMTModel
                         lift $ SC.pop 1
 
                         St.modify . second $ M.adjust (const False) d
                         lift $ SC.push 1
                         b <- vSMTSolve'_ r
-                        rmodel <- lift $ getModel
+                        rmodel <- lift $ getVSMTModel
                         lift $ SC.pop 1
 
                         St.modify . first $ ((:) (VChc d lmodel rmodel))
@@ -321,7 +332,7 @@ vSMTSolve'_ (ChcI d l r) =
 
 -- | The main solver algorithm. You can think of this as the sem function for
 -- the dsl
-vSolve_ :: VProp S.SBool S.SDouble -> IncSolve S.SBool
+vSolve_ :: VProp S.SBool S.SDouble -> IncVSolve S.SBool
 vSolve_ (RefB b) = return b
 vSolve_ (LitB b) = return $ S.literal b
 vSolve_ (OpB Not bs)= do b <- vSolve_ (S.bnot bs)
@@ -335,14 +346,14 @@ vSolve_ (OpBB op l r) = do bl <- vSolve_ l
   where handler Impl   = (==>)
         handler BiImpl = (<=>)
         handler XOr    = (<+>)
-vSolve_ (OpIB op l r) = error "You called the SAT Solver with SMT Exprs! Launching the missiles like you asked!"
-vSolve_ (Opn And ps) = do b <- solveHelper S.true ps (S.&&&)
+vSolve_ (OpIB _ _ _) = error "You called the SAT Solver with SMT Exprs! Launching the missiles like you asked!"
+vSolve_ (Opn And ps) = do b <- vSolveHelper S.true ps (S.&&&)
                           S.constrain b
                           return b
-vSolve_ (Opn Or ps) = do b <- solveHelper S.true ps (S.|||)
+vSolve_ (Opn Or ps) = do b <- vSolveHelper S.true ps (S.|||)
                          S.constrain b
                          return b
-vSolve_ (ChcB d l r) = {-# SCC "Choice_Solve"#-}
+vSolve_ (ChcB d l r) =
   do (_, used) <- get
      case M.lookup d used of
        Just True  -> vSolve_ l
@@ -350,13 +361,13 @@ vSolve_ (ChcB d l r) = {-# SCC "Choice_Solve"#-}
        Nothing    -> do St.modify . second $ M.insert d True
                         lift $ SC.push 1
                         _ <- vSolve_ l
-                        lmodel <- lift $ getModel
+                        lmodel <- lift $ getVModel
                         lift $ SC.pop 1
 
                         St.modify . second $ M.adjust (const False) d
                         lift $ SC.push 1
                         b <- vSolve_ r
-                        rmodel <- lift $ getModel
+                        rmodel <- lift $ getVModel
                         lift $ SC.pop 1
 
                         St.modify . first $ ((:) (VChc d lmodel rmodel))
