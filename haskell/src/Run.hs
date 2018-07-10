@@ -150,7 +150,19 @@ data Result = R (Maybe I.SMTModel)
             | L [S.SatResult]
             | Vsolve [V Dim (Maybe I.SMTModel)]
             | Vsmt   [V Dim (Maybe I.SMTResult)]
-            deriving (Generic)
+            deriving (Generic, Show)
+
+instance Show I.SMTResult where
+  show (I.Unsatisfiable _) = "Unsatisfiable"
+  show (I.Satisfiable _ model) = "Satisfiable with model: \n" <> show model
+  show (I.SatExtField _ model) =
+    "Satisfiable, but only with an extension field containing inf/epsilon\n"
+    <> show model
+  show (I.Unknown _ str) = "Something unknown happened, check for missiles: \n"
+                           <> str
+  show (I.ProofError _ strs) = mconcat $
+                               ["The prover errored out with messages: ", "\n"]
+                               ++ strs
 
 instance NFData Result
 
@@ -241,6 +253,7 @@ getModel_ f = do cs <- SC.checkSat
 
 getVModel :: SC.Query (V d (Maybe I.SMTModel))
 getVModel = getModel_ SC.getModel
+
 getVSMTModel :: SC.Query (V d (Maybe S.SMTResult))
 getVSMTModel = getModel_ SC.getSMTResult
 
@@ -265,37 +278,37 @@ vSMTSolveHelper acc !(x:xs) f = do b <- vSMTSolve_ x; vSMTSolveHelper (b `f` acc
 -- | The main solver algorithm. You can think of this as the sem function for
 -- the dsl
 vSMTSolve_ :: VProp S.SBool S.SDouble -> IncVSMTSolve S.SBool
-vSMTSolve_ (RefB b) = return b
-vSMTSolve_ (LitB b) = return $ S.literal b
-vSMTSolve_ (OpB Not bs)= do b <- vSMTSolve_ (S.bnot bs)
-                            S.constrain b
-                            return b
-vSMTSolve_ (OpBB op l r) = do bl <- vSMTSolve_ l
-                              br <- vSMTSolve_ r
-                              let op' = handler op
-                              S.constrain $ bl `op'` br
-                              return $ bl `op'` br
+vSMTSolve_ !(RefB b) = return b
+vSMTSolve_ !(LitB b) = return $ S.literal b
+vSMTSolve_ !(OpB Not bs)= do b <- vSMTSolve_ (S.bnot bs)
+                             S.constrain b
+                             return b
+vSMTSolve_ !(OpBB op l r) = do bl <- vSMTSolve_ l
+                               br <- vSMTSolve_ r
+                               let op' = handler op
+                               S.constrain $ bl `op'` br
+                               return $ bl `op'` br
   where handler Impl   = (==>)
         handler BiImpl = (<=>)
         handler XOr    = (<+>)
-vSMTSolve_ (OpIB op l r) = do bl <- vSMTSolve'_ l
-                              br <- vSMTSolve'_ r
-                              let op' = handler op
-                              S.constrain $ bl `op'` br
-                              return $ bl `op'` br
+vSMTSolve_ !(OpIB op l r) = do bl <- vSMTSolve'_ l
+                               br <- vSMTSolve'_ r
+                               let op' = handler op
+                               S.constrain $ bl `op'` br
+                               return $ bl `op'` br
   where handler LT  = (.<)
         handler LTE = (.<=)
         handler GTE = (.>=)
         handler GT  = (.>)
         handler EQ  = (.==)
         handler NEQ = (./=)
-vSMTSolve_ (Opn And ps) = do b <- vSMTSolveHelper S.true ps (S.&&&)
+vSMTSolve_ !(Opn And ps) = do b <- vSMTSolveHelper S.true ps (S.&&&)
+                              S.constrain b
+                              return b
+vSMTSolve_ !(Opn Or ps) = do b <- vSMTSolveHelper S.true ps (S.|||)
                              S.constrain b
                              return b
-vSMTSolve_ (Opn Or ps) = do b <- vSMTSolveHelper S.true ps (S.|||)
-                            S.constrain b
-                            return b
-vSMTSolve_ (ChcB d l r) = {-# SCC "Choice_Solve"#-}
+vSMTSolve_ !(ChcB d l r) =
   do (_, used) <- get
      case M.lookup d used of
        Just True  -> vSMTSolve_ l
@@ -319,23 +332,23 @@ vSMTSolve_ (ChcB d l r) = {-# SCC "Choice_Solve"#-}
 
 -- | The incremental solve algorithm just for VIExprs
 vSMTSolve'_ :: VIExpr S.SDouble -> IncVSMTSolve S.SDouble
-vSMTSolve'_ (RefI i) = return i
-vSMTSolve'_ (LitI (I i)) = return . S.literal . fromIntegral $ i
-vSMTSolve'_ (LitI (D d)) = return . S.literal $ d
-vSMTSolve'_ (OpI op e) = do e' <- vSMTSolve'_ e
-                            return $ (handler op) e'
+vSMTSolve'_ !(RefI i) = return i
+vSMTSolve'_ !(LitI (I i)) = return . S.literal . fromIntegral $ i
+vSMTSolve'_ !(LitI (D d)) = return . S.literal $ d
+vSMTSolve'_ !(OpI op e) = do e' <- vSMTSolve'_ e
+                             return $ (handler op) e'
   where handler Neg  = negate
         handler Abs  = abs
         handler Sign = signum
-vSMTSolve'_ (OpII op l r) = do l' <- vSMTSolve'_ l
-                               r' <- vSMTSolve'_ r
-                               return $ handler op l' r'
+vSMTSolve'_ !(OpII op l r) = do l' <- vSMTSolve'_ l
+                                r' <- vSMTSolve'_ r
+                                return $ handler op l' r'
   where handler Add  = (+)
         handler Sub  = (-)
         handler Mult = (*)
         handler Div  = (./)
         handler Mod  = (.%)
-vSMTSolve'_ (ChcI d l r) =
+vSMTSolve'_ !(ChcI d l r) =
   do (_, used) <- get
      case M.lookup d used of
        Just True  -> vSMTSolve'_ l
@@ -360,27 +373,27 @@ vSMTSolve'_ (ChcI d l r) =
 -- | The main solver algorithm. You can think of this as the sem function for
 -- the dsl
 vSolve_ :: VProp S.SBool S.SDouble -> IncVSolve S.SBool
-vSolve_ (RefB b) = return b
-vSolve_ (LitB b) = return $ S.literal b
-vSolve_ (OpB Not bs)= do b <- vSolve_ (S.bnot bs)
-                         S.constrain b
-                         return b
-vSolve_ (OpBB op l r) = do bl <- vSolve_ l
-                           br <- vSolve_ r
-                           let op' = handler op
-                           S.constrain $ bl `op'` br
-                           return $ bl `op'` br
+vSolve_ !(RefB b) = return b
+vSolve_ !(LitB b) = return $ S.literal b
+vSolve_ !(OpB Not bs)= do b <- vSolve_ (S.bnot bs)
+                          S.constrain b
+                          return b
+vSolve_ !(OpBB op l r) = do bl <- vSolve_ l
+                            br <- vSolve_ r
+                            let op' = handler op
+                            S.constrain $ bl `op'` br
+                            return $ bl `op'` br
   where handler Impl   = (==>)
         handler BiImpl = (<=>)
         handler XOr    = (<+>)
-vSolve_ (OpIB _ _ _) = error "You called the SAT Solver with SMT Exprs! Launching the missiles like you asked!"
-vSolve_ (Opn And ps) = do b <- vSolveHelper S.true ps (S.&&&)
+vSolve_ !(OpIB _ _ _) = error "You called the SAT Solver with SMT Exprs! Launching the missiles like you asked!"
+vSolve_ !(Opn And ps) = do b <- vSolveHelper S.true ps (S.&&&)
+                           S.constrain b
+                           return b
+vSolve_ !(Opn Or ps) = do b <- vSolveHelper S.true ps (S.|||)
                           S.constrain b
                           return b
-vSolve_ (Opn Or ps) = do b <- vSolveHelper S.true ps (S.|||)
-                         S.constrain b
-                         return b
-vSolve_ (ChcB d l r) =
+vSolve_ !(ChcB d l r) =
   do (_, used) <- get
      case M.lookup d used of
        Just True  -> vSolve_ l
