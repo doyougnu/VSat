@@ -12,7 +12,7 @@ import VProp.Core
 import VProp.Types hiding (appendFile, writeFile)
 import VProp.Gen
 import Test.QuickCheck (generate, choose)
-import Control.DeepSeq (deepseq, NFData)
+import Control.DeepSeq (NFData)
 
 import System.CPUTime
 import System.Environment
@@ -130,11 +130,11 @@ benchRandomSample descfp timefp metrics@(_, n) = do
   -- time "Unique/BForce" metrics timefp $! runEnv True False False [] noShprop
 
   -- | run incremental solve
-  time "Shared/VSolve" metrics timefp $! runEnv False False False [] prop
+  time "Shared/VSolve" metrics timefp $! runVS [] prop
   -- time "Unique/VSolve" metrics timefp $! runEnv False False False [] noShprop
 
   -- | run and decomp
-  time "Shared/ChcDecomp" metrics timefp $! runEnv True True False [] prop
+  time "Shared/ChcDecomp" metrics timefp $! runAD [] prop
   -- time "Unique/ChcDecomp" metrics timefp $! runEnv True True False [] noShprop
 
 time :: NFData a => Text -> RunMetric -> FilePath -> IO a -> IO ()
