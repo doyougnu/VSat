@@ -1,9 +1,11 @@
-module Run ( runEnv
-           , Opts (..)
+module Run ( Opts (..)
            , Result (..)
            , SatDict
            , Log
-           -- , runEnvFirst
+           , runAD
+           , runBF
+           , runVS
+           , runVSMT
            ) where
 
 import qualified Data.Map.Strict as M
@@ -31,11 +33,8 @@ import V
 type SatDict a = (M.Map Config Bool, M.Map a Bool) -- keys may incur perf penalty
 
 -- | The optimizations that could be set
-data Opts a = Opts { runBaselines :: Bool              -- ^ Run baselines?
-                   , runAD :: Bool                     -- ^ run anddecomp baseline? else Brute Force
-                   , runOpts :: Bool                   -- ^ Run optimizations or not?
-                   , optimizations :: [VProp a a -> VProp a a] -- ^ a list of optimizations
-                   }
+newtype Opts a = Opts [VProp a a -> VProp a a] -- ^ a list of optimizations
+
 
 -- | Type convenience for Log
 type Log = String
@@ -44,35 +43,41 @@ type Log = String
 type Env a r = RWST (Opts a) Log (SatDict a) IO r -- ^ the monad stack
 
 -- | An empty reader monad environment, in the future read these from config file
-_emptyOpts :: (Opts a)
-_emptyOpts = Opts { runBaselines = False
-                  , runAD = False
-                  , runOpts = False
-                  , optimizations = []
-                  }
+_emptyOpts :: Opts a
+_emptyOpts = Opts []
 
-
-_setOpts :: Bool -> Bool -> Bool -> [VProp a a -> VProp a a] -> Opts a
-_setOpts base bAD bOpt opts = Opts { runBaselines = base
-                                   , runAD = bAD
-                                   , runOpts = bOpt
-                                   , optimizations = opts
-                                   }
-
-
+_emptySt :: SatDict a
+_emptySt = (,) M.empty M.empty
 
 -- | Run the RWS monad with defaults of empty state, reader
-_runEnv :: Env a r -> Opts a -> (SatDict a) -> IO (r, (SatDict a),  Log)
+_runEnv :: Env a r -> Opts a -> SatDict a -> IO (r, (SatDict a),  Log)
 _runEnv m opts st = runRWST m opts st
 
 -- TODO use configurate and load the config from a file
-runEnv :: Bool -> Bool -> Bool
-  -> [VProp String String -> VProp String String]
-  -> VProp String String -> IO (Result, (SatDict String), Log)
-runEnv !base !bAD !bOpt !opts !x = _runEnv
-                                   (work x)
-                                   (_setOpts base bAD bOpt opts)
-                                   (initSt x)
+runEnv :: (VProp String String-> Env String Result)
+       -> [VProp String String-> VProp String String]
+       -> VProp String String-> IO (Result , (SatDict String), Log)
+runEnv f !opts !x = _runEnv (f x) (Opts opts) (initSt x)
+
+runAD :: [VProp String String -> VProp String String]
+      -> VProp String String
+      -> IO (Result, SatDict String, Log)
+runAD = runEnv runAndDecomp
+
+runBF :: [VProp String String -> VProp String String]
+  -> VProp String String
+  -> IO (Result, SatDict String, Log)
+runBF = runEnv runBruteForce
+
+runVS :: [VProp String String -> VProp String String]
+  -> VProp String String
+  -> IO (Result, SatDict String, Log)
+runVS = runEnv runVSolve
+
+runVSMT :: [VProp String String -> VProp String String]
+  -> VProp String String
+  -> IO (Result, SatDict String, Log)
+runVSMT = runEnv runVSMTSolve
 
 -- runEnvFirst :: Bool -> Bool -> Bool -> [VProp String -> VProp String] -> VProp String -> IO (V Dim (Maybe I.SMTModel))
 -- runEnvFirst base bAD bOpt opts x = (head . unbox . fst') <$> _runEnv (work x) (_setOpts base bAD bOpt opts) (initSt x)
@@ -100,52 +105,71 @@ _logResult x = tell $ "Got result: " ++ show x
 -- | Run the brute force baseline case, that is select every plain variant and
 -- run them to the sat solver
 runBruteForce :: (Show a, Ord a) =>
-  (MonadTrans t, MonadState (SatDict a) (t IO)) => VProp a a -> t IO [S.SatResult]
-runBruteForce prop = {-# SCC "brute_force"#-} do
+  (MonadTrans t,
+   MonadState (SatDict a) (t IO)) => VProp a a -> t IO Result
+runBruteForce prop = lift $ flip evalStateT _emptySt $
+  do
   (_confs, _) <- get
   let confs = M.keys _confs
       plainProps = (\y -> sequence $! (y, selectVariant y prop)) <$> confs
   plainModels <- lift $ mapM (S.sat . symbolicPropExpr . snd) $! catMaybes plainProps
-  return plainModels
+  return $ L plainModels
 
 -- | Run the and decomposition baseline case, that is deconstruct every choice
 -- and then run the sat solver
-runAndDecomp :: VProp String String -> IO (Maybe I.SMTModel)
-runAndDecomp prop = {-# SCC "andDecomp" #-} S.runSMT $ do
-  p <- symbolicPropExpr $ (andDecomp prop dimName)
-  S.constrain p
-  SC.query $ do
-    c <- SC.checkSat
-    case c of
-      SC.Unk -> error "asdf"
-      SC.Unsat -> return Nothing
-      SC.Sat -> do model' <- SC.getModel
-                   return $ Just model'
+runAndDecomp :: (MonadTrans t, Monad (t IO)) => VProp String String -> t IO Result
+runAndDecomp prop = do
+  res <- lift . S.runSMT $ do
+    p <- symbolicPropExpr $ (andDecomp prop dimName)
+    S.constrain p
+    SC.query $ do
+      c <- SC.checkSat
+      case c of
+        SC.Unk -> error "asdf"
+        SC.Unsat -> return Nothing
+        SC.Sat -> do model' <- SC.getModel
+                     return $ Just model'
+  lift . return $ R res
+
+runVSolve :: (MonadReader (Opts String) (t IO), MonadTrans t) =>
+  VProp String String -> t IO Result
+runVSolve prop =
+  do opts <- ask
+     (result,_) <- lift . S.runSMT . vSolve $ St.evalStateT (propToSBool prop) (M.empty, M.empty)
+     lift . return . Vsolve $ result
+
+runVSMTSolve :: (MonadTrans t, MonadReader (Opts String) (t IO)) =>
+  VProp String String -> t IO Result
+runVSMTSolve prop =
+  do opts <- ask
+     (res,_) <- lift . S.runSMT . vSMTSolve $ St.evalStateT (propToSBool prop) (M.empty, M.empty)
+     lift . return $ Vsmt res
 
 -- | main workhorse for running the SAT solver
 data Result = R (Maybe I.SMTModel)
             | L [S.SatResult]
-            | Vr [V Dim (Maybe I.SMTModel)]
-            deriving (Generic, Show)
+            | Vsolve [V Dim (Maybe I.SMTModel)]
+            | Vsmt   [V Dim (Maybe I.SMTResult)]
+            deriving (Generic)
 
 instance NFData Result
 
-work :: ( MonadTrans t
-        , MonadState (SatDict String) (t IO)
-        , MonadReader (Opts String) (t IO)) => VProp String String -> t IO Result
-work prop = do
-  baselines <- asks runBaselines
-  bAD <- asks runAD
-  -- fix this antipattern later
-  if baselines
-    then if bAD
-         then lift $ runAndDecomp prop  >>= return . R
-         else do
-    runBruteForce prop >>= return . L
-    else do
-    opts <- asks optimizations
-    (result,_) <- lift . S.runSMT . vSolve $ St.evalStateT (propToSBool prop) (M.empty, M.empty)
-    return $ Vr result
+-- work :: ( MonadTrans t
+--         , MonadState (SatDict String) (t IO)
+--         , MonadReader (Opts String) (t IO)) => VProp String String -> t IO Result
+-- work prop = do
+--   baselines <- asks runBaselines
+--   bAD <- asks runAD
+--   -- fix this antipattern later
+--   if baselines
+--     then if bAD
+--          then lift $ runAndDecomp prop  >>= return . R
+--          else do
+--     runBruteForce prop >>= return . L
+--     else do
+--     opts <- asks optimizations
+--     (result,_) <- lift . S.runSMT . vSolve $ St.evalStateT (propToSBool prop) (M.empty, M.empty)
+--     return $ Vr result
 
 -- | wrapper around map to keep track of the variable references we've seen, a,
 -- and their symbolic type, b
@@ -208,13 +232,16 @@ smtDouble str = do (_,st) <- get
 
 -- | get a model out given an S.SBool
 -- getModel :: SC.Query (V Dim (Maybe I.SMTModel))
+getModel_ :: SC.Query a -> SC.Query (V d (Maybe a))
 getModel_ f = do cs <- SC.checkSat
                  case cs of
                    SC.Unk   -> error "Unknown!"
                    SC.Unsat -> return (Plain Nothing)
                    SC.Sat   -> (Plain . Just) <$> f
 
+getVModel :: SC.Query (V d (Maybe I.SMTModel))
 getVModel = getModel_ SC.getModel
+getVSMTModel :: SC.Query (V d (Maybe S.SMTResult))
 getVSMTModel = getModel_ SC.getSMTResult
 
 -- | type class needed to avoid lifting for constraints in the IncSolve monad
