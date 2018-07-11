@@ -12,6 +12,7 @@ module VProp.Types ( module Prelude
                    , NPrim(..)
                    , Opn(..)
                    , SNum(..)
+                   , RefN(..)
                    , (.<)
                    , (.<=)
                    , (.==)
