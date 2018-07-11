@@ -76,10 +76,10 @@ data VProp a b
    = LitB Bool
    | RefB a
    | OpB  B_B  !(VProp a b)
-   | OpBB BB_B !(VProp a b)  !(VProp a b)
-   | OpIB NN_B !(VIExpr b) !(VIExpr b)
+   | OpBB BB_B !(VProp a b) !(VProp a b)
+   | OpIB NN_B !(VIExpr b)  !(VIExpr b)
    | Opn  Opn  ![(VProp a b)]
-   | ChcB Dim  !(VProp a b)  !(VProp a b)
+   | ChcB Dim  !(VProp a b) !(VProp a b)
   deriving (Eq,Generic,Typeable,Functor,Traversable,Foldable,Ord)
 
 -- | Integer Expressions with Choices
