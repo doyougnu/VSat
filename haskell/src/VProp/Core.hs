@@ -84,6 +84,14 @@ isPlain' _            = True
 isChc :: VProp a b -> Bool
 isChc = not . isPlain
 
+onlyBools :: VProp a a -> Bool
+onlyBools (OpIB _ _ _ ) = False
+onlyBools (ChcB _ l r)  = onlyBools l && onlyBools r
+onlyBools (Opn _ xs)    = foldr (\x acc -> acc && onlyBools x) True xs
+onlyBools (OpBB _ l r)  = onlyBools l && onlyBools r
+onlyBools (OpB  _ e)    = onlyBools e
+onlyBools _             = True
+
 -- ----------------------------- Choice Manipulation ------------------------------
 -- -- | Wrapper around engine
 -- prune :: (VProp a) -> (VProp a)

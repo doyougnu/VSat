@@ -16,7 +16,7 @@ import Prelude hiding (LT,EQ,GT)
 import qualified Control.Arrow as A ((&&&))
 
 import VProp.Types
-import VProp.Core (maxShared)
+import VProp.Core (maxShared, onlyBools)
 
 -- | A wrapper to represent readable strings
 newtype Readable = Re { readStr :: String }
@@ -127,6 +127,10 @@ vPropShare = sized . arbVProp genSharedDim genSharedVar . (id A.&&& id)
 -- | generate with $ x <- genVProp :: (IO (VProp Var Var))
 genVProp :: (Arbitrary a) => IO (VProp a a)
 genVProp = generate arbitrary
+
+-- | run With $ x <- generate . genBoolProp $ vPropNoShare (repeat 30)
+genBoolProp :: (Arbitrary a) => Gen (VProp a a) -> Gen (VProp a a)
+genBoolProp = flip suchThat onlyBools
 
 -- vPropChoicesOverRefs = sized $ flip arbProp
 

@@ -166,23 +166,6 @@ instance Show I.SMTResult where
 
 instance NFData Result
 
--- work :: ( MonadTrans t
---         , MonadState (SatDict String) (t IO)
---         , MonadReader (Opts String) (t IO)) => VProp String String -> t IO Result
--- work prop = do
---   baselines <- asks runBaselines
---   bAD <- asks runAD
---   -- fix this antipattern later
---   if baselines
---     then if bAD
---          then lift $ runAndDecomp prop  >>= return . R
---          else do
---     runBruteForce prop >>= return . L
---     else do
---     opts <- asks optimizations
---     (result,_) <- lift . S.runSMT . vSolve $ St.evalStateT (propToSBool prop) (M.empty, M.empty)
---     return $ Vr result
-
 -- | wrapper around map to keep track of the variable references we've seen, a,
 -- and their symbolic type, b
 type UsedVars a b = M.Map a b
@@ -209,12 +192,14 @@ type IncVSMTSolve a = St.StateT (IncState I.SMTResult) SC.Query a
 -- SBV. When we hit a choice we manipulate the assertion stack to maximize reuse
 -- of non-variational terms and then cons the resultant model for each branch of
 -- the choice onto the result list.
-vSolve :: S.Symbolic (VProp S.SBool S.SDouble) -> S.Symbolic (IncState I.SMTModel)
+vSolve :: S.Symbolic (VProp S.SBool S.SDouble)
+       -> S.Symbolic (IncState I.SMTModel)
 vSolve prop = do prop' <- prop
                  SC.query $ St.execStateT (vSolve_ prop') ([], M.empty)
 
 -- | Solve a VSMT proposition
-vSMTSolve :: S.Symbolic (VProp S.SBool S.SDouble) -> S.Symbolic (IncState I.SMTResult)
+vSMTSolve :: S.Symbolic (VProp S.SBool S.SDouble)
+          -> S.Symbolic (IncState I.SMTResult)
 vSMTSolve prop = do prop' <- prop
                     SC.query $ St.execStateT (vSMTSolve_ prop') ([], M.empty)
 
