@@ -25,7 +25,7 @@ import           Data.SBV            ( (&&&)
                                      , literal
                                      , sBools
                                      , sInteger
-                                     , sDoubles
+                                     , sIntegers
                                      , uninterpret
                                      , ite
                                      , fromBool)
@@ -51,7 +51,7 @@ instance (Show a, Ord a) => SAT (VProp a a) where
 
 -- TODO fix this repetition
 -- | Evaluate a feature expression against a configuration.
-evalPropExpr :: DimBool -> VConfig a SDouble -> VConfig a SBool -> VProp a a -> SBool
+evalPropExpr :: DimBool -> VConfig a SInteger -> VConfig a SBool -> VProp a a -> SBool
 evalPropExpr _ _ _ (LitB b)   =  literal b
 evalPropExpr _ _ c (RefB f)   = c f
 evalPropExpr d i c (OpB Not e)   = bnot (evalPropExpr d i c e)
@@ -70,10 +70,12 @@ evalPropExpr d i _ (OpIB op l r) = (handler op) (evalPropExpr' d i l) (evalPropE
 evalPropExpr d i c (ChcB dim l r)
   = ite (d dim) (evalPropExpr d i c l) (evalPropExpr d i c r)
 
-evalPropExpr' :: DimBool -> VConfig a SDouble -> VIExpr a -> SDouble
-evalPropExpr' _ _ (LitI (I i)) =  literal $ fromIntegral i
-evalPropExpr' _ _ (LitI (D d)) =  literal d
-evalPropExpr' _ i (RefI f) = i f
+-- | Eval the numeric expressions, VIExpr, assume everything is an integer until
+-- absolutely necessary to coerce
+evalPropExpr' :: DimBool -> VConfig a SInteger -> VIExpr a -> SNum
+evalPropExpr' _ _ (LitI (I i)) =  SI . literal $ i
+evalPropExpr' _ _ (LitI (D d)) =  SD $ literal d
+evalPropExpr' _ i (Ref _ f) = SI $ i f
 evalPropExpr' d i (OpI Neg e) = negate $ evalPropExpr' d i e
 evalPropExpr' d i (OpI Abs e) = abs $ evalPropExpr' d i e
 evalPropExpr' d i (OpI Sign e) = signum $ evalPropExpr' d i e
@@ -85,8 +87,6 @@ evalPropExpr' d i (OpII Mod l r)  = evalPropExpr' d i l .% evalPropExpr' d i r
 evalPropExpr' d i (ChcI dim l r)
   = ite (d dim) (evalPropExpr' d i l) (evalPropExpr' d i r)
 
-
-
 -- | Generate a symbolic predicate for a feature expression.
 symbolicPropExpr :: (Show a, Ord a) => VProp a a -> Predicate
 symbolicPropExpr e = do
@@ -95,7 +95,7 @@ symbolicPropExpr e = do
         ds = Set.toList (dimensions e)
     syms  <- fmap (fromList . zip vs) (sBools (show <$> vs))
     dims  <- fmap (fromList . zip ds) (sBools (map dimName ds))
-    isyms <- fmap (fromList . zip is) (sDoubles (show <$> is))
+    isyms <- fmap (fromList . zip is) (sIntegers (show <$> is))
     let look f = fromMaybe err (lookup f syms)
         lookd d = fromMaybe errd (lookup d dims)
         looki i = fromMaybe erri (lookup i isyms)
