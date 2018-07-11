@@ -63,7 +63,7 @@ prettyPropExpr = top
     sub e       = "(" ++ top e ++ ")"
 
 xxx :: VProp String String
-xxx =  ref "A" &&& ((iRef "b") .< (5 + (iRef "c")))
+xxx =  true &&& ((iRef "b") .< (5 + (iRef "c")))
 
 -- yyy :: VProp String String
 yyy = (5 + (iRef "c"))

@@ -23,6 +23,8 @@ import Control.DeepSeq               (NFData)
 
 import Data.Maybe                    (catMaybes)
 
+import Debug.Trace (trace)
+
 import VProp.Types
 import VProp.SBV
 import VProp.Core
@@ -142,7 +144,7 @@ runVSMTSolve :: (MonadTrans t, MonadReader (Opts String) (t IO)) =>
   VProp String String -> t IO Result
 runVSMTSolve prop =
   do opts <- ask
-     (res,_) <- lift . S.runSMT . vSMTSolve $ St.evalStateT (propToSBool prop) (M.empty, M.empty)
+     (res,_) <- lift . S.runSMTWith S.z3{S.verbose=True} . vSMTSolve $ St.evalStateT (propToSBool prop) (M.empty, M.empty)
      lift . return $ Vsmt res
 
 -- | main workhorse for running the SAT solver
@@ -244,7 +246,8 @@ vSolveHelper !acc !(x:xs) f = do b <- vSolve_ x; vSolveHelper (b `f` acc) xs f
 vSMTSolveHelper :: S.SBool -> [VProp S.SBool SNum] ->
   (S.SBool -> S.SBool -> S.SBool) -> IncVSMTSolve S.SBool
 vSMTSolveHelper !acc ![]     _ = return acc
-vSMTSolveHelper !acc !(x:xs) f = do b <- vSMTSolve_ x; vSMTSolveHelper (b `f` acc) xs f
+vSMTSolveHelper !acc !(x:xs) f = do b <- vSMTSolve_ x
+                                    vSMTSolveHelper (b `f` acc) xs f
 
 -- | The main solver algorithm. You can think of this as the sem function for
 -- the dsl
@@ -262,20 +265,26 @@ vSMTSolve_ !(OpBB op l r) = do bl <- vSMTSolve_ l
   where handler Impl   = (==>)
         handler BiImpl = (<=>)
         handler XOr    = (<+>)
-vSMTSolve_ !(OpIB op l r) = do bl <- vSMTSolve'_ l
-                               br <- vSMTSolve'_ r
+vSMTSolve_ !(OpIB op l r) = do (SI bl) <- vSMTSolve'_ l
+                               trace ("Before br") (return ())
+                               (SI br) <- vSMTSolve'_ r
+                               trace ("after br : " ++ show r) (return ())
                                let op' = handler op
-                               S.constrain $ bl `op'` br
-                               return $ bl `op'` br
+                                   res = bl `op'` br
+                               S.constrain res
+                               return res
   where handler LT  = (.<)
         handler LTE = (.<=)
         handler GTE = (.>=)
         handler GT  = (.>)
         handler EQ  = (.==)
         handler NEQ = (./=)
-vSMTSolve_ !(Opn And ps) = do b <- vSMTSolveHelper S.true ps (S.&&&)
-                              S.constrain b
-                              return b
+vSMTSolve_ !(Opn And ps) = do
+  trace "before b" (return ())
+  b <- vSMTSolveHelper S.true ps (S.&&&)
+  trace "after b" (return ())
+  S.constrain b
+  return b
 vSMTSolve_ !(Opn Or ps) = do b <- vSMTSolveHelper S.true ps (S.|||)
                              S.constrain b
                              return b
@@ -303,9 +312,9 @@ vSMTSolve_ !(ChcB d l r) =
 
 -- | The incremental solve algorithm just for VIExprs
 vSMTSolve'_ :: VIExpr SNum -> IncVSMTSolve SNum
-vSMTSolve'_ !(Ref RefI i) = return i
-vSMTSolve'_ !(Ref RefD i) = return i
-vSMTSolve'_ !(LitI (I i)) = return . SI . S.literal . fromIntegral $ i
+vSMTSolve'_ !(Ref RefI i) = trace ("got a ref: " ++ show i) (return ()) >> return i
+vSMTSolve'_ !(Ref RefD d) = trace ("got an int: " ++ show d) (return ()) >> return d
+vSMTSolve'_ !(LitI (I i)) = trace ("got an int: " ++ show i) (return ()) >> return . SI . S.literal $ i
 vSMTSolve'_ !(LitI (D d)) = return . SD . S.literal $ d
 vSMTSolve'_ !(OpI op e) = do e' <- vSMTSolve'_ e
                              return $ (handler op) e'

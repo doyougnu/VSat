@@ -91,6 +91,11 @@ data VIExpr a
   | ChcI Dim  !(VIExpr a) !(VIExpr a)
   deriving (Eq,Generic,Typeable,Functor,Traversable,Foldable,Ord)
 
+-- | Mirroring NPrim with Symbolic types for the solver
+data SNum = SI S.SInteger
+          | SD S.SDouble
+          deriving (Eq, Show)
+
 -- | data constructor for Numeric operations
 data NPrim = I Integer | D Double
   deriving (Eq,Generic,Typeable,Ord)
@@ -166,9 +171,6 @@ instance Prim Bool Double where
 
 
 -- * SBV instances
-data SNum = SI S.SInteger
-          | SD S.SDouble
-          deriving (Eq, Show)
 
 -- | we'll need to mirror the NPrim data type in SBV via SNum
 instance Num SNum where
@@ -176,13 +178,32 @@ instance Num SNum where
   abs = abs
   negate = negate
   signum = signum
-  (+) = (+)
-  (-) = (-)
-  (*) = (*)
+  (SI i) + (SI i') = SI $ i + i'
+  (SD d) + (SI i)  = SD $ d + S.sFromIntegral i
+  (SI i) + (SD d)  = SD $ d + S.sFromIntegral i
+  (SD d) + (SD d') = SD $ d + d'
+
+  (SI i) - (SI i') = SI $ i - i'
+  (SD d) - (SI i)  = SD $ d - S.sFromIntegral i
+  (SI i) - (SD d)  = SD $ S.sFromIntegral i - d
+  (SD d) - (SD d') = SD $ d - d'
+
+  (SI i) * (SI i') = SI $ i * i'
+  (SD d) * (SI i)  = SD $ d * S.sFromIntegral i
+  (SI i) * (SD d)  = SD $ d * S.sFromIntegral i
+  (SD d) * (SD d') = SD $ d * d'
 
 instance PrimN SNum where
-  (./) = (./)
-  (.%) = (.%)
+  (SI i) ./ (SI i') = SI $ i ./ i'
+  (SD d) ./ (SI i)  = SD $ d ./ (S.sFromIntegral i)
+  (SI i) ./ (SD d)  = SD $ S.sFromIntegral i ./ d
+  (SD d) ./ (SD d') = SD $ d ./ d'
+
+
+  (SI i) .% (SI i') = SI $ i .% i'
+  (SD d) .% (SI i)  = SD $ d .% (S.sFromIntegral i)
+  (SI i) .% (SD d)  = SD $ S.sFromIntegral i .% d
+  (SD d) .% (SD d') = SD $ d .% d'
 
 instance PrimN S.SInteger where
   (./)  = S.sDiv
