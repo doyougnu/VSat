@@ -41,12 +41,6 @@ import SAT
 instance (Show a, Ord a) => SAT (VProp a a) where
   toPredicate = symbolicPropExpr
 
--- | make prop mergeable so choices can use symbolic conditionals
-instance Mergeable (VProp a b) where
-  symbolicMerge _ b thn els
-    | Just result <- unliteral b = if result then thn else els
-  symbolicMerge _ _ _ _ = undefined -- quite -WALL
-
 -- instance Eq a => EqSymbolic (VProp a) where
 --   (.==) l r | l == r = true
 --             | otherwise = false
