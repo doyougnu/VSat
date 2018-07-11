@@ -238,13 +238,13 @@ instance (Monad m, I.SolverContext m) =>
 -- | Helper functoins for the n-ary cases
 vSolveHelper :: S.SBool -> [VProp S.SBool SNum] ->
   (S.SBool -> S.SBool -> S.SBool) -> IncVSolve S.SBool
-vSolveHelper acc ![]     _ = return acc
-vSolveHelper acc !(x:xs) f = do b <- vSolve_ x; vSolveHelper (b `f` acc) xs f
+vSolveHelper !acc ![]     _ = return acc
+vSolveHelper !acc !(x:xs) f = do b <- vSolve_ x; vSolveHelper (b `f` acc) xs f
 
 vSMTSolveHelper :: S.SBool -> [VProp S.SBool SNum] ->
   (S.SBool -> S.SBool -> S.SBool) -> IncVSMTSolve S.SBool
-vSMTSolveHelper acc ![]     _ = return acc
-vSMTSolveHelper acc !(x:xs) f = do b <- vSMTSolve_ x; vSMTSolveHelper (b `f` acc) xs f
+vSMTSolveHelper !acc ![]     _ = return acc
+vSMTSolveHelper !acc !(x:xs) f = do b <- vSMTSolve_ x; vSMTSolveHelper (b `f` acc) xs f
 
 -- | The main solver algorithm. You can think of this as the sem function for
 -- the dsl
