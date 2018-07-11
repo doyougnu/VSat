@@ -70,6 +70,9 @@ frequencies = elements [1..10]
 genN_N :: Gen N_N
 genN_N = elements [Neg, Abs, Sign]
 
+genRefN :: Gen RefN
+genRefN = elements [RefI, RefD]
+
 genB_B :: Gen B_B
 genB_B = elements [Not]
 
@@ -106,9 +109,8 @@ arbVProp gd gv fs@(bfreqs, ifreqs) n
 
 arbVIExpr :: Arbitrary a =>
   Gen Dim -> Gen a -> [Int] -> Int -> Gen (VIExpr a)
-arbVIExpr _ gv _ 0 = RefI <$> gv
+arbVIExpr _ gv _ 0 = liftM2 Ref genRefN gv
 arbVIExpr gd gv ifreqs n = frequency $ zip ifreqs [ LitI <$> genPrim
-                                                  , RefI <$> gv
                                                   , liftM2 OpI genN_N l
                                                   , liftM3 OpII genNN_N l l
                                                   , liftM3 ChcI gd l l
