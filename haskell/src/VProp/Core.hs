@@ -36,7 +36,7 @@ instance Show BB_B where show Impl   = "→"
 
 instance Show a => Show (VIExpr a) where
   show (LitI a) = show a
-  show (RefI a) = show a
+  show (Ref _ a) = show a
   show (OpI Neg a) = "¬" <> show a
   show (OpI Abs a) = "|" <> show a <> "|"
   show (OpI Sign a) = "signum " <> show a
@@ -232,7 +232,7 @@ vars (ChcB _ l r) = vars l `Set.union` vars r
 
 vars' :: Ord a => (VIExpr a) -> Set.Set a
 vars' (LitI _) = Set.empty
-vars' (RefI f) = Set.singleton f
+vars' (Ref _ f) = Set.singleton f
 vars' (OpI _ e) = vars' e
 vars' (OpII _ l r) = vars' l `Set.union` vars' r
 vars' (ChcI _ l r) = vars' l `Set.union` vars' r
@@ -250,7 +250,7 @@ dimensions (ChcB d l r) = Set.singleton d `Set.union`
 
 dimensions' :: (VIExpr a) -> Set.Set Dim
 dimensions' (LitI _)     = Set.empty
-dimensions' (RefI _)     = Set.empty
+dimensions' (Ref _ _)     = Set.empty
 dimensions' (OpI _ e)    = dimensions' e
 dimensions' (OpII _ l r) = dimensions' l `Set.union` dimensions' r
 dimensions' (ChcI d l r) = Set.singleton d `Set.union`
@@ -268,7 +268,7 @@ ivars (ChcB _ l r) = ivars l `Set.union` ivars r
 
 ivars' :: Ord a => VIExpr a -> Set.Set a
 ivars' (LitI _)     = Set.empty
-ivars' (RefI a)     = Set.singleton a
+ivars' (Ref _ a)    = Set.singleton a
 ivars' (OpI _ e)    = ivars' e
 ivars' (OpII _ l r) = ivars' l `Set.union` ivars' r
 ivars' (ChcI _ l r) = ivars' l `Set.union` ivars' r
