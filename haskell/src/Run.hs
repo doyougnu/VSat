@@ -303,7 +303,8 @@ vSMTSolve_ !(ChcB d l r) =
 
 -- | The incremental solve algorithm just for VIExprs
 vSMTSolve'_ :: VIExpr SNum -> IncVSMTSolve SNum
-vSMTSolve'_ !(RefI i) = return i
+vSMTSolve'_ !(Ref RefI i) = return i
+vSMTSolve'_ !(Ref RefD i) = return i
 vSMTSolve'_ !(LitI (I i)) = return . SI . S.literal . fromIntegral $ i
 vSMTSolve'_ !(LitI (D d)) = return . SD . S.literal $ d
 vSMTSolve'_ !(OpI op e) = do e' <- vSMTSolve'_ e
