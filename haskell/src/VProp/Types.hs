@@ -175,9 +175,16 @@ instance Prim Bool Double where
 -- | we'll need to mirror the NPrim data type in SBV via SNum
 instance Num SNum where
   fromInteger = SI . S.literal
-  abs = abs
-  negate = negate
-  signum = signum
+
+  abs (SI i) = SI $ abs i
+  abs (SD d) = SD $ abs d
+
+  negate (SI i) = SI $ negate i
+  negate (SD d) = SD $ negate d
+
+  signum (SI i) = SI $ signum i
+  signum (SD d) = SD $ signum d
+
   (SI i) + (SI i') = SI $ i + i'
   (SD d) + (SI i)  = SD $ d + S.sFromIntegral i
   (SI i) + (SD d)  = SD $ d + S.sFromIntegral i
@@ -245,14 +252,36 @@ instance S.Mergeable SNum where
   symbolicMerge _ _ _ _ = undefined -- quite -WALL
 
 instance S.EqSymbolic SNum where
-  (.==) = (S..==)
-  (./=) = (S../=)
+  (.==) (SI i) (SI i') = (S..==) i i'
+  (.==) (SD d) (SI i') = (S..==) d (S.sFromIntegral i')
+  (.==) (SI i) (SD d)  = (S..==) (S.sFromIntegral i) d
+  (.==) (SD d) (SD d') = (S..==) d d'
+
+  (./=) (SI i) (SI i') = (S../=) i i'
+  (./=) (SD d) (SI i') = (S../=) d (S.sFromIntegral i')
+  (./=) (SI i) (SD d)  = (S../=) (S.sFromIntegral i) d
+  (./=) (SD d) (SD d') = (S../=) d d'
 
 instance S.OrdSymbolic SNum where
-  (.<)  = (S..<)
-  (.<=) = (S..<=)
-  (.>=) = (S..>=)
-  (.>)  = (S..>)
+  (.<) (SI i) (SI i') = (S..<) i i'
+  (.<) (SD d) (SI i') = (S..<) d (S.sFromIntegral i')
+  (.<) (SI i) (SD d)  = (S..<) (S.sFromIntegral i) d
+  (.<) (SD d) (SD d') = (S..<) d d'
+
+  (.<=) (SI i) (SI i') = (S..<=) i i'
+  (.<=) (SD d) (SI i') = (S..<=) d (S.sFromIntegral i')
+  (.<=) (SI i) (SD d)  = (S..<=) (S.sFromIntegral i) d
+  (.<=) (SD d) (SD d') = (S..<=) d d'
+
+  (.>=) (SI i) (SI i') = (S..>=) i i'
+  (.>=) (SD d) (SI i') = (S..>=) d (S.sFromIntegral i')
+  (.>=) (SI i) (SD d)  = (S..>=) (S.sFromIntegral i) d
+  (.>=) (SD d) (SD d') = (S..>=) d d'
+
+  (.>) (SI i) (SI i') = (S..>) i i'
+  (.>) (SD d) (SI i') = (S..>) d (S.sFromIntegral i')
+  (.>) (SI i) (SD d)  = (S..>) (S.sFromIntegral i) d
+  (.>) (SD d) (SD d') = (S..>) d d'
 
 instance Prim S.SBool SNum where
   (.<)  = (S..<)
