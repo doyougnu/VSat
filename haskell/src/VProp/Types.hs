@@ -11,6 +11,7 @@ module VProp.Types ( module Prelude
                    , NN_B(..)
                    , NPrim(..)
                    , Opn(..)
+                   , SNum(..)
                    , (.<)
                    , (.<=)
                    , (.==)
@@ -32,6 +33,7 @@ module VProp.Types ( module Prelude
                    , bifoldr
                    , bitraverse
                    , iRef
+                   , dRef
                    , ref) where
 
 import           Data.Data           (Data, Typeable)
@@ -82,7 +84,7 @@ data VProp a b
 -- | Integer Expressions with Choices
 data VIExpr a
   = LitI NPrim
-  | RefI a
+  | Ref RefN a
   | OpI  N_N  !(VIExpr a)
   | OpII NN_N !(VIExpr a) !(VIExpr a)
   | ChcI Dim  !(VIExpr a) !(VIExpr a)
@@ -91,6 +93,9 @@ data VIExpr a
 -- | data constructor for Numeric operations
 data NPrim = I Integer | D Double
   deriving (Eq,Generic,Typeable,Ord)
+
+-- | Reference types
+data RefN = RefI | RefD deriving (Eq,Generic,Typeable,Ord)
 
 -- | Unary Numeric Operator
 data N_N = Neg | Abs | Sign deriving (Eq,Generic,Data,Typeable,Ord)
@@ -124,9 +129,12 @@ infixl 7 ./, .%
 -- | some not so smart constructors, pinning a to string because we will be
 -- using String the most
 iRef :: String -> VIExpr String
-iRef = RefI
+iRef = Ref RefI
 
-ref :: a -> VProp a b
+dRef :: String -> VIExpr String
+dRef = Ref RefD
+
+ref :: String -> VProp String b
 ref = RefB
 
 -- | Begin primitive instances
@@ -155,7 +163,25 @@ instance Prim Bool Double where
   (.>=) = (>=)
   (.>)  = (>)
 
+
 -- * SBV instances
+data SNum = SI S.SInteger
+          | SD S.SDouble
+          deriving (Eq, Show)
+
+-- | we'll need to mirror the NPrim data type in SBV via SNum
+instance Num SNum where
+  fromInteger = SI . S.literal
+  abs = abs
+  negate = negate
+  signum = signum
+  (+) = (+)
+  (-) = (-)
+  (*) = (*)
+
+instance PrimN SNum where
+  (./) = (./)
+  (.%) = (.%)
 
 instance PrimN S.SInteger where
   (./)  = S.sDiv
@@ -190,6 +216,30 @@ instance PrimN S.SInt32 where
 instance PrimN S.SInt64 where
   (./)  = S.sDiv
   (.%)  = S.sMod
+
+instance S.Mergeable SNum where
+  symbolicMerge _ b thn els
+    | Just result <- S.unliteral b = if result then thn else els
+  symbolicMerge _ _ _ _ = undefined -- quite -WALL
+
+instance S.EqSymbolic SNum where
+  (.==) = (S..==)
+  (./=) = (S../=)
+
+instance S.OrdSymbolic SNum where
+  (.<)  = (S..<)
+  (.<=) = (S..<=)
+  (.>=) = (S..>=)
+  (.>)  = (S..>)
+
+instance Prim S.SBool SNum where
+  (.<)  = (S..<)
+  (.<=) = (S..<=)
+  (.==) = (S..==)
+  (./=) = (S../=)
+  (.>=) = (S..>=)
+  (.>)  = (S..>)
+
 
 instance Prim S.SBool S.SInteger where
   (.<)  = (S..<)
@@ -238,6 +288,12 @@ instance Prim S.SBool S.SDouble where
   (./=) = (S../=)
   (.>=) = (S..>=)
   (.>)  = (S..>)
+
+-- | make prop mergeable so choices can use symbolic conditionals
+instance S.Mergeable (VProp a b) where
+  symbolicMerge _ b thn els
+    | Just result <- S.unliteral b = if result then thn else els
+  symbolicMerge _ _ _ _ = undefined -- quite -WALL
 
 -- | We can treat a variational proposition as a boolean formulae
 instance S.Boolean (VProp a b) where
