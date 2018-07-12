@@ -35,7 +35,6 @@ type SatDict a = (M.Map Config Bool, M.Map a Bool) -- keys may incur perf penalt
 -- | The optimizations that could be set
 newtype Opts a = Opts [VProp a a -> VProp a a] -- ^ a list of optimizations
 
-
 -- | Type convenience for Log
 type Log = String
 
@@ -135,21 +134,23 @@ runVSolve :: (MonadReader (Opts String) (t IO), MonadTrans t) =>
   VProp String String -> t IO Result
 runVSolve prop =
   do opts <- ask
-     (result,_) <- lift . S.runSMT . vSolve $ St.evalStateT (propToSBool prop) (M.empty, M.empty)
+     (result,_) <- lift . S.runSMT . vSolve $
+                   St.evalStateT (propToSBool prop) (M.empty, M.empty)
      lift . return . Vsolve $ result
 
 runVSMTSolve :: (MonadTrans t, MonadReader (Opts String) (t IO)) =>
   VProp String String -> t IO Result
 runVSMTSolve prop =
   do opts <- ask
-     (res,_) <- lift . S.runSMTWith S.z3{S.verbose=True} . vSMTSolve $ St.evalStateT (propToSBool prop) (M.empty, M.empty)
+     (res,_) <- lift . S.runSMTWith S.z3{S.verbose=True} . vSMTSolve $
+                St.evalStateT (propToSBool prop) (M.empty, M.empty)
      lift . return $ Vsmt res
 
 -- | main workhorse for running the SAT solver
 data Result = R (Maybe I.SMTModel)
             | L [S.SatResult]
             | Vsolve [V Dim (Maybe I.SMTModel)]
-            | Vsmt   [V Dim (Maybe I.SMTModel)]
+            | Vsmt   [V Dim (Maybe S.ThmResult)]
             deriving (Generic, Show)
 
 instance NFData Result
@@ -173,7 +174,7 @@ type IncState a = ([V Dim (Maybe a)], UsedDims Dim)
 -- we can pull out sbv models Hardcoding so that I don't have to write the mtl
 -- typeclass. I do not expect these to change much
 type IncVSolve a    = St.StateT (IncState I.SMTModel)  SC.Query a
-type IncVSMTSolve a = St.StateT (IncState I.SMTModel) SC.Query a
+type IncVSMTSolve a = St.StateT (IncState S.ThmResult) SC.Query a
 
 -- | Given a VProp with references at the boolean level as SBools, and at the
 -- number level as SDoubles, recur through the proposition loading terms into
@@ -187,9 +188,15 @@ vSolve prop = do prop' <- prop
 
 -- | Solve a VSMT proposition
 vSMTSolve :: S.Symbolic (VProp S.SBool SNum)
-          -> S.Symbolic (IncState I.SMTModel)
+          -> S.Symbolic (IncState S.ThmResult)
 vSMTSolve prop = do prop' <- prop
-                    SC.query $ St.execStateT (vSMTSolve_ prop') ([], M.empty)
+                    SC.query $
+                      do
+                      res <- St.execStateT (vSMTSolve_ prop') ([], M.empty)
+                      lmodel <- getVSMTModel
+                      let res' = first ((:) (VChc "DEF" lmodel lmodel)) res
+                      return res'
+
 
 -- | This ensures two things: 1st we need all variables to be symbolic before
 -- starting query mode. 2nd we cannot allow any duplicates to be called on a
@@ -226,6 +233,12 @@ getModel = do cs <- SC.checkSat
                 SC.Unsat -> return (Plain Nothing)
                 SC.Sat   -> (Plain . Just) <$> SC.getModel
 
+getVSMTModel :: SC.Query (V d (Maybe S.ThmResult))
+getVSMTModel = do cs <- SC.checkSat
+                  case cs of
+                    SC.Unk   -> error "Unknown!"
+                    SC.Unsat -> return (Plain Nothing)
+                    SC.Sat   -> (Plain . Just . S.ThmResult) <$> SC.getSMTResult
 
 -- | type class needed to avoid lifting for constraints in the IncSolve monad
 instance (Monad m, I.SolverContext m) =>
@@ -290,13 +303,13 @@ vSMTSolve_ !(ChcB d l r) =
        Nothing    -> do St.modify . second $ M.insert d True
                         lift $ SC.push 1
                         _ <- vSMTSolve_ l
-                        lmodel <- lift $ getModel
+                        lmodel <- lift $ getVSMTModel
                         lift $ SC.pop 1
 
                         St.modify . second $ M.adjust (const False) d
                         lift $ SC.push 1
                         b <- vSMTSolve_ r
-                        rmodel <- lift $ getModel
+                        rmodel <- lift $ getVSMTModel
                         lift $ SC.pop 1
 
                         St.modify . first $ ((:) (VChc d lmodel rmodel))
@@ -331,19 +344,19 @@ vSMTSolve'_ !(ChcI d l r) =
        Nothing    -> do St.modify . second $ M.insert d True
                         lift $ SC.push 1
                         _ <- vSMTSolve'_ l
-                        lmodel <- lift $ getModel
+                        lmodel <- lift $ getVSMTModel
                         lift $ SC.pop 1
 
                         St.modify . second $ M.adjust (const False) d
                         lift $ SC.push 1
-                        b <- vSMTSolve'_ r
-                        rmodel <- lift $ getModel
+                        r' <- vSMTSolve'_ r
+                        rmodel <- lift $ getVSMTModel
                         lift $ SC.pop 1
 
                         St.modify . first $ ((:) (VChc d lmodel rmodel))
 
                         St.modify . second $ M.delete d
-                        return b
+                        return r'
 
 -- | The main solver algorithm. You can think of this as the sem function for
 -- the dsl

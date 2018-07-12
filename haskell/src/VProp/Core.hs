@@ -64,10 +64,13 @@ prettyPropExpr = top
 
 xxx :: VProp String String
 -- xxx =  true &&& ((iRef "b") .< (5 + (iRef "c")))
-xxx =  true &&& (3 .== signum (5 + (iRef "c")))
+xxx =  true &&& (iRef "a" + 2 .== 2 + iRef "a")
+
+yy :: VProp String String
+yy = (ChcI "AA" (iRef "c") (iRef "c")) .== (ChcI "BB" (iRef "c") (iRef "d"))
 
 -- yyy :: VProp String String
-yyy = (5 + (iRef "c"))
+-- yyy = (4 .> iRef "c") .<= yy
 
 ----------------------------- Predicates ---------------------------------------
 -- | true if a propositions has no chcs whatsoever
