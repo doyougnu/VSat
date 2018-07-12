@@ -264,29 +264,32 @@ instance S.EqSymbolic SNum where
 
 instance S.OrdSymbolic SNum where
   (.<) (SI i) (SI i') = (S..<) i i'
-  (.<) (SD d) (SI i') = (S..<) d (S.sFromIntegral i')
+  (.<) (SD d) (SI i)  = (S..<) d (S.sFromIntegral i)
   (.<) (SI i) (SD d)  = (S..<) (S.sFromIntegral i) d
   (.<) (SD d) (SD d') = (S..<) d d'
 
   (.<=) (SI i) (SI i') = (S..<=) i i'
-  (.<=) (SD d) (SI i') = (S..<=) d (S.sFromIntegral i')
+  (.<=) (SD d) (SI i)  = (S..<=) d (S.sFromIntegral i)
   (.<=) (SI i) (SD d)  = (S..<=) (S.sFromIntegral i) d
   (.<=) (SD d) (SD d') = (S..<=) d d'
 
   (.>=) (SI i) (SI i') = (S..>=) i i'
-  (.>=) (SD d) (SI i') = (S..>=) d (S.sFromIntegral i')
+  (.>=) (SD d) (SI i)  = (S..>=) d (S.sFromIntegral i)
   (.>=) (SI i) (SD d)  = (S..>=) (S.sFromIntegral i) d
   (.>=) (SD d) (SD d') = (S..>=) d d'
 
   (.>) (SI i) (SI i') = (S..>) i i'
-  (.>) (SD d) (SI i') = (S..>) d (S.sFromIntegral i')
+  (.>) (SD d) (SI i)  = (S..>) d (S.sFromIntegral i)
   (.>) (SI i) (SD d)  = (S..>) (S.sFromIntegral i) d
   (.>) (SD d) (SD d') = (S..>) d d'
 
 instance Prim S.SBool SNum where
   (.<)  = (S..<)
   (.<=) = (S..<=)
-  (.==) = (S..==)
+  (.==) (SI i) (SI i') = (S..==) i i'
+  (.==) (SD d) (SI i)  = (S..==) d (S.sFromIntegral i)
+  (.==) (SI i) (SD d)  = (S..==) (S.sFromIntegral i) d
+  (.==) (SD d) (SD d') = (S..==) d d'
   (./=) = (S../=)
   (.>=) = (S..>=)
   (.>)  = (S..>)
