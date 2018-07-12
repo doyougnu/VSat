@@ -63,11 +63,10 @@ prettyPropExpr = top
     sub e       = "(" ++ top e ++ ")"
 
 xxx :: VProp String String
--- xxx =  true &&& ((iRef "b") .< (5 + (iRef "c")))
-xxx =  true &&& (iRef "a" + 2 .== 2 + iRef "a")
+xxx =  (iRef "a" + 2 .== 2 + iRef "a")
 
 yy :: VProp String String
-yy = (ChcI "AA" (iRef "c") (iRef "c")) .== (ChcI "BB" (iRef "c") (iRef "d"))
+yy = (iRef "a" + 2 .== 2 + iRef "a")
 
 -- yyy :: VProp String String
 -- yyy = (4 .> iRef "c") .<= yy

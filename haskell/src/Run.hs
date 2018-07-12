@@ -15,11 +15,12 @@ import qualified Data.SBV.Internals  as I
 import qualified Data.SBV            as S
 import qualified Data.SBV.Control    as SC
 import           Prelude hiding (LT, GT, EQ)
+import Data.Foldable (foldrM)
 
 import Control.Arrow (first, second)
 
 import GHC.Generics
-import Control.DeepSeq               (NFData)
+import Control.DeepSeq               (NFData, force)
 
 import Data.Maybe                    (catMaybes)
 
@@ -134,7 +135,7 @@ runVSolve :: (MonadReader (Opts String) (t IO), MonadTrans t) =>
   VProp String String -> t IO Result
 runVSolve prop =
   do opts <- ask
-     (result,_) <- lift . S.runSMT . vSolve $
+     (result,_) <- lift . S.runSMTWith S.z3{S.verbose=True} . vSolve $
                    St.evalStateT (propToSBool prop) (M.empty, M.empty)
      lift . return . Vsolve $ result
 
@@ -149,7 +150,7 @@ runVSMTSolve prop =
 -- | main workhorse for running the SAT solver
 data Result = R (Maybe I.SMTModel)
             | L [S.SatResult]
-            | Vsolve [V Dim (Maybe I.SMTModel)]
+            | Vsolve [V Dim (Maybe S.ThmResult)]
             | Vsmt   [V Dim (Maybe S.ThmResult)]
             deriving (Generic, Show)
 
@@ -173,7 +174,7 @@ type IncState a = ([V Dim (Maybe a)], UsedDims Dim)
 -- | the incremental solve monad, with the base monad being the query monad so
 -- we can pull out sbv models Hardcoding so that I don't have to write the mtl
 -- typeclass. I do not expect these to change much
-type IncVSolve a    = St.StateT (IncState I.SMTModel)  SC.Query a
+type IncVSolve a    = St.StateT (IncState S.ThmResult) SC.Query a
 type IncVSMTSolve a = St.StateT (IncState S.ThmResult) SC.Query a
 
 -- | Given a VProp with references at the boolean level as SBools, and at the
@@ -181,21 +182,27 @@ type IncVSMTSolve a = St.StateT (IncState S.ThmResult) SC.Query a
 -- SBV. When we hit a choice we manipulate the assertion stack to maximize reuse
 -- of non-variational terms and then cons the resultant model for each branch of
 -- the choice onto the result list.
-vSolve :: S.Symbolic (VProp S.SBool SNum)
-       -> S.Symbolic (IncState I.SMTModel)
+vSolve :: S.Symbolic (VProp S.SBool SNum) -> S.Symbolic (IncState S.ThmResult)
 vSolve prop = do prop' <- prop
-                 SC.query $ St.execStateT (vSolve_ prop') ([], M.empty)
+                 S.setOption $ SC.ProduceProofs True
+                 SC.query $
+                   do
+                     res <- St.execStateT (vSolve_ prop') ([], M.empty)
+                     return res
 
 -- | Solve a VSMT proposition
-vSMTSolve :: S.Symbolic (VProp S.SBool SNum)
-          -> S.Symbolic (IncState S.ThmResult)
+vSMTSolve :: S.Symbolic (VProp S.SBool SNum) -> S.Symbolic (IncState S.ThmResult)
 vSMTSolve prop = do prop' <- prop
+                    S.setOption $ SC.ProduceProofs True
                     SC.query $
                       do
-                      res <- St.execStateT (vSMTSolve_ prop') ([], M.empty)
-                      lmodel <- getVSMTModel
-                      let res' = first ((:) (VChc "DEF" lmodel lmodel)) res
-                      return res'
+                      x@(b, res) <- St.runStateT (vSMTSolve_ prop') ([], M.empty)
+                      let
+                        prf = S.prove b
+                        -- res' = first ((:) prf) res
+                      r <- SC.io $ prf
+                      SC.io $ putStrLn (show r)
+                      return res
 
 
 -- | This ensures two things: 1st we need all variables to be symbolic before
@@ -233,12 +240,12 @@ getModel = do cs <- SC.checkSat
                 SC.Unsat -> return (Plain Nothing)
                 SC.Sat   -> (Plain . Just) <$> SC.getModel
 
-getVSMTModel :: SC.Query (V d (Maybe S.ThmResult))
-getVSMTModel = do cs <- SC.checkSat
-                  case cs of
-                    SC.Unk   -> error "Unknown!"
-                    SC.Unsat -> return (Plain Nothing)
-                    SC.Sat   -> (Plain . Just . S.ThmResult) <$> SC.getSMTResult
+getVSMTModel :: S.SBool -> SC.Query (V d (Maybe S.ThmResult))
+getVSMTModel b = do cs <- SC.checkSat
+                    case cs of
+                      SC.Unk   -> error "Unknown!"
+                      SC.Unsat -> return (Plain Nothing)
+                      SC.Sat   -> (Plain . Just ) <$> (SC.io $ S.prove b)
 
 -- | type class needed to avoid lifting for constraints in the IncSolve monad
 instance (Monad m, I.SolverContext m) =>
@@ -276,8 +283,8 @@ vSMTSolve_ !(OpBB op l r) = do bl <- vSMTSolve_ l
   where handler Impl   = (==>)
         handler BiImpl = (<=>)
         handler XOr    = (<+>)
-vSMTSolve_ !(OpIB op l r) = do bl <- vSMTSolve'_ l
-                               br <- vSMTSolve'_ r
+vSMTSolve_ !(OpIB op l r) = do (SI bl) <- vSMTSolve'_ l
+                               (SI br) <- vSMTSolve'_ r
                                let op' = handler op
                                    res = bl `op'` br
                                S.constrain res
@@ -289,10 +296,10 @@ vSMTSolve_ !(OpIB op l r) = do bl <- vSMTSolve'_ l
         handler EQ  = (.==)
         handler NEQ = (./=)
 vSMTSolve_ !(Opn And ps) = do
-  b <- vSMTSolveHelper S.true ps (S.&&&)
+  b <- vSMTSolveHelper S.true ps (&&&)
   S.constrain b
   return b
-vSMTSolve_ !(Opn Or ps) = do b <- vSMTSolveHelper S.true ps (S.|||)
+vSMTSolve_ !(Opn Or ps) = do b <- vSMTSolveHelper S.true ps (|||)
                              S.constrain b
                              return b
 vSMTSolve_ !(ChcB d l r) =
@@ -302,14 +309,14 @@ vSMTSolve_ !(ChcB d l r) =
        Just False -> vSMTSolve_ r
        Nothing    -> do St.modify . second $ M.insert d True
                         lift $ SC.push 1
-                        _ <- vSMTSolve_ l
-                        lmodel <- lift $ getVSMTModel
+                        lb <- vSMTSolve_ l
+                        lmodel <- lift $ getVSMTModel lb
                         lift $ SC.pop 1
 
                         St.modify . second $ M.adjust (const False) d
                         lift $ SC.push 1
                         b <- vSMTSolve_ r
-                        rmodel <- lift $ getVSMTModel
+                        rmodel <- lift $ getVSMTModel b
                         lift $ SC.pop 1
 
                         St.modify . first $ ((:) (VChc d lmodel rmodel))
@@ -343,14 +350,15 @@ vSMTSolve'_ !(ChcI d l r) =
        Just False -> vSMTSolve'_ r
        Nothing    -> do St.modify . second $ M.insert d True
                         lift $ SC.push 1
-                        _ <- vSMTSolve'_ l
-                        lmodel <- lift $ getVSMTModel
+                        lb <- vSMTSolve'_ l
+                        lmodel <- lift $ getVSMTModel true
                         lift $ SC.pop 1
 
                         St.modify . second $ M.adjust (const False) d
                         lift $ SC.push 1
                         r' <- vSMTSolve'_ r
-                        rmodel <- lift $ getVSMTModel
+     -- TODO FIX THIS LATER
+                        rmodel <- lift $ getVSMTModel true
                         lift $ SC.pop 1
 
                         St.modify . first $ ((:) (VChc d lmodel rmodel))
@@ -369,16 +377,17 @@ vSolve_ !(OpB Not bs)= do b <- vSolve_ (S.bnot bs)
 vSolve_ !(OpBB op l r) = do bl <- vSolve_ l
                             br <- vSolve_ r
                             let op' = handler op
-                            S.constrain $ bl `op'` br
-                            return $ bl `op'` br
+                                res = bl `op'` br
+                            S.constrain res
+                            return $ res
   where handler Impl   = (==>)
         handler BiImpl = (<=>)
         handler XOr    = (<+>)
 vSolve_ !(OpIB _ _ _) = error "You called the SAT Solver with SMT Exprs! Launching the missiles like you asked!"
-vSolve_ !(Opn And ps) = do b <- vSolveHelper S.true ps (S.&&&)
+vSolve_ !(Opn And ps) = do b <- vSolveHelper S.true ps (&&&)
                            S.constrain b
                            return b
-vSolve_ !(Opn Or ps) = do b <- vSolveHelper S.true ps (S.|||)
+vSolve_ !(Opn Or ps) = do b <- vSolveHelper S.false ps (|||)
                           S.constrain b
                           return b
 vSolve_ !(ChcB d l r) =
@@ -388,14 +397,14 @@ vSolve_ !(ChcB d l r) =
        Just False -> vSolve_ r
        Nothing    -> do St.modify . second $ M.insert d True
                         lift $ SC.push 1
-                        _ <- vSolve_ l
-                        lmodel <- lift $ getModel
+                        lb <- vSolve_ l
+                        lmodel <- lift $ getVSMTModel lb
                         lift $ SC.pop 1
 
                         St.modify . second $ M.adjust (const False) d
                         lift $ SC.push 1
                         b <- vSolve_ r
-                        rmodel <- lift $ getModel
+                        rmodel <- lift $ getVSMTModel b
                         lift $ SC.pop 1
 
                         St.modify . first $ ((:) (VChc d lmodel rmodel))

@@ -35,7 +35,7 @@ module VProp.Types ( module Prelude
                    , bitraverse
                    , iRef
                    , dRef
-                   , ref) where
+                   , bRef) where
 
 import           Data.Data           (Data, Typeable)
 import           Data.Monoid         ((<>))
@@ -140,8 +140,8 @@ iRef = Ref RefI
 dRef :: String -> VIExpr String
 dRef = Ref RefD
 
-ref :: String -> VProp String b
-ref = RefB
+bRef :: String -> VProp String b
+bRef = RefB
 
 -- | Begin primitive instances
 
@@ -169,6 +169,21 @@ instance Prim Bool Double where
   (.>=) = (>=)
   (.>)  = (>)
 
+instance Prim (VProp a b) Integer where
+  (.<)  i j = OpIB LT  (LitI $ I i) (LitI $ I j)
+  (.<=) i j = OpIB LTE (LitI $ I i) (LitI $ I j)
+  (.==) i j = OpIB EQ  (LitI $ I i) (LitI $ I j)
+  (./=) i j = OpIB NEQ (LitI $ I i) (LitI $ I j)
+  (.>=) i j = OpIB GTE (LitI $ I i) (LitI $ I j)
+  (.>)  i j = OpIB GT  (LitI $ I i) (LitI $ I j)
+
+instance Prim (VProp a b) Double where
+  (.<)  i j = OpIB LT  (LitI $ D i) (LitI $ D j)
+  (.<=) i j = OpIB LTE (LitI $ D i) (LitI $ D j)
+  (.==) i j = OpIB EQ  (LitI $ D i) (LitI $ D j)
+  (./=) i j = OpIB NEQ (LitI $ D i) (LitI $ D j)
+  (.>=) i j = OpIB GTE (LitI $ D i) (LitI $ D j)
+  (.>)  i j = OpIB GT  (LitI $ D i) (LitI $ D j)
 
 -- * SBV instances
 
@@ -286,14 +301,10 @@ instance S.OrdSymbolic SNum where
 instance Prim S.SBool SNum where
   (.<)  = (S..<)
   (.<=) = (S..<=)
-  (.==) (SI i) (SI i') = (S..==) i i'
-  (.==) (SD d) (SI i)  = (S..==) d (S.sFromIntegral i)
-  (.==) (SI i) (SD d)  = (S..==) (S.sFromIntegral i) d
-  (.==) (SD d) (SD d') = (S..==) d d'
+  (.==) = (S..==)
   (./=) = (S../=)
   (.>=) = (S..>=)
   (.>)  = (S..>)
-
 
 instance Prim S.SBool S.SInteger where
   (.<)  = (S..<)
@@ -352,7 +363,7 @@ instance S.Mergeable (VProp a b) where
 -- | We can treat a variational proposition as a boolean formulae
 instance S.Boolean (VProp a b) where
   true  = LitB True
-  false = LitB True
+  false = LitB False
   bnot  = OpB Not
   l &&& r = Opn And [l,r]
   l ||| r = Opn Or  [l,r]

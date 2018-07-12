@@ -73,7 +73,7 @@ evalPropExpr d !i !c !(ChcB dim l r)
 -- | Eval the numeric expressions, VIExpr, assume everything is an integer until
 -- absolutely necessary to coerce
 evalPropExpr' :: DimBool -> VConfig a SInteger -> VIExpr a -> SNum
-evalPropExpr' _ _ !(LitI (I i)) =  SI . literal $ i
+evalPropExpr' _ _ !(LitI (I i)) =  SI $ literal i
 evalPropExpr' _ _ !(LitI (D d)) =  SD $ literal d
 evalPropExpr' _ !i !(Ref _ f) = SI $ i f
 evalPropExpr' d !i !(OpI Neg e) = negate $ evalPropExpr' d i e
