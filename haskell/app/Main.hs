@@ -9,10 +9,10 @@ import GHC.Generics (Generic)
 import qualified Data.ByteString.Char8 as BS (pack)
 import Data.ByteString.Lazy (writeFile, appendFile)
 import VProp.Core
-import VProp.Types
+import VProp.Types hiding (appendFile, writeFile)
 import VProp.Gen
 import Test.QuickCheck (generate, choose)
-import Control.DeepSeq (deepseq, NFData)
+import Control.DeepSeq (NFData)
 
 import System.CPUTime
 import System.Environment
@@ -65,7 +65,8 @@ type RunMetric = (RunNum, TermSize)
 
 -- | Give a descriptor, run metrics, and a prop, generate the descriptor metrics
 -- for the prop and write them out to a csv
-writeDesc :: Show a => String -> RunMetric -> VProp a -> FilePath -> IO ()
+writeDesc :: (Show a, Show b, Eq a, Eq b) =>
+  String -> RunMetric -> VProp a b -> FilePath -> IO ()
 writeDesc desc (rn, n) prop' descFile = do
   let descriptorsFs = [ numTerms
                       , numChc
@@ -94,8 +95,10 @@ writeDesc desc (rn, n) prop' descFile = do
 -- | Given a file path, get the year, date and time of the run and prepend it to
 -- the filepath
 prependDate :: FilePath -> IO FilePath
-prependDate str = do (year, month, day) <- getCurrentTime >>= return . toGregorian . utctDay
-                     return $ mconcat [show year, "-", show month, "-", show day, "-", str]
+prependDate str = do (year, month, day) <- getCurrentTime >>=
+                                           return . toGregorian . utctDay
+                     return $ mconcat [show year, "-", show month
+                                      , "-", show day, "-", str]
 
 format :: FilePath -> FilePath -> IO FilePath
 format fp fldr = prependDate (fp ++ ".csv") >>= return . ((++) (fldr ++ "/"))
@@ -116,7 +119,7 @@ benchRandomSample descfp timefp metrics@(_, n) = do
           generate . genVPropAtShare n . vPropShare
   -- noShprop' <- generate (sequence $ repeat $ choose (0, 10)) >>=
   --              generate . genVPropAtSize n .  vPropNoShare
-  let prop = fmap show prop'
+  let prop = bimap show show prop'
       -- noShprop = fmap show noShprop'
 
   writeDesc "Shared" metrics prop descfp
@@ -127,11 +130,11 @@ benchRandomSample descfp timefp metrics@(_, n) = do
   -- time "Unique/BForce" metrics timefp $! runEnv True False False [] noShprop
 
   -- | run incremental solve
-  time "Shared/VSolve" metrics timefp $! runEnv False False False [] prop
+  time "Shared/VSolve" metrics timefp $! runVS [] prop
   -- time "Unique/VSolve" metrics timefp $! runEnv False False False [] noShprop
 
   -- | run and decomp
-  time "Shared/ChcDecomp" metrics timefp $! runEnv True True False [] prop
+  time "Shared/ChcDecomp" metrics timefp $! runAD [] prop
   -- time "Unique/ChcDecomp" metrics timefp $! runEnv True True False [] noShprop
 
 time :: NFData a => Text -> RunMetric -> FilePath -> IO a -> IO ()
