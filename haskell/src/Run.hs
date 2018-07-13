@@ -267,8 +267,8 @@ vSMTSolveHelper !acc !(x:xs) f = do b <- vSMTSolve_ x
 vSMTSolve_ :: VProp S.SBool SNum -> IncVSMTSolve S.SBool
 vSMTSolve_ !(RefB b) = return b
 vSMTSolve_ !(LitB b) = return $ S.literal b
-vSMTSolve_ !(OpB Not bs)= do b <- vSMTSolve_ (S.bnot bs)
-                             S.constrain b
+vSMTSolve_ !(OpB Not bs)= do b <- vSMTSolve_ bs
+                             S.constrain $ S.bnot b
                              return b
 vSMTSolve_ !(OpBB op l r) = do bl <- vSMTSolve_ l
                                br <- vSMTSolve_ r
@@ -412,10 +412,10 @@ vSolve_ !(ChcB d l r) =
 -- ex1 :: VProp Var Var
 -- ex1 = BB≺((#F ↔ (CC≺inbahhaa , rtohdirjqwlilghnxilvyt≻)) ∨ (BB≺lzqnwmzybbwn, iiqrrdbccsrpdxib≻ < signum nznposifl)) ↔ (hmfoxjqaypseaqiqwgdzwmup ≠ -25) , losyjs ≠ AA≺25, hozllhxjicdntwwhxu≻ % fpyop * hkkhcnmmhhpbwgctijz≻
 test :: S.Symbolic (Maybe S.ThmResult)
-test = do x <- S.sBool "x"   -- a free variable named "x"
+test = do x <- bnot $ S.sBool "x"   -- a free variable named "x"
 
           -- This is new
-          S.constrain $ x S.||| S.true
+
 
           -- Go into the Query mode
           SC.query $ do
