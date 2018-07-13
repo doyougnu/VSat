@@ -3,6 +3,11 @@ packages:
 # system-ghc: false
 extra-deps: []
 
+nix:
+  enable: true
+  pure: true
+  packages: [ z3, pkgconfig ]
+
 resolver: lts-11.14
 build:
   library-profiling: false

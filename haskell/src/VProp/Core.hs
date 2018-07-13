@@ -66,7 +66,7 @@ xxx :: VProp String String
 xxx =  (iRef "a" + 2 .== 2 + iRef "a")
 
 yy :: VProp String String
-yy = (iRef "a" + 2 .== 2 + iRef "a")
+yy = Opn And [bRef "a", true]
 
 -- yyy :: VProp String String
 -- yyy = (4 .> iRef "c") .<= yy

@@ -186,9 +186,8 @@ vSolve :: S.Symbolic (VProp S.SBool SNum) -> S.Symbolic (IncState S.ThmResult)
 vSolve prop = do prop' <- prop
                  S.setOption $ SC.ProduceProofs True
                  SC.query $
-                   do
-                     res <- St.execStateT (vSolve_ prop') ([], M.empty)
-                     return res
+                   do res <- St.execStateT (vSolve_ prop') ([], M.empty)
+                      return res
 
 -- | Solve a VSMT proposition
 vSMTSolve :: S.Symbolic (VProp S.SBool SNum) -> S.Symbolic (IncState S.ThmResult)
@@ -196,13 +195,9 @@ vSMTSolve prop = do prop' <- prop
                     S.setOption $ SC.ProduceProofs True
                     SC.query $
                       do
-                      x@(b, res) <- St.runStateT (vSMTSolve_ prop') ([], M.empty)
-                      let
-                        prf = S.prove b
-                        -- res' = first ((:) prf) res
-                      r <- SC.io $ prf
-                      SC.io $ putStrLn (show r)
-                      return res
+                      (b, res) <- St.runStateT (vSMTSolve_ prop') ([], M.empty)
+                      prf <- S.ThmResult <$> SC.getSMTResult
+                      return $ first ((:) (Plain . Just $ prf)) res
 
 
 -- | This ensures two things: 1st we need all variables to be symbolic before
@@ -245,7 +240,7 @@ getVSMTModel b = do cs <- SC.checkSat
                     case cs of
                       SC.Unk   -> error "Unknown!"
                       SC.Unsat -> return (Plain Nothing)
-                      SC.Sat   -> (Plain . Just ) <$> (SC.io $ S.prove b)
+                      SC.Sat   -> (Plain . Just . S.ThmResult) <$> (SC.getSMTResult)
 
 -- | type class needed to avoid lifting for constraints in the IncSolve monad
 instance (Monad m, I.SolverContext m) =>
@@ -416,3 +411,22 @@ vSolve_ !(ChcB d l r) =
 -- These fail
 -- ex1 :: VProp Var Var
 -- ex1 = BB≺((#F ↔ (CC≺inbahhaa , rtohdirjqwlilghnxilvyt≻)) ∨ (BB≺lzqnwmzybbwn, iiqrrdbccsrpdxib≻ < signum nznposifl)) ↔ (hmfoxjqaypseaqiqwgdzwmup ≠ -25) , losyjs ≠ AA≺25, hozllhxjicdntwwhxu≻ % fpyop * hkkhcnmmhhpbwgctijz≻
+test :: S.Symbolic (Maybe S.ThmResult)
+test = do x <- S.sBool "x"   -- a free variable named "x"
+
+          -- This is new
+          S.constrain $ x S.||| S.true
+
+          -- Go into the Query mode
+          SC.query $ do
+                -- Query the solver: Are the constraints satisfiable?
+                cs <- SC.checkSat
+                case cs of
+                  SC.Unk   -> error "Solver said unknown!"
+                  SC.Unsat -> return Nothing -- no solution!
+                  SC.Sat   -> -- Query the values:
+                    do res <- SC.getSMTResult
+
+                       SC.io $ putStrLn $ "Solver returned: " ++ show (S.ThmResult res)
+
+                       return $ Just (S.ThmResult res)
