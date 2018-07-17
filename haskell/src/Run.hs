@@ -6,6 +6,8 @@ module Run ( Opts (..)
            , runBF
            , runVS
            , runVSMT
+           , sat
+           , prove
            ) where
 
 import qualified Data.Map.Strict as M
@@ -15,12 +17,11 @@ import qualified Data.SBV.Internals  as I
 import qualified Data.SBV            as S
 import qualified Data.SBV.Control    as SC
 import           Prelude hiding (LT, GT, EQ)
-import Data.Foldable (foldrM)
 
 import Control.Arrow (first, second)
 
 import GHC.Generics
-import Control.DeepSeq               (NFData, force)
+import Control.DeepSeq               (NFData)
 
 import Data.Maybe                    (catMaybes)
 
@@ -137,7 +138,7 @@ runVSolve prop =
   do opts <- ask
      (result,_) <- lift . S.runSMTWith S.z3{S.verbose=True} . vSolve $
                    St.evalStateT (propToSBool prop) (M.empty, M.empty)
-     lift . return . Vsolve $ result
+     lift . return . V $ result
 
 runVSMTSolve :: (MonadTrans t, MonadReader (Opts String) (t IO)) =>
   VProp String String -> t IO Result
@@ -145,14 +146,13 @@ runVSMTSolve prop =
   do opts <- ask
      (res,_) <- lift . S.runSMTWith S.z3{S.verbose=True} . vSMTSolve $
                 St.evalStateT (propToSBool prop) (M.empty, M.empty)
-     lift . return $ Vsmt res
+     lift . return . V $ res
 
 -- | main workhorse for running the SAT solver
 data Result = R (Maybe I.SMTModel)
             | L [S.SatResult]
-            | Vsolve [V Dim (Maybe S.ThmResult)]
-            | Vsmt   [V Dim (Maybe S.ThmResult)]
-            deriving (Generic, Show)
+            | V [V Dim (Maybe S.SMTResult)]
+            deriving (Generic)
 
 instance NFData Result
 
@@ -174,15 +174,15 @@ type IncState a = ([V Dim (Maybe a)], UsedDims Dim)
 -- | the incremental solve monad, with the base monad being the query monad so
 -- we can pull out sbv models Hardcoding so that I don't have to write the mtl
 -- typeclass. I do not expect these to change much
-type IncVSolve a    = St.StateT (IncState S.ThmResult) SC.Query a
-type IncVSMTSolve a = St.StateT (IncState S.ThmResult) SC.Query a
+type IncVSolve a    = St.StateT (IncState S.SMTResult) SC.Query a
+type IncVSMTSolve a = St.StateT (IncState S.SMTResult) SC.Query a
 
 -- | Given a VProp with references at the boolean level as SBools, and at the
 -- number level as SDoubles, recur through the proposition loading terms into
 -- SBV. When we hit a choice we manipulate the assertion stack to maximize reuse
 -- of non-variational terms and then cons the resultant model for each branch of
 -- the choice onto the result list.
-vSolve :: S.Symbolic (VProp S.SBool SNum) -> S.Symbolic (IncState S.ThmResult)
+vSolve :: S.Symbolic (VProp S.SBool SNum) -> S.Symbolic (IncState S.SMTResult)
 vSolve prop = do prop' <- prop
                  S.setOption $ SC.ProduceProofs True
                  SC.query $
@@ -190,13 +190,13 @@ vSolve prop = do prop' <- prop
                       return res
 
 -- | Solve a VSMT proposition
-vSMTSolve :: S.Symbolic (VProp S.SBool SNum) -> S.Symbolic (IncState S.ThmResult)
+vSMTSolve :: S.Symbolic (VProp S.SBool SNum) -> S.Symbolic (IncState S.SMTResult)
 vSMTSolve prop = do prop' <- prop
                     S.setOption $ SC.ProduceProofs True
                     SC.query $
                       do
-                      (b, res) <- St.runStateT (vSMTSolve_ prop') ([], M.empty)
-                      prf <- S.ThmResult <$> SC.getSMTResult
+                      (_, res) <- St.runStateT (vSMTSolve_ prop') ([], M.empty)
+                      prf <- SC.getSMTResult
                       return $ first ((:) (Plain . Just $ prf)) res
 
 
@@ -227,20 +227,20 @@ smtDouble str = do (_,st) <- get
                                    return b'
                      Just x  -> return x
 
--- | get a model out given an S.SBool
-getModel :: SC.Query (V d (Maybe I.SMTModel))
-getModel = do cs <- SC.checkSat
-              case cs of
-                SC.Unk   -> error "Unknown!"
-                SC.Unsat -> return (Plain Nothing)
-                SC.Sat   -> (Plain . Just) <$> SC.getModel
+-- -- | get a model out given an S.SBool
+-- getModel :: SC.Query (V d (Maybe I.SMTModel))
+-- getModel = do cs <- SC.checkSat
+--               case cs of
+--                 SC.Unk   -> error "Unknown!"
+--                 SC.Unsat -> return (Plain Nothing)
+--                 SC.Sat   -> (Plain . Just) <$> SC.getModel
 
-getVSMTModel :: S.SBool -> SC.Query (V d (Maybe S.ThmResult))
+getVSMTModel :: S.SBool -> SC.Query (V d (Maybe S.SMTResult))
 getVSMTModel b = do cs <- SC.checkSat
                     case cs of
                       SC.Unk   -> error "Unknown!"
                       SC.Unsat -> return (Plain Nothing)
-                      SC.Sat   -> (Plain . Just . S.ThmResult) <$> (SC.getSMTResult)
+                      SC.Sat   -> (Plain . Just) <$> (SC.getSMTResult)
 
 -- | type class needed to avoid lifting for constraints in the IncSolve monad
 instance (Monad m, I.SolverContext m) =>
@@ -278,8 +278,8 @@ vSMTSolve_ !(OpBB op l r) = do bl <- vSMTSolve_ l
   where handler Impl   = (==>)
         handler BiImpl = (<=>)
         handler XOr    = (<+>)
-vSMTSolve_ !(OpIB op l r) = do (SI bl) <- vSMTSolve'_ l
-                               (SI br) <- vSMTSolve'_ r
+vSMTSolve_ !(OpIB op l r) = do bl <- vSMTSolve'_ l
+                               br <- vSMTSolve'_ r
                                let op' = handler op
                                    res = bl `op'` br
                                S.constrain res
@@ -411,22 +411,22 @@ vSolve_ !(ChcB d l r) =
 -- These fail
 -- ex1 :: VProp Var Var
 -- ex1 = BB≺((#F ↔ (CC≺inbahhaa , rtohdirjqwlilghnxilvyt≻)) ∨ (BB≺lzqnwmzybbwn, iiqrrdbccsrpdxib≻ < signum nznposifl)) ↔ (hmfoxjqaypseaqiqwgdzwmup ≠ -25) , losyjs ≠ AA≺25, hozllhxjicdntwwhxu≻ % fpyop * hkkhcnmmhhpbwgctijz≻
-test :: S.Symbolic (Maybe S.ThmResult)
-test = do x <- bnot $ S.sBool "x"   -- a free variable named "x"
+-- test :: S.Symbolic (Maybe S.ThmResult)
+-- test = do x <- bnot $ S.sBool "x"   -- a free variable named "x"
 
-          -- This is new
+--           -- This is new
 
 
-          -- Go into the Query mode
-          SC.query $ do
-                -- Query the solver: Are the constraints satisfiable?
-                cs <- SC.checkSat
-                case cs of
-                  SC.Unk   -> error "Solver said unknown!"
-                  SC.Unsat -> return Nothing -- no solution!
-                  SC.Sat   -> -- Query the values:
-                    do res <- SC.getSMTResult
+--           -- Go into the Query mode
+--           SC.query $ do
+--                 -- Query the solver: Are the constraints satisfiable?
+--                 cs <- SC.checkSat
+--                 case cs of
+--                   SC.Unk   -> error "Solver said unknown!"
+--                   SC.Unsat -> return Nothing -- no solution!
+--                   SC.Sat   -> -- Query the values:
+--                     do res <- SC.getSMTResult
 
-                       SC.io $ putStrLn $ "Solver returned: " ++ show (S.ThmResult res)
+--                        SC.io $ putStrLn $ "Solver returned: " ++ show (S.ThmResult res)
 
-                       return $ Just (S.ThmResult res)
+--                        return $ Just (S.ThmResult res)
