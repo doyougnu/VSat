@@ -6,8 +6,6 @@ module Run ( Opts (..)
            , runBF
            , runVS
            , runVSMT
-           , sat
-           , prove
            ) where
 
 import qualified Data.Map.Strict as M
@@ -136,7 +134,7 @@ runVSolve :: (MonadReader (Opts String) (t IO), MonadTrans t) =>
   VProp String String -> t IO Result
 runVSolve prop =
   do opts <- ask
-     (result,_) <- lift . S.runSMTWith S.z3{S.verbose=True} . vSolve $
+     (result,_) <- lift . S.runSMT . vSolve $
                    St.evalStateT (propToSBool prop) (M.empty, M.empty)
      lift . return . V $ result
 
@@ -144,7 +142,7 @@ runVSMTSolve :: (MonadTrans t, MonadReader (Opts String) (t IO)) =>
   VProp String String -> t IO Result
 runVSMTSolve prop =
   do opts <- ask
-     (res,_) <- lift . S.runSMTWith S.z3{S.verbose=True} . vSMTSolve $
+     (res,_) <- lift . S.runSMT . vSMTSolve $
                 St.evalStateT (propToSBool prop) (M.empty, M.empty)
      lift . return . V $ res
 
