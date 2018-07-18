@@ -24,7 +24,7 @@ dependencies:
 - mtl
 - foldl
 - bifunctors
-- QuickCheck
+# - QuickCheck
 - deepseq
 - sbv
 - cassava
@@ -33,6 +33,7 @@ dependencies:
 - text
 - vector
 - time
+- tasty-quickcheck
 
 library:
   source-dirs: src

@@ -1,16 +1,18 @@
 module VProp.Gen where
 
 import           Control.Monad       (liftM2, liftM3)
-import           Test.QuickCheck     (oneof, arbitrarySizedIntegral,  Arbitrary
-                                     , Gen
-                                     , arbitrary
-                                     , suchThat
-                                     , elements
-                                     , listOf
-                                     , frequency
-                                     , sized
-                                     , generate
-                                     , resize)
+import           Test.Tasty.QuickCheck ( oneof
+                                       , arbitrarySizedIntegral
+                                       , Arbitrary
+                                       , Gen
+                                       , arbitrary
+                                       , suchThat
+                                       , elements
+                                       , listOf
+                                       , frequency
+                                       , sized
+                                       , generate
+                                       , resize)
 import           Data.Char           (toUpper)
 import Prelude hiding (LT,EQ,GT)
 import qualified Control.Arrow as A ((&&&))
