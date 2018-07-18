@@ -98,6 +98,22 @@ onlyBools (OpBB _ l r)  = onlyBools l && onlyBools r
 onlyBools (OpB  _ e)    = onlyBools e
 onlyBools _             = True
 
+onlyLits :: VProp a a -> Bool
+onlyLits (LitB _) = True
+onlyLits (RefB _) = False
+onlyLits (OpIB _ l r) = onlyLits' l && onlyLits' r
+onlyLits (ChcB _ l r) = onlyLits l && onlyLits r
+onlyLits (Opn _ xs)   = foldr (\x acc -> acc && onlyLits x) True xs
+onlyLits (OpBB _ l r) =  onlyLits l && onlyLits r
+onlyLits (OpB _ e)    = onlyLits e
+
+onlyLits' :: VIExpr a -> Bool
+onlyLits' (LitI _)  = True
+onlyLits' (Ref _ _) = False
+onlyLits' (OpI _ e) = onlyLits' e
+onlyLits' (OpII _ l r) = onlyLits' l && onlyLits' r
+onlyLits' (ChcI _ l r) = onlyLits' l && onlyLits' r
+
 -- ----------------------------- Choice Manipulation ------------------------------
 -- -- | Wrapper around engine
 -- prune :: (VProp a) -> (VProp a)
