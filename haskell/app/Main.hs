@@ -11,7 +11,7 @@ import Data.ByteString.Lazy (writeFile, appendFile)
 import VProp.Core
 import VProp.Types hiding (appendFile, writeFile)
 import VProp.Gen
-import Test.QuickCheck (generate, choose)
+import Test.Tasty.QuickCheck (generate, choose)
 import Control.DeepSeq (NFData)
 import Api
 
