@@ -40,8 +40,7 @@ module VProp.Types ( module Prelude
 import           Data.Data           (Data, Typeable)
 import           Data.Monoid         ((<>))
 import           Data.Fixed          (mod')
-import           Test.QuickCheck     (Arbitrary)
-import           Test.QuickCheck.Gen
+import           Test.Tasty.QuickCheck
 import           GHC.Generics        (Generic)
 import           Data.String         (IsString)
 import           Control.DeepSeq     (NFData)
