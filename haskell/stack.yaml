@@ -5,7 +5,7 @@ extra-deps: []
 
 nix:
   enable: true
-  pure: true
+  pure: false
   packages: [ z3, pkgconfig ]
 
 resolver: lts-11.14

@@ -58,30 +58,30 @@ runEnv :: (VProp String String-> Env String Result)
        -> VProp String String-> IO (Result , (SatDict String), Log)
 runEnv f !opts !x = _runEnv (f x) (Opts opts) (initSt x)
 
+-- | Run the and decomposition solver
 runAD :: [VProp String String -> VProp String String]
       -> VProp String String
       -> IO (Result, SatDict String, Log)
 runAD = runEnv runAndDecomp
 
+-- | Run the brute force solver
 runBF :: [VProp String String -> VProp String String]
   -> VProp String String
   -> IO (Result, SatDict String, Log)
 runBF = runEnv runBruteForce
 
+-- | Run the variational sat solver given a list of optimizations and a prop.
+-- This can throw an exception if the prop has SMT terms in it
 runVS :: [VProp String String -> VProp String String]
   -> VProp String String
   -> IO (Result, SatDict String, Log)
 runVS = runEnv runVSolve
 
+-- | Run the VSMT solver given a list of optimizations and a prop
 runVSMT :: [VProp String String -> VProp String String]
   -> VProp String String
   -> IO (Result, SatDict String, Log)
 runVSMT = runEnv runVSMTSolve
-
--- runEnvFirst :: Bool -> Bool -> Bool -> [VProp String -> VProp String] -> VProp String -> IO (V Dim (Maybe I.SMTModel))
--- runEnvFirst base bAD bOpt opts x = (head . unbox . fst') <$> _runEnv (work x) (_setOpts base bAD bOpt opts) (initSt x)
---   where fst' (y,_,_)  = y
---         unbox (Vr xs) = xs
 
 -- | Given a VProp a term generate the satisfiability map
 initSt :: (Show a, Ord a) => VProp a a -> (SatDict a)
@@ -118,7 +118,7 @@ runBruteForce prop = lift $ flip evalStateT _emptySt $
 -- and then run the sat solver
 runAndDecomp :: (MonadTrans t, Monad (t IO)) => VProp String String -> t IO Result
 runAndDecomp prop = do
-  res <- lift . S.runSMT $ do
+  res <- lift . S.runSMTWith S.z3{S.verbose=True} $ do
     p <- symbolicPropExpr $ (andDecomp prop dimName)
     S.constrain p
     SC.query $ do
