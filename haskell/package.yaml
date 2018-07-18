@@ -24,7 +24,6 @@ dependencies:
 - mtl
 - foldl
 - bifunctors
-# - QuickCheck
 - deepseq
 - sbv
 - cassava
@@ -89,3 +88,7 @@ tests:
     - -with-rtsopts=-N
     dependencies:
     - vsat
+    - tasty-hunit
+    - tasty
+    - tasty-smallcheck
+    - tasty-quickcheck
