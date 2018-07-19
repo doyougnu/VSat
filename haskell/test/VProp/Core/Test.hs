@@ -2,6 +2,8 @@ module VProp.Core.Test where
 
 import Test.Tasty
 import Test.Tasty.QuickCheck as QC
+import qualified Data.Set as Set
+import Data.List  (group, genericLength)
 
 import VProp.Types
 import VProp.Core
@@ -10,6 +12,9 @@ import VProp.Gen
 
 coreProperties :: TestTree
 coreProperties = testGroup "Core Properties" [qcProps]
+
+freq :: (Integral b, Eq a) => [a] -> [([a], b)]
+freq = fmap (\x -> (x , genericLength x)) . group
 
 qcProps = testGroup "QuickChecked Properties"
   [ QC.testProperty "And Decomposition removes all choices" $
@@ -23,8 +28,23 @@ qcProps = testGroup "QuickChecked Properties"
           then (null $ dimensions x) == True
           else (null $ dimensions x) == False
 
-  -- , QC.testProperty "If a prop has onlybool information, then it will have no integer variables" $
-  --   \x -> if onlyBools (x :: VProp String String) <+> not (onlyLits x)
-  --         then (null $ ivars x) == True
-  --         else (null $ ivars x) == False
+  , QC.testProperty "Destructors have no duplicates: dimensions" $
+    \x -> (length . Set.toList $ dimensions (x :: VProp String String))
+          ==
+          (foldr (\x acc -> acc + snd x) 0 . freq . Set.toList $ dimensions x)
+
+  , QC.testProperty "Destructors have no duplicates: vars" $
+    \x -> (length . Set.toList $ vars (x :: VProp String String))
+          ==
+          (foldr (\x acc -> acc + snd x) 0 . freq . Set.toList $ vars x)
+
+  , QC.testProperty "Destructors have no duplicates: ivars" $
+    \x -> (length . Set.toList $ ivars (x :: VProp String String))
+          ==
+          (foldr (\x acc -> acc + snd x) 0 . freq . Set.toList $ ivars x)
+
+  , QC.testProperty "Destructors have no duplicates: ivars" $
+    \x -> (length . Set.toList $ ivars (x :: VProp String String))
+          ==
+          (foldr (\x acc -> acc + snd x) 0 . freq . Set.toList $ ivars x)
   ]
