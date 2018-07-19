@@ -51,7 +51,11 @@ instance (Show a, Ord a) => SAT (VProp a a) where
 
 -- TODO fix this repetition
 -- | Evaluate a feature expression against a configuration.
-evalPropExpr :: DimBool -> VConfig a SInteger -> VConfig a SBool -> VProp a a -> SBool
+evalPropExpr :: DimBool
+             -> VConfig a SInteger
+             -> VConfig a SBool
+             -> VProp a a
+             -> SBool
 evalPropExpr _ _ _ (LitB b)    = literal b
 evalPropExpr _ _ !c (RefB f)   = c f
 evalPropExpr d !i !c !(OpB Not e)   = bnot (evalPropExpr d i c e)
@@ -96,7 +100,7 @@ symbolicPropExpr e = do
     syms  <- fmap (fromList . zip vs) (sBools (show <$> vs))
     dims  <- fmap (fromList . zip ds) (sBools (map dimName ds))
     isyms <- fmap (fromList . zip is) (sIntegers (show <$> is))
-    let look f = fromMaybe err (lookup f syms)
+    let look f  = fromMaybe err  (lookup f syms)
         lookd d = fromMaybe errd (lookup d dims)
         looki i = fromMaybe erri (lookup i isyms)
     return (evalPropExpr lookd looki look e)
