@@ -88,6 +88,7 @@ tests:
     - -with-rtsopts=-N
     dependencies:
     - vsat
+    - QuickCheck
     - tasty
     - tasty-hunit
     - tasty-smallcheck
