@@ -6,6 +6,8 @@ module Run ( Opts (..)
            , runBF
            , runVS
            , runVSMT
+           , unbox
+           , fst'
            ) where
 
 import qualified Data.Map.Strict as M
@@ -89,7 +91,6 @@ initSt prop = (sats, vs)
   where sats = M.fromList . fmap (\x -> (x, False)) $ M.fromList <$> configs prop
         vs = M.fromSet (const False) (vars prop)
 
-
 -- | Some logging functions
 _logBaseline :: (Show a, MonadWriter [Char] m) => a -> m ()
 _logBaseline x = tell $ "Running baseline: " ++ show x
@@ -121,13 +122,7 @@ runAndDecomp prop = do
   res <- lift . S.runSMTWith S.z3{S.verbose=True} $ do
     p <- symbolicPropExpr $ (andDecomp prop dimName)
     S.constrain p
-    SC.query $ do
-      c <- SC.checkSat
-      case c of
-        SC.Unk -> error "asdf"
-        SC.Unsat -> return Nothing
-        SC.Sat -> do model' <- SC.getModel
-                     return $ Just model'
+    SC.query getVSMTModel
   lift . return $ R res
 
 runVSolve :: (MonadReader (Opts String) (t IO), MonadTrans t) =>
@@ -147,10 +142,16 @@ runVSMTSolve prop =
      lift . return . V $ res
 
 -- | main workhorse for running the SAT solver
-data Result = R (Maybe I.SMTModel)
+data Result = R (V Dim (Maybe I.SMTResult))
             | L [S.SatResult]
             | V [V Dim (Maybe S.SMTResult)]
             deriving (Generic)
+
+-- | unbox a result to get the SMTResults
+unbox :: Result -> [V Dim (Maybe S.SMTResult)]
+unbox (L _) = []
+unbox (R _) = []
+unbox (V xs) = xs
 
 instance NFData Result
 
@@ -225,20 +226,12 @@ smtDouble str = do (_,st) <- get
                                    return b'
                      Just x  -> return x
 
--- -- | get a model out given an S.SBool
--- getModel :: SC.Query (V d (Maybe I.SMTModel))
--- getModel = do cs <- SC.checkSat
---               case cs of
---                 SC.Unk   -> error "Unknown!"
---                 SC.Unsat -> return (Plain Nothing)
---                 SC.Sat   -> (Plain . Just) <$> SC.getModel
-
-getVSMTModel :: S.SBool -> SC.Query (V d (Maybe S.SMTResult))
-getVSMTModel b = do cs <- SC.checkSat
-                    case cs of
-                      SC.Unk   -> error "Unknown!"
-                      SC.Unsat -> return (Plain Nothing)
-                      SC.Sat   -> (Plain . Just) <$> (SC.getSMTResult)
+getVSMTModel :: SC.Query (V d (Maybe S.SMTResult))
+getVSMTModel = do cs <- SC.checkSat
+                  case cs of
+                    SC.Unk   -> error "Unknown!"
+                    SC.Unsat -> return (Plain Nothing)
+                    SC.Sat   -> (Plain . Just) <$> SC.getSMTResult
 
 -- | type class needed to avoid lifting for constraints in the IncSolve monad
 instance (Monad m, I.SolverContext m) =>
@@ -302,14 +295,14 @@ vSMTSolve_ !(ChcB d l r) =
        Just False -> vSMTSolve_ r
        Nothing    -> do St.modify . second $ M.insert d True
                         lift $ SC.push 1
-                        lb <- vSMTSolve_ l
-                        lmodel <- lift $ getVSMTModel lb
+                        _ <- vSMTSolve_ l
+                        lmodel <- lift $ getVSMTModel
                         lift $ SC.pop 1
 
                         St.modify . second $ M.adjust (const False) d
                         lift $ SC.push 1
                         b <- vSMTSolve_ r
-                        rmodel <- lift $ getVSMTModel b
+                        rmodel <- lift $ getVSMTModel
                         lift $ SC.pop 1
 
                         St.modify . first $ ((:) (VChc d lmodel rmodel))
@@ -343,15 +336,15 @@ vSMTSolve'_ !(ChcI d l r) =
        Just False -> vSMTSolve'_ r
        Nothing    -> do St.modify . second $ M.insert d True
                         lift $ SC.push 1
-                        lb <- vSMTSolve'_ l
-                        lmodel <- lift $ getVSMTModel true
+                        _ <- vSMTSolve'_ l
+                        lmodel <- lift $ getVSMTModel
                         lift $ SC.pop 1
 
                         St.modify . second $ M.adjust (const False) d
                         lift $ SC.push 1
                         r' <- vSMTSolve'_ r
      -- TODO FIX THIS LATER
-                        rmodel <- lift $ getVSMTModel true
+                        rmodel <- lift $ getVSMTModel
                         lift $ SC.pop 1
 
                         St.modify . first $ ((:) (VChc d lmodel rmodel))
@@ -390,41 +383,17 @@ vSolve_ !(ChcB d l r) =
        Just False -> vSolve_ r
        Nothing    -> do St.modify . second $ M.insert d True
                         lift $ SC.push 1
-                        lb <- vSolve_ l
-                        lmodel <- lift $ getVSMTModel lb
+                        _ <- vSolve_ l
+                        lmodel <- lift $ getVSMTModel
                         lift $ SC.pop 1
 
                         St.modify . second $ M.adjust (const False) d
                         lift $ SC.push 1
                         b <- vSolve_ r
-                        rmodel <- lift $ getVSMTModel b
+                        rmodel <- lift $ getVSMTModel
                         lift $ SC.pop 1
 
                         St.modify . first $ ((:) (VChc d lmodel rmodel))
 
                         St.modify . second $ M.delete d
                         return b
-
-
--- These fail
--- ex1 :: VProp Var Var
--- ex1 = BB≺((#F ↔ (CC≺inbahhaa , rtohdirjqwlilghnxilvyt≻)) ∨ (BB≺lzqnwmzybbwn, iiqrrdbccsrpdxib≻ < signum nznposifl)) ↔ (hmfoxjqaypseaqiqwgdzwmup ≠ -25) , losyjs ≠ AA≺25, hozllhxjicdntwwhxu≻ % fpyop * hkkhcnmmhhpbwgctijz≻
--- test :: S.Symbolic (Maybe S.ThmResult)
--- test = do x <- bnot $ S.sBool "x"   -- a free variable named "x"
-
---           -- This is new
-
-
---           -- Go into the Query mode
---           SC.query $ do
---                 -- Query the solver: Are the constraints satisfiable?
---                 cs <- SC.checkSat
---                 case cs of
---                   SC.Unk   -> error "Solver said unknown!"
---                   SC.Unsat -> return Nothing -- no solution!
---                   SC.Sat   -> -- Query the values:
---                     do res <- SC.getSMTResult
-
---                        SC.io $ putStrLn $ "Solver returned: " ++ show (S.ThmResult res)
-
---                        return $ Just (S.ThmResult res)
