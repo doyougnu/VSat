@@ -13,7 +13,7 @@ import GHC.Generics
 import Control.DeepSeq        (NFData)
 
 -- | a choice data type, without the object language
-data V d a = Plain a | VChc d (V d a) (V d a) deriving (Show,Generic)
+data V d a = Plain a | VChc d (V d a) (V d a) deriving (Show,Generic,Eq)
 
 type VConfig d = Map.Map d Bool
 

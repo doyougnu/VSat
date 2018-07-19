@@ -5,6 +5,7 @@ import Data.SBV (SatResult(..), ThmResult(..))
 import VProp.Types
 import Run
 import V
+import Utils (fst')
 
 sat :: [VProp String String -> VProp String String]
   -> VProp String String

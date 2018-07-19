@@ -3,6 +3,7 @@ module Run ( Opts (..)
            , SatDict
            , Log
            , runAD
+           , runAD_
            , runBF
            , runVS
            , runVSMT
@@ -29,6 +30,7 @@ import VProp.Types
 import VProp.SBV
 import VProp.Core
 import V
+import Utils
 
 -- | The satisfiable dictionary, this is actually the "state" keys are configs
 -- and values are whether that config is satisfiable or not (a bool)
@@ -61,10 +63,16 @@ runEnv :: (VProp String String-> Env String Result)
 runEnv f !opts !x = _runEnv (f x) (Opts opts) (initSt x)
 
 -- | Run the and decomposition solver
-runAD :: [VProp String String -> VProp String String]
+runAD_ :: [VProp String String -> VProp String String]
       -> VProp String String
       -> IO (Result, SatDict String, Log)
-runAD = runEnv runAndDecomp
+runAD_ = runEnv runAndDecomp
+
+runAD :: [VProp String String -> VProp String String]
+      -> VProp String String
+      -> IO [V Dim (Maybe S.SatResult)]
+runAD os p = fmap (bimap id (fmap S.SatResult)) . unbox . fst' <$>
+             runEnv runAndDecomp os p
 
 -- | Run the brute force solver
 runBF :: [VProp String String -> VProp String String]
