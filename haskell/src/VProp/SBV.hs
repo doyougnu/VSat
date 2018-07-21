@@ -38,16 +38,10 @@ import VProp.Types
 import VProp.Core
 import SAT
 
+import Debug.Trace (trace)
+
 instance (Show a, Ord a) => SAT (VProp a a) where
   toPredicate = symbolicPropExpr
-
--- instance Eq a => EqSymbolic (VProp a) where
---   (.==) l r | l == r = true
---             | otherwise = false
-
--- instance Ord a => OrdSymbolic (VProp a) where
---   (.<) l r | l < r = true
---            | otherwise = false
 
 -- TODO fix this repetition
 -- | Evaluate a feature expression against a configuration.
@@ -77,9 +71,9 @@ evalPropExpr d !i !c !(ChcB dim l r)
 -- | Eval the numeric expressions, VIExpr, assume everything is an integer until
 -- absolutely necessary to coerce
 evalPropExpr' :: DimBool -> VConfig a SInteger -> VIExpr a -> SNum
-evalPropExpr' _ _ !(LitI (I i)) =  SI $ literal i
-evalPropExpr' _ _ !(LitI (D d)) =  SD $ literal d
-evalPropExpr' _ !i !(Ref _ f) = SI $ i f
+evalPropExpr' _  _ !(LitI (I i)) = SI $ literal i
+evalPropExpr' _  _ !(LitI (D d)) = SD $ literal d
+evalPropExpr' _ !i !(Ref _ f)    = trace (show $ i f) $ SI $ i f
 evalPropExpr' d !i !(OpI Neg e) = negate $ evalPropExpr' d i e
 evalPropExpr' d !i !(OpI Abs e) = abs $ evalPropExpr' d i e
 evalPropExpr' d !i !(OpI Sign e) = signum $ evalPropExpr' d i e
@@ -115,15 +109,4 @@ andDecomp !(ChcB d l r) f = (dimToVar f d &&& andDecomp l f) |||
 andDecomp !(OpB op x)    f = OpB  op (andDecomp x f)
 andDecomp !(OpBB op l r) f = OpBB op (andDecomp l f) (andDecomp r f)
 andDecomp !(Opn op ps)   f = Opn  op (flip andDecomp f <$> ps)
-andDecomp !x           _ = x
-
--- | Reduce the size of a feature expression by applying some basic
---   simplification rules.
--- shrinkPropExpr :: (Show a, Ord a) => VProp a -> VProp a
--- shrinkPropExpr e
---     | unsatisfiable e           = Lit $ B False
---     | tautology e               = Lit $ B True
--- shrinkPropExpr (Not (Not e))    = shrinkPropExpr e
--- shrinkPropExpr (Opn And ps)  = Opn And (filter (not . tautology) ps)
--- shrinkPropExpr (Opn Or ps)   = Opn Or (filter (not . unsatisfiable) ps)
--- shrinkPropExpr e = e
+andDecomp !x             _ = x
