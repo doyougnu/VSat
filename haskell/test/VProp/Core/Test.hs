@@ -47,4 +47,7 @@ qcProps = testGroup "QuickChecked Properties"
     \x -> (length . Set.toList $ ivars (x :: VProp String String))
           ==
           (foldr (\x acc -> acc + snd x) 0 . freq . Set.toList $ ivars x)
+
+  , QC.testProperty "And Decomposition does not affect plain props" $
+    \x -> isPlain x QC.==> andDecomp x dimName == (x :: VProp String String)
   ]

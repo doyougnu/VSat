@@ -15,7 +15,11 @@ runProperties = testGroup "Run Properties" [qcProps]
 
 qcProps = testGroup "QuickChecked Properties" []
 
-andDecomp_correct x = QCM.monadicIO $
-  do a <- QCM.run $ runAD [] (x :: VProp String String)
-     b <- QCM.run $ runAD [] x
-     assert ((head a) == (head b))
+-- andDecomp_correct x = QCM.monadicIO $
+--   do a <- QCM.run $ runAD [] (x :: VProp String String)
+--      b <- QCM.run $ runAD [] x
+--      assert ((head a) == (head b))
+
+-- andDecomp_plain x = QCM.monadicIO $
+--   do a <- QCM.run $ runAD [] (x :: VProp String String)
+--      assert $ isPlain a

@@ -245,7 +245,7 @@ vars (LitB _)     = Set.empty
 vars (RefB f)     = Set.singleton f
 vars (OpB _ e)    = vars e
 vars (OpBB _ l r) = vars l `Set.union` vars r
-vars (OpIB _ l r) = vars' l `Set.union` vars' r
+vars (OpIB _ _ _) = Set.empty
 vars (Opn _ ps)   = Set.unions $ vars <$> ps
 vars (ChcB _ l r) = vars l `Set.union` vars r
 
