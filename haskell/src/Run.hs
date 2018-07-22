@@ -127,10 +127,9 @@ runBruteForce prop = lift $ flip evalStateT _emptySt $
 -- and then run the sat solver
 runAndDecomp :: (MonadTrans t, Monad (t IO)) => VProp String String -> t IO Result
 runAndDecomp prop = do
-  res <- lift . S.runSMTWith S.z3{S.verbose=True} $ do
-    p <- symbolicPropExpr $ (andDecomp prop dimName)
-    S.constrain p
-    SC.query getVSMTModel
+  res <- lift . S.runSMT $ do
+    p <- symbolicPropExpr $ andDecomp prop dimName
+    SC.query $ do S.constrain p; getVSMTModel
   lift . return $ R res
 
 runVSolve :: (MonadReader (Opts String) (t IO), MonadTrans t) =>
@@ -158,7 +157,7 @@ data Result = R (V Dim (Maybe I.SMTResult))
 -- | unbox a result to get the SMTResults
 unbox :: Result -> [V Dim (Maybe S.SMTResult)]
 unbox (L _) = []
-unbox (R _) = []
+unbox (R x) = [x]
 unbox (V xs) = xs
 
 instance NFData Result
@@ -191,7 +190,7 @@ type IncVSMTSolve a = St.StateT (IncState S.SMTResult) SC.Query a
 -- the choice onto the result list.
 vSolve :: S.Symbolic (VProp S.SBool SNum) -> S.Symbolic (IncState S.SMTResult)
 vSolve prop = do prop' <- prop
-                 S.setOption $ SC.ProduceProofs True
+                 -- S.setOption $ SC.ProduceProofs True
                  SC.query $
                    do res <- St.execStateT (vSolve_ prop') ([], M.empty)
                       return res
@@ -199,7 +198,7 @@ vSolve prop = do prop' <- prop
 -- | Solve a VSMT proposition
 vSMTSolve :: S.Symbolic (VProp S.SBool SNum) -> S.Symbolic (IncState S.SMTResult)
 vSMTSolve prop = do prop' <- prop
-                    S.setOption $ SC.ProduceProofs True
+                    -- S.setOption $ SC.ProduceProofs True
                     SC.query $
                       do
                       (_, res) <- St.runStateT (vSMTSolve_ prop') ([], M.empty)
