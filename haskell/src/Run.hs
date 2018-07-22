@@ -121,7 +121,7 @@ runBruteForce prop = lift $ flip evalStateT _emptySt $
   let confs = M.keys _confs
       plainProps = (\y -> sequence $! (y, selectVariant y prop)) <$> confs
   plainModels <- lift $ mapM (S.sat . symbolicPropExpr . snd) $! catMaybes plainProps
-  return $ L plainModels
+  return $ L plainM
 
 -- | Run the and decomposition baseline case, that is deconstruct every choice
 -- and then run the sat solver
@@ -130,7 +130,7 @@ runAndDecomp prop = do
   res <- lift . S.runSMT $ do
     p <- symbolicPropExpr $ andDecomp prop dimName
     SC.query $ do S.constrain p; getVSMTModel
-  lift . return $ R res
+  lift . return $ V [res]
 
 runVSolve :: (MonadReader (Opts String) (t IO), MonadTrans t) =>
   VProp String String -> t IO Result
@@ -149,15 +149,13 @@ runVSMTSolve prop =
      lift . return . V $ res
 
 -- | main workhorse for running the SAT solver
-data Result = R (V Dim (Maybe I.SMTResult))
-            | L [S.SatResult]
+data Result = L [S.SatResult]
             | V [V Dim (Maybe S.SMTResult)]
             deriving (Generic)
 
 -- | unbox a result to get the SMTResults
 unbox :: Result -> [V Dim (Maybe S.SMTResult)]
 unbox (L _) = []
-unbox (R x) = [x]
 unbox (V xs) = xs
 
 instance NFData Result
