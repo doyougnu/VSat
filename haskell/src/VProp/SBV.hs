@@ -38,7 +38,6 @@ import VProp.Types
 import VProp.Core
 import SAT
 
-import Debug.Trace (trace)
 
 instance (Show a, Ord a) => SAT (VProp a a) where
   toPredicate = symbolicPropExpr
@@ -73,7 +72,7 @@ evalPropExpr d !i !c !(ChcB dim l r)
 evalPropExpr' :: DimBool -> VConfig a SInteger -> VIExpr a -> SNum
 evalPropExpr' _  _ !(LitI (I i)) = SI $ literal i
 evalPropExpr' _  _ !(LitI (D d)) = SD $ literal d
-evalPropExpr' _ !i !(Ref _ f)    = trace (show $ i f) $ SI $ i f
+evalPropExpr' _ !i !(Ref _ f)    = SI $ i f
 evalPropExpr' d !i !(OpI Neg e) = negate $ evalPropExpr' d i e
 evalPropExpr' d !i !(OpI Abs e) = abs $ evalPropExpr' d i e
 evalPropExpr' d !i !(OpI Sign e) = signum $ evalPropExpr' d i e
