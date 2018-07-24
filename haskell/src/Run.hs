@@ -70,7 +70,7 @@ runAD_ = runEnv runAndDecomp
 
 runAD :: [VProp String String -> VProp String String]
       -> VProp String String
-      -> IO [V Dim (Maybe S.SatResult)]
+      -> IO [V String (Maybe S.SatResult)]
 runAD os p = fmap (bimap id (fmap S.SatResult)) . unbox . fst' <$>
              runEnv runAndDecomp os p
 
@@ -113,15 +113,14 @@ _logResult x = tell $ "Got result: " ++ show x
 -- | Run the brute force baseline case, that is select every plain variant and
 -- run them to the sat solver
 runBruteForce :: (Show a, Ord a) =>
-  (MonadTrans t,
-   MonadState (SatDict a) (t IO)) => VProp a a -> t IO Result
+  (MonadTrans t, MonadState (SatDict a) (t IO)) => VProp a a -> t IO Result
 runBruteForce prop = lift $ flip evalStateT _emptySt $
   do
   (_confs, _) <- get
   let confs = M.keys _confs
       plainProps = (\y -> sequence $! (y, selectVariant y prop)) <$> confs
-  plainModels <- lift $ mapM (S.sat . symbolicPropExpr . snd) $! catMaybes plainProps
-  return $ L plainM
+  plainMs <- lift $ mapM (S.sat . symbolicPropExpr . snd) $! catMaybes plainProps
+  return $ L plainMs
 
 -- | Run the and decomposition baseline case, that is deconstruct every choice
 -- and then run the sat solver
@@ -150,11 +149,11 @@ runVSMTSolve prop =
 
 -- | main workhorse for running the SAT solver
 data Result = L [S.SatResult]
-            | V [V Dim (Maybe S.SMTResult)]
+            | V [V String (Maybe S.SMTResult)]
             deriving (Generic)
 
 -- | unbox a result to get the SMTResults
-unbox :: Result -> [V Dim (Maybe S.SMTResult)]
+unbox :: Result -> [V String (Maybe S.SMTResult)]
 unbox (L _) = []
 unbox (V xs) = xs
 
@@ -173,7 +172,7 @@ type UsedDims a = M.Map a Bool
 
 -- | the internal state for the incremental solve algorithm, it holds a result
 -- list, and the used dims map
-type IncState a = ([V Dim (Maybe a)], UsedDims Dim)
+type IncState a = ([V String (Maybe a)], UsedDims Dim)
 
 -- | the incremental solve monad, with the base monad being the query monad so
 -- we can pull out sbv models Hardcoding so that I don't have to write the mtl
@@ -188,7 +187,6 @@ type IncVSMTSolve a = St.StateT (IncState S.SMTResult) SC.Query a
 -- the choice onto the result list.
 vSolve :: S.Symbolic (VProp S.SBool SNum) -> S.Symbolic (IncState S.SMTResult)
 vSolve prop = do prop' <- prop
-                 -- S.setOption $ SC.ProduceProofs True
                  SC.query $
                    do res <- St.execStateT (vSolve_ prop') ([], M.empty)
                       return res
@@ -196,7 +194,6 @@ vSolve prop = do prop' <- prop
 -- | Solve a VSMT proposition
 vSMTSolve :: S.Symbolic (VProp S.SBool SNum) -> S.Symbolic (IncState S.SMTResult)
 vSMTSolve prop = do prop' <- prop
-                    -- S.setOption $ SC.ProduceProofs True
                     SC.query $
                       do
                       (_, res) <- St.runStateT (vSMTSolve_ prop') ([], M.empty)
@@ -310,7 +307,7 @@ vSMTSolve_ !(ChcB d l r) =
                         rmodel <- lift $ getVSMTModel
                         lift $ SC.pop 1
 
-                        St.modify . first $ ((:) (VChc d lmodel rmodel))
+                        St.modify . first $ ((:) (VChc (dimName d) lmodel rmodel))
 
                         St.modify . second $ M.delete d
                         return b
@@ -352,7 +349,7 @@ vSMTSolve'_ !(ChcI d l r) =
                         rmodel <- lift $ getVSMTModel
                         lift $ SC.pop 1
 
-                        St.modify . first $ ((:) (VChc d lmodel rmodel))
+                        St.modify . first $ ((:) (VChc (dimName d) lmodel rmodel))
 
                         St.modify . second $ M.delete d
                         return r'
@@ -398,7 +395,7 @@ vSolve_ !(ChcB d l r) =
                         rmodel <- lift $ getVSMTModel
                         lift $ SC.pop 1
 
-                        St.modify . first $ ((:) (VChc d lmodel rmodel))
+                        St.modify . first $ ((:) (VChc (dimName d) lmodel rmodel))
 
                         St.modify . second $ M.delete d
                         return b
