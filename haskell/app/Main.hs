@@ -13,7 +13,10 @@ import VProp.Types hiding (appendFile, writeFile)
 import VProp.Gen
 import Test.Tasty.QuickCheck (generate, choose)
 import Control.DeepSeq (NFData)
+
 import Api
+import Json
+
 
 import System.CPUTime
 import System.Environment
