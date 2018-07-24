@@ -11,11 +11,15 @@ import Data.List              (sortOn)
 import qualified Data.Map.Strict     as Map
 import GHC.Generics
 import Control.DeepSeq        (NFData)
+import Data.Aeson
 
 -- | a choice data type, without the object language
 data V d a = Plain a | VChc d (V d a) (V d a) deriving (Show,Generic,Eq)
 
 type VConfig d = Map.Map d Bool
+
+instance (ToJSON a, ToJSON d) => ToJSON (V a d)
+instance (FromJSON a, FromJSON d) => FromJSON (V a d)
 
 instance (NFData a, NFData d) => NFData (V d a)
 
