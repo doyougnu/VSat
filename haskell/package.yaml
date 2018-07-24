@@ -33,6 +33,7 @@ dependencies:
 - vector
 - time
 - tasty-quickcheck
+- aeson
 
 library:
   source-dirs: src
