@@ -1,8 +1,9 @@
 module Json ( module Data.Aeson) where
 
 import V (V(..))
-import Data.SBV (SatResult(..), SMTResult(..),ThmResult(..))
+import Data.SBV (SatResult(..), SMTResult(..),ThmResult(..),SMTConfig(..),SMTSolver(..),Solver(..))
 import Data.SBV.Internals (showModel)
+import Control.Monad (liftM2)
 
 import Data.Text
 import Data.Aeson
@@ -27,3 +28,42 @@ instance (Show d, Show a, ToJSON a, ToJSON d) => ToJSON (V a d) where
                                         , ("false" :: Text) .= toJSON r
                                         ]
                                ]
+
+instance Eq SMTResult where
+  (Unsatisfiable x) == (Unsatisfiable y) = x == y
+  (Satisfiable _ x) == (Satisfiable _ y) = x == y
+  (Satisfiable _ x) == (Satisfiable _ y) = x == y
+
+instance Eq Solver where
+  Z3        == Z3        = True
+  Yices     == Yices     = True
+  Boolector == Boolector = True
+  CVC4      == CVC4      = True
+  MathSAT   == MathSAT   = True
+  ABC       == ABC       = True
+  _         == _         = False
+
+instance Eq SMTConfig where
+  (SMTConfig
+   {verbose             = a
+   ,timing              = b
+   ,printBase           = c
+   ,printRealPrec       = d
+   ,satCmd              = e
+   ,allSatMaxModelCount = f
+   ,isNonModelVar       = g
+   ,transcript          = h
+   ,smtLibVersion       = i
+   ,solver              = j
+   ,roundingMode        = k
+   ,solverSetOptions    = l
+   ,ignoreExitCode      = m
+   ,redirectVerbose     = n
+   }) == (SMTConfig{..}) = a == verbose &&
+                           c == printBase &&
+                           d == printRealPrec &&
+                           e == satCmd &&
+                           (==) f allSatMaxModelCount &&
+                           (==) h transcript &&
+                           (name j) == (name solver) &&
+                           (==) n redirectVerbose
