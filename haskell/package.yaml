@@ -34,6 +34,7 @@ dependencies:
 - time
 - tasty-quickcheck
 - aeson
+- Spock
 
 library:
   source-dirs: src
@@ -50,6 +51,7 @@ default-extensions:
   - FlexibleInstances
   - DeriveDataTypeable
   - MultiParamTypeClasses
+  - RecordWildCards
 
 executables:
   vsat:
