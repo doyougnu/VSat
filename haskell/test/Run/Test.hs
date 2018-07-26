@@ -71,10 +71,11 @@ runProperties = testGroup "Run Properties" [qcProps]
 
 qcProps = QC.testProperty "and decomp is correct" $ \x -> andDecomp_correct x
 
-andDecomp_correct x = QCM.monadicIO $
-  do a <- QCM.run $ runAD [] (x :: VProp String String)
-     b <- QCM.run $ runAD [] x
+andDecomp_correct x = not (null $ vars (x :: VProp Var Var)) QC.==> QCM.monadicIO $
+  do a <- QCM.run $ runAD [] x'
+     b <- QCM.run $ runAD [] x'
      assert ((head a) == (head b))
+  where x' = bimap show show x
 
 -- andDecomp_plain x = QCM.monadicIO $
 --   do a <- QCM.run $ runAD [] (x :: VProp String String)
