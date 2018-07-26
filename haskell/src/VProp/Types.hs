@@ -121,12 +121,12 @@ data NN_B = LT | LTE | GT | GTE | EQ | NEQ deriving (Eq,Generic,Data,Typeable,Or
 data Opn = And | Or deriving (Eq,Generic,Data,Typeable,Show,Ord)
 
 -- | add div and mod to num
-class Num n => PrimN n where
-  (./), (.%) :: n -> n -> n
+class (Num n, Num m) => PrimN n m where
+  (./), (.%) :: n -> m -> m
 
 -- | Overload the primitive operators
-class (S.Boolean b, PrimN n) => Prim b n where
-  (.<), (.<=), (.==), (./=), (.>=), (.>) :: n -> n -> b
+class (S.Boolean b, PrimN n m) => Prim b n m where
+  (.<), (.<=), (.==), (./=), (.>=), (.>) :: n -> m -> b
 
 infix 4 .<, .<=, .==, ./=, .>=, .>
 infixl 7 ./, .%
@@ -144,15 +144,15 @@ bRef = RefB
 
 -- | Begin primitive instances
 
-instance PrimN Integer where
+instance PrimN Integer Integer where
   (./) = div
   (.%) = mod
 
-instance PrimN Double where
+instance PrimN Double Double where
   (./) = (/)
   (.%) = mod'
 
-instance Prim Bool Integer where
+instance Prim Bool Integer Integer where
   (.<)  = (<)
   (.<=) = (<=)
   (.==) = (==)
@@ -160,7 +160,7 @@ instance Prim Bool Integer where
   (.>=) = (>=)
   (.>)  = (>)
 
-instance Prim Bool Double where
+instance Prim Bool Double Double where
   (.<)  = (<)
   (.<=) = (<=)
   (.==) = (==)
@@ -168,7 +168,7 @@ instance Prim Bool Double where
   (.>=) = (>=)
   (.>)  = (>)
 
-instance Prim (VProp a b) Integer where
+instance Prim (VProp a b) Integer Integer where
   (.<)  i j = OpIB LT  (LitI $ I i) (LitI $ I j)
   (.<=) i j = OpIB LTE (LitI $ I i) (LitI $ I j)
   (.==) i j = OpIB EQ  (LitI $ I i) (LitI $ I j)
@@ -176,7 +176,7 @@ instance Prim (VProp a b) Integer where
   (.>=) i j = OpIB GTE (LitI $ I i) (LitI $ I j)
   (.>)  i j = OpIB GT  (LitI $ I i) (LitI $ I j)
 
-instance Prim (VProp a b) Double where
+instance Prim (VProp a b) Double Double where
   (.<)  i j = OpIB LT  (LitI $ D i) (LitI $ D j)
   (.<=) i j = OpIB LTE (LitI $ D i) (LitI $ D j)
   (.==) i j = OpIB EQ  (LitI $ D i) (LitI $ D j)
@@ -214,19 +214,29 @@ instance Num SNum where
   (SI i) * (SD d)  = SD $ d * S.sFromIntegral i
   (SD d) * (SD d') = SD $ d * d'
 
-instance PrimN SNum where
+instance PrimN SNum SNum where
   (SI i) ./ (SI i') = SI $ i ./ i'
   (SD d) ./ (SI i)  = SD $ d ./ (S.sFromIntegral i)
   (SI i) ./ (SD d)  = SD $ S.sFromIntegral i ./ d
   (SD d) ./ (SD d') = SD $ d ./ d'
 
-
   (SI i) .% (SI i') = SI $ i .% i'
-  (SD d) .% (SI i)  = SD $ d .% (S.sFromIntegral i)
-  (SI i) .% (SD d)  = SD $ S.sFromIntegral i .% d
-  (SD d) .% (SD d') = SD $ d .% d'
+  (SD d) .% (SI i)  = SI $ (S.sRealToSInteger $ (S.toRational d)) .% i
+  (SI i) .% (SD d)  = SI $ i .% (S.sRealToSInteger d)
+  (SD d) .% (SD d') = SI $ (S.sRealToSInteger d) .% (S.sRealToSInteger d')
 
-instance PrimN S.SInteger where
+instance PrimN NPrim SNum  where
+  (I i) ./ (SI i')  = SI $ (S.literal i)                   ./ i'
+  (I i) ./ (SD d')  = SD $ (S.sFromIntegral $ S.literal i) ./ d'
+  (D d) ./ (SI i')  = SI $ (S.literal d)                   ./ (S.sFromIntegral i')
+  (D d) ./ (SD d')  = SD $ (S.literal d)                   ./ d'
+
+  (I i) .% (SI i')  = SI $ (S.literal i)                   .% i'
+  (I i) .% (SD d')  = SD $ (S.sFromIntegral $ S.literal i) .% d'
+  (D d) .% (SI i')  = SI $ (S.literal d)                   .% (S.sFromIntegral i')
+  (D d) .% (SD d')  = SD $ (S.literal d)                   .% d'
+
+instance PrimN S.SInteger S.SInteger where
   (./)  = S.sDiv
   (.%)  = S.sMod
 
@@ -240,23 +250,23 @@ instance S.SDivisible S.SDouble where
   sQuotRem = liftQRem
   sDivMod  = liftDMod
 
-instance PrimN S.SDouble where
+instance PrimN S.SDouble S.SDouble where
   (./)  = S.sDiv
   (.%)  = S.sMod
 
-instance PrimN S.SInt8 where
+instance PrimN S.SInt8 S.SInt8 where
   (./)  = S.sDiv
   (.%)  = S.sMod
 
-instance PrimN S.SInt16 where
+instance PrimN S.SInt16 S.SInt16 where
   (./)  = S.sDiv
   (.%)  = S.sMod
 
-instance PrimN S.SInt32 where
+instance PrimN S.SInt32 S.SInt32 where
   (./)  = S.sDiv
   (.%)  = S.sMod
 
-instance PrimN S.SInt64 where
+instance PrimN S.SInt64 S.SInt64 where
   (./)  = S.sDiv
   (.%)  = S.sMod
 
@@ -297,7 +307,7 @@ instance S.OrdSymbolic SNum where
   (.>) (SI i) (SD d)  = (S..>) (S.sFromIntegral i) d
   (.>) (SD d) (SD d') = (S..>) d d'
 
-instance Prim S.SBool SNum where
+instance Prim S.SBool SNum SNum where
   (.<)  = (S..<)
   (.<=) = (S..<=)
   (.==) = (S..==)
@@ -305,7 +315,7 @@ instance Prim S.SBool SNum where
   (.>=) = (S..>=)
   (.>)  = (S..>)
 
-instance Prim S.SBool S.SInteger where
+instance Prim S.SBool S.SInteger S.SInteger where
   (.<)  = (S..<)
   (.<=) = (S..<=)
   (.==) = (S..==)
@@ -313,7 +323,7 @@ instance Prim S.SBool S.SInteger where
   (.>=) = (S..>=)
   (.>)  = (S..>)
 
-instance Prim S.SBool S.SInt8 where
+instance Prim S.SBool S.SInt8 S.SInt8 where
   (.<)  = (S..<)
   (.<=) = (S..<=)
   (.==) = (S..==)
@@ -321,7 +331,7 @@ instance Prim S.SBool S.SInt8 where
   (.>=) = (S..>=)
   (.>)  = (S..>)
 
-instance Prim S.SBool S.SInt16 where
+instance Prim S.SBool S.SInt16 S.SInt16 where
   (.<)  = (S..<)
   (.<=) = (S..<=)
   (.==) = (S..==)
@@ -329,7 +339,7 @@ instance Prim S.SBool S.SInt16 where
   (.>=) = (S..>=)
   (.>)  = (S..>)
 
-instance Prim S.SBool S.SInt32 where
+instance Prim S.SBool S.SInt32 S.SInt32 where
   (.<)  = (S..<)
   (.<=) = (S..<=)
   (.==) = (S..==)
@@ -337,7 +347,7 @@ instance Prim S.SBool S.SInt32 where
   (.>=) = (S..>=)
   (.>)  = (S..>)
 
-instance Prim S.SBool S.SInt64 where
+instance Prim S.SBool S.SInt64 S.SInt64 where
   (.<)  = (S..<)
   (.<=) = (S..<=)
   (.==) = (S..==)
@@ -345,7 +355,7 @@ instance Prim S.SBool S.SInt64 where
   (.>=) = (S..>=)
   (.>)  = (S..>)
 
-instance Prim S.SBool S.SDouble where
+instance Prim S.SBool S.SDouble S.SDouble where
   (.<)  = (S..<)
   (.<=) = (S..<=)
   (.==) = (S..==)
@@ -391,11 +401,11 @@ instance Num (VIExpr a) where
   (*)    = OpII Mult
 
 -- | the other num instances
-instance PrimN (VIExpr a) where
+instance PrimN (VIExpr a) (VIExpr a) where
   (./) = OpII Div
   (.%) = OpII Mod
 
-instance Prim (VProp a b) (VIExpr b) where
+instance Prim (VProp a b) (VIExpr b) (VIExpr b) where
   (.<)  = OpIB LT
   (.<=) = OpIB LTE
   (.==) = OpIB EQ
