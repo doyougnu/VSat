@@ -17,6 +17,7 @@ import VProp.Core
 import VProp.SBV
 import VProp.Gen
 import Run
+import Api
 
 instance Eq SMTResult where
   (Unsatisfiable x) == (Unsatisfiable y) = x == y
@@ -63,13 +64,16 @@ instance Eq SMTConfig where
                            (name j) == (name solver) &&
                            (==) n redirectVerbose
 
-instance Eq SatResult where
-  (SatResult x) == (SatResult y) = x == y
+instance Eq SatResult where (SatResult x) == (SatResult y) = x == y
+instance Eq ThmResult where (ThmResult x) == (ThmResult y) = x == y
 
 runProperties :: TestTree
-runProperties = testGroup "Run Properties" [qcProps]
+runProperties = testGroup "Run Properties" [ad_term, qcProps]
 
 qcProps = QC.testProperty "and decomp is correct" $ \x -> andDecomp_correct x
+ad_term = QC.testProperty
+          "and decomp terminates on known failing example"
+          andDecomp_terminates
 
 andDecomp_correct x = not (null $ vars (x :: VProp Var Var)) QC.==> QCM.monadicIO $
   do a <- QCM.run $ runAD [] x'
@@ -77,6 +81,9 @@ andDecomp_correct x = not (null $ vars (x :: VProp Var Var)) QC.==> QCM.monadicI
      assert ((head a) == (head b))
   where x' = bimap show show x
 
--- andDecomp_plain x = QCM.monadicIO $
---   do a <- QCM.run $ runAD [] (x :: VProp String String)
---      assert $ isPlain a
+andDecomp_terminates = QCM.monadicIO $
+  do a <- QCM.run $ runAD [] prop
+     assert (not $ null a)
+  where
+    prop :: VProp String String
+    prop = true &&& (iRef "a") .> (LitI . D $ 9.999999)
