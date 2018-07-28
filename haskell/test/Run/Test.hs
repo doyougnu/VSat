@@ -86,4 +86,4 @@ andDecomp_terminates = QCM.monadicIO $
      assert (not $ null a)
   where
     prop :: VProp String String
-    prop = true &&& (iRef "a") .> (LitI . D $ 9.999999)
+    prop = (iRef "a") .> (LitI . D $ 9.999999)
