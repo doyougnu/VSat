@@ -9,6 +9,7 @@ import VProp.Types
 import VProp.Core
 import VProp.SBV
 import VProp.Gen
+import Run
 
 coreProperties :: TestTree
 coreProperties = testGroup "Core Properties" [qcProps]
