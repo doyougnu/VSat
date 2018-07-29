@@ -92,13 +92,13 @@ symbolicPropExpr e = do
         ds = Set.toList (dimensions e)
         isType = Set.toList (ivarsWithType e)
 
-        helper :: (RefN, a) -> S.Symbolic SNum
+        helper :: Show a => (RefN, a) -> S.Symbolic SNum
         helper (RefD, d) = S.sDouble (show d) >>= return . SD
         helper (RefI, i) = S.sInteger (show i) >>= return . SI
 
     syms  <- fmap (fromList . zip vs) (S.sBools (show <$> vs))
     dims  <- fmap (fromList . zip ds) (S.sBools (map dimName ds))
-    isyms <- fmap (fromList . zip (show <$> is)) (traverse helper isType)
+    isyms <- fmap (fromList . zip is) (traverse helper isType)
     let look f  = fromMaybe err  (lookup f syms)
         lookd d = fromMaybe errd (lookup d dims)
         looki i = fromMaybe erri (lookup i isyms)
