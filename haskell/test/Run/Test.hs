@@ -68,7 +68,9 @@ instance Eq SatResult where (SatResult x) == (SatResult y) = x == y
 instance Eq ThmResult where (ThmResult x) == (ThmResult y) = x == y
 
 runProperties :: TestTree
-runProperties = testGroup "Run Properties" [ad_term, qcProps]
+runProperties = testGroup "Run Properties" [ad_term
+                                           , qcProps
+                                           ]
 
 qcProps = QC.testProperty "and decomp is correct" $ \x -> andDecomp_correct x
 ad_term = QC.testProperty
@@ -86,4 +88,4 @@ andDecomp_terminates = QCM.monadicIO $
      assert (not $ null a)
   where
     prop :: VProp String String
-    prop = (iRef "a") .> (LitI . D $ 9.999999)
+    prop = (dRef "a") .< (LitI . D $ 9.99999)

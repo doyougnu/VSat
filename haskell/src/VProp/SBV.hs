@@ -93,8 +93,8 @@ symbolicPropExpr e = do
         isType = Set.toList (ivarsWithType e)
 
         helper :: Show a => (RefN, a) -> S.Symbolic SNum
-        helper (RefD, d) = S.sDouble (show d) >>= return . SD
-        helper (RefI, i) = S.sInteger (show i) >>= return . SI
+        helper (RefD, d) = SD <$> S.sDouble (show d)
+        helper (RefI, i) = SI <$> S.sInteger (show i)
 
     syms  <- fmap (fromList . zip vs) (S.sBools (show <$> vs))
     dims  <- fmap (fromList . zip ds) (S.sBools (map dimName ds))
