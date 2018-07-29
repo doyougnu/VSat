@@ -62,15 +62,6 @@ prettyPropExpr = top
     sub (OpB b e) = show b <> sub e
     sub e       = "(" ++ top e ++ ")"
 
-xxx :: VProp String String
-xxx =  (iRef "a" + 2 .== 2 + iRef "a")
-
-yy :: VProp String String
-yy = Opn And [bRef "a", true]
-
--- yyy :: VProp String String
--- yyy = (4 .> iRef "c") .<= yy
-
 ----------------------------- Predicates ---------------------------------------
 -- | true if a propositions has no chcs whatsoever
 isPlain :: VProp a b -> Bool
@@ -287,11 +278,29 @@ ivars (ChcB _ l r) = ivars l `Set.union` ivars r
 
 ivars' :: Ord a => VIExpr a -> Set.Set a
 ivars' (LitI _)     = Set.empty
-ivars' (Ref _ a)    = Set.singleton a
 ivars' (OpI _ e)    = ivars' e
 ivars' (OpII _ l r) = ivars' l `Set.union` ivars' r
 ivars' (ChcI _ l r) = ivars' l `Set.union` ivars' r
+ivars' (Ref _ a)    = Set.singleton a
 
+-- | The set of integar variable references for an expression
+-- we save the leading constructors i.e. RefI or RefD so we know whether to call
+-- sInteger or sDouble in evalPropExpr
+ivarsWithType :: (Ord a, Ord b) => VProp a b -> Set.Set (RefN, b)
+ivarsWithType (LitB _)     = Set.empty
+ivarsWithType (RefB _)     = Set.empty
+ivarsWithType (OpB _ e)    = ivarsWithType e
+ivarsWithType (OpBB _ l r) = ivarsWithType l `Set.union` ivarsWithType r
+ivarsWithType (OpIB _ l r) = ivarsWithType' l `Set.union` ivarsWithType' r
+ivarsWithType (Opn _ ps)   = Set.unions $ ivarsWithType <$> ps
+ivarsWithType (ChcB _ l r) = ivarsWithType l `Set.union` ivarsWithType r
+
+ivarsWithType' :: Ord a => VIExpr a -> Set.Set (RefN, a)
+ivarsWithType' (LitI _)     = Set.empty
+ivarsWithType' (OpI _ e)    = ivarsWithType' e
+ivarsWithType' (OpII _ l r) = ivarsWithType' l `Set.union` ivarsWithType' r
+ivarsWithType' (ChcI _ l r) = ivarsWithType' l `Set.union` ivarsWithType' r
+ivarsWithType' (Ref x a)    = Set.singleton (x, a)
 
 -- | The set of all choices
 configs :: VProp a b -> [[(Dim, Bool)]]
