@@ -68,14 +68,18 @@ instance Eq SatResult where (SatResult x) == (SatResult y) = x == y
 instance Eq ThmResult where (ThmResult x) == (ThmResult y) = x == y
 
 runProperties :: TestTree
-runProperties = testGroup "Run Properties" [ad_term
-                                           , qcProps
+runProperties = testGroup "Run Properties" [ ad_term2
+                                           -- , ad_term
+                                           -- , qcProps
                                            ]
 
 qcProps = QC.testProperty "and decomp is correct" $ \x -> andDecomp_correct x
 ad_term = QC.testProperty
           "and decomp terminates on known failing example"
           andDecomp_terminates
+ad_term2 = QC.testProperty
+          "and decomp terminates on known failing example 2"
+          andDecomp_terminates2
 
 andDecomp_correct x = not (null $ vars (x :: VProp Var Var)) QC.==> QCM.monadicIO $
   do a <- QCM.run $ runAD [] x'
@@ -89,3 +93,20 @@ andDecomp_terminates = QCM.monadicIO $
   where
     prop :: VProp String String
     prop = (dRef "a") .< (LitI . D $ 9.99999)
+
+
+andDecomp_terminates2 = QCM.monadicIO $
+  do a <- QCM.run $ runAD [] prop
+     assert (not $ null a)
+  where
+    prop :: VProp String String
+    prop = (iRef "x" .< dRef "q") &&& (bRef "w" &&& bRef "rhy")
+    -- prop = ((dRef "x" - iRef "q") .== 0) &&& (bRef "w" &&& bRef "rhy")
+
+andDecomp_terminates3 = QCM.monadicIO $
+  do a <- QCM.run $ runAD [] prop
+     assert (not $ null a)
+  where
+    prop :: VProp String String
+    prop = ChcB "AA" (bRef "gd" &&& (iRef "j" .<= iRef "zy")) (false &&& bRef "g")
+-- AA≺gd ∧ (j ≤ zy) , #F ∧ g≻

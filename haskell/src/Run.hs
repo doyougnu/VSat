@@ -126,7 +126,7 @@ runBruteForce prop = lift $ flip evalStateT _emptySt $
 -- and then run the sat solver
 runAndDecomp :: (MonadTrans t, Monad (t IO)) => VProp String String -> t IO Result
 runAndDecomp prop = do
-  res <- lift . S.runSMT $ do
+  res <- lift . S.runSMTWith S.z3{S.verbose=True} $ do
     p <- symbolicPropExpr $ andDecomp prop dimName
     SC.query $ do S.constrain p; getVSMTModel
   lift . return $ V [res]

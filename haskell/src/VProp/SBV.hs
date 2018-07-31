@@ -57,7 +57,9 @@ evalPropExpr d !i !c !(Opn Or ps)   = foldr1 (|||) $ evalPropExpr d i c <$> ps
 evalPropExpr d !i !c !(OpBB Impl l r)   = evalPropExpr d i c l ==> evalPropExpr d i c r
 evalPropExpr d !i !c !(OpBB BiImpl l r) = evalPropExpr d i c l <=> evalPropExpr d i c r
 evalPropExpr d !i !c !(OpBB XOr l r) = evalPropExpr d i c l <+> evalPropExpr d i c r
-evalPropExpr d !i _  !(OpIB op l r)  = (handler op) (evalPropExpr' d i l) (evalPropExpr' d i r)
+evalPropExpr d !i _  !(OpIB op l r)  = (handler op)
+                                       (evalPropExpr' d i l)
+                                       (evalPropExpr' d i r)
   where handler LT  = (.<)
         handler LTE = (.<=)
         handler GT  = (.>)
