@@ -1,4 +1,4 @@
-module Json ( module Data.Aeson) where
+module Json where
 
 import V (V(..))
 import Data.SBV ( SatResult(..)

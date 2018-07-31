@@ -1,4 +1,8 @@
-module Api where
+module Api ( SatResult(..)
+           , ThmResult(..)
+           , sat
+           , prove
+           ) where
 
 import Data.SBV (SatResult(..), ThmResult(..))
 
