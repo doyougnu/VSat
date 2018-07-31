@@ -217,13 +217,13 @@ instance Num SNum where
 instance PrimN SNum where
   (SI i) ./ (SI i') = SI $ i ./ i'
   (SD d) ./ (SI i)  = SD $ d ./ (S.sFromIntegral i)
-  (SI i) ./ (SD d)  = SD $ S.sFromIntegral i ./ d
+  (SI i) ./ (SD d)  = SD $ (S.sFromIntegral i) ./ d
   (SD d) ./ (SD d') = SD $ d ./ d'
 
 
   (SI i) .% (SI i') = SI $ i .% i'
   (SD d) .% (SI i)  = SD $ d .% (S.sFromIntegral i)
-  (SI i) .% (SD d)  = SD $ S.sFromIntegral i .% d
+  (SI i) .% (SD d)  = SD $ (S.sFromIntegral i) .% d
   (SD d) .% (SD d') = SD $ d .% d'
 
 instance PrimN S.SInteger where
@@ -298,12 +298,44 @@ instance S.OrdSymbolic SNum where
   (.>) (SD d) (SD d') = (S..>) d d'
 
 instance Prim S.SBool SNum where
-  (.<)  = (S..<)
-  (.<=) = (S..<=)
-  (.==) = (S..==)
-  (./=) = (S../=)
-  (.>=) = (S..>=)
-  (.>)  = (S..>)
+  (.<) (SI i) (SI i') = (S..<) i i'
+  (.<) (SD d) (SI i)  = (S..<) d (S.sFromIntegral i)
+  (.<) (SI i) (SD d)  = (S..<) (S.sFromIntegral i) d
+  (.<) (SD d) (SD d') = (S..<) d d'
+
+  (.<=) (SI i) (SI i') = (S..<=) i i'
+  (.<=) (SD d) (SI i)  = (S..<=) d (S.sFromIntegral i)
+  (.<=) (SI i) (SD d)  = (S..<=) (S.sFromIntegral i) d
+  (.<=) (SD d) (SD d') = (S..<=) d d'
+
+  (.>=) (SI i) (SI i') = (S..>=) i i'
+  (.>=) (SD d) (SI i)  = (S..>=) d (S.sFromIntegral i)
+  (.>=) (SI i) (SD d)  = (S..>=) (S.sFromIntegral i) d
+  (.>=) (SD d) (SD d') = (S..>=) d d'
+
+  (.>) (SI i) (SI i') = (S..>) i i'
+  (.>) (SD d) (SI i)  = (S..>) d (S.sFromIntegral i)
+  (.>) (SI i) (SD d)  = (S..>) (S.sFromIntegral i) d
+  (.>) (SD d) (SD d') = (S..>) d d'
+
+  (.==) (SI i) (SI i') = (S..==) i i'
+  (.==) (SD d) (SI i') = (S..==) d (S.sFromIntegral i')
+  (.==) (SI i) (SD d)  = (S..==) (S.sFromIntegral i) d
+  (.==) (SD d) (SD d') = (S..==) d d'
+
+  (./=) (SI i) (SI i') = (S../=) i i'
+  (./=) (SD d) (SI i') = (S../=) d (S.sFromIntegral i')
+  (./=) (SI i) (SD d)  = (S../=) (S.sFromIntegral i) d
+  (./=) (SD d) (SD d') = (S../=) d d'
+
+
+
+  -- (.<)  = (S..<)
+  -- (.<=) = (S..<=)
+  -- (.==) = (S..==)
+  -- (./=) = (S../=)
+  -- (.>=) = (S..>=)
+  -- (.>)  = (S..>)
 
 instance Prim S.SBool S.SInteger where
   (.<)  = (S..<)
