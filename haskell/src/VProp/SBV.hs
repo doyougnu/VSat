@@ -72,7 +72,7 @@ evalPropExpr d !i !c !(ChcB dim l r)
 -- | Eval the numeric expressions, VIExpr, assume everything is an integer until
 -- absolutely necessary to coerce
 evalPropExpr' :: DimBool -> VConfig a SNum -> VIExpr a -> SNum
-evalPropExpr' _  _ !(LitI (I i)) = SI $ S.literal i
+evalPropExpr' _  _ !(LitI (I i)) = SI . S.literal . fromIntegral $ i
 evalPropExpr' _  _ !(LitI (D d)) = SD $ S.literal d
 evalPropExpr' _ !i !(Ref _ f)    = i f
 evalPropExpr' d !i !(OpI Neg e) = negate $ evalPropExpr' d i e
@@ -96,7 +96,7 @@ symbolicPropExpr e = do
 
         helper :: Show a => (RefN, a) -> S.Symbolic SNum
         helper (RefD, d) = SD <$> S.sDouble (show d)
-        helper (RefI, i) = SI <$> S.sInteger (show i)
+        helper (RefI, i) = SI <$> S.sInt64 (show i)
 
     syms  <- fmap (fromList . zip vs) (S.sBools (show <$> vs))
     dims  <- fmap (fromList . zip ds) (S.sBools (map dimName ds))

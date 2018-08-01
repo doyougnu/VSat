@@ -205,7 +205,7 @@ vSMTSolve prop = do prop' <- prop
 -- starting query mode. 2nd we cannot allow any duplicates to be called on a
 -- string -> symbolic a function or missiles will launch.
 propToSBool :: VProp String String -> IncPack String (VProp S.SBool SNum)
-propToSBool = bitraverse smtBool smtDouble
+propToSBool = bitraverse smtBool smtInt
 
 -- | convert every reference to a boolean, keeping track of what you've seen
 -- before
@@ -219,14 +219,14 @@ smtBool str = do (st,_) <- get
 
 -- | convert every reference to a double, keeping track of what you've seen
 -- before
-smtDouble :: String -> IncPack String SNum
-smtDouble str = do (_,st) <- get
-                   case str `M.lookup` st of
-                     Nothing -> do b <- lift $ S.sInteger str
-                                   let b' = SI b
-                                   St.modify (second $ M.insert str b')
-                                   return b'
-                     Just x  -> return x
+smtInt :: String -> IncPack String SNum
+smtInt str = do (_,st) <- get
+                case str `M.lookup` st of
+                  Nothing -> do b <- lift $ S.sInt64 str
+                                let b' = SI b
+                                St.modify (second $ M.insert str b')
+                                return b'
+                  Just x  -> return x
 
 getVSMTModel :: SC.Query (V d (Maybe S.SMTResult))
 getVSMTModel = do cs <- SC.checkSat
@@ -316,7 +316,7 @@ vSMTSolve_ !(ChcB d l r) =
 vSMTSolve'_ :: VIExpr SNum -> IncVSMTSolve SNum
 vSMTSolve'_ !(Ref RefI i) = return i
 vSMTSolve'_ !(Ref RefD d) = return d
-vSMTSolve'_ !(LitI (I i)) = return . SI . S.literal $ i
+vSMTSolve'_ !(LitI (I i)) = return . SI . S.literal . fromIntegral $ i
 vSMTSolve'_ !(LitI (D d)) = return . SD . S.literal $ d
 vSMTSolve'_ !(OpI op e) = do e' <- vSMTSolve'_ e
                              return $ (handler op) e'
