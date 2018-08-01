@@ -91,7 +91,7 @@ data VIExpr a
   deriving (Eq,Generic,Typeable,Functor,Traversable,Foldable,Ord)
 
 -- | Mirroring NPrim with Symbolic types for the solver
-data SNum = SI S.SInteger
+data SNum = SI S.SInt64
           | SD S.SDouble
           deriving (Eq, Show)
 
@@ -188,7 +188,7 @@ instance Prim (VProp a b) Double where
 
 -- | we'll need to mirror the NPrim data type in SBV via SNum
 instance Num SNum where
-  fromInteger = SI . S.literal
+  fromInteger = SI . S.literal . fromInteger
 
   abs (SI i) = SI $ abs i
   abs (SD d) = SD $ abs d
@@ -225,10 +225,6 @@ instance PrimN SNum where
   (SD d) .% (SI i)  = SD $ d .% (S.sFromIntegral i)
   (SI i) .% (SD d)  = SD $ (S.sFromIntegral i) .% d
   (SD d) .% (SD d') = SD $ d .% d'
-
-instance PrimN S.SInteger where
-  (./)  = S.sDiv
-  (.%)  = S.sMod
 
 -- Cannot coerce these to integers because the S.SDivisible type signature is
 -- not expressive enough i.e. a -> a -> (a, a), and not a -> a -> (b, b)
@@ -335,14 +331,6 @@ instance Prim S.SBool SNum where
   (./=) (SD d) (SI i') = (S../=) d (S.sFromIntegral i')
   (./=) (SI i) (SD d)  = (S../=) (S.sFromIntegral i) d
   (./=) (SD d) (SD d') = (S../=) d d'
-
-instance Prim S.SBool S.SInteger where
-  (.<)  = (S..<)
-  (.<=) = (S..<=)
-  (.==) = (S..==)
-  (./=) = (S../=)
-  (.>=) = (S..>=)
-  (.>)  = (S..>)
 
 instance Prim S.SBool S.SInt8 where
   (.<)  = (S..<)
