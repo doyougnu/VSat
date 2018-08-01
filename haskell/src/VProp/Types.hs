@@ -45,7 +45,7 @@ import           GHC.Generics        (Generic)
 import           Data.String         (IsString)
 import           Control.DeepSeq     (NFData)
 import qualified Data.SBV as S
-import           Data.SBV.Internals (liftQRem, liftDMod)
+import           Data.SBV.Internals (liftQRem, liftDMod, isSymbolic)
 import           Data.Map            (Map)
 import           Data.Bifunctor      (Bifunctor, bimap)
 import           Data.Bitraversable  (Bitraversable, bitraverse)
@@ -200,9 +200,9 @@ instance Num SNum where
   signum (SD d) = SD $ signum d
 
   (SI i) + (SI i') = SI $ i + i'
-  (SD d) + (SI i)  = SD $ d + S.sFromIntegral i
-  (SI i) + (SD d)  = SD $ d + S.sFromIntegral i
-  (SD d) + (SD d') = SD $ d + d'
+  (SD d) + (SI i)  = SD $ S.fpAdd S.sRoundNearestTiesToAway d (S.sFromIntegral i)
+  (SI i) + (SD d)  = SD $ S.fpAdd S.sRoundNearestTiesToAway (S.sFromIntegral i) d
+  (SD d) + (SD d') = SD $ S.fpAdd S.sRoundNearestTiesToAway d d'
 
   (SI i) - (SI i') = SI $ i - i'
   (SD d) - (SI i)  = SD $ d - S.sFromIntegral i
@@ -230,6 +230,9 @@ instance PrimN S.SInteger where
   (./)  = S.sDiv
   (.%)  = S.sMod
 
+-- Cannot coerce these to integers because the S.SDivisible type signature is
+-- not expressive enough i.e. a -> a -> (a, a), and not a -> a -> (b, b)
+
 instance S.SDivisible Double where
   sQuotRem x 0.0 = (0.0, x)
   sQuotRem x y = x `S.sQuotRem` y
@@ -237,12 +240,17 @@ instance S.SDivisible Double where
   sDivMod  x y = x `S.sDivMod` y
 
 instance S.SDivisible S.SDouble where
-  sQuotRem = liftQRem
   sDivMod  = liftDMod
+  sQuotRem x y
+    | not (isSymbolic x || isSymbolic y) = liftQRem x y
+    | True = S.ite (y .== 0) (0, x) (qE+i, rE-i*y)
+    where (qE, rE) = liftQRem x y   -- for integers, this is euclidean due to SMTLib semantics
+          i = S.ite (x .>= 0.0 S.||| rE .== 0.0) 0.0
+            $ S.ite (y .>  0.0)              1.0 (-1.0)
 
 instance PrimN S.SDouble where
-  (./)  = S.sDiv
-  (.%)  = S.sMod
+  (./)  = S.fpDiv S.sRoundNearestTiesToAway
+  (.%)  = undefined
 
 instance PrimN S.SInt8 where
   (./)  = S.sDiv
@@ -327,15 +335,6 @@ instance Prim S.SBool SNum where
   (./=) (SD d) (SI i') = (S../=) d (S.sFromIntegral i')
   (./=) (SI i) (SD d)  = (S../=) (S.sFromIntegral i) d
   (./=) (SD d) (SD d') = (S../=) d d'
-
-
-
-  -- (.<)  = (S..<)
-  -- (.<=) = (S..<=)
-  -- (.==) = (S..==)
-  -- (./=) = (S../=)
-  -- (.>=) = (S..>=)
-  -- (.>)  = (S..>)
 
 instance Prim S.SBool S.SInteger where
   (.<)  = (S..<)

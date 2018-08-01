@@ -68,7 +68,9 @@ instance Eq SatResult where (SatResult x) == (SatResult y) = x == y
 instance Eq ThmResult where (ThmResult x) == (ThmResult y) = x == y
 
 runProperties :: TestTree
-runProperties = testGroup "Run Properties" [ ad_term2
+runProperties = testGroup "Run Properties" [
+  -- sat_term
+                                           ad_term2
                                            -- , ad_term
                                            -- , qcProps
                                            ]
@@ -80,6 +82,10 @@ ad_term = QC.testProperty
 ad_term2 = QC.testProperty
           "and decomp terminates on known failing example 2"
           andDecomp_terminates2
+
+sat_term = QC.testProperty
+           "Satisfiability terminates on any input"
+           sat_terminates
 
 andDecomp_correct x = not (null $ vars (x :: VProp Var Var)) QC.==> QCM.monadicIO $
   do a <- QCM.run $ runAD [] x'
@@ -100,7 +106,7 @@ andDecomp_terminates2 = QCM.monadicIO $
      assert (not $ null a)
   where
     prop :: VProp String String
-    prop = (iRef "x" .< dRef "q") &&& (bRef "w" &&& bRef "rhy")
+    prop = ((dRef "x" + iRef "q") .== 0) &&& true
     -- prop = ((dRef "x" - iRef "q") .== 0) &&& (bRef "w" &&& bRef "rhy")
 
 andDecomp_terminates3 = QCM.monadicIO $
@@ -110,3 +116,15 @@ andDecomp_terminates3 = QCM.monadicIO $
     prop :: VProp String String
     prop = ChcB "AA" (bRef "gd" &&& (iRef "j" .<= iRef "zy")) (false &&& bRef "g")
 -- AA≺gd ∧ (j ≤ zy) , #F ∧ g≻
+
+sat_terminates x = QCM.monadicIO $
+  do a <- QCM.run . sat [] . bimap show show $ (x :: VProp Var Var)
+     assert (not $ null a)
+
+-- sat_error = QCM.monadicIO $
+--   do a <- QCM.run $ runAD [] prop
+--      assert (not $ null a)
+--   where
+--     prop :: VProp String String
+--     prop =
+--     -- prop = ((dRef "x" - iRef "q") .== 0) &&& (bRef "w" &&& bRef "rhy")
