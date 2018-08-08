@@ -45,7 +45,7 @@ import           GHC.Generics        (Generic)
 import           Data.String         (IsString)
 import           Control.DeepSeq     (NFData)
 import qualified Data.SBV as S
-import           Data.SBV.Internals (liftQRem, liftDMod, isSymbolic)
+-- import           Data.SBV.Internals (liftQRem, liftDMod, isSymbolic)
 import           Data.Map            (Map)
 import           Data.Bifunctor      (Bifunctor, bimap)
 import           Data.Bitraversable  (Bitraversable, bitraverse)
@@ -191,18 +191,18 @@ instance Num SNum where
   fromInteger = SI . S.literal . fromInteger
 
   abs (SI i) = SI $ abs i
-  abs (SD d) = SD $ abs d
+  abs (SD d) = SD $ S.fpAbs d
 
   negate (SI i) = SI $ negate i
-  negate (SD d) = SD $ negate d
+  negate (SD d) = SD $ S.fpNeg d
 
   signum (SI i) = SI $ signum i
-  signum (SD d) = SD $ signum d
+  signum (SD d) = SD $ signum (S.fromSDouble S.sRoundNearestTiesToAway d)
 
   (SI i) + (SI i') = SI $ i + i'
-  (SD d) + (SI i)  = SD $ S.fpAdd S.sRoundNearestTiesToAway d (S.sFromIntegral i)
-  (SI i) + (SD d)  = SD $ S.fpAdd S.sRoundNearestTiesToAway (S.sFromIntegral i) d
-  (SD d) + (SD d') = SD $ S.fpAdd S.sRoundNearestTiesToAway d d'
+  (SD d) + (SI i)  = SD $ d + (S.sFromIntegral i)
+  (SI i) + (SD d)  = SD $ (S.sFromIntegral i) + d
+  (SD d) + (SD d') = SD $ d + d'
 
   (SI i) - (SI i') = SI $ i - i'
   (SD d) - (SI i)  = SD $ d - S.sFromIntegral i
@@ -222,9 +222,12 @@ instance PrimN SNum where
 
 
   (SI i) .% (SI i') = SI $ i .% i'
-  (SD d) .% (SI i)  = SD $ d .% (S.sFromIntegral i)
-  (SI i) .% (SD d)  = SD $ (S.sFromIntegral i) .% d
-  (SD d) .% (SD d') = SD $ d .% d'
+  (SD d) .% (SI i)  = SI $ (S.fromSDouble S.sRoundNearestTiesToAway d) .% i
+  (SI i) .% (SD d)  = SI $ i .% (S.fromSDouble S.sRoundNearestTiesToAway d)
+  -- (SD d) .% (SD d') = SI $ S.sDiv
+  --   ((S.fromSDouble S.sRoundNearestTiesToAway d) :: S.SInt64)
+  --   ((S.fromSDouble S.sRoundNearestTiesToAway d') :: S.SInt64)
+  (SD d) .% (SD d') = SD $ S.fpRem d d'
 
 -- Cannot coerce these to integers because the S.SDivisible type signature is
 -- not expressive enough i.e. a -> a -> (a, a), and not a -> a -> (b, b)
@@ -235,14 +238,14 @@ instance S.SDivisible Double where
   sDivMod  x 0.0 = (0.0, x)
   sDivMod  x y = x `S.sDivMod` y
 
-instance S.SDivisible S.SDouble where
-  sDivMod  = liftDMod
-  sQuotRem x y
-    | not (isSymbolic x || isSymbolic y) = liftQRem x y
-    | True = S.ite (y .== 0) (0, x) (qE+i, rE-i*y)
-    where (qE, rE) = liftQRem x y   -- for integers, this is euclidean due to SMTLib semantics
-          i = S.ite (x .>= 0.0 S.||| rE .== 0.0) 0.0
-            $ S.ite (y .>  0.0)              1.0 (-1.0)
+-- instance S.SDivisible S.SDouble where
+--   sDivMod  = liftDMod
+--   sQuotRem x y
+--     | not (isSymbolic x || isSymbolic y) = liftQRem x y
+--     | True = S.ite (y .== 0) (0, x) (qE+i, rE-i*y)
+--     where (qE, rE) = liftQRem x y   -- for integers, this is euclidean due to SMTLib semantics
+--           i = S.ite (x .>= 0.0 S.||| rE .== 0.0) 0.0
+--             $ S.ite (y .>  0.0)              1.0 (-1.0)
 
 instance PrimN S.SDouble where
   (./)  = S.fpDiv S.sRoundNearestTiesToAway
