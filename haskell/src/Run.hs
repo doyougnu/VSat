@@ -205,7 +205,21 @@ vSMTSolve prop = do prop' <- prop
 -- starting query mode. 2nd we cannot allow any duplicates to be called on a
 -- string -> symbolic a function or missiles will launch.
 propToSBool :: VProp String String -> IncPack String (VProp S.SBool SNum)
-propToSBool = bitraverse smtBool smtInt
+propToSBool !(RefB x)     = RefB   <$> smtBool x
+propToSBool !(OpB o e)    = OpB  o <$> propToSBool e
+propToSBool !(OpBB o l r) = OpBB o <$> propToSBool l <*> propToSBool r
+propToSBool !(Opn o xs)   = Opn  o <$> traverse propToSBool xs
+propToSBool !(ChcB d l r) = ChcB d <$> propToSBool l <*> propToSBool r
+propToSBool !(OpIB o l r) = OpIB o <$> propToSBool' l <*> propToSBool' r
+propToSBool !(LitB b)     = return $ LitB b
+
+propToSBool' :: VIExpr String -> IncPack String (VIExpr SNum)
+propToSBool' !(Ref RefI i) = Ref RefI <$> smtInt i
+propToSBool' !(Ref RefD d) = Ref RefD <$> smtDouble d
+propToSBool' !(OpI o e)    = OpI o    <$> propToSBool' e
+propToSBool' !(OpII o l r) = OpII o <$> propToSBool' l <*> propToSBool' r
+propToSBool' !(ChcI d l r) = ChcI d <$> propToSBool' l <*> propToSBool' r
+propToSBool' !(LitI x)     = return $ LitI x
 
 -- | convert every reference to a boolean, keeping track of what you've seen
 -- before
@@ -217,7 +231,7 @@ smtBool str = do (st,_) <- get
                                  return b
                    Just x  -> return x
 
--- | convert every reference to a double, keeping track of what you've seen
+-- | convert every reference to a Integer, keeping track of what you've seen
 -- before
 smtInt :: String -> IncPack String SNum
 smtInt str = do (_,st) <- get
@@ -227,6 +241,17 @@ smtInt str = do (_,st) <- get
                                 St.modify (second $ M.insert str b')
                                 return b'
                   Just x  -> return x
+
+-- | convert every reference to a Integer, keeping track of what you've seen
+-- before
+smtDouble :: String -> IncPack String SNum
+smtDouble str = do (_,st) <- get
+                   case str `M.lookup` st of
+                     Nothing -> do b <- lift $ S.sDouble str
+                                   let b' = SD b
+                                   St.modify (second $ M.insert str b')
+                                   return b'
+                     Just x  -> return x
 
 getVSMTModel :: SC.Query (V d (Maybe S.SMTResult))
 getVSMTModel = do cs <- SC.checkSat
