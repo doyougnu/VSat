@@ -1,7 +1,9 @@
 module VProp.SBV ( andDecomp
                  -- , shrinkPropExpr
                  , evalPropExpr
-                 , symbolicPropExpr) where
+                 , symbolicPropExpr
+                 , SAT(..)
+                 , toPredicate) where
 
 import qualified Data.SBV as S
 -- ( (&&&)
