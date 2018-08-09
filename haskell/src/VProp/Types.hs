@@ -13,6 +13,7 @@ module VProp.Types ( module Prelude
                    , Opn(..)
                    , SNum(..)
                    , RefN(..)
+                   , PrimN(..)
                    , (.<)
                    , (.<=)
                    , (.==)
@@ -27,8 +28,6 @@ module VProp.Types ( module Prelude
                    , (S.<+>)
                    , (S.==>)
                    , (S.<=>)
-                   , (./)
-                   , (.%)
                    , bifoldMap
                    , bimap
                    , bifoldr
@@ -224,28 +223,7 @@ instance PrimN SNum where
   (SI i) .% (SI i') = SI $ i .% i'
   (SD d) .% (SI i)  = SI $ (S.fromSDouble S.sRoundNearestTiesToAway d) .% i
   (SI i) .% (SD d)  = SI $ i .% (S.fromSDouble S.sRoundNearestTiesToAway d)
-  -- (SD d) .% (SD d') = SI $ S.sDiv
-  --   ((S.fromSDouble S.sRoundNearestTiesToAway d) :: S.SInt64)
-  --   ((S.fromSDouble S.sRoundNearestTiesToAway d') :: S.SInt64)
   (SD d) .% (SD d') = SD $ S.fpRem d d'
-
--- Cannot coerce these to integers because the S.SDivisible type signature is
--- not expressive enough i.e. a -> a -> (a, a), and not a -> a -> (b, b)
-
-instance S.SDivisible Double where
-  sQuotRem x 0.0 = (0.0, x)
-  sQuotRem x y = x `S.sQuotRem` y
-  sDivMod  x 0.0 = (0.0, x)
-  sDivMod  x y = x `S.sDivMod` y
-
--- instance S.SDivisible S.SDouble where
---   sDivMod  = liftDMod
---   sQuotRem x y
---     | not (isSymbolic x || isSymbolic y) = liftQRem x y
---     | True = S.ite (y .== 0) (0, x) (qE+i, rE-i*y)
---     where (qE, rE) = liftQRem x y   -- for integers, this is euclidean due to SMTLib semantics
---           i = S.ite (x .>= 0.0 S.||| rE .== 0.0) 0.0
---             $ S.ite (y .>  0.0)              1.0 (-1.0)
 
 instance PrimN S.SDouble where
   (./)  = S.fpDiv S.sRoundNearestTiesToAway

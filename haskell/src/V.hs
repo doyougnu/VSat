@@ -13,6 +13,8 @@ import GHC.Generics
 import Control.DeepSeq        (NFData)
 import Data.Aeson
 
+import VProp.Types (PrimN(..))
+
 -- | a choice data type, without the object language
 data V d a = Plain a | VChc d (V d a) (V d a) deriving (Show,Generic,Eq)
 
@@ -48,6 +50,18 @@ instance Monad (V d) where
   return = Plain
   (Plain a) >>= f = f a
   (VChc d l r) >>= f = VChc d (l >>= f) (r >>= f)
+
+-- instance (Num a,Num b,PrimN a,PrimN b) => PrimN (V a b) where
+--   (Plain a) ./ (Plain b) = Plain $ a ./ b
+
+instance (Num a) => Num (V d a) where
+  (Plain a) + (Plain b) = Plain $ a + b
+  (Plain a) + x@(VChc _ _ _) = bimap id (+a) x
+  x@(VChc _ _ _) + (Plain a) = bimap id (+a) x
+  (VChc d l r) + (VChc d' l' r') = VChc d
+                                   (VChc d' (l + l') (l + r'))
+                                   (VChc d' (r + l') (r + r'))
+
 
 -- | Given a tag tree, fmap over the tree with respect to a config
 replace :: Ord d => VConfig d -> a -> V d (Maybe a) -> V d (Maybe a)
