@@ -78,9 +78,11 @@ isPlain' (OpII _ l r) = isPlain' l && isPlain' r
 isPlain' (OpI _ e)    = isPlain' e
 isPlain' _            = True
 
+-- | Does the prop contain choices
 isChc :: VProp a b -> Bool
 isChc = not . isPlain
 
+-- | Does the prop only contain boolean values? No ints or floats
 onlyBools :: VProp a a -> Bool
 onlyBools (OpIB _ _ _ ) = False
 onlyBools (ChcB _ l r)  = onlyBools l && onlyBools r
@@ -89,6 +91,7 @@ onlyBools (OpBB _ l r)  = onlyBools l && onlyBools r
 onlyBools (OpB  _ e)    = onlyBools e
 onlyBools _             = True
 
+-- | Does the prop contain no variables?
 onlyLits :: VProp a a -> Bool
 onlyLits (LitB _) = True
 onlyLits (RefB _) = False
