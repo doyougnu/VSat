@@ -1,5 +1,4 @@
-module Run ( Opts (..)
-           , Result (..)
+module Run ( Result (..)
            , SatDict
            , Log
            , runAD
@@ -31,64 +30,59 @@ import VProp.SBV
 import VProp.Core
 import V
 import Utils
+import Config
 
 -- | The satisfiable dictionary, this is actually the "state" keys are configs
 -- and values are whether that config is satisfiable or not (a bool)
 type SatDict a = (M.Map Config Bool, M.Map a Bool) -- keys may incur perf penalty
 
--- | The optimizations that could be set
-newtype Opts a = Opts [VProp a a -> VProp a a] -- ^ a list of optimizations
-
 -- | Type convenience for Log
 type Log = String
 
 -- | Takes a dimension d, a value a, and a result r
-type Env a r = RWST (Opts a) Log (SatDict a) IO r -- ^ the monad stack
+type Env a r = RWST (SMTConf a) Log (SatDict a) IO r -- ^ the monad stack
 
 -- | An empty reader monad environment, in the future read these from config file
-_emptyOpts :: Opts a
-_emptyOpts = Opts []
-
 _emptySt :: SatDict a
 _emptySt = (,) M.empty M.empty
 
 -- | Run the RWS monad with defaults of empty state, reader
-_runEnv :: Env a r -> Opts a -> SatDict a -> IO (r, (SatDict a),  Log)
+_runEnv :: Env a r -> SMTConf a -> SatDict a -> IO (r, (SatDict a),  Log)
 _runEnv m opts st = runRWST m opts st
 
 -- TODO use configurate and load the config from a file
 runEnv :: (VProp String String-> Env String Result)
-       -> [VProp String String-> VProp String String]
-       -> VProp String String-> IO (Result , (SatDict String), Log)
-runEnv f !opts !x = _runEnv (f x) (Opts opts) (initSt x)
+       -> SMTConf String
+       -> VProp String String-> IO (Result, (SatDict String), Log)
+runEnv f !conf !x = _runEnv (f x) conf (initSt x)
 
 -- | Run the and decomposition solver
-runAD_ :: [VProp String String -> VProp String String]
+runAD_ :: SMTConf String
       -> VProp String String
       -> IO (Result, SatDict String, Log)
 runAD_ = runEnv runAndDecomp
 
-runAD :: [VProp String String -> VProp String String]
+runAD :: SMTConf String
       -> VProp String String
       -> IO [V String (Maybe S.SatResult)]
 runAD os p = fmap (bimap id (fmap S.SatResult)) . unbox . fst' <$>
              runEnv runAndDecomp os p
 
 -- | Run the brute force solver
-runBF :: [VProp String String -> VProp String String]
+runBF :: SMTConf String
   -> VProp String String
   -> IO (Result, SatDict String, Log)
 runBF = runEnv runBruteForce
 
 -- | Run the variational sat solver given a list of optimizations and a prop.
 -- This can throw an exception if the prop has SMT terms in it
-runVS :: [VProp String String -> VProp String String]
+runVS :: SMTConf String
   -> VProp String String
   -> IO (Result, SatDict String, Log)
 runVS = runEnv runVSolve
 
 -- | Run the VSMT solver given a list of optimizations and a prop
-runVSMT :: [VProp String String -> VProp String String]
+runVSMT :: SMTConf String
   -> VProp String String
   -> IO (Result, SatDict String, Log)
 runVSMT = runEnv runVSMTSolve
@@ -131,21 +125,23 @@ runAndDecomp prop = do
     SC.query $ do S.constrain p; getVSMTModel
   lift . return $ V [res]
 
-runVSolve :: (MonadReader (Opts String) (t IO), MonadTrans t) =>
+runVSolve :: (MonadReader (SMTConf String) (t IO), MonadTrans t) =>
   VProp String String -> t IO Result
 runVSolve prop =
-  do opts <- ask
-     (result,_) <- lift . S.runSMT . vSolve $
-                   St.evalStateT (propToSBool prop) (M.empty, M.empty)
+  do cnf <- ask
+     let prop' = foldr ($!) prop (opts cnf)
+     (result,_) <- lift . S.runSMTWith (conf cnf) . vSolve $
+                   St.evalStateT (propToSBool prop') (M.empty, M.empty)
      lift . return . V $ result
 
-runVSMTSolve :: (MonadTrans t, MonadReader (Opts String) (t IO)) =>
+runVSMTSolve :: (MonadTrans t, MonadReader (SMTConf String) (t IO)) =>
   VProp String String -> t IO Result
 runVSMTSolve prop =
-  do opts <- ask
-     (res,_) <- lift . S.runSMT . vSMTSolve $
-                St.evalStateT (propToSBool prop) (M.empty, M.empty)
-     lift . return . V $ res
+  do  cnf <- ask
+      let prop' = foldr ($!) prop (opts cnf)
+      (res,_) <- lift . S.runSMTWith (conf cnf) . vSMTSolve $
+                 St.evalStateT (propToSBool prop') (M.empty, M.empty)
+      lift . return . V $ res
 
 -- | main workhorse for running the SAT solver
 data Result = L [S.SatResult]
