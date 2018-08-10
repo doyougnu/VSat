@@ -1,8 +1,9 @@
 module Run.Test where
 
 import Test.Tasty
-import Test.Tasty.QuickCheck as QC
-import Test.QuickCheck.Monadic as QCM
+import qualified Test.Tasty.HUnit as H
+import qualified Test.Tasty.QuickCheck as QC
+import qualified Test.QuickCheck.Monadic as QCM
 import Data.SBV ( SatResult(..)
                 , SMTResult(..)
                 , ThmResult(..)
@@ -16,6 +17,7 @@ import VProp.Types
 import VProp.Core
 import VProp.SBV
 import VProp.Gen
+import Config (defConf)
 import Run
 import Api
 
@@ -70,15 +72,27 @@ instance Eq ThmResult where (ThmResult x) == (ThmResult y) = x == y
 runProperties :: TestTree
 runProperties = testGroup "Run Properties" [
   -- sat_term
-                                           ad_term2
-                                           -- , ad_term
+  -- sat_error
+  -- , sat_error2
+  -- , sat_error3
+                                           -- ad_term2
+                                           -- ad_term
                                            -- , qcProps
                                            ]
 
-qcProps = QC.testProperty "and decomp is correct" $ \x -> andDecomp_correct x
+unitTests :: TestTree
+unitTests = testGroup "Unit Tests" [
+  -- sat_term
+  sat_error
+  , sat_error2
+  -- , sat_error3
+  , sat_error4
+  ]
+
 ad_term = QC.testProperty
           "and decomp terminates on known failing example"
           andDecomp_terminates
+
 ad_term2 = QC.testProperty
           "and decomp terminates on known failing example 2"
           andDecomp_terminates2
@@ -87,44 +101,78 @@ sat_term = QC.testProperty
            "Satisfiability terminates on any input"
            sat_terminates
 
-andDecomp_correct x = not (null $ vars (x :: VProp Var Var)) QC.==> QCM.monadicIO $
-  do a <- QCM.run $ runAD [] x'
-     b <- QCM.run $ runAD [] x'
-     assert ((head a) == (head b))
-  where x' = bimap show show x
+sat_error = H.testCase
+           "Coercian with division works properly"
+           sat_error_unit
+
+sat_error2 = H.testCase
+           "Inequality with doubles works properly"
+           sat_error_unit2
+
+sat_error3 = H.testCase
+           "Modulus with doubles works"
+           sat_error_unit3
+
+sat_error4 = H.testCase
+           "The solver doesn't run out of memory"
+           sat_error_unit4
 
 andDecomp_terminates = QCM.monadicIO $
-  do a <- QCM.run $ runAD [] prop
-     assert (not $ null a)
+  do a <- QCM.run $ runAD defConf prop
+     QCM.assert (not $ null a)
   where
     prop :: VProp String String
     prop = (dRef "a") .< (LitI . D $ 9.99999)
 
 
 andDecomp_terminates2 = QCM.monadicIO $
-  do a <- QCM.run $ runAD [] prop
-     assert (not $ null a)
+  do a <- QCM.run $ runAD defConf prop
+     QCM.assert (not $ null a)
   where
     prop :: VProp String String
     prop = ((dRef "x" + iRef "q") .== 0) &&& true
     -- prop = ((dRef "x" - iRef "q") .== 0) &&& (bRef "w" &&& bRef "rhy")
 
 andDecomp_terminates3 = QCM.monadicIO $
-  do a <- QCM.run $ runAD [] prop
-     assert (not $ null a)
+  do a <- QCM.run $ runAD defConf prop
+     QCM.assert (not $ null a)
   where
     prop :: VProp String String
     prop = ChcB "AA" (bRef "gd" &&& (iRef "j" .<= iRef "zy")) (false &&& bRef "g")
 -- AA≺gd ∧ (j ≤ zy) , #F ∧ g≻
 
-sat_terminates x = QCM.monadicIO $
-  do a <- QCM.run . sat [] . bimap show show $ (x :: VProp Var Var)
-     assert (not $ null a)
+sat_terminates x = onlyBools x QC.==> QCM.monadicIO
+  $ do a <- QCM.run . sat . bimap show show $ (x :: VProp Var Var)
+       QCM.assert (not $ null a)
 
--- sat_error = QCM.monadicIO $
---   do a <- QCM.run $ runAD [] prop
---      assert (not $ null a)
---   where
---     prop :: VProp String String
---     prop =
---     -- prop = ((dRef "x" - iRef "q") .== 0) &&& (bRef "w" &&& bRef "rhy")
+sat_error_unit = do a <- sat prop
+                    H.assertBool "" (not $ null a)
+  where
+    prop :: VProp String String
+    prop = (signum 7 - (LitI . D $ 10.905)) ./=
+           ((signum (signum (dRef "x"))) + signum 6)
+    -- prop = (signum 7 - (LitI . D $ 10.905)) .== (0 :: VIExpr String)
+    -- prop = (signum 7 - (LitI . D $ 10.905)) .== (0 :: VIExpr String)
+    -- prop = ((dRef "x" - iRef "q") .== 0) &&& (bRef "w" &&& bRef "rhy")
+
+sat_error_unit2 = do a <- sat prop
+                     H.assertBool "" (not $ null a)
+  where
+    prop :: VProp String String
+    prop = ((dRef "x") .<= (LitI . D $ 15.309)) &&& true
+    -- prop = (dRef "x") .== (LitI . I $ 15) -- this passes
+
+sat_error_unit3 = do a <- sat prop
+                     H.assertBool "Modulus with Doubles passes as long as there is one integer" . not . null $ a
+  where
+    prop :: VProp String String
+    prop = (dRef "x") .% (dRef "y") .> (LitI . I $ 1)
+
+sat_error_unit4 = do a <- sat prop
+                     H.assertBool "Division with a Double and Int coearces correctly" . not . null $ a
+  where
+    prop :: VProp String String
+    prop =  (dRef "x") .% (-6) ./= (-(LitI . D $ 74.257))
+    -- prop =  (abs (iRef "x")) .% (-6) ./= (-(LitI . D $ 74.257)) -- this is the original error, a define_fun
+    -- prop = ((abs (dRef "x")) .% (-6) ./= (-(LitI . D $ 74.257))) <+> (bnot (bRef "y")) -- this throws a bitvec error
+    -- (|ogzpzgeb| .% -6 ≠ -74.25731844390708) ⊻ ¬opvp
