@@ -21,5 +21,5 @@ type ApiAction a = SpockAction () () () a
 satHandler :: SpockCtxM ctx conn sess st ()
 satHandler = do get "sat" $ do
                   prop <- liftIO $ (genVProp :: IO (VProp Var Var))
-                  res <- liftIO $ sat [] (bimap show show prop)
+                  res <- liftIO $ sat (bimap show show prop)
                   json res
