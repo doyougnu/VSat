@@ -44,7 +44,6 @@ import           GHC.Generics        (Generic)
 import           Data.String         (IsString)
 import           Control.DeepSeq     (NFData)
 import qualified Data.SBV as S
--- import           Data.SBV.Internals (liftQRem, liftDMod, isSymbolic)
 import           Data.Map            (Map)
 import           Data.Bifunctor      (Bifunctor, bimap)
 import           Data.Bitraversable  (Bitraversable, bitraverse)

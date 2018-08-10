@@ -1,16 +1,16 @@
 module Json where
 
-import V (V(..))
 import Data.SBV ( SatResult(..)
                 , SMTResult(..)
-                , ThmResult(..)
-                , SMTConfig(..)
-                , SMTSolver(..)
-                , Solver(..))
-import Data.SBV.Internals (showModel, SMTModel(..))
+                , ThmResult(..))
+import Data.SBV.Internals (showModel)
 
 import Data.Text
 import Data.Aeson
+
+import V (V(..))
+import VProp.Types
+import VProp.Core
 
 instance ToJSON SMTResult where
   toJSON (Unsatisfiable _) = object [("isSat" :: Text) .= ("Unsatisfiable" :: Text)]
@@ -28,7 +28,26 @@ instance ToJSON ThmResult where toJSON (ThmResult x) = toJSON x
 instance (Show d, Show a, ToJSON a, ToJSON d) => ToJSON (V a d) where
   toJSON (Plain x) = toJSON x
   toJSON (VChc d l r) = object [ (pack (show d) :: Text) .=
-                                 object [ ("true" :: Text) .= toJSON l
-                                        , ("false" :: Text) .= toJSON r
+                                 object [ ("L" :: Text) .= toJSON l
+                                        , ("R" :: Text) .= toJSON r
                                         ]
                                ]
+
+-- | VIExpr instances for FromJSON
+instance FromJSON NPrim where
+  parseJSON = withObject "num" $ \x -> do
+    type' <- x .: "type"
+    case type' of
+      "I" -> I <$> x .: "value"
+      "D" -> D <$> x .: "value"
+      _   -> fail ("unknown numeric type: " ++ type')
+
+instance FromJSON N_N
+instance FromJSON B_B
+instance FromJSON NN_N
+instance FromJSON BB_B
+instance FromJSON NN_B
+instance FromJSON RefN
+instance FromJSON Opn
+instance FromJSON Dim
+instance FromJSON a => FromJSON (VIExpr a)
