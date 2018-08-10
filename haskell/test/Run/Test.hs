@@ -11,7 +11,7 @@ import Data.SBV ( SatResult(..)
                 , SMTSolver(..)
                 , Solver(..))
 import Data.SBV.Internals (showModel, SMTModel(..))
-
+import Control.Monad.Trans (liftIO)
 
 import VProp.Types
 import VProp.Core
@@ -71,7 +71,7 @@ instance Eq ThmResult where (ThmResult x) == (ThmResult y) = x == y
 
 runProperties :: TestTree
 runProperties = testGroup "Run Properties" [
-  -- sat_term
+  sat_term
   -- sat_error
   -- , sat_error2
   -- , sat_error3
@@ -82,7 +82,6 @@ runProperties = testGroup "Run Properties" [
 
 unitTests :: TestTree
 unitTests = testGroup "Unit Tests" [
-  -- sat_term
   sat_error
   , sat_error2
   -- , sat_error3
@@ -143,6 +142,7 @@ andDecomp_terminates3 = QCM.monadicIO $
 
 sat_terminates x = onlyBools x QC.==> QCM.monadicIO
   $ do a <- QCM.run . sat . bimap show show $ (x :: VProp Var Var)
+       liftIO $ print x
        QCM.assert (not $ null a)
 
 sat_error_unit = do a <- sat prop
