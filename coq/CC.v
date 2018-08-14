@@ -74,19 +74,25 @@ Theorem andv_elminination : forall p : vprop,
     - trivial.
     - simpl. reflexivity. Qed.
 
+Axiom chc_commut : forall d d' : string,
+      forall l r l' r' : vprop,
+      forall f : vprop -> vprop -> vprop,
+ chc d (chc d' (f l l') (f l r')) (chc d' (f r l') (f r r'))
+ = chc d' (chc d (f l' l) (f l' r)) (chc d (f r' l) (f r' r)).
+
 Theorem andv_commut : forall p q : vprop,
   andv p q = andv q p.
   Proof.
-    intros. induction p as [].
-    - induction q as [].
+    intros. destruct p as [].
+    - destruct q as [].
       + trivial.
       + trivial.
       + simpl. reflexivity.
-    - induction q as [].
+    - destruct q as [].
       + trivial.
       + trivial.
       + reflexivity.
-    - induction q as [].
+    - destruct q as [].
       + simpl. reflexivity.
       + reflexivity.
-      +
+      + simpl. rewrite chc_commut. reflexivity. Qed.
