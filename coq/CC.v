@@ -6,6 +6,8 @@ Require Import Relations.Relation_Definitions.
 Require Import Classes.Morphisms.
 Require Import Setoids.Setoid.
 
+Module CC.
+
 Inductive vprop : Type :=
   | true : vprop
   | false : vprop
@@ -96,3 +98,22 @@ Theorem andv_commut : forall p q : vprop,
       + simpl. reflexivity.
       + reflexivity.
       + simpl. rewrite chc_commut. reflexivity. Qed.
+
+Theorem orv_commut : forall p q : vprop,
+  orv p q = orv q p.
+  Proof.
+    intros. destruct p as [].
+    - destruct q as [].
+      + trivial.
+      + trivial.
+      + simpl. reflexivity.
+    - destruct q as [].
+      + trivial.
+      + trivial.
+      + reflexivity.
+    - destruct q as [].
+      + simpl. reflexivity.
+      + reflexivity.
+      + simpl. rewrite chc_commut. reflexivity. Qed.
+
+End CC.
