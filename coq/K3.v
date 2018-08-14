@@ -6,12 +6,14 @@ Require Import Relations.Relation_Definitions.
 Require Import Classes.Morphisms.
 Require Import Setoids.Setoid.
 
+Module k3.
+
 Inductive k3: Set :=
   | true
   | both
   | false.
 
-Definition andk3 (a b : k3) :=
+Definition andk (a b : k3) :=
   match a, b with
     | true, true => true
     | true, both => both
@@ -24,7 +26,7 @@ Definition andk3 (a b : k3) :=
     | false, false => false
   end.
 
-Definition ork3 (a b : k3) :=
+Definition ork (a b : k3) :=
   match a, b with
     | true, true => true
     | true, both => true
@@ -56,3 +58,22 @@ Definition imp (a b : k3) :=
     | false, both => true
     | false, false => true
   end.
+
+Theorem andk_commut : forall p q : k3,
+  andk p q = andk q p.
+  Proof.
+    intros. destruct p as [].
+    - destruct q as [].
+      + trivial.
+      + trivial.
+      + simpl. reflexivity.
+    - destruct q as [].
+      + trivial.
+      + trivial.
+      + reflexivity.
+    - destruct q as [].
+      + simpl. reflexivity.
+      + reflexivity.
+      + simpl. reflexivity. Qed.
+
+End k3.
