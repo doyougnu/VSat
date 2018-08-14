@@ -7,52 +7,52 @@ Require Import Classes.Morphisms.
 Require Import Setoids.Setoid.
 
 Inductive k3: Set :=
-  | true3
-  | both3
-  | false3.
+  | true
+  | both
+  | false.
 
 Definition andk3 (a b : k3) :=
   match a, b with
-    | true3, true3 => true3
-    | true3, both3 => both3
-    | true3, false3 => false3
-    | both3, true3 => both3
-    | both3, both3 => both3
-    | both3, false3 => false3
-    | false3, true3 => false3
-    | false3, both3 => false3
-    | false3, false3 => false3
+    | true, true => true
+    | true, both => both
+    | true, false => false
+    | both, true => both
+    | both, both => both
+    | both, false => false
+    | false, true => false
+    | false, both => false
+    | false, false => false
   end.
 
 Definition ork3 (a b : k3) :=
   match a, b with
-    | true3, true3 => true3
-    | true3, both3 => true3
-    | true3, false3 => true3
-    | both3, true3 => true3
-    | both3, both3 => both3
-    | both3, false3 => both3
-    | false3, true3 => true3
-    | false3, both3 => both3
-    | false3, false3 => false3
+    | true, true => true
+    | true, both => true
+    | true, false => true
+    | both, true => true
+    | both, both => both
+    | both, false => both
+    | false, true => true
+    | false, both => both
+    | false, false => false
   end.
 
 Definition negk (a : k3) :=
   match a with
-    | true3 => false3
-    | both3 => both3
-    | false3 => true3
+    | true => false
+    | both => both
+    | false => true
   end.
 
 Definition imp (a b : k3) :=
   match a, b with
-    | true3, true3 => true3
-    | true3, both3 => both3
-    | true3, false3 => false3
-    | both3, true3 => true3
-    | both3, both3 => both3
-    | both3, false3 => both3
-    | false3, true3 => true3
-    | false3, both3 => true3
-    | false3, false3 => true3
+    | true, true => true
+    | true, both => both
+    | true, false => false
+    | both, true => true
+    | both, both => both
+    | both, false => both
+    | false, true => true
+    | false, both => true
+    | false, false => true
   end.

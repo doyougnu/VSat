@@ -7,29 +7,30 @@ Require Import Classes.Morphisms.
 Require Import Setoids.Setoid.
 
 Inductive vprop : Type :=
-  | lit : bool -> vprop
+  | true : vprop
+  | false : vprop
   | chc : string -> vprop -> vprop -> vprop.
 
 (* Negation of a vprop is identical for C2 except for choices it inverts the
 choice *)
 Fixpoint negv (p : vprop) : vprop :=
   match p with
-  | lit b => lit (negb b)
-  | chc d l r => chc d r l
+  | true => false
+  | false => true
+  | chc d l r => chc d (negv l) (negv r)
   end.
 
 Fixpoint andv (l r :vprop) :=
   match l with
-    | lit false => lit false
-    | lit true => match r with
-                | lit false => lit false
-                | lit true => lit true
-                | chc d l'' r' => chc d l'' r'
-
-               end
+    | false => false
+    | true => match r with
+             | false => false
+             | true => true
+             | chc d l'' r' => chc d l'' r'
+             end
     | chc d l' r' => match r with
-                      | lit false => lit false
-                      | lit true => chc d l' r'
+                      | false => false
+                      | true => chc d l' r'
                       | chc d' l'' r'' => chc d
                                              (chc d' (andv l' l'') (andv l' r''))
                                              (chc d' (andv r' l'') (andv r' r''))
@@ -38,16 +39,16 @@ Fixpoint andv (l r :vprop) :=
 
 Fixpoint orv (l r :vprop) :=
   match l with
-    | lit true => lit true
-    | lit false => match r with
-                | lit false => lit false
-                | lit true => lit true
+    | true => true
+    | false => match r with
+                | false => false
+                | true => true
                 | chc d l'' r' => chc d l'' r'
 
                end
     | chc d l' r' => match r with
-                      | lit true => lit true
-                      | lit false => chc d l' r'
+                      | true => true
+                      | false => chc d l' r'
                       | chc d' l'' r'' => chc d
                                              (chc d' (orv l' l'') (orv l' r''))
                                              (chc d' (orv r' l'') (orv r' r''))
@@ -55,4 +56,37 @@ Fixpoint orv (l r :vprop) :=
   end.
 
 
-Fixpoint impv (l r :vprop) := negv (orv l r).
+Definition impv (l r :vprop) := negv (orv l r).
+
+(* a literal false in an and expression makes the whole expression false *)
+Theorem andv_f_f : forall p q : vprop,
+    andv false q = false.
+  Proof.
+    intros. simpl. reflexivity. Qed.
+
+(* and elimination for choices, if we have a lit true in the and we can just
+return the other side*)
+Theorem andv_elminination : forall p : vprop,
+      andv true p = p.
+  Proof.
+    intros. induction p as [].
+    - trivial.
+    - trivial.
+    - simpl. reflexivity. Qed.
+
+Theorem andv_commut : forall p q : vprop,
+  andv p q = andv q p.
+  Proof.
+    intros. induction p as [].
+    - induction q as [].
+      + trivial.
+      + trivial.
+      + simpl. reflexivity.
+    - induction q as [].
+      + trivial.
+      + trivial.
+      + reflexivity.
+    - induction q as [].
+      + simpl. reflexivity.
+      + reflexivity.
+      +
