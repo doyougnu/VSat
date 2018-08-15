@@ -54,3 +54,13 @@ Theorem neg_commut_diag : forall p : CC.vprop,
     - reflexivity.
     - reflexivity.
   Qed.
+
+Theorem parisa_proof : forall p : CC.vprop
+    , forall opv : CC.vprop -> CC.vprop -> CC.vprop
+      , forall opk : k3.k3 -> k3.k3 -> k3.k3,
+          toK3 (opv p) = opk (toK3 p).
+  Proof.
+    intros. destruct toK3. destruct toK3.
+    - destruct toK3.
+      +  reflexivity.
+      +
