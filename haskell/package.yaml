@@ -4,7 +4,7 @@ github:              "doyougnu/vsat"
 license:             BSD3
 author:              "Jeffrey Young"
 maintainer:          "youngjef@oregonstate.edu"
-copyright:           "2018 Author name here"
+copyright:           "2018 Jeffrey Young"
 
 extra-source-files:
 - README.md

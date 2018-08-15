@@ -10,8 +10,6 @@ import Data.Aeson
 
 import V (V(..))
 import VProp.Types
-import VProp.Core
-import VProp.Gen
 
 instance ToJSON SMTResult where
   toJSON (Unsatisfiable _) = object [("isSat" :: Text) .= ("Unsatisfiable" :: Text)]
