@@ -6,7 +6,7 @@ excellent [Data.SBV](https://hackage.haskell.org/package/sbv-7.5/docs/Data-SBV.h
 library.
 
 # Building from Source (The only method currently)
-You'll need to install `stack` and the sat solver you want to use, the following are supported: [z3](https://github.com/Z3Prover/z3/wiki), [Yices](http://yices.csl.sri.com/), [mathsat](http://mathsat.fbk.eu/), [boolector](https://boolector.github.io/), [abc](https://people.eecs.berkeley.edu/~alanmi/abc/), [cvc4](http://cvc4.cs.stanford.edu/web/). Stack will take care of most of the installation process by installing a sandboxed `ghc` and the `cabal` build tool for you.
+You'll need to install `stack` and the sat solver you want to use, the following are supported: [z3](https://github.com/Z3Prover/z3/wiki), [Yices](http://yices.csl.sri.com/), [mathsat](http://mathsat.fbk.eu/), [boolector](https://boolector.github.io/), [abc](https://people.eecs.berkeley.edu/~alanmi/abc/), [cvc4](http://cvc4.cs.stanford.edu/web/). Stack will take care of most of the installation process by installing a sandboxed `ghc` and the `cabal` build tool for you. Please refer to the sat solver home pages to install the one you'd like to use for your OS.
 
 ## Installing Stack
 
@@ -94,3 +94,14 @@ in the github repo and tell stack you are in a nix environment, like so:
 Notice that you'll need to pass in the extra packages for the tool. In this case
 I'm using `z3` so I need to tell stack to look for it, and `pkgconfig` which you
 should almost always pass in.
+
+## Installing Haskell Using Stack
+You just need to run the following:
+```
+stack setup # this will download and install GHC, and a package index
+git clone <this-repo> ~/path/you/want/to/build/in && cd /path/you/want/to/build/in
+stack build # this will build the exectuable, go get some coffee, trust me
+```
+
+## Running the VSMT solver
+### TBD, eta 2 days just need to write some routes
