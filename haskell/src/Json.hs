@@ -6,7 +6,7 @@ import Data.SBV ( SatResult(..)
 import Data.SBV.Internals (showModel)
 
 import Data.Text
-import Data.Aeson
+import Data.Aeson hiding (json)
 
 import V (V(..))
 import VProp.Types
@@ -52,8 +52,8 @@ instance FromJSON BB_B
 instance FromJSON NN_B
 instance FromJSON RefN
 instance FromJSON Opn
-instance FromJSON Dim
 instance FromJSON Var
+instance FromJSON Dim
 instance FromJSON a => FromJSON (VIExpr a)
 instance (FromJSON a, FromJSON b) => FromJSON (VProp a b)
 

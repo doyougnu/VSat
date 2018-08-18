@@ -24,4 +24,4 @@ addOption f c = SMTConf {conf = c'{solverSetOptions=f sOpts}, opts = os}
 
 -- | set the seed of the internal solver
 setSeed' :: Integer -> SMTConf a -> SMTConf a
-setSeed' x = addOption ((:) (RandomSeed x))
+setSeed' = addOption . (:) . RandomSeed
