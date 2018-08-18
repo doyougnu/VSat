@@ -2,6 +2,8 @@ module Api ( SatResult(..)
            , ThmResult(..)
            , sat
            , prove
+           , satWith
+           , proveWith
            ) where
 
 import Data.SBV (SatResult(..), ThmResult(..))
@@ -11,7 +13,6 @@ import Config (defConf,SMTConf(..))
 import Run
 import V
 import Utils (fst')
-
 
 -- | Run VSMT and return variable bindings
 sat :: VProp String String -> IO [V String (Maybe SatResult)]
