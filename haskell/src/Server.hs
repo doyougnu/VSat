@@ -20,14 +20,13 @@ type Api = SpockM () () ()
 -- * ApiAction represents Spock actions, these are handlers
 type ApiAction a = SpockAction () () () a
 
-data Request a b = Request { solver :: String
-                           -- , opts   :: [VProp a b -> VProp a b]
-                           , seed   :: Integer
+data Request a b = Request { settings :: Maybe Settings
                            , getProp :: VProp a b}
   deriving (Generic)
 
 instance FromJSONKey Dim
 instance (FromJSON a, FromJSON b) => FromJSON (Request a b)
+instance (ToJSON a, ToJSON b) => ToJSON (Request a b)
 
 -- satHandler :: Api [V String (Maybe SatResult)]
 -- satHandler :: SpockCtxM ctx conn sess st ()
