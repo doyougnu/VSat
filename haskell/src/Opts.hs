@@ -2,10 +2,20 @@ module Opts where
 
 import System.IO.Unsafe (unsafePerformIO)
 import Data.SBV (isSatisfiable)
+import GHC.Generics (Generic)
 
 import VProp.Types
 import VProp.SBV (SAT, toPredicate)
 import Data.List (sort)
+
+-- | Data type to represent the optimization options
+-- Used for the JSON parser
+data Opts = MoveRight
+          | MoveLeft
+          | Shrink
+          | None
+          deriving (Generic,Show)
+
 
 -- | Given any arbritrary prop move any choices to the right
 moveChcToRight :: (Ord a, Ord b) => VProp a b -> VProp a b

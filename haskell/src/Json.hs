@@ -4,12 +4,13 @@ import Data.SBV ( SatResult(..)
                 , SMTResult(..)
                 , ThmResult(..))
 import Data.SBV.Internals (showModel)
-
 import Data.Text
 import Data.Aeson hiding (json)
 
 import V (V(..))
 import VProp.Types
+import Opts
+import Config
 
 instance ToJSON SMTResult where
   toJSON (Unsatisfiable _) = object [("isSat" :: Text) .= ("Unsatisfiable" :: Text)]
@@ -70,3 +71,23 @@ instance ToJSON Var
 
 instance ToJSON a => ToJSON (VIExpr a)
 instance (ToJSON a, ToJSON b) => ToJSON (VProp a b)
+
+instance ToJSON Opts
+instance FromJSON Opts
+
+instance FromJSON Solver
+instance ToJSON Solver
+instance FromJSON Settings
+instance ToJSON Settings
+
+-- parseOpt :: Parser (Maybe Opt)
+-- parseOpt = do
+--   when
+
+-- parseOpts :: Value -> Parser [Opts]
+-- parseOpts = withArray "optimizations" $ \arr ->  mapM mvRght (toList arr)
+
+-- instance FromJSON Opts where
+--   parseJSON = withObject "optimizations" $ \o ->
+--     asum [
+--          ]
