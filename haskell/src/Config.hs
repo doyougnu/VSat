@@ -9,7 +9,7 @@ import Opts
 
 data Settings = Settings { solver :: Solver
                          , optimizations :: [Opts]
-                         , seed :: Integer
+                         , seed :: Maybe Integer
                          } deriving (Show,Generic)
 
 data SMTConf a = SMTConf { conf :: SMTConfig
@@ -26,14 +26,15 @@ data Solver = Z3
 
 -- | Convert an interfacial interface to an SMT one
 toConf :: (Ord a, Show a) => Settings -> SMTConf a
-toConf Settings{..} = setSeed seed . setSolver solver $
-  SMTConf{ conf = z3
-         , opts = convertOpts <$> optimizations
-         }
+toConf Settings{..} = foldr ($) defConf ss
+  where ss = [setSeed seed, setSolver solver, setOpts optimizations]
 
 -- | A default configuration uses z3 and tries to shrink propositions
-defConf :: (Show a, Ord a) => SMTConf a
-defConf = SMTConf{conf=z3, opts=[shrinkProp]}
+defSettings :: Settings
+defSettings = Settings{solver=Z3, optimizations=[], seed=Nothing}
+
+defConf :: (Ord a,Show a) => SMTConf a
+defConf = toConf defSettings
 
 -- | apply some function on the solver options. This could be done more cleanly
 -- with lenses but I don't want to bloat the library
@@ -44,8 +45,9 @@ addOption f c = SMTConf {conf = c'{solverSetOptions=f sOpts}, opts = os}
         os = opts c
 
 -- | set the seed of the internal solver
-setSeed :: Integer -> SMTConf a -> SMTConf a
-setSeed = addOption . (:) . RandomSeed
+setSeed :: (Maybe Integer) -> SMTConf a -> SMTConf a
+setSeed (Just x) c = addOption ((RandomSeed x ):) c
+setSeed Nothing  c = c
 
 setSolver :: Solver -> SMTConf a -> SMTConf a
 setSolver Z3 a = a{conf=z3}
@@ -54,6 +56,9 @@ setSolver MathSat a = a{conf=mathSAT}
 setSolver Boolector a = a{conf=boolector}
 setSolver Abc a = a{conf=abc}
 setSolver Cvc4 a = a{conf=cvc4}
+
+setOpts :: (Ord a, Show a) => [Opts] -> SMTConf a -> SMTConf a
+setOpts os c = c{opts=convertOpts <$> os}
 
 convertOpts :: (Ord a,Show a) =>  Opts -> (VProp a a -> VProp a a)
 convertOpts MoveRight = moveChcToRight
