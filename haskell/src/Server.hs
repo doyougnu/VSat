@@ -5,6 +5,7 @@ import Web.Spock.Config
 import Control.Monad.IO.Class (liftIO)
 import GHC.Generics (Generic)
 import Data.Aeson hiding (json)
+import Data.Maybe (maybe)
 
 import Api
 import Json
@@ -39,5 +40,7 @@ instance (ToJSON a, ToJSON b) => ToJSON (Request a b)
 satHandler = do post "sat" $ do
                   req <- jsonBody' :: ApiAction (Request Var Var)
                   let prop = getProp req
-                  res <- liftIO $ sat (bimap show show prop)
+                      sets = maybe defSettings id (settings req)
+                      conf = toConf sets
+                  res <- liftIO $ satWith conf (bimap show show prop)
                   json res
