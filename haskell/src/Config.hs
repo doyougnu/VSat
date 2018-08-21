@@ -33,8 +33,16 @@ toConf Settings{..} = foldr ($!) defConf ss
 defSettings :: Settings
 defSettings = Settings{solver=Z3, optimizations=[], seed=Nothing}
 
+allOptsSettings :: Settings
+allOptsSettings = Settings{ solver=Z3
+                          , optimizations=[MoveLeft,Shrink]
+                          , seed=Nothing}
+
 defConf :: (Ord a,Show a) => SMTConf a
 defConf = toConf defSettings
+
+allOptsConf :: (Ord a,Show a) => SMTConf a
+allOptsConf = toConf allOptsSettings
 
 -- | apply some function on the solver options. This could be done more cleanly
 -- with lenses but I don't want to bloat the library
