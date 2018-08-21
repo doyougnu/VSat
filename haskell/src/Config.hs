@@ -26,7 +26,7 @@ data Solver = Z3
 
 -- | Convert an interfacial interface to an SMT one
 toConf :: (Ord a, Show a) => Settings -> SMTConf a
-toConf Settings{..} = foldr ($) defConf ss
+toConf Settings{..} = foldr ($!) defConf ss
   where ss = [setSeed seed, setSolver solver, setOpts optimizations]
 
 -- | A default configuration uses z3 and tries to shrink propositions

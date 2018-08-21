@@ -54,7 +54,7 @@ _runEnv m opts st = runRWST m opts st
 runEnv :: (VProp String String-> Env String Result)
        -> SMTConf String
        -> VProp String String-> IO (Result, (SatDict String), Log)
-runEnv f !conf !x = _runEnv (f x) conf (initSt x)
+runEnv f conf !x = _runEnv (f x) conf (initSt x)
 
 -- | Run the and decomposition solver
 runAD_ :: SMTConf String
@@ -136,12 +136,11 @@ runVSolve prop =
 
 runVSMTSolve :: (MonadTrans t, MonadReader (SMTConf String) (t IO)) =>
   VProp String String -> t IO Result
-runVSMTSolve prop =
-  do  cnf <- ask
-      let prop' = foldr ($!) prop (opts cnf)
-      (res,_) <- lift . S.runSMTWith (conf cnf) . vSMTSolve $
-                 St.evalStateT (propToSBool prop') (M.empty, M.empty)
-      lift . return . V $ res
+runVSMTSolve prop = do cnf <- ask
+                       let prop' = foldr ($!) prop (opts cnf)
+                       (res,_) <- lift . S.runSMT . vSMTSolve $
+                         St.evalStateT (propToSBool prop) (M.empty, M.empty)
+                       lift . return . V $ res
 
 -- | main workhorse for running the SAT solver
 data Result = L [S.SatResult]
@@ -192,7 +191,7 @@ vSMTSolve :: S.Symbolic (VProp S.SBool SNum) -> S.Symbolic (IncState S.SMTResult
 vSMTSolve prop = do prop' <- prop
                     SC.query $
                       do
-                      (_, res) <- St.runStateT (vSMTSolve_ prop') ([], M.empty)
+                      res <- St.execStateT (vSMTSolve_ prop') ([], M.empty)
                       prf <- SC.getSMTResult
                       return $ first ((:) (Plain . Just $ prf)) res
 
