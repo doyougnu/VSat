@@ -18,7 +18,7 @@ import Prelude hiding (LT,EQ,GT)
 import qualified Control.Arrow as A ((&&&))
 
 import VProp.Types
-import VProp.Core (maxShared, onlyBools)
+import VProp.Core (maxShared, onlyBools, noDupRefs)
 
 -- | A wrapper to represent readable strings
 newtype Readable = Re { readStr :: String }
@@ -29,7 +29,7 @@ instance Arbitrary Var where arbitrary = Var <$> genAlphaNumStr
 
 
 -- | arbritrary instance for the generator monad
-instance Arbitrary a => Arbitrary (VProp a a) where
+instance (Arbitrary a, Ord a) => Arbitrary (VProp a a) where
   arbitrary = sized $ arbVProp genSharedDim arbitrary (repeat 3, repeat 3)
 
 -- | Generate only alphabetical characters
@@ -78,11 +78,10 @@ genRefN = elements [RefI, RefD]
 genB_B :: Gen B_B
 genB_B = elements [Not]
 
--- | leaving out mod, due to double conversion errors, one would first need to
--- implement an SDivisible for double but the types of the class dont allow the
--- result type to be different from the input types
+-- MOD will fail if there is no integer in the expression. Will be a stack
+-- overflow or memory error
 genNN_N :: Gen NN_N
-genNN_N = elements [Add, Sub, Mult, Div]
+genNN_N = elements [Add, Mod, Sub, Mult, Div]
 
 genBB_B :: Gen BB_B
 genBB_B = elements [Impl, BiImpl, XOr]
@@ -93,13 +92,19 @@ genNN_B = elements [LT, LTE, GT, GTE, EQ, NEQ]
 genOpn :: Gen Opn
 genOpn = elements [And, Or]
 
+-- | Generate an arbritrary prop where any variable name in the boolean language
+-- _does not_ occur in the integer language
+arbVProp :: (Arbitrary a, Ord a) =>
+  Gen Dim -> Gen a -> ([Int], [Int]) -> Int -> Gen (VProp a a)
+arbVProp gd gv fs n = flip suchThat noDupRefs $ arbVProp_ gd gv fs n
+
 -- | Generate an Arbitrary VProp, given a generator and counter these
 -- frequencies can change for different depths. The counter is merely for a
 -- `sized` call
-arbVProp :: Arbitrary a =>
+arbVProp_ :: Arbitrary a =>
   Gen Dim -> Gen a -> ([Int], [Int]) -> Int -> Gen (VProp a a)
-arbVProp _  gv _     0 = RefB <$> gv
-arbVProp gd gv fs@(bfreqs, ifreqs) n
+arbVProp_ _  gv _     0 = RefB <$> gv
+arbVProp_ gd gv fs@(bfreqs, ifreqs) n
   = frequency $ zip bfreqs [ LitB <$> arbitrary
                            , RefB <$> gv
                            , (liftM3 ChcB gd l l)
@@ -109,7 +114,7 @@ arbVProp gd gv fs@(bfreqs, ifreqs) n
                            , liftM3 OpBB genBB_B l l
                            , liftM3 OpIB genNN_B l' l'
                            ]
-  where l = arbVProp gd gv fs (n `div` 2)
+  where l = arbVProp_ gd gv fs (n `div` 2)
         l' = arbVIExpr gd gv ifreqs (n `div` 2)
 
 arbVIExpr :: Arbitrary a =>
@@ -133,14 +138,12 @@ vPropShare = sized . arbVProp genSharedDim genSharedVar . (id A.&&& id)
 -- | Generate a random prop according to its arbritrary type class instance,
 -- this has a strong likelihood of sharing
 -- | generate with $ x <- genVProp :: (IO (VProp Var Var))
-genVProp :: (Arbitrary a) => IO (VProp a a)
+genVProp :: (Arbitrary a, Ord a) => IO (VProp a a)
 genVProp = generate arbitrary
 
 -- | run With $ x <- generate . genBoolProp $ vPropNoShare (repeat 30)
 genBoolProp :: (Arbitrary a) => Gen (VProp a a) -> Gen (VProp a a)
 genBoolProp = flip suchThat onlyBools
-
--- vPropChoicesOverRefs = sized $ flip arbProp
 
 genVPropAtSize :: (Arbitrary a, Arbitrary b) =>
   Int -> Gen (VProp a b) -> Gen (VProp a b)

@@ -91,6 +91,22 @@ onlyBools (OpBB _ l r)  = onlyBools l && onlyBools r
 onlyBools (OpB  _ e)    = onlyBools e
 onlyBools _             = True
 
+-- | Does the prop only contain Ints
+onlyInts :: VProp a a -> Bool
+onlyInts (OpIB _ l r) = onlyInts' l && onlyInts' r
+onlyInts (ChcB _ l r) = onlyInts l && onlyInts r
+onlyInts (Opn _ xs)   = foldr (\x acc -> acc && onlyInts x) True xs
+onlyInts (OpBB _ l r) = onlyInts l && onlyInts r
+onlyInts (OpB _ e)    = onlyInts e
+onlyInts _            = True
+
+onlyInts' :: VIExpr a -> Bool
+onlyInts' (LitI (D _)) = False
+onlyInts' (OpI _ e)    = onlyInts' e
+onlyInts' (OpII _ l r) = onlyInts' l && onlyInts' r
+onlyInts' (ChcI _ l r) = onlyInts' l && onlyInts' r
+onlyInts' _            = True
+
 -- | Does the prop contain no variables?
 onlyLits :: VProp a a -> Bool
 onlyLits (LitB _) = True
@@ -107,6 +123,11 @@ onlyLits' (Ref _ _) = False
 onlyLits' (OpI _ e) = onlyLits' e
 onlyLits' (OpII _ l r) = onlyLits' l && onlyLits' r
 onlyLits' (ChcI _ l r) = onlyLits' l && onlyLits' r
+
+-- | Are there any variables in the boolean language that shadow variables in
+-- the integer language?
+noDupRefs :: Ord a => VProp a a -> Bool
+noDupRefs prop = Set.null $ (bvars prop) Set.\\ (ivars prop)
 
 -- ----------------------------- Choice Manipulation ------------------------------
 -- -- | Wrapper around engine
@@ -304,6 +325,16 @@ ivarsWithType' (OpI _ e)    = ivarsWithType' e
 ivarsWithType' (OpII _ l r) = ivarsWithType' l `Set.union` ivarsWithType' r
 ivarsWithType' (ChcI _ l r) = ivarsWithType' l `Set.union` ivarsWithType' r
 ivarsWithType' (Ref x a)    = Set.singleton (x, a)
+
+-- | The set of boolean variable references for an expression
+bvars :: (Ord a, Ord b) => VProp a b -> Set.Set a
+bvars (LitB _)     = Set.empty
+bvars (RefB v)     = Set.singleton v
+bvars (OpB _ e)    = bvars e
+bvars (OpBB _ l r) = bvars l `Set.union` bvars r
+bvars (OpIB _ _ _) = Set.empty
+bvars (Opn _ ps)   = Set.unions $ bvars <$> ps
+bvars (ChcB _ l r) = bvars l `Set.union` bvars r
 
 -- | The set of all choices
 configs :: VProp a b -> [[(Dim, Bool)]]
