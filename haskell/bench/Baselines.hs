@@ -13,8 +13,7 @@ import Test.Tasty.QuickCheck (generate, choose)
 import Control.DeepSeq (NFData)
 
 import Api
-import Json
-
+import Config
 
 import System.CPUTime
 import System.Environment
@@ -132,11 +131,14 @@ benchRandomSample descfp timefp metrics@(_, n) = do
   -- time "Unique/BForce" metrics timefp $! runEnv True False False [] noShprop
 
   -- | run incremental solve
-  time "Shared/VSolve" metrics timefp $! runVS [] prop
+  -- time "Shared/VSMTSolve" metrics timefp $! satWith defConf prop
+  time "defConf/VSMTSolve" metrics timefp $! satWith defConf prop
+  time "opts/VSMTSolve" metrics timefp $! satWith allOptsConf prop
   -- time "Unique/VSolve" metrics timefp $! runEnv False False False [] noShprop
 
   -- | run and decomp
-  time "Shared/ChcDecomp" metrics timefp $! runAD [] prop
+  time "defConf/ChcDecomp" metrics timefp $! runAD defConf prop
+  time "opts/ChcDecomp" metrics timefp $! runAD allOptsConf prop
   -- time "Unique/ChcDecomp" metrics timefp $! runEnv True True False [] noShprop
 
 time :: NFData a => Text -> RunMetric -> FilePath -> IO a -> IO ()
