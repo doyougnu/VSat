@@ -10,4 +10,4 @@ import Server
 main :: IO ()
 main = do
   spockCfg <- defaultSpockCfg () PCNoDatabase ()
-  runSpock 8080 (spock spockCfg satHandler)
+  runSpock 8080 (spock spockCfg app)

@@ -7,6 +7,11 @@ import GHC.Generics (Generic)
 import Data.Aeson hiding (json)
 import Data.Maybe (maybe)
 
+import           Data.Aeson       hiding (json)
+import           Data.Monoid      ((<>))
+import           Data.Text        (Text, pack)
+import           GHC.Generics
+
 import Api
 import Json
 import V
@@ -22,25 +27,31 @@ type Api = SpockM () () ()
 type ApiAction a = SpockAction () () () a
 
 data Request a b = Request { settings :: Maybe Settings
-                           , getProp :: VProp a b}
-  deriving (Generic)
+                           , proposition :: VProp a b
+                           }
+  deriving (Generic,Show)
 
 instance FromJSONKey Dim
 instance (FromJSON a, FromJSON b) => FromJSON (Request a b)
 instance (ToJSON a, ToJSON b) => ToJSON (Request a b)
 
--- satHandler :: Api [V String (Maybe SatResult)]
--- satHandler :: SpockCtxM ctx conn sess st ()
--- satHandler = do post "sat" $ do
---                   prop <- liftIO $ (genVProp :: IO (VProp Var Var))
---                   res <- liftIO $ sat (bimap show show prop)
---                   json res
 
--- satHandler :: SpockCtxM ctx conn sess st ()
-satHandler = do post "sat" $ do
-                  req <- jsonBody' :: ApiAction (Request Var Var)
-                  let prop = getProp req
-                      sets = maybe defSettings id (settings req)
-                      conf = toConf sets
-                  res <- liftIO $ satWith conf (bimap show show prop)
-                  json res
+app :: Api ()
+app = do post "sat" satHandler
+         post "prove" proveHandler
+
+satHandler = do
+  req <- jsonBody' :: ApiAction (Request String String)
+  let prop = proposition req
+      sets = maybe defSettings id (settings req)
+      conf = toConf sets
+  res <- liftIO $ satWith conf prop
+  json res
+
+proveHandler = do
+  req <- jsonBody' :: ApiAction (Request Var Var)
+  let prop = proposition req
+      sets = maybe defSettings id (settings req)
+      conf = toConf sets
+  res <- liftIO $ proveWith conf (bimap show show prop)
+  json res
