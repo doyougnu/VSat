@@ -17,7 +17,7 @@ import VProp.Types
 import VProp.Core
 import VProp.SBV
 import VProp.Gen
-import Config (defConf)
+import Config (defConf, allOptsConf)
 import Run
 import Api
 
@@ -71,7 +71,8 @@ instance Eq ThmResult where (ThmResult x) == (ThmResult y) = x == y
 
 runProperties :: TestTree
 runProperties = testGroup "Run Properties" [
-  sat_term
+  andDecomp_terminatesSh
+  -- , sat_term
   -- sat_error
   -- , sat_error2
   -- , sat_error3
@@ -84,21 +85,18 @@ unitTests :: TestTree
 unitTests = testGroup "Unit Tests" [
   sat_error
   , sat_error2
-  -- , sat_error3
-  , sat_error4
+  -- , sat_error4
+  , andDecomp_duplicate
+  , andDecomp_duplicateChc
   ]
-
-ad_term = QC.testProperty
-          "and decomp terminates on known failing example"
-          andDecomp_terminates
-
-ad_term2 = QC.testProperty
-          "and decomp terminates on known failing example 2"
-          andDecomp_terminates2
 
 sat_term = QC.testProperty
            "Satisfiability terminates on any input"
            sat_terminates
+
+andDecomp_terminatesSh = QC.testProperty
+                         "And decomp terminates with shared generated props"
+                         andDecomp_terminatesSh_
 
 sat_error = H.testCase
            "Coercian with division works properly"
@@ -116,33 +114,36 @@ sat_error4 = H.testCase
            "The solver doesn't run out of memory"
            sat_error_unit4
 
-andDecomp_terminates = QCM.monadicIO $
-  do a <- QCM.run $ runAD defConf prop
-     QCM.assert (not $ null a)
+andDecomp_duplicate = H.testCase
+  "And decomposition can solve props with repeat variables" $
+  do a <- runAD defConf prop
+     H.assertBool "should never be empty" (not $ null a)
   where
     prop :: VProp String String
-    prop = (dRef "a") .< (LitI . D $ 9.99999)
+    prop = Opn And [bRef "c", bRef "c"]
 
-
-andDecomp_terminates2 = QCM.monadicIO $
-  do a <- QCM.run $ runAD defConf prop
-     QCM.assert (not $ null a)
+andDecomp_duplicateChc = H.testCase
+  "And decomposition can solve props with repeat dimensions" $
+  do a <- runAD defConf prop
+     H.assertBool "should never be empty" (not $ null a)
   where
     prop :: VProp String String
-    prop = ((dRef "x" + iRef "q") .== 0) &&& true
-    -- prop = ((dRef "x" - iRef "q") .== 0) &&& (bRef "w" &&& bRef "rhy")
+    prop = ChcB "D" (bRef "c" &&& bRef "d") (bRef "a") &&& ChcB "D" (bRef "a") (bRef "c")
 
-andDecomp_terminates3 = QCM.monadicIO $
-  do a <- QCM.run $ runAD defConf prop
-     QCM.assert (not $ null a)
-  where
-    prop :: VProp String String
-    prop = ChcB "AA" (bRef "gd" &&& (iRef "j" .<= iRef "zy")) (false &&& bRef "g")
--- AA≺gd ∧ (j ≤ zy) , #F ∧ g≻
+andDecomp_terminatesSh_ = QCM.monadicIO $
+  do
+    prop <- QCM.run . QC.generate . genVPropAtShare 5 $ vPropShare (repeat 4)
+    a <- QCM.run $ runAD defConf (bimap show show prop)
+    QCM.assert (not $ null a)
 
-sat_terminates x = onlyBools x QC.==> QCM.monadicIO
-  $ do a <- QCM.run . sat . bimap show show $ (x :: VProp Var Var)
-       liftIO $ print x
+sat_terminates x =  onlyInts x QC.==> QCM.monadicIO
+  $ do -- liftIO $ print $ "prop: " ++ show (x :: VProp Var Var) ++ " \n"
+       a <- QCM.run . sat . bimap show show $ (x :: VProp Var Var)
+       QCM.assert (not $ null a)
+
+ad_terminates x = onlyInts x QC.==> QCM.monadicIO
+  $ do -- liftIO $ print $ "prop: " ++ show (x :: VProp Var Var) ++ " \n"
+       a <- QCM.run . runAD defConf . bimap show show $ (x :: VProp Var Var)
        QCM.assert (not $ null a)
 
 sat_error_unit = do a <- sat prop
