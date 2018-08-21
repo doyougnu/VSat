@@ -2,7 +2,6 @@ module Run ( Result (..)
            , SatDict
            , Log
            , runAD
-           , runAD_
            , runBF
            , runVS
            , runVSMT
@@ -55,12 +54,6 @@ runEnv :: (VProp String String-> Env String Result)
        -> SMTConf String
        -> VProp String String-> IO (Result, (SatDict String), Log)
 runEnv f conf !x = _runEnv (f x) conf (initSt x)
-
--- | Run the and decomposition solver
-runAD_ :: SMTConf String
-      -> VProp String String
-      -> IO (Result, SatDict String, Log)
-runAD_ = runEnv runAndDecomp
 
 runAD :: SMTConf String
       -> VProp String String
@@ -120,7 +113,7 @@ runBruteForce prop = lift $ flip evalStateT _emptySt $
 -- and then run the sat solver
 runAndDecomp :: (MonadTrans t, Monad (t IO)) => VProp String String -> t IO Result
 runAndDecomp prop = do
-  res <- lift . S.runSMTWith S.z3{S.verbose=True} $ do
+  res <- lift . S.runSMT $ do
     p <- symbolicPropExpr $ andDecomp prop dimName
     SC.query $ do S.constrain p; getVSMTModel
   lift . return $ V [res]
