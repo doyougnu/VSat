@@ -104,4 +104,136 @@ stack build # this will build the exectuable, go get some coffee, trust me
 ```
 
 ## Running the VSMT solver
-### TBD, eta 2 days just need to write some routes
+### Starting the local server
+To run the local server you need to build the project and then execute the
+binary that results from the build, like so:
+```
+cd /to/haskell/directory/
+stack build                # build the binary
+stack exec vsat            # execute the binary
+```
+
+on my system this looks like:
+
+```
+➜  haskell git:(master) ✗ pwd
+/home/doyougnu/Research/VSat/haskell
+➜  haskell git:(master) ✗ stack build
+
+Warning: Specified pattern "README.md" for extra-source-files does not match any files
+vsat-0.1.0.0: unregistering (local file changes: src/Server.hs)
+vsat-0.1.0.0: configure (lib + exe)
+Configuring vsat-0.1.0.0...
+vsat-0.1.0.0: build (lib + exe)
+Preprocessing library for vsat-0.1.0.0..
+Building library for vsat-0.1.0.0..
+[ 1 of 14] Compiling SAT              ( src/SAT.hs, .stack-work/dist/x86_64-linux-nix/Cabal-2.0.1.0/build/SAT.o )
+...
+Linking .stack-work/dist/x86_64-linux-nix/Cabal-2.0.1.0/build/vsat/vsat ...
+
+vsat-0.1.0.0: copy/register
+Installing library in /home/doyougnu/Research/VSat/haskell/.stack-work/install/x86_64-linux-nix/lts-11.14/8.2.2/lib/x86_64-linux-ghc-8.2.2/vsat-0.1.0.0-Aj9r5QEWrvTKTjvHnt9QFe
+Installing executable vsat in /home/doyougnu/Research/VSat/haskell/.stack-work/install/x86_64-linux-nix/lts-11.14/8.2.2/bin
+Registering library for vsat-0.1.0.0..
+
+➜  haskell git:(master) ✗ stack exec vsat
+Spock is running on port 8080               # server now running on localhost:8080
+```
+
+### Available routes
+There are only 4 routes available at this time but it is trivially easy to add
+more and I will do so upon request (open an issue on the repo). These are:
+
+```
+localhost:8080/sat                     # run the VSMT solver with default config
+localhost:8080/satWith                 # run solver with custom config
+localhost:8080/prove                   # run prover with default config
+localhost:8080/proveWith               # run the prover with custom config
+```
+
+The default config uses `z3` and turns on the most useful optimizations. These
+optimizations are trivially some reordering to maximize sharing in the
+variational expressions. You can view them in the `Opts.hs` file. If you want to
+customize the configuration see the `Sending a Request` section.
+
+### Sending a Request
+To send a request I recommend using a helpful tool like
+[postman](https://www.getpostman.com/), you can `cURL` if you really want. In
+any case the tool expects an object with two fields, `settings`, and
+`proposition` with `settings` being an optional field. I've just used Haskell's
+generics to generate the JSON parser so it is tightly coupled to the solver AST,
+this is open to change in the future but for right now it is sufficient. Here
+are some explicit examples:
+
+```
+####### Request to localhost:8080/sat
+{"settings":null,"proposition":{"tag":"LitB","contents":true}}
+
+# Response
+[
+    {
+        "model": "[There are no variables bound by the model.]"
+    }
+]
+
+######## the proposition
+a ∨ kejtjbsjshvouk
+
+# expands to in JSON
+{
+    "tag": "Opn",
+    "contents": [
+        "Or",
+        [
+            {
+                "tag": "RefB",
+                "contents": {
+                    "varName": "a"
+                }
+            },
+            {
+                "tag": "RefB",
+                "contents": {
+                    "varName": "kejtjbsjshvouk"
+                }
+            }
+        ]
+    ]
+}
+
+# Request to localhost:8080/satWith
+{
+    "settings": {
+        "seed": 1234,
+        "solver": "Z3",
+        "optimizations": []
+    }
+    ,"proposition": {
+        "tag": "Opn",
+        "contents": [
+            "Or",
+            [
+                {
+                    "tag": "RefB",
+                    "contents": {
+                        "varName": "a"
+                    }
+                },
+                {
+                    "tag": "RefB",
+                    "contents": {
+                        "varName": "kejtjbsjshvouk"
+                    }
+                }
+            ]
+        ]
+    }
+}
+
+# Response
+[
+    {
+        "model": "  a              = False :: Bool\n  kejtjbsjshvouk = False :: Bool"
+    }
+]
+```

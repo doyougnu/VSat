@@ -327,14 +327,8 @@ ivarsWithType' (ChcI _ l r) = ivarsWithType' l `Set.union` ivarsWithType' r
 ivarsWithType' (Ref x a)    = Set.singleton (x, a)
 
 -- | The set of boolean variable references for an expression
-bvars :: (Ord a, Ord b) => VProp a b -> Set.Set a
-bvars (LitB _)     = Set.empty
-bvars (RefB v)     = Set.singleton v
-bvars (OpB _ e)    = bvars e
-bvars (OpBB _ l r) = bvars l `Set.union` bvars r
-bvars (OpIB _ _ _) = Set.empty
-bvars (Opn _ ps)   = Set.unions $ bvars <$> ps
-bvars (ChcB _ l r) = bvars l `Set.union` bvars r
+bvars :: Ord a => VProp a a -> Set.Set a
+bvars prop = vars prop `Set.difference` ivars prop
 
 -- | The set of all choices
 configs :: VProp a b -> [[(Dim, Bool)]]

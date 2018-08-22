@@ -33,6 +33,7 @@ dependencies:
 - vector
 - time
 - tasty-quickcheck
+- aeson-pretty
 - aeson
 - Spock
 

@@ -37,21 +37,40 @@ instance (ToJSON a, ToJSON b) => ToJSON (Request a b)
 
 
 app :: Api ()
-app = do post "sat" satHandler
+app = do post "satWith" satWithHandler
+         post "proveWith" proveWithHandler
+         post "sat" satHandler
          post "prove" proveHandler
 
-satHandler = do
-  req <- jsonBody' :: ApiAction (Request String String)
+-- TODO cleanup these types
+satWithHandler :: ActionCtxT () (WebStateM () () ()) b
+satWithHandler = do
+  req <- jsonBody' :: ApiAction (Request Var Var)
   let prop = proposition req
       sets = maybe defSettings id (settings req)
       conf = toConf sets
-  res <- liftIO $ satWith conf prop
+  res <- liftIO $ satWith conf (bimap show show prop)
   json res
 
-proveHandler = do
+proveWithHandler :: ActionCtxT () (WebStateM () () ()) b
+proveWithHandler = do
   req <- jsonBody' :: ApiAction (Request Var Var)
   let prop = proposition req
       sets = maybe defSettings id (settings req)
       conf = toConf sets
   res <- liftIO $ proveWith conf (bimap show show prop)
+  json res
+
+satHandler :: ActionCtxT () (WebStateM () () ()) b
+satHandler = do
+  req <- jsonBody' :: ApiAction (Request Var Var)
+  let prop = proposition req
+  res <- liftIO $ sat (bimap show show prop)
+  json res
+
+proveHandler :: ActionCtxT () (WebStateM () () ()) b
+proveHandler = do
+  req <- jsonBody' :: ApiAction (Request Var Var)
+  let prop = proposition req
+  res <- liftIO $ prove (bimap show show prop)
   json res
