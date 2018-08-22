@@ -383,3 +383,21 @@ Here is a non trivial example, for more examples check the examples folder:
 
 Notice that the response is parameterized by the choice dimension `DD`. The `L`
 tag corresponds to setting `DD` to `true`, and the `R` to the `false` branch.
+
+### Available Optimizations
+The optimizations that are available are given by the `Opts` data type. Order is
+important here, in general you want anything that reduces terms to be closer to
+the tail of the input list, and anything that shuffles terms to be closer to the
+head. Here is a description of each, expect this to change substantially in the
+coming weeks:
+
+```
+- MoveRight
+  Moves every choice to the right of any commutative operator. This is should _increase_ run times because it minimizes sharing in the AST. I leave it here for testing purposes.
+
+- MoveLeft
+  Conversly, MoveLeft maximizes sharing. This should almost always be turned on and is part of the defaults.
+
+- Shrink
+  This uses basic `C_2` logic equivalences to reduce the size of terms. Things like `false /\ __ == false`. This is also part of the defaults.
+```

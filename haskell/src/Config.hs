@@ -31,7 +31,7 @@ toConf Settings{..} = foldr ($!) defConf ss
 
 -- | A default configuration uses z3 and tries to shrink propositions
 defSettings :: Settings
-defSettings = Settings{solver=Z3, optimizations=[], seed=Nothing}
+defSettings = Settings{solver=Z3, optimizations=[MoveLeft,Shrink], seed=Nothing}
 
 allOptsSettings :: Settings
 allOptsSettings = Settings{ solver=Z3
