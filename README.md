@@ -398,15 +398,23 @@ the tail of the input list, and anything that shuffles terms to be closer to the
 head. Here is a description of each, expect this to change substantially in the
 coming weeks:
 
+
+
 ```
 - MoveRight
-  Moves every choice to the right of any commutative operator. This is should _increase_ run times because it minimizes sharing in the AST. I leave it here for testing purposes.
+  Moves every choice to the right of any commutative operator. This is should
+  _increase_ run times because it minimizes sharing in the AST. I leave it here
+  for testing purposes.
+
 
 - MoveLeft
-  Conversly, MoveLeft maximizes sharing. This should almost always be turned on and is part of the defaults.
+  Conversely, MoveLeft maximizes sharing. This should almost always be turned on
+  and is part of the defaults.
+
 
 - Shrink
-  This uses basic `C_2` logic equivalences to reduce the size of terms. Things like `false /\ __ == false`. This is also part of the defaults.
+  This uses basic `C_2` logic equivalences to reduce the size of terms. Things
+  like `false /\ __ == false`. This is also part of the defaults.
 ```
 
 ## Known Issues
