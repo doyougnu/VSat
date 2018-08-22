@@ -206,7 +206,10 @@ a ∨ kejtjbsjshvouk
     "settings": {
         "seed": 1234,
         "solver": "Z3",
-        "optimizations": []
+        "optimizations": [
+            "MoveLeft",
+            "Shrink"
+        ]
     }
     ,"proposition": {
         "tag": "Opn",
@@ -237,3 +240,146 @@ a ∨ kejtjbsjshvouk
     }
 ]
 ```
+
+As you can see these propositions, once expanded in JSON, can get quite large.
+Here is a non trivial example, for more examples check the examples folder:
+
+```
+# The prop
+((-17 > 93.52511917955651) ∧ ((-6 < |pccfjtjnkhfapjwtopwwxym|) ↔ ((DD≺zgmpwfdv , vrkpyxv≻) ∧ bifdhcpwh))) ∧ pevwtpjw
+
+# Expands to
+{
+    "settings": {
+        "seed": 1234,
+        "solver": "Z3",
+        "optimizations": []
+    },
+    "proposition": {
+        "tag": "Opn",
+        "contents": [
+            "And",
+            [
+                {
+                    "tag": "Opn",
+                    "contents": [
+                        "And",
+                        [
+                            {
+                                "tag": "OpIB",
+                                "contents": [
+                                    "GT",
+                                    {
+                                        "tag": "LitI",
+                                        "contents": {
+                                            "tag": "I",
+                                            "contents": -17
+                                        }
+                                    },
+                                    {
+                                        "tag": "LitI",
+                                        "contents": {
+                                            "tag": "D",
+                                            "contents": 93.52511917955651
+                                        }
+                                    }
+                                ]
+                            },
+                            {
+                                "tag": "OpBB",
+                                "contents": [
+                                    "BiImpl",
+                                    {
+                                        "tag": "OpIB",
+                                        "contents": [
+                                            "LT",
+                                            {
+                                                "tag": "LitI",
+                                                "contents": {
+                                                    "tag": "I",
+                                                    "contents": -6
+                                                }
+                                            },
+                                            {
+                                                "tag": "OpI",
+                                                "contents": [
+                                                    "Abs",
+                                                    {
+                                                        "tag": "Ref",
+                                                        "contents": [
+                                                            "RefI",
+                                                            {
+                                                                "varName": "pccfjtjnkhfapjwtopwwxym"
+                                                            }
+                                                        ]
+                                                    }
+                                                ]
+                                            }
+                                        ]
+                                    },
+                                    {
+                                        "tag": "Opn",
+                                        "contents": [
+                                            "And",
+                                            [
+                                                {
+                                                    "tag": "ChcB",
+                                                    "contents": [
+                                                        {
+                                                            "dimName": "DD"
+                                                        },
+                                                        {
+                                                            "tag": "RefB",
+                                                            "contents": {
+                                                                "varName": "zgmpwfdv"
+                                                            }
+                                                        },
+                                                        {
+                                                            "tag": "RefB",
+                                                            "contents": {
+                                                                "varName": "vrkpyxv"
+                                                            }
+                                                        }
+                                                    ]
+                                                },
+                                                {
+                                                    "tag": "RefB",
+                                                    "contents": {
+                                                        "varName": "bifdhcpwh"
+                                                    }
+                                                }
+                                            ]
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    ]
+                },
+                {
+                    "tag": "RefB",
+                    "contents": {
+                        "varName": "pevwtpjw"
+                    }
+                }
+            ]
+        ]
+    }
+}
+
+# The Response
+[
+    {
+        "isSat": "Unsatisfiable"
+    },
+    {
+        "\"DD\"": {
+            "L": null,
+            "R": null
+        }
+    }
+]
+```
+
+Notice that the response is parameterized by the choice dimension `DD`. The `L`
+tag corresponds to setting `DD` to `true`, and the `R` to the `false` branch.
