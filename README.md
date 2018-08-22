@@ -384,6 +384,13 @@ Here is a non trivial example, for more examples check the examples folder:
 Notice that the response is parameterized by the choice dimension `DD`. The `L`
 tag corresponds to setting `DD` to `true`, and the `R` to the `false` branch.
 
+### Available Settings
+The last two examples show all possible settings. Setting the seed for the
+solver is the only field that can be omitted. If you do not include a mandatory
+field then you'll receive a response saying so. For a list of available
+optimizations see below, for a list of available solvers see the `building from
+source` section above.
+
 ### Available Optimizations
 The optimizations that are available are given by the `Opts` data type. Order is
 important here, in general you want anything that reduces terms to be closer to
@@ -401,3 +408,15 @@ coming weeks:
 - Shrink
   This uses basic `C_2` logic equivalences to reduce the size of terms. Things like `false /\ __ == false`. This is also part of the defaults.
 ```
+
+## Known Issues
+### Doubles and modulus lead to non-linear constraints
+Be careful with modulus operator and the `Double` numeric type. These can easily
+lead to non-linear constraints and consume all the memory available. This
+behavior will depend on the solver, and I've only tested with `z3` which will
+happily accept and then eventually blow up once it runs out of memory.
+
+## Opening Issues
+If you would like to raise an issue with this project please do so on the
+[github](https://github.com/doyougnu/VSat). The github is the homepage for this
+tool.
