@@ -127,7 +127,7 @@ onlyLits' (ChcI _ l r) = onlyLits' l && onlyLits' r
 -- | Are there any variables in the boolean language that shadow variables in
 -- the integer language?
 noDupRefs :: Ord a => VProp a a -> Bool
-noDupRefs prop = Set.null $ (bvars prop) Set.\\ (ivars prop)
+noDupRefs prop = Set.null $ (bvars prop) `Set.intersection` (ivars prop)
 
 -- ----------------------------- Choice Manipulation ------------------------------
 -- -- | Wrapper around engine
