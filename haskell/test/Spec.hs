@@ -8,7 +8,7 @@ import Run.Test
 
 main :: IO ()
 main = do
-  setEnv "TASTY_QUICKCHECK_TESTS" "300"
+  setEnv "TASTY_QUICKCHECK_TESTS" "3000"
   defaultMain tests
   where tests = testGroup "All" [ -- jsonProperties
                                  unitTests

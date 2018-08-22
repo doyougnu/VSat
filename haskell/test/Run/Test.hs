@@ -85,7 +85,7 @@ unitTests :: TestTree
 unitTests = testGroup "Unit Tests" [
   sat_error
   , sat_error2
-  -- , sat_error4
+  , sat_error4
   , andDecomp_duplicate
   , andDecomp_duplicateChc
   ]
@@ -96,7 +96,7 @@ sat_term = QC.testProperty
 
 andDecomp_terminatesSh = QC.testProperty
                          "And decomp terminates with shared generated props"
-                         andDecomp_terminatesSh_
+                         ad_terminates
 
 sat_error = H.testCase
            "Coercian with division works properly"
@@ -120,7 +120,7 @@ andDecomp_duplicate = H.testCase
      H.assertBool "should never be empty" (not $ null a)
   where
     prop :: VProp String String
-    prop = Opn And [bRef "c", bRef "c"]
+    prop = iRef "x" ./= iRef "x"
 
 andDecomp_duplicateChc = H.testCase
   "And decomposition can solve props with repeat dimensions" $
@@ -132,7 +132,11 @@ andDecomp_duplicateChc = H.testCase
 
 andDecomp_terminatesSh_ = QCM.monadicIO $
   do
-    prop <- QCM.run . QC.generate . genVPropAtShare 5 $ vPropShare (repeat 4)
+    let gen = genVPropAtShare 5 $ vPropShare (repeat 4)
+    prop <- QCM.run . QC.generate $ gen `QC.suchThat` onlyInts
+    liftIO $ print "----\n"
+    liftIO $ print prop
+    liftIO $ print "----\n"
     a <- QCM.run $ runAD defConf (bimap show show prop)
     QCM.assert (not $ null a)
 
@@ -142,7 +146,8 @@ sat_terminates x =  onlyInts x QC.==> QCM.monadicIO
        QCM.assert (not $ null a)
 
 ad_terminates x = onlyInts x QC.==> QCM.monadicIO
-  $ do -- liftIO $ print $ "prop: " ++ show (x :: VProp Var Var) ++ " \n"
+  $ do -- liftIO $ print $ "prop: " ++ show (x :: VProp Var Var)
+       -- liftIO $ print $ "prop Dup?: " ++ show (noDupRefs x)
        a <- QCM.run . runAD defConf . bimap show show $ (x :: VProp Var Var)
        QCM.assert (not $ null a)
 
@@ -173,6 +178,7 @@ sat_error_unit4 = do a <- sat prop
                      H.assertBool "Division with a Double and Int coearces correctly" . not . null $ a
   where
     prop :: VProp String String
+  -- this will still fail with a bitvec error
     prop =  (dRef "x") .% (-6) ./= (-(LitI . D $ 74.257))
     -- prop =  (abs (iRef "x")) .% (-6) ./= (-(LitI . D $ 74.257)) -- this is the original error, a define_fun
     -- prop = ((abs (dRef "x")) .% (-6) ./= (-(LitI . D $ 74.257))) <+> (bnot (bRef "y")) -- this throws a bitvec error

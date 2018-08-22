@@ -81,7 +81,7 @@ genB_B = elements [Not]
 -- MOD will fail if there is no integer in the expression. Will be a stack
 -- overflow or memory error
 genNN_N :: Gen NN_N
-genNN_N = elements [Add, Mod, Sub, Mult, Div]
+genNN_N = elements [Add, Sub, Mult, Div]
 
 genBB_B :: Gen BB_B
 genBB_B = elements [Impl, BiImpl, XOr]
