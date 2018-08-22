@@ -1,10 +1,13 @@
 module Main where
 
-import Web.Spock
+import Web.Spock hiding (Var)
 import Web.Spock.Config
 
-import VProp.Types as T
+import VProp.Types
 import VProp.Gen
+import Data.Aeson.Encode.Pretty
+import Data.Aeson (decode)
+import qualified Data.ByteString.Lazy.Char8 as B (putStrLn)
 import Server
 
 main :: IO ()

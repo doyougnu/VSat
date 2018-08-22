@@ -417,6 +417,96 @@ coming weeks:
   like `false /\ __ == false`. This is also part of the defaults.
 ```
 
+## Generating JSON and running the tool in a REPL
+This following only applies if you have a local build up and running. If you are
+unsure about what your particular proposition should look like when encoded or
+if you want to view non-trivial examples, then you can pull up a REPL and
+experiment with the tool. Simply `cd` to the `haskell` folder and run `stack
+repl` like so:
+
+```
+~ cd ~/Research/VSat/haskell
+➜  haskell git:(master) ✗ stack ghci
+
+Warning: Specified pattern "README.md" for extra-source-files does not match any files
+vsat-0.1.0.0: initial-build-steps (lib + exe)
+The following GHC options are incompatible with GHCi and have not been passed to it: -threaded
+Configuring GHCi with the following packages: vsat
+Using main module: 1. Package `vsat' component exe:vsat with main-is file: /home/doyougnu/Research/VSat/haskell/app/Main.hs
+GHCi, version 8.2.2: http://www.haskell.org/ghc/  :? for help
+...
+```
+
+Now you should have a prompt that looks like this:
+
+```
+Ok, 14 modules loaded.
+Loaded GHCi configuration from /run/user/1729/ghci15604/ghci-script
+*Main Api Config Json Opts Run SAT Server Utils V VProp.Core VProp.Gen VProp.SBV VProp.Types>
+```
+
+and you can change it to something more user friendly:
+
+```
+*Main Api Config Json Opts Run SAT Server Utils V VProp.Core VProp.Gen VProp.SBV VProp.Types> :set prompt "-> "
+->
+```
+
+Now from the repl you can generate propositions, encode them to JSON, decode
+them, or run the tool:
+
+```hs
+-- Generating a random proposition
+-> generatedProp <- genVProp :: IO (VProp Var Var)
+-> generatedProp
+(BB≺CC≺(DD≺djfzjapa , yfrndabwslxnvrydbsf≻) ∨ (tipauin < yqfoyxvbvsmkxaacuelaqr) , aqtkkieqoxoaudcoymsyysggajzxuy≻ , #T ∨ (DD≺AA≺lcensknidrerfjdswkcqq , mrxujjsqlwgyfytqmf≻ , #T≻)≻) ∨ ((||qtuuzekibwtxttsthrrvy|| ≠ mdhwpofheikqyffykyfswchb * rpsxbapcipkhjewapjltbdb * svxcvirohqfidk * pvhdjs) ∨ ¬((j ≤ kk) ∧ msvqsgkuzqbsuzsahmrlt))
+
+-- encoding it to JSON
+-> let x = encodePretty generatedProp
+-> :t x
+x :: Data.ByteString.Lazy.Internal.ByteString
+
+-- Pretty printing it
+-> B.putStrLn x
+{
+    "tag": "Opn",
+    "contents": [
+        "Or",
+        [
+            {
+                "tag": "ChcB",
+                "contents": [
+                    {
+                        "dimName": "BB"
+                    },
+                    {
+                        "tag": "ChcB",
+                        "contents": [
+                            {
+                                "dimName": "CC"
+...
+...
+
+-- decoding it
+-> decode x :: Maybe (VProp Var Var)
+Just (BB≺CC≺(DD≺djfzjapa , yfrndabwslxnvrydbsf≻) ∨ (tipauin < yqfoyxvbvsmkxaacuelaqr) , aqtkkieqoxoaudcoymsyysggajzxuy≻ , #T ∨ (DD≺AA≺lcensknidrerfjdswkcqq , mrxujjsqlwgyfytqmf≻ , #T≻)≻) ∨ ((||qtuuzekibwtxttsthrrvy|| ≠ mdhwpofheikqyffykyfswchb * rpsxbapcipkhjewapjltbdb * svxcvirohqfidk * pvhdjs) ∨ ¬((j ≤ kk) ∧ msvqsgkuzqbsuzsahmrlt))
+
+-- Running the solver directly
+-> prove (bimap show show generatedProp)
+[Plain (Just Q.E.D.),VChc "BB" (Plain (Just Falsifiable. Counter-example:
+  djfzjapa                       = False :: Bool
+  yfrndabwslxnvrydbsf            = False :: Bool
+  tipauin                        =     0 :: Int64
+  yqfoyxvbvsmkxaacuelaqr         =   NaN :: Double
+  aqtkkieqoxoaudcoymsyysggajzxuy = False :: Bool
+  lcensknidrerfjdswkcqq          = False :: Bool
+  mrxujjsqlwgyfytqmf             = False :: Bool
+  qtuuzekibwtxttsthrrvy          =   NaN :: Double
+  mdhwpofheikqyffykyfswchb       =   NaN :: Double
+...
+...
+```
+
 ## Known Issues
 ### Doubles and modulus lead to non-linear constraints
 Be careful with modulus operator and the `Double` numeric type. These can easily
