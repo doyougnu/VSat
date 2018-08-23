@@ -416,3 +416,103 @@ signum (LitI (D 2.718))
     ]
 }
 ```
+
+# Arithmetic Binary Operators
+```
+# Haskell: Addition, Subtraction, Multiplication, Modulus, Division
+iRef "y" + dRef "z"  ## Integer will be coerced at runtime
+dRef "a" * dRef "b"
+dRef "a" .% dRef "b" ## this will lead to non-linear constraints!
+iRef "a" ./ iRef "c"
+
+# JSON
+> print $ encodePretty $ (iRef "y" + dRef "z")
+{
+    "tag": "OpII",
+    "contents": [
+        "Add",
+        {
+            "tag": "Ref",
+            "contents": [
+                "RefI",
+                "y"
+            ]
+        },
+        {
+            "tag": "Ref",
+            "contents": [
+                "RefD",
+                "z"
+            ]
+        }
+    ]
+}
+
+
+> print $ encodePretty $ (dRef "a" * dRef "b")
+{
+    "tag": "OpII",
+    "contents": [
+        "Mult",
+        {
+            "tag": "Ref",
+            "contents": [
+                "RefD",
+                "a"
+            ]
+        },
+        {
+            "tag": "Ref",
+            "contents": [
+                "RefD",
+                "b"
+            ]
+        }
+    ]
+}
+
+> print $ encodePretty $ (dRef "a" .% dRef "b")
+{
+    "tag": "OpII",
+    "contents": [
+        "Mod",
+        {
+            "tag": "Ref",
+            "contents": [
+                "RefD",
+                "a"
+            ]
+        },
+        {
+            "tag": "Ref",
+            "contents": [
+                "RefD",
+                "b"
+            ]
+        }
+    ]
+}
+
+> print $ encodePretty $ (iRef "a" ./ iRef "b")
+{
+    "tag": "OpII",
+    "contents": [
+        "Div",
+        {
+            "tag": "Ref",
+            "contents": [
+                "RefI",
+                "a"
+            ]
+        },
+        {
+            "tag": "Ref",
+            "contents": [
+                "RefI",
+                "b"
+            ]
+        }
+    ]
+}
+
+```
