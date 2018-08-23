@@ -224,5 +224,195 @@ true <=> false
         }
     ]
 }
-
+
+# Haskell: Logical Xor
+ChcB "Variation!" true (bRef "a") <+> bRef "y"
+
+# JSON
+> print $ encodePretty $ (ChcB "Variation!" true (bRef "a") <+> bRef "y":: VProp String String)
+{
+    "tag": "OpBB",
+    "contents": [
+        "XOr",
+        {
+            "tag": "ChcB",
+            "contents": [
+                {
+                    "dimName": "Variation!"
+                },
+                {
+                    "tag": "LitB",
+                    "contents": true
+                },
+                {
+                    "tag": "RefB",
+                    "contents": "a"
+                }
+            ]
+        },
+        {
+            "tag": "RefB",
+            "contents": "y"
+        }
+    ]
+}
+```
+
+### Arithmetic to Boolean Operators
+These are operators that take two numeric values and produce a boolean.
+
+```
+# Haskell: Less than, This applies to greater than, greater than equal
+# , equal, and not equal as well
+dRef "x" .< iRef "y"
+
+# JSON
+> print $ encodePretty $ (dRef "x" .< iRef "y":: VProp String String)
+{
+    "tag": "OpIB",
+    "contents": [
+        "LT",
+        {
+            "tag": "Ref",
+            "contents": [
+                "RefD",
+                "x"
+            ]
+        },
+        {
+            "tag": "Ref",
+            "contents": [
+                "RefI",
+                "y"
+            ]
+        }
+    ]
+}
+
+# Haskell: greater than, less than equal, and not equal
+dRef "x" .> iRef "y"
+dRef "x" .<= iRef "y"
+dRef "x" ./= iRef "y"
+
+# JSON
+> print $ encodePretty $ (dRef "x" .> iRef "y":: VProp String String)
+{
+    "tag": "OpIB",
+    "contents": [
+        "GT",
+        {
+            "tag": "Ref",
+            "contents": [
+                "RefD",
+                "x"
+            ]
+        },
+        {
+            "tag": "Ref",
+            "contents": [
+                "RefI",
+                "y"
+            ]
+        }
+    ]
+}
+
+> print $ encodePretty $ (dRef "x" .<= iRef "y":: VProp String String)
+{
+    "tag": "OpIB",
+    "contents": [
+        "LTE",
+        {
+            "tag": "Ref",
+            "contents": [
+                "RefD",
+                "x"
+            ]
+        },
+        {
+            "tag": "Ref",
+            "contents": [
+                "RefI",
+                "y"
+            ]
+        }
+    ]
+}
+
+> print $ encodePretty $ (dRef "x" ./= iRef "y":: VProp String String)
+{
+    "tag": "OpIB",
+    "contents": [
+        "NEQ",
+        {
+            "tag": "Ref",
+            "contents": [
+                "RefD",
+                "x"
+            ]
+        },
+        {
+            "tag": "Ref",
+            "contents": [
+                "RefI",
+                "y"
+            ]
+        }
+    ]
+}
+```
+
+### Arithmetic Unary Operators
+
+```
+# Haskell: Negation, Absolute value and Signum
+negate (dRef "x")
+abs (iRef "y")
+signum (LitI (D 2.718))
+
+# JSON
+> print $ encodePretty $ (negate (dRef "x"))
+{
+    "tag": "OpI",
+    "contents": [
+        "Neg",
+        {
+            "tag": "Ref",
+            "contents": [
+                "RefD",
+                "x"
+            ]
+        }
+    ]
+}
+
+> print $ encodePretty $ (abs (iRef "y"))
+{
+    "tag": "OpI",
+    "contents": [
+        "Abs",
+        {
+            "tag": "Ref",
+            "contents": [
+                "RefI",
+                "y"
+            ]
+        }
+    ]
+}
+
+> print $ encodePretty $ (signum (iRef "y"))
+{
+    "tag": "OpI",
+    "contents": [
+        "Sign",
+        {
+            "tag": "Ref",
+            "contents": [
+                "RefI",
+                "y"
+            ]
+        }
+    ]
+}
 ```
