@@ -3,6 +3,7 @@ module Main where
 import Web.Spock hiding (Var)
 import Web.Spock.Config
 
+-- Keeping unused imports for repl experience, see docs
 import VProp.Types
 import VProp.Gen
 import Data.Aeson.Encode.Pretty
