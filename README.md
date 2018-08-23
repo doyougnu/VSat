@@ -514,6 +514,21 @@ lead to non-linear constraints and consume all the memory available. This
 behavior will depend on the solver, and I've only tested with `z3` which will
 happily accept and then eventually blow up once it runs out of memory.
 
+### Choices are not supported in the Arithmetic language
+The solver is flexible enough to allow you write something like this:
+
+```hs
+-- We have a choice in the arithmetic language!
+ChcI "DD" (iRef "a") (iRef b) .< (LitI (I 100)) &&& some-boolean-proposition
+```
+
+However you'll never be able to run this because I've explicitly turned it off
+in the solving routine for performance and memory concern reasons. Essentially
+what happens when one has choices in the arithmetic language is that the choices
+end up distributing over any binary connective, leading to a large amount of
+redundancy and limited sharing. These both explode the runtime performance and
+the memory performance of the tool.
+
 ## Opening Issues
 If you would like to raise an issue with this project please do so on the
 [github](https://github.com/doyougnu/VSat). The github is the homepage for this
