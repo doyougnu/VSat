@@ -5,7 +5,7 @@ import Web.Spock.Config
 import Control.Monad.IO.Class (liftIO)
 import GHC.Generics (Generic)
 import Data.Aeson hiding (json)
-import Data.Maybe (maybe)
+import Data.Maybe (fromMaybe)
 import Network.Wai.Middleware.RequestLogger
 
 import           Data.Aeson       hiding (json)
@@ -51,9 +51,9 @@ satWithHandler = do
   req <- jsonBody' :: ApiAction (Request Var Var)
   liftIO . putStrLn $ "receive: " ++ show req
   let prop = proposition req
-      sets = maybe defSettings id (settings req)
+      sets = fromMaybe defSettings (settings req)
       conf = toConf sets
-  liftIO . putStrLn $ "running sat"
+  liftIO . putStrLn $ "set: " ++ show sets
   res <- liftIO $ satWith conf (bimap show show prop)
   json res
 
