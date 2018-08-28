@@ -53,8 +53,8 @@ satWithHandler = do
   liftIO . putStrLn $ "running sat"
   -- res <- liftIO $ sat conf' (bimap show show prop)
   res <- liftIO $ sat (bimap show show prop)
-  json res
-  -- json ("all good!" :: String)
+  -- json res
+  json ("all good!" :: String)
 
 proveWithHandler :: ActionCtxT () (WebStateM () () ()) b
 proveWithHandler = do
