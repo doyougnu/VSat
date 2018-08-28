@@ -16,6 +16,7 @@ import qualified Data.SBV.Internals  as I
 import qualified Data.SBV            as S
 import qualified Data.SBV.Control    as SC
 import           Prelude hiding (LT, GT, EQ)
+import Data.Foldable (foldr')
 
 import Control.Arrow (first, second)
 
@@ -122,7 +123,7 @@ runVSolve :: (MonadReader (SMTConf String) (t IO), MonadTrans t) =>
   VProp String String -> t IO Result
 runVSolve prop =
   do cnf <- ask
-     let prop' = foldr ($!) prop (opts cnf)
+     let prop' = foldr' ($!) prop (opts cnf)
      (result,_) <- lift . S.runSMTWith (conf cnf) . vSolve $
                    St.evalStateT (propToSBool prop') (M.empty, M.empty)
      lift . return . V $ result
@@ -131,7 +132,7 @@ runVSMTSolve :: (MonadTrans t, MonadReader (SMTConf String) (t IO)) =>
   VProp String String -> t IO Result
 runVSMTSolve prop =
   do cnf <- ask
-     let prop' = foldr ($!) prop (opts cnf)
+     let prop' = foldr' ($!) prop (opts cnf)
      (res,_) <- lift . S.runSMTWith (conf cnf) . vSMTSolve $
        St.evalStateT (propToSBool prop') (M.empty, M.empty)
      lift . return . V $ res
