@@ -4,17 +4,22 @@ packages:
 extra-deps: []
 
 ## uncomment the following lines to tell stack you are in a nix environment
-# nix:
-#   enable: true
-#   pure: false
-#   packages: [ z3, pkgconfig ]
+nix:
+  enable: true
+  pure: false
+  packages: [ z3, pkgconfig ]
 
 resolver: lts-11.14
 build:
   library-profiling: false
   executable-profiling: false
 
+# docker:
+#   enable: true
+
 image:
   containers:
     - name: vsat
       base: fpco/stack-run
+      entrypoints:
+        - vsat
