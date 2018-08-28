@@ -46,14 +46,15 @@ app = do post "satWith" satWithHandler
 satWithHandler :: ActionCtxT () (WebStateM () () ()) b
 satWithHandler = do
   req <- jsonBody' :: ApiAction (Request Var Var)
-  -- liftIO . putStrLn $ "receive: " ++ show req
-  -- let prop = proposition req
+  liftIO . putStrLn $ "receive: " ++ show req
+  let prop = proposition req
   --     sets = maybe defSettings id (settings req)
       -- conf' = toConf sets
-  -- liftIO . putStrLn $ "running sat"
-  -- res <- liftIO $ satWith conf' (bimap show show prop)
-  -- json res
-  json ("all good!" :: String)
+  liftIO . putStrLn $ "running sat"
+  -- res <- liftIO $ sat conf' (bimap show show prop)
+  res <- liftIO $ sat (bimap show show prop)
+  json res
+  -- json ("all good!" :: String)
 
 proveWithHandler :: ActionCtxT () (WebStateM () () ()) b
 proveWithHandler = do
