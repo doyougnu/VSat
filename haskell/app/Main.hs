@@ -2,6 +2,7 @@ module Main where
 
 import Web.Spock hiding (Var)
 import Web.Spock.Config
+import System.Environment (getEnv)
 
 -- Keeping unused imports for repl experience, see docs
 import VProp.Types
@@ -15,5 +16,8 @@ print = B.putStrLn
 
 main :: IO ()
 main = do
+  port <- read <$> getEnv "PORT"
+  port' <- read <$> getEnv "TEST"
   spockCfg <- defaultSpockCfg () PCNoDatabase ()
-  runSpock 8080 (spock spockCfg app)
+  putStrLn $ "running on port: " ++ show (port' :: Integer)
+  runSpock port (spock spockCfg app)
