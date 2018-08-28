@@ -17,9 +17,9 @@ build:
 # docker:
 #   enable: true
 
-image:
-  containers:
-    - name: vsat
-      base: fpco/stack-run
-      entrypoints:
-        - vsat
+# image:
+#   containers:
+#     - name: vsat
+#       base: fpco/stack-run
+#       entrypoints:
+#         - vsat
