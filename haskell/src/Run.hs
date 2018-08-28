@@ -129,11 +129,12 @@ runVSolve prop =
 
 runVSMTSolve :: (MonadTrans t, MonadReader (SMTConf String) (t IO)) =>
   VProp String String -> t IO Result
-runVSMTSolve prop = do cnf <- ask
-                       let prop' = foldr ($!) prop (opts cnf)
-                       (res,_) <- lift . S.runSMT . vSMTSolve $
-                         St.evalStateT (propToSBool prop) (M.empty, M.empty)
-                       lift . return . V $ res
+runVSMTSolve prop =
+  do cnf <- ask
+     let prop' = foldr ($!) prop (opts cnf)
+     (res,_) <- lift . S.runSMTWith (conf cnf) . vSMTSolve $
+       St.evalStateT (propToSBool prop') (M.empty, M.empty)
+     lift . return . V $ res
 
 -- | main workhorse for running the SAT solver
 data Result = L [S.SatResult]
