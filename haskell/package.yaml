@@ -36,6 +36,7 @@ dependencies:
 - aeson-pretty
 - aeson
 - Spock
+- wai-extra
 
 library:
   source-dirs: src
