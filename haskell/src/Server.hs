@@ -49,10 +49,11 @@ satWithHandler = do
   liftIO . putStrLn $ "receive: " ++ show req
   let prop = proposition req
       sets = maybe defSettings id (settings req)
-      conf' = toConf sets
+      -- conf' = toConf sets
   liftIO . putStrLn $ "running sat"
-  res <- liftIO $ satWith conf' (bimap show show prop)
-  json res
+  -- res <- liftIO $ satWith conf' (bimap show show prop)
+  -- json res
+  json ("all good!" :: String)
 
 proveWithHandler :: ActionCtxT () (WebStateM () () ()) b
 proveWithHandler = do
