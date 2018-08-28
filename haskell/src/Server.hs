@@ -6,6 +6,7 @@ import Control.Monad.IO.Class (liftIO)
 import GHC.Generics (Generic)
 import Data.Aeson hiding (json)
 import Data.Maybe (maybe)
+import Network.Wai.Middleware.RequestLogger
 
 import           Data.Aeson       hiding (json)
 import           Data.Monoid      ((<>))
@@ -37,10 +38,12 @@ instance (ToJSON a, ToJSON b) => ToJSON (Request a b)
 
 
 app :: Api ()
-app = do post "satWith" satWithHandler
-         post "proveWith" proveWithHandler
-         post "sat" satHandler
-         post "prove" proveHandler
+app = do
+  middleware logStdout
+  post "satWith" satWithHandler
+  post "proveWith" proveWithHandler
+  post "sat" satHandler
+  post "prove" proveHandler
 
 -- TODO cleanup these types
 satWithHandler :: ActionCtxT () (WebStateM () () ()) b
@@ -48,13 +51,11 @@ satWithHandler = do
   req <- jsonBody' :: ApiAction (Request Var Var)
   liftIO . putStrLn $ "receive: " ++ show req
   let prop = proposition req
-  --     sets = maybe defSettings id (settings req)
-      -- conf' = toConf sets
+      sets = maybe defSettings id (settings req)
+      conf = toConf sets
   liftIO . putStrLn $ "running sat"
-  -- res <- liftIO $ sat conf' (bimap show show prop)
-  res <- liftIO $ sat (bimap show show prop)
-  -- json res
-  json ("all good!" :: String)
+  res <- liftIO $ satWith conf (bimap show show prop)
+  json res
 
 proveWithHandler :: ActionCtxT () (WebStateM () () ()) b
 proveWithHandler = do
