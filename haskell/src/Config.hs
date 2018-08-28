@@ -3,6 +3,7 @@ module Config where
 import Data.SBV.Control (SMTOption(..))
 import Data.SBV (SMTConfig(..),z3,yices,mathSAT,boolector,abc,cvc4)
 import GHC.Generics (Generic)
+import Data.Foldable (foldr')
 
 import VProp.Types
 import Opts
@@ -26,7 +27,7 @@ data Solver = Z3
 
 -- | Convert an interfacial interface to an SMT one
 toConf :: (Ord a, Show a) => Settings -> SMTConf a
-toConf Settings{..} = foldr ($!) defConf ss
+toConf Settings{..} = foldr' ($!) defConf ss
   where ss = [setSeed seed, setSolver solver, setOpts optimizations]
 
 -- | A default configuration uses z3 and tries to shrink propositions
@@ -39,7 +40,7 @@ allOptsSettings = Settings{ solver=Z3
                           , seed=Nothing}
 
 defConf :: (Ord a,Show a) => SMTConf a
-defConf = toConf defSettings
+defConf = SMTConf{conf=z3, opts=[moveChcToLeft, shrinkProp]}
 
 allOptsConf :: (Ord a,Show a) => SMTConf a
 allOptsConf = toConf allOptsSettings
