@@ -5,8 +5,23 @@ built on top of the
 excellent [Data.SBV](https://hackage.haskell.org/package/sbv-7.5/docs/Data-SBV.html)
 library.
 
-# Building from Source (The only method currently)
-You'll need to install `stack` and the sat solver you want to use, the following are supported: [z3](https://github.com/Z3Prover/z3/wiki), [Yices](http://yices.csl.sri.com/), [mathsat](http://mathsat.fbk.eu/), [boolector](https://boolector.github.io/), [abc](https://people.eecs.berkeley.edu/~alanmi/abc/), [cvc4](http://cvc4.cs.stanford.edu/web/). Stack will take care of most of the installation process by installing a sandboxed `ghc` and the `cabal` build tool for you. Please refer to the sat solver home pages to install the one you'd like to use for your OS.
+# Using the Heroku Server (Recommended for non-haskell users)
+If you do not feel confident installing from source and are just trying to use
+the tool then you can send your requests to a heroku server I've spun up. Be forewarned that your **first request will take longer than normal** due to the dyno being spun up from a sleep state.
+- url: `https://vsatcc.herokuapp.com/`.
+- supported solvers: Only `z3` at this time
+- available routes: see the available routes section below
+
+# Building from Source
+You'll need to install `stack` and the sat solver you want to use, the following
+are supported: [z3](https://github.com/Z3Prover/z3/wiki),
+[Yices](http://yices.csl.sri.com/), [mathsat](http://mathsat.fbk.eu/),
+[boolector](https://boolector.github.io/),
+[abc](https://people.eecs.berkeley.edu/~alanmi/abc/),
+[cvc4](http://cvc4.cs.stanford.edu/web/). Stack will take care of most of the
+installation process by installing a sandboxed `ghc` and the `cabal` build tool
+for you. Please refer to the sat solver home pages to install the one you'd like
+to use for your OS.
 
 ## Installing Stack
 
