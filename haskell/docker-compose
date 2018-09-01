@@ -1,9 +1,0 @@
-version: '1'
-services:
-  vsat:
-    build:
-      context: .
-      args:
-        - BINARY_PATH
-    image: fpco/vsat
-    command: /opt/vsat/vsat

@@ -1,0 +1,10 @@
+## How to build and deploy the docker image, this process is known working
+- make your changes and commit to the git repo
+- cd to the vsat directory
+- run `docker build haskell --no-cache -t vsat:latest`
+- tag the docker image: `docker tag vsat:latest registry.heroku.com/vsatcc/web`
+- now push it: `docker push registry.heroku.com/vsatcc/web`
+
+# Resources
+[1]: https://medium.com/travis-on-docker/how-to-run-dockerized-apps-on-heroku-and-its-pretty-great-76e07e610e22
+[2]: https://devcenter.heroku.com/articles/container-registry-and-runtime#build-an-image-and-push
