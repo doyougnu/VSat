@@ -9,7 +9,7 @@ RUN stack build --no-nix --copy-bins
 RUN apt-get update && apt-get install -y \
     git \
     python3 \
-    build-essential \
+    build-essential
 
 # Build z3 from source
 COPY buildScripts/buildz3.sh .
