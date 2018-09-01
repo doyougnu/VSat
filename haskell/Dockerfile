@@ -5,15 +5,11 @@ ADD . /vsat
 RUN stack setup --no-nix
 RUN stack build --no-nix --copy-bins
 
-# add yices repo
-RUN add-apt-repository ppa:scr-csl/formal-methods
-
 # Dependencies and install yices2
 RUN apt-get update && apt-get install -y \
     git \
     python3 \
     build-essential \
-    yices2
 
 # Build z3 from source
 COPY buildScripts/buildz3.sh .
