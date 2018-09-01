@@ -5,11 +5,17 @@ ADD . /vsat
 RUN stack setup --no-nix
 RUN stack build --no-nix --copy-bins
 
-# Build the most recent z3 (needed to comply with SBV)
+# add yices repo
+RUN add-apt-repository ppa:scr-csl/formal-methods
+
+# Dependencies and install yices2
 RUN apt-get update && apt-get install -y \
     git \
     python3 \
-    build-essential
+    build-essential \
+    yices2
+
+# Build z3 from source
 COPY buildScripts/buildz3.sh .
 RUN chmod +x buildz3.sh
 RUN ./buildz3.sh
