@@ -14,12 +14,7 @@ module VProp.Types ( module Prelude
                    , SNum(..)
                    , RefN(..)
                    , PrimN(..)
-                   , (.<)
-                   , (.<=)
-                   , (.==)
-                   , (./=)
-                   , (.>=)
-                   , (.>)
+                   , Prim(..)
                    , S.true
                    , S.false
                    , S.bnot
@@ -33,8 +28,12 @@ module VProp.Types ( module Prelude
                    , bifoldr
                    , bitraverse
                    , iRef
+                   , iLit
                    , dRef
-                   , bRef) where
+                   , dLit
+                   , bRef
+                   , iChc
+                   , bChc) where
 
 import           Data.Data           (Data, Typeable)
 import           Data.Monoid         ((<>))
@@ -134,11 +133,23 @@ infixl 7 ./, .%
 iRef :: String -> VIExpr String
 iRef = Ref RefI
 
+iLit :: Integer -> VIExpr a
+iLit = LitI . I
+
+dLit :: Double -> VIExpr a
+dLit = LitI . D
+
 dRef :: String -> VIExpr String
 dRef = Ref RefD
 
 bRef :: String -> VProp String b
 bRef = RefB
+
+bChc :: String -> VProp a b -> VProp a b -> VProp a b
+bChc x = ChcB (Dim x)
+
+iChc :: String -> VIExpr a -> VIExpr a -> VIExpr a
+iChc x = ChcI (Dim x)
 
 -- | Begin primitive instances
 
