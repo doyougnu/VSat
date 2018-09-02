@@ -24,72 +24,72 @@ data Opts = MoveRight
 -- | Given any arbritrary prop move any choices to the right
 moveChcToRight :: (Ord a, Ord b) => VProp a b -> VProp a b
   -- structural instances
-moveChcToRight (Opn op xs) = Opn op . sort $ fmap moveChcToRight xs
-moveChcToRight (OpBB XOr x@(ChcB _ _ _) r) = OpBB XOr r x
-moveChcToRight (OpBB BiImpl x@(ChcB _ _ _) r) = OpBB Impl r x
-moveChcToRight (OpIB LT x@(ChcI _ _ _) r) = OpIB GT (moveChcToRight' r) (moveChcToRight' x)
-moveChcToRight (OpIB GT x@(ChcI _ _ _) r) = OpIB LT (moveChcToRight' r) (moveChcToRight' x)
-moveChcToRight (OpIB EQ x@(ChcI _ _ _) r) = OpIB EQ (moveChcToRight' r) (moveChcToRight' x)
-moveChcToRight (OpIB NEQ x@(ChcI _ _ _) r) = OpIB NEQ (moveChcToRight' r) (moveChcToRight' x)
-moveChcToRight (OpIB LTE x@(ChcI _ _ _) r) = OpIB GTE (moveChcToRight' r) (moveChcToRight' x)
-moveChcToRight (OpIB GTE x@(ChcI _ _ _) r) = OpIB LTE (moveChcToRight' r) (moveChcToRight' x)
+moveChcToRight !(Opn op xs) = Opn op . sort $ fmap moveChcToRight xs
+moveChcToRight !(OpBB XOr x@(ChcB _ _ _) r) = OpBB XOr r x
+moveChcToRight !(OpBB BiImpl x@(ChcB _ _ _) r) = OpBB Impl r x
+moveChcToRight !(OpIB LT x@(ChcI _ _ _) r) = OpIB GT (moveChcToRight' r) (moveChcToRight' x)
+moveChcToRight !(OpIB GT x@(ChcI _ _ _) r) = OpIB LT (moveChcToRight' r) (moveChcToRight' x)
+moveChcToRight !(OpIB EQ x@(ChcI _ _ _) r) = OpIB EQ (moveChcToRight' r) (moveChcToRight' x)
+moveChcToRight !(OpIB NEQ x@(ChcI _ _ _) r) = OpIB NEQ (moveChcToRight' r) (moveChcToRight' x)
+moveChcToRight !(OpIB LTE x@(ChcI _ _ _) r) = OpIB GTE (moveChcToRight' r) (moveChcToRight' x)
+moveChcToRight !(OpIB GTE x@(ChcI _ _ _) r) = OpIB LTE (moveChcToRight' r) (moveChcToRight' x)
   -- recursive instances
-moveChcToRight (OpIB op l r) = OpIB op (moveChcToRight' l) (moveChcToRight' r)
-moveChcToRight (ChcB d l r)  = ChcB d  (moveChcToRight l) (moveChcToRight r)
-moveChcToRight (OpB op e)    = OpB op  (moveChcToRight e)
-moveChcToRight (OpBB op l r) = OpBB op (moveChcToRight l) (moveChcToRight r)
+moveChcToRight !(OpIB op l r) = OpIB op (moveChcToRight' l) (moveChcToRight' r)
+moveChcToRight !(ChcB d l r)  = ChcB d  (moveChcToRight l) (moveChcToRight r)
+moveChcToRight !(OpB op e)    = OpB op  (moveChcToRight e)
+moveChcToRight !(OpBB op l r) = OpBB op (moveChcToRight l) (moveChcToRight r)
 moveChcToRight nonRecursive = nonRecursive
 
 moveChcToRight' :: (Ord a) => VIExpr a -> VIExpr a
   -- structural instances
-moveChcToRight' (OpII Add x@(ChcI _ _ _) r)  = OpII Add (moveChcToRight' r) (moveChcToRight' x)
-moveChcToRight' (OpII Mult x@(ChcI _ _ _) r) = OpII Mult (moveChcToRight' r) (moveChcToRight' x)
+moveChcToRight' !(OpII Add x@(ChcI _ _ _) r)  = OpII Add (moveChcToRight' r) (moveChcToRight' x)
+moveChcToRight' !(OpII Mult x@(ChcI _ _ _) r) = OpII Mult (moveChcToRight' r) (moveChcToRight' x)
   -- recursive instances
-moveChcToRight' (OpII op l r) = OpII op (moveChcToRight' l) (moveChcToRight' r)
-moveChcToRight' (OpI op e)    = OpI op (moveChcToRight' e)
-moveChcToRight' (ChcI d l r)  = ChcI d (moveChcToRight' l) (moveChcToRight' r)
+moveChcToRight' !(OpII op l r) = OpII op (moveChcToRight' l) (moveChcToRight' r)
+moveChcToRight' !(OpI op e)    = OpI op (moveChcToRight' e)
+moveChcToRight' !(ChcI d l r)  = ChcI d (moveChcToRight' l) (moveChcToRight' r)
 moveChcToRight' nonRecursive  = nonRecursive
 
 -- | Given any arbritrary prop move any choices to the left
 moveChcToLeft :: (Ord a, Ord b) => VProp a b -> VProp a b
   -- structural instances
-moveChcToLeft (Opn op xs) = Opn op . reverse . sort . fmap moveChcToLeft $ xs
-moveChcToLeft (OpBB XOr    l x@(ChcB _ _ _)) = OpBB XOr (moveChcToLeft x) (moveChcToLeft l)
-moveChcToLeft (OpBB BiImpl l x@(ChcB _ _ _)) = OpBB BiImpl (moveChcToLeft x) (moveChcToLeft l)
-moveChcToLeft (OpIB LT l x@(ChcI _ _ _)) = OpIB GT (moveChcToLeft' x) (moveChcToLeft' l)
-moveChcToLeft (OpIB GT l x@(ChcI _ _ _)) = OpIB LT (moveChcToLeft' x) (moveChcToLeft' l)
-moveChcToLeft (OpIB EQ l x@(ChcI _ _ _)) = OpIB EQ (moveChcToLeft' x) (moveChcToRight' l)
-moveChcToLeft (OpIB NEQ l x@(ChcI _ _ _)) = OpIB NEQ (moveChcToLeft' x) (moveChcToRight' l)
-moveChcToLeft (OpIB LTE l x@(ChcI _ _ _)) = OpIB GTE (moveChcToLeft' x) (moveChcToRight' l)
-moveChcToLeft (OpIB GTE l x@(ChcI _ _ _)) = OpIB LTE (moveChcToLeft' x) (moveChcToRight' l)
+moveChcToLeft !(Opn op xs) = Opn op . reverse . sort . fmap moveChcToLeft $ xs
+moveChcToLeft !(OpBB XOr    l x@(ChcB _ _ _)) = OpBB XOr (moveChcToLeft x) (moveChcToLeft l)
+moveChcToLeft !(OpBB BiImpl l x@(ChcB _ _ _)) = OpBB BiImpl (moveChcToLeft x) (moveChcToLeft l)
+moveChcToLeft !(OpIB LT l x@(ChcI _ _ _)) = OpIB GT (moveChcToLeft' x) (moveChcToLeft' l)
+moveChcToLeft !(OpIB GT l x@(ChcI _ _ _)) = OpIB LT (moveChcToLeft' x) (moveChcToLeft' l)
+moveChcToLeft !(OpIB EQ l x@(ChcI _ _ _)) = OpIB EQ (moveChcToLeft' x) (moveChcToRight' l)
+moveChcToLeft !(OpIB NEQ l x@(ChcI _ _ _)) = OpIB NEQ (moveChcToLeft' x) (moveChcToRight' l)
+moveChcToLeft !(OpIB LTE l x@(ChcI _ _ _)) = OpIB GTE (moveChcToLeft' x) (moveChcToRight' l)
+moveChcToLeft !(OpIB GTE l x@(ChcI _ _ _)) = OpIB LTE (moveChcToLeft' x) (moveChcToRight' l)
   -- recursive instances
-moveChcToLeft (OpIB op l r) = OpIB op (moveChcToLeft' l) (moveChcToLeft' r)
-moveChcToLeft (ChcB d l r)  = ChcB d  (moveChcToLeft l) (moveChcToLeft r)
-moveChcToLeft (OpB op e)    = OpB op  (moveChcToLeft e)
-moveChcToLeft (OpBB op l r) = OpBB op (moveChcToLeft l) (moveChcToLeft r)
+moveChcToLeft !(OpIB op l r) = OpIB op (moveChcToLeft' l) (moveChcToLeft' r)
+moveChcToLeft !(ChcB d l r)  = ChcB d  (moveChcToLeft l) (moveChcToLeft r)
+moveChcToLeft !(OpB op e)    = OpB op  (moveChcToLeft e)
+moveChcToLeft !(OpBB op l r) = OpBB op (moveChcToLeft l) (moveChcToLeft r)
 moveChcToLeft nonRecursive = nonRecursive
 
 moveChcToLeft' :: (Ord a) => VIExpr a -> VIExpr a
   -- structural instances
-moveChcToLeft' (OpII Add l x@(ChcI _ _ _))  = OpII Add (moveChcToLeft' x) (moveChcToLeft' l)
-moveChcToLeft' (OpII Mult l x@(ChcI _ _ _)) = OpII Mult (moveChcToLeft' x) (moveChcToLeft' l)
+moveChcToLeft' !(OpII Add l x@(ChcI _ _ _))  = OpII Add (moveChcToLeft' x) (moveChcToLeft' l)
+moveChcToLeft' !(OpII Mult l x@(ChcI _ _ _)) = OpII Mult (moveChcToLeft' x) (moveChcToLeft' l)
   -- recursive instances
-moveChcToLeft' (OpII op l r) = OpII op (moveChcToLeft' l) (moveChcToLeft' r)
-moveChcToLeft' (OpI op e)    = OpI op (moveChcToLeft' e)
-moveChcToLeft' (ChcI d l r)  = ChcI d (moveChcToLeft' l) (moveChcToLeft' r)
+moveChcToLeft' !(OpII op l r) = OpII op (moveChcToLeft' l) (moveChcToLeft' r)
+moveChcToLeft' !(OpI op e)    = OpI op (moveChcToLeft' e)
+moveChcToLeft' !(ChcI d l r)  = ChcI d (moveChcToLeft' l) (moveChcToLeft' r)
 moveChcToLeft' nonRecursive  = nonRecursive
 
 -- | Given a VProp try to eliminate some terms based on simple rules
 shrinkProp :: (Show a, Ord a) => VProp a a -> VProp a a
-shrinkProp (OpB Not (OpB Not x)) = shrinkProp x
-shrinkProp (Opn And xs) = Opn And $ filter (not . tautology) xs
-shrinkProp (Opn Or xs) = Opn Or $ filter (not . unsatisfiable) xs
+shrinkProp !(OpB Not (OpB Not x)) = shrinkProp x
+shrinkProp !(Opn And xs) = Opn And $ filter (not . tautology) xs
+shrinkProp !(Opn Or xs) = Opn Or $ filter (not . unsatisfiable) xs
 shrinkProp e
   | unsatisfiable e = false
   | tautology e     = true
-shrinkProp (OpBB op l r) = OpBB op (shrinkProp l) (shrinkProp r)
-shrinkProp (OpB op e) = OpB op $ shrinkProp e
-shrinkProp (ChcB d l r) = ChcB d (shrinkProp l) (shrinkProp r)
+shrinkProp !(OpBB op l r) = OpBB op (shrinkProp l) (shrinkProp r)
+shrinkProp !(OpB op e) = OpB op $ shrinkProp e
+shrinkProp !(ChcB d l r) = ChcB d (shrinkProp l) (shrinkProp r)
 shrinkProp nonRecursive = nonRecursive
 
 -- | Is the predicate satisfiable?
