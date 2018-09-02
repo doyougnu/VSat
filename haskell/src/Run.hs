@@ -278,16 +278,16 @@ vSMTSolve_ !(LitB b) = return $ S.literal b
 vSMTSolve_ !(OpB Not bs)= do b <- vSMTSolve_ bs
                              S.constrain $ S.bnot b
                              return b
-vSMTSolve_ !(OpBB op l r) = do bl <- vSMTSolve_ l
-                               br <- vSMTSolve_ r
+vSMTSolve_ !(OpBB op l r) = do br <- vSMTSolve_ r
+                               bl <- vSMTSolve_ l
                                let op' = handler op
                                S.constrain $ bl `op'` br
                                return $ bl `op'` br
   where handler Impl   = (==>)
         handler BiImpl = (<=>)
         handler XOr    = (<+>)
-vSMTSolve_ !(OpIB op l r) = do bl <- vSMTSolve'_ l
-                               br <- vSMTSolve'_ r
+vSMTSolve_ !(OpIB op l r) = do br <- vSMTSolve'_ r
+                               bl <- vSMTSolve'_ l
                                let op' = handler op
                                    res = bl `op'` br
                                S.constrain res
@@ -310,16 +310,16 @@ vSMTSolve_ !(ChcB d l r) =
      case M.lookup d used of
        Just True  -> vSMTSolve_ l
        Just False -> vSMTSolve_ r
-       Nothing    -> do St.modify . second $ M.insert d True
-                        lift $ SC.push 1
-                        _ <- vSMTSolve_ l
-                        lmodel <- lift $ getVSMTModel
-                        lift $ SC.pop 1
-
-                        St.modify . second $ M.adjust (const False) d
+       Nothing    -> do St.modify . second $ M.adjust (const False) d
                         lift $ SC.push 1
                         b <- vSMTSolve_ r
                         rmodel <- lift $ getVSMTModel
+                        lift $ SC.pop 1
+
+                        St.modify . second $ M.insert d True
+                        lift $ SC.push 1
+                        _ <- vSMTSolve_ l
+                        lmodel <- lift $ getVSMTModel
                         lift $ SC.pop 1
 
                         St.modify . first $ ((:) (VChc (dimName d) lmodel rmodel))
@@ -338,8 +338,8 @@ vSMTSolve'_ !(OpI op e) = do e' <- vSMTSolve'_ e
   where handler Neg  = negate
         handler Abs  = abs
         handler Sign = signum
-vSMTSolve'_ !(OpII op l r) = do l' <- vSMTSolve'_ l
-                                r' <- vSMTSolve'_ r
+vSMTSolve'_ !(OpII op l r) = do r' <- vSMTSolve'_ r
+                                l' <- vSMTSolve'_ l
                                 return $ handler op l' r'
   where handler Add  = (+)
         handler Sub  = (-)
