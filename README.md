@@ -415,7 +415,6 @@ coming weeks:
 
 
 
-```
 - MoveRight
   Moves every choice to the right of any commutative operator. This is should
   _increase_ run times because it minimizes sharing in the AST. I leave it here
@@ -460,7 +459,6 @@ coming weeks:
   defaults, should almost always be turned on, and should be the last
   optimization in the optimization list passed in such that it is processed
   first by the tool
-```
 
 
 ## Generating JSON and running the tool in a REPL
