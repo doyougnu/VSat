@@ -6,7 +6,6 @@ import qualified Data.Set as Set
 import           Data.List           (intercalate,group,sort)
 import           Data.Monoid         ((<>))
 import           Prelude hiding      (LT, GT, EQ)
-import           Data.Foldable       (foldr1,foldr')
 
 
 import VProp.Types
@@ -130,76 +129,7 @@ onlyLits' (ChcI _ l r) = onlyLits' l && onlyLits' r
 noDupRefs :: Ord a => VProp a a -> Bool
 noDupRefs prop = Set.null $ (bvars prop) `Set.intersection` (ivars prop)
 
--- -----------------------------        CNF          ------------------------------
-toCNF :: VProp a b -> VProp a b
-toCNF = associate . distributeAndOverOr . moveNot . elimImpl
-
--- | eliminate all implications and equivalences
-elimImpl :: VProp a b -> VProp a b
-elimImpl !(OpBB BiImpl l r) = Opn And [ Opn Or [bnot l', r']
-                                      , Opn Or [bnot r', l']
-                                      ]
-  where l' = elimImpl l
-        r' = elimImpl r
-elimImpl !(OpBB Impl l r) = Opn Or [bnot $ elimImpl l, elimImpl r]
-elimImpl !(OpBB op l r)   = OpBB op (elimImpl l) (elimImpl r)
-elimImpl !(Opn op os)     = Opn op $ fmap elimImpl os
-elimImpl !(OpB op e)      = OpB op $ elimImpl e
-elimImpl !(ChcB d l r)    = ChcB d (elimImpl l) (elimImpl r)
-elimImpl nonRecursive    = nonRecursive
-
--- | apply demorgans repeatedly to move nots inward
-moveNot :: VProp a b -> VProp a b
-moveNot !(OpB Not (Opn And os)) = Opn Or  $ fmap (moveNot . OpB Not) os
-moveNot !(OpB Not (Opn Or  os)) = Opn And $ fmap (moveNot . OpB Not) os
-moveNot !(OpB Not (OpB Not e))  = e
-moveNot !(Opn And os)  = Opn And $ fmap moveNot os
-moveNot !(Opn Or os)   = Opn Or $ fmap moveNot os
-moveNot !(OpBB op l r) = OpBB op (moveNot l) (moveNot r)
-moveNot !(OpB op e)    = OpB op (moveNot e)
-moveNot !(ChcB d l r)  = ChcB d (moveNot l) (moveNot r)
-moveNot nonRecursive  = nonRecursive
-
--- | distribute ands over ors
-distributeAndOverOr :: VProp a b -> VProp a b
-distributeAndOverOr (Opn Or es) = foldr1 helper $ fmap distributeAndOverOr es
-  where
-    helper (Opn And as) x = Opn And $
-                            distributeAndOverOr <$> [Opn Or [a,x] | a <- as ]
-    helper x (Opn And as) = Opn And $
-                            distributeAndOverOr <$> [Opn Or [x,a] | a <- as ]
-    helper (Opn Or as) e = Opn Or $ e:as -- or is commutative
-    helper e (Opn Or as) = Opn Or $ e:as
-    helper p q           = Opn Or [p,q]
-distributeAndOverOr (Opn And es) = Opn And $ fmap distributeAndOverOr es
-distributeAndOverOr (OpB op e)   = OpB op $ distributeAndOverOr e
-distributeAndOverOr (OpBB op l r) = OpBB op
-                                    (distributeAndOverOr l)
-                                    (distributeAndOverOr r)
-distributeAndOverOr (ChcB d l r) = ChcB d
-                                   (distributeAndOverOr l)
-                                   (distributeAndOverOr r)
-distributeAndOverOr nonRecursive = nonRecursive
-
-
--- | flatten all nested lists
-associate :: VProp a b -> VProp a b
-associate (Opn And es) = Opn And $ foldr' f [] (fmap associate es)
-  where f (Opn And as) bs = as ++ bs
-        f e bs            = e:bs
-associate (Opn Or es) = Opn Or $ foldr' f [] (fmap associate es)
-  where f (Opn Or as) bs = as ++ bs
-        f e bs            = e:bs
-associate (OpB op e)    = OpB op $ associate e
-associate (OpBB op l r) = OpBB op (associate l) (associate r)
-associate (ChcB d l r)  = ChcB d (associate l) (associate r)
-associate nonRecursive  = nonRecursive
-
 -- ----------------------------- Choice Manipulation ------------------------------
--- -- | Wrapper around engine
--- prune :: (VProp a) -> (VProp a)
--- prune = pruneTagTree Map.empty
-
 -- | Given a config and a Variational VProp term select the element out that the
 -- config points to
 selectVariant :: Config -> VProp a b -> Maybe (VProp a b)

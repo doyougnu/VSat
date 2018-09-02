@@ -5,8 +5,10 @@ import Data.SBV (isSatisfiable)
 import GHC.Generics (Generic)
 
 import VProp.Types
+import VProp.Gen
 import VProp.SBV (SAT, toPredicate)
 import Data.List (sort)
+import Data.Foldable (foldr')
 import qualified Data.Map.Strict as Map
 import Prelude hiding (LT,GT,EQ)
 
@@ -17,6 +19,7 @@ data Opts = MoveRight
           | Shrink
           | Prune
           | Atomize
+          | CNF
           | None
           deriving (Generic,Show)
 
@@ -111,36 +114,40 @@ equivalent a b = tautology (a <=> b)
 -- | atomization is the process of reshuffling choices in a variational
 -- expression such that they are the last node before the leaves in the tree
 atomize :: VProp a b -> VProp a b
-atomize !x@(ChcB d
-                (OpBB op l r)
-                (OpBB op' l' r'))
-  | op == op' = OpBB op (ChcB d l l') (ChcB d r r')
+  -- structural instances
+atomize !x@(ChcB d (OpBB op l r) (OpBB op' l' r'))
+  | op == op' = OpBB op
+                (ChcB d (atomize l) (atomize l'))
+                (ChcB d (atomize r) (atomize r'))
   | otherwise = x
-atomize !x@(ChcB d
-               (OpB op l)
-               (OpB op' l'))
-  | op == op' = OpB op (ChcB d l l')
+atomize !x@(ChcB d (OpB op l) (OpB op' l'))
+  | op == op' = OpB op (ChcB d (atomize l) (atomize l'))
   | otherwise = x
-atomize !x@(ChcB d
-                (Opn op es)
-                (Opn op' es'))
-  | op == op' = Opn op $ zipWith (ChcB d) es es'
+atomize !x@(ChcB d (Opn op es) (Opn op' es'))
+  | op == op' = Opn op $ zipWith (\a b -> ChcB d (atomize a) (atomize b)) es es'
   | otherwise = x
+  -- recursive instances
 atomize !(OpIB op l r) = OpIB op (atomize' l) (atomize' r)
 atomize !(Opn op os)   = Opn op (atomize <$> os)
 atomize !(OpB op e)    = OpB op (atomize e)
 atomize !(OpBB op l r) = OpBB op (atomize l) (atomize r)
+atomize !(ChcB d l r)  = ChcB d (atomize l) (atomize r)
 atomize x = x
 
 atomize' :: VIExpr a -> VIExpr a
-atomize' !x@(ChcI d
-               (OpII op l r)
-               (OpII op' l' r'))
-  | op == op' = OpII op (ChcI d l l') (ChcI d r r')
+  -- structural instances
+atomize' !x@(ChcI d (OpII op l r) (OpII op' l' r'))
+  | op == op' = OpII op
+                (ChcI d (atomize' l) (atomize' l'))
+                (ChcI d (atomize' r) (atomize' r'))
   | otherwise = x
 atomize' !x@(ChcI d (OpI op l) (OpI op' l'))
-  | op == op' = OpI op (ChcI d l l')
+  | op == op' = OpI op (ChcI d (atomize' l) (atomize' l'))
   | otherwise = x
+  -- recursive instances
+atomize' (OpI op e)    = OpI op $ atomize' e
+atomize' (OpII op l r) = OpII op (atomize' l) (atomize' r)
+atomize' (ChcI d l r)  = ChcI d (atomize' l) (atomize' r)
 atomize' x = x
 
 -- | The normal form is CNF with choices driven as close to leaves as possible
@@ -198,3 +205,74 @@ prune_' tb !(ChcI t y n) = case Map.lookup t tb of
 prune_' tb !(OpI op e) = OpI op $ prune_' tb e
 prune_' tb !(OpII op l r) = OpII op (prune_' tb l) (prune_' tb r)
 prune_' _ nonRecursive = nonRecursive
+
+
+-- -----------------------------        CNF          ------------------------------
+toCNF :: VProp a b -> VProp a b
+toCNF = associate . distributeAndOverOr . moveNot . elimImplXor
+
+-- | eliminate all implications and equivalences
+elimImplXor :: VProp a b -> VProp a b
+elimImplXor !(OpBB BiImpl l r) = Opn And [ Opn Or [bnot l', r']
+                                         , Opn Or [bnot r', l']
+                                         ]
+  where l' = elimImplXor l
+        r' = elimImplXor r
+elimImplXor !(OpBB Impl l r) = Opn Or [bnot $ elimImplXor l, elimImplXor r]
+  -- xor is elminated via equivalence p `xor` q === (p or q) and (not p or not q)
+elimImplXor !(OpBB XOr l r)  = Opn And [ Opn Or [l',r']
+                                       , Opn Or [bnot l', bnot r']
+                                       ]
+  where l' = elimImplXor l
+        r' = elimImplXor r
+elimImplXor !(Opn op os)     = Opn op $ fmap elimImplXor os
+elimImplXor !(OpB op e)      = OpB op $ elimImplXor e
+elimImplXor !(ChcB d l r)    = ChcB d (elimImplXor l) (elimImplXor r)
+elimImplXor nonRecursive    = nonRecursive
+
+-- | apply demorgans repeatedly to move nots inward
+moveNot :: VProp a b -> VProp a b
+moveNot !(OpB Not (Opn And os)) = Opn Or  $ fmap (moveNot . OpB Not) os
+moveNot !(OpB Not (Opn Or  os)) = Opn And $ fmap (moveNot . OpB Not) os
+moveNot !(OpB Not (OpB Not e))  = e
+moveNot !(Opn And os)  = Opn And $ fmap moveNot os
+moveNot !(Opn Or os)   = Opn Or $ fmap moveNot os
+moveNot !(OpBB op l r) = OpBB op (moveNot l) (moveNot r)
+moveNot !(OpB op e)    = OpB op (moveNot e)
+moveNot !(ChcB d l r)  = ChcB d (moveNot l) (moveNot r)
+moveNot nonRecursive  = nonRecursive
+
+-- | distribute ands over ors
+distributeAndOverOr :: VProp a b -> VProp a b
+distributeAndOverOr (Opn Or es) = foldr1 helper $ fmap distributeAndOverOr es
+  where
+    helper (Opn And as) x = Opn And $
+                            distributeAndOverOr <$> [Opn Or [a,x] | a <- as ]
+    helper x (Opn And as) = Opn And $
+                            distributeAndOverOr <$> [Opn Or [x,a] | a <- as ]
+    helper (Opn Or as) e = Opn Or $ e:as -- or is commutative
+    helper e (Opn Or as) = Opn Or $ e:as
+    helper p q           = Opn Or [p,q]
+distributeAndOverOr (Opn And es) = Opn And $ fmap distributeAndOverOr es
+distributeAndOverOr (OpB op e)   = OpB op $ distributeAndOverOr e
+distributeAndOverOr (OpBB op l r) = OpBB op
+                                    (distributeAndOverOr l)
+                                    (distributeAndOverOr r)
+distributeAndOverOr (ChcB d l r) = ChcB d
+                                   (distributeAndOverOr l)
+                                   (distributeAndOverOr r)
+distributeAndOverOr nonRecursive = nonRecursive
+
+
+-- | flatten all nested lists
+associate :: VProp a b -> VProp a b
+associate (Opn And es) = Opn And $ foldr' f [] (fmap associate es)
+  where f (Opn And as) bs = as ++ bs
+        f e bs            = e:bs
+associate (Opn Or es) = Opn Or $ foldr' f [] (fmap associate es)
+  where f (Opn Or as) bs = as ++ bs
+        f e bs            = e:bs
+associate (OpB op e)    = OpB op $ associate e
+associate (OpBB op l r) = OpBB op (associate l) (associate r)
+associate (ChcB d l r)  = ChcB d (associate l) (associate r)
+associate nonRecursive  = nonRecursive
