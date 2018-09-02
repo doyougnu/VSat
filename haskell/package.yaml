@@ -74,7 +74,6 @@ benchmarks:
     - -threaded
     - -rtsopts
     - -with-rtsopts=-N
-    dependencies:
 
 
 tests:
