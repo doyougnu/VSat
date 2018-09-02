@@ -2,35 +2,9 @@ module VProp.SBV ( andDecomp
                  -- , shrinkPropExpr
                  , evalPropExpr
                  , symbolicPropExpr
-                 , SAT(..)
-                 , toPredicate) where
+                 , SAT(..)) where
 
 import qualified Data.SBV as S
--- ( (&&&)
---                                      , (|||)
---                                      , (==>)
---                                      , (<=>)
---                                      , Boolean
---                                      , Mergeable
---                                      , S.Predicate
---                                      , S.Uninterpreted
---                                      , S.EqSymbolic
---                                      , S.OrdSymbolic
---                                      , S.SBool
---                                      , S.SInteger
---                                      , S.SDouble
---                                      , S.true
---                                      , S.false
---                                      , S.bnot
---                                      , S.symbolicMerge
---                                      , S.unliteral
---                                      , S.literal
---                                      , S.sBools
---                                      , S.sInteger
---                                      , S.sDouble
---                                      , S.uninterpret
---                                      , S.ite
---                                      , S.fromBool)
 import           Prelude    hiding   (lookup,LT,EQ,GT)
 import           Data.Maybe          (fromMaybe)
 import           Data.Map            (fromList, lookup)
