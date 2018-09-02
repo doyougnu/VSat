@@ -428,8 +428,8 @@ coming weeks:
 
 #### Shrink
   This uses basic `C_2` logic equivalences to reduce the size of terms. Things
-  like `false /\ __ == false`. This can be a costly optimization if you
-  proposition is not likely to have tautolgies available for reduction because
+  like `false /\ __ == false`. This can be a costly optimization if your
+  proposition is not likely to have tautologies available for reduction because
   it actually makes trivial calls to the sat solver instead of manipulating the
   AST directly.
 
