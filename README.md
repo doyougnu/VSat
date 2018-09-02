@@ -429,8 +429,39 @@ coming weeks:
 
 - Shrink
   This uses basic `C_2` logic equivalences to reduce the size of terms. Things
-  like `false /\ __ == false`. This is also part of the defaults.
+  like `false /\ __ == false`. This can be a costly optimization if you
+  proposition is not likely to have tautolgies available for reduction because
+  it actually makes trivial calls to the sat solver instead of manipulating the
+  AST directly.
+
+- Atomize
+  Atomization is the process of driving variational terms as far down the AST as
+  possible. This, taken in conjunction with `toCNF` and `moveLeft` maximizes the
+  amount of sharing among plain terms that is possible for any given
+  proposition. You can think of this as sorting the AST such that all the
+  variational terms are as close to the leftmost leaves as possible, and all
+  plain terms are as close to the right most leaves as possible. Thus, when the
+  VSMTsolver algorithm solves the prop the assertion stack in the sat solver
+  will be maximized with plain terms. The name comes from breaking apart large
+  choice expressions into smaller ones via choice distribution laws. This is
+  part of defaults and should always be turned on in conjunction with `toCNF`
+  and `moveLeft`.
+
+- CNF
+  This manipulates the prop's AST to remove implications, equivalences and
+  xor's. It then transforms the prop in [conjuctive normal
+  form](https://en.wikipedia.org/wiki/Conjunctive_normal_form). Use this if
+  you're going to turn on structural optimizations like `Atomize` and
+  `MoveLeft`.
+
+- Prune
+  This inspects choice expressions to look for nested equivalent dimensions, it
+  then cleaves off expressions that are impossible to reach. This is part of
+  defaults, should almost always be turned on, and should be the last
+  optimization in the optimization list passed in such that it is processed
+  first by the tool
 ```
+
 
 ## Generating JSON and running the tool in a REPL
 This following only applies if you have a local build up and running. If you are
