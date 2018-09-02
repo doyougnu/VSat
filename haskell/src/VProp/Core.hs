@@ -38,7 +38,7 @@ instance Show BB_B where show Impl   = "→"
 instance Show a => Show (VIExpr a) where
   show (LitI a) = show a
   show (Ref _ a) = show a
-  show (OpI Neg a) = "¬" <> show a
+  show (OpI Neg a) = "¬" <> "(" <> show a <> ")"
   show (OpI Abs a) = "|" <> show a <> "|"
   show (OpI Sign a) = "signum " <> show a
   show (OpII f l r) = mconcat [show l, " ", show f, " ", show r]
@@ -54,7 +54,7 @@ prettyPropExpr = top
     top (Opn And ps)    = intercalate " ∧ " $ sub <$> ps
     top (OpBB b l r)    = mconcat [sub l, " ", show b, " ", sub r]
     top (OpIB nb l r)    = mconcat [show l, " ", show nb, " ", show r]
-    top (ChcB d ls rs) = dimName d ++ "≺" ++ top ls ++ " , " ++ top rs++ "≻"
+    top (ChcB d ls rs) = dimName d ++ "≺" ++ top ls ++ ", " ++ top rs++ "≻"
     top e           = sub e
 
     sub :: (Show a, Show b) => VProp a b -> String
@@ -199,20 +199,6 @@ associate nonRecursive  = nonRecursive
 -- -- | Wrapper around engine
 -- prune :: (VProp a) -> (VProp a)
 -- prune = pruneTagTree Map.empty
-
--- -- | Given a config and variational expression remove redundant choices
--- pruneTagTree :: Config -> (VProp a) -> (VProp a)
--- pruneTagTree _ (Ref d) = Ref d
--- pruneTagTree _ (Lit b) = Lit b
--- pruneTagTree tb (Chc t y n) = case Map.lookup t tb of
---                              Nothing -> Chc t
---                                         (pruneTagTree (Map.insert t True tb) y)
---                                         (pruneTagTree (Map.insert t False tb) n)
---                              Just True -> pruneTagTree tb y
---                              Just False -> pruneTagTree tb n
--- pruneTagTree tb (Not x)      = Not $ pruneTagTree tb x
--- pruneTagTree tb (Op2 a l r)  = Op2 a (pruneTagTree tb l) (pruneTagTree tb r)
--- pruneTagTree tb (Opn a ps)  = Opn a (pruneTagTree tb <$> ps)
 
 -- | Given a config and a Variational VProp term select the element out that the
 -- config points to
