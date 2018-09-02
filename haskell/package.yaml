@@ -19,13 +19,11 @@ dependencies:
 - base >= 4.7 && < 5
 - containers >= 0.5
 - mtl
-- foldl
 - bifunctors
 - deepseq
 - sbv
 - cassava
 - bytestring
-- criterion
 - text
 - vector
 - time
@@ -77,7 +75,6 @@ benchmarks:
     - -rtsopts
     - -with-rtsopts=-N
     dependencies:
-      - criterion
 
 
 tests:
