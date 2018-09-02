@@ -1,5 +1,4 @@
-module VProp.Types ( module Prelude
-                   , Var(..)
+module VProp.Types ( Var(..)
                    , Dim(..)
                    , VConfig
                    , DimBool

@@ -52,9 +52,6 @@ instance Monad (V d) where
   (Plain a) >>= f = f a
   (VChc d l r) >>= f = VChc d (l >>= f) (r >>= f)
 
-instance Prim SBool (V a SNum) where
-  (Plain a) .< (Plain b) = Plain $ a < b
-
 instance (Num b,PrimN b) => PrimN (V a b) where
   (Plain a) ./ (Plain b) = Plain $ a ./ b
   (Plain a) ./ x@(VChc _ _ _) = bimap id (\y -> a ./ y) x

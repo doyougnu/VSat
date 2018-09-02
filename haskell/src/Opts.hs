@@ -5,8 +5,10 @@ import Data.SBV (isSatisfiable)
 import GHC.Generics (Generic)
 
 import VProp.Types
+import VProp.Gen
 import VProp.SBV (SAT, toPredicate)
 import Data.List (sort)
+import qualified Data.Map as Map
 
 -- | Data type to represent the optimization options
 -- Used for the JSON parser
@@ -51,12 +53,6 @@ shrinkProp (Opn Or xs) = Opn Or $ filter (not . unsatisfiable) xs
 shrinkProp e
   | unsatisfiable e = false
   | tautology e     = true
--- | The inner false branch is dead if d == d'
-shrinkProp (ChcB d (ChcB d' l' _) r)
-  | d == d' = ChcB d (shrinkProp l') (shrinkProp r)
--- | mirrored case
-shrinkProp (ChcB d l (ChcB d' _ r'))
-  | d == d' = ChcB d (shrinkProp l) (shrinkProp r')
 shrinkProp x = x
 
 
@@ -75,3 +71,96 @@ tautology = unsatisfiable . bnot
 -- | Are these predicates equivalent?
 equivalent :: SAT b => b -> b -> Bool
 equivalent a b = tautology (a <=> b)
+
+-- | atomization is the process of reshuffling choices in a variational
+-- expression such that they are the last node before the leaves in the tree
+atomize :: VProp a b -> VProp a b
+atomize = undefined
+
+atomize' :: VIExpr a -> VIExpr a
+atomize' = undefined
+
+driveChcDown :: VProp a b -> VProp a b
+driveChcDown x@(ChcB d
+                (OpBB op l r)
+                (OpBB op' l' r'))
+  | op == op' = OpBB op (ChcB d l l') (ChcB d r r')
+  | otherwise = x
+driveChcDown x@(ChcB d
+               (OpB op l)
+               (OpB op' l'))
+  | op == op' = OpB op (ChcB d l l')
+  | otherwise = x
+driveChcDown (OpIB op l r) = OpIB op (driveChcDown' l) (driveChcDown' r)
+driveChcDown (Opn op os) = Opn op (driveChcDown <$> os)
+driveChcDown (OpB op e) = OpB op (driveChcDown e)
+driveChcDown (OpBB op l r) = OpBB op (driveChcDown l) (driveChcDown r)
+driveChcDown x = x
+
+driveChcDown' :: VIExpr a -> VIExpr a
+driveChcDown' x@(ChcI d
+               (OpII op l r)
+               (OpII op' l' r'))
+  | op == op' = OpII op (ChcI d l l') (ChcI d r r')
+  | otherwise = x
+driveChcDown' x@(ChcI d (OpI op l) (OpI op' l'))
+  | op == op' = OpI op (ChcI d l l')
+  | otherwise = x
+driveChcDown' x = x
+
+-- | The normal form is CNF with choices driven as close to leaves as possible
+isNormalForm :: VProp a b -> Bool
+isNormalForm (LitB _) = True
+isNormalForm (RefB _) = True
+isNormalForm (ChcB _ (LitB _) (LitB _ )) = True
+isNormalForm (ChcB _ (RefB _) (LitB _ )) = True
+isNormalForm (ChcB _ (LitB _) (RefB _ )) = True
+isNormalForm (ChcB _ (RefB _) (RefB _ )) = True
+isNormalForm (ChcB _
+                (OpIB _ l r)
+                (OpIB _ l' r')) = isNormalForm' l && isNormalForm' r &&
+                                  isNormalForm' l' && isNormalForm' r'
+isNormalForm (OpIB _ l r) = isNormalForm' l && isNormalForm' r
+isNormalForm (Opn _ os)   = foldr (\x acc -> acc && isNormalForm x) True os
+isNormalForm _            = False
+
+isNormalForm' :: VIExpr a -> Bool
+isNormalForm' (LitI _)  = True
+isNormalForm' (Ref _ _) = True
+isNormalForm' (ChcI _ (LitI _) (LitI _))   = True
+isNormalForm' (ChcI _ (Ref _ _) (LitI _))  = True
+isNormalForm' (ChcI _ (LitI _) (Ref _ _))  = True
+isNormalForm' (ChcI _ (Ref _ _) (Ref _ _)) = True
+isNormalForm' (OpI _ e) = isNormalForm' e
+isNormalForm' (OpII _ l r) = isNormalForm' l && isNormalForm' r
+isNormalForm' _ = False
+
+
+-- | Given a config and variational expression remove redundant choices
+prune :: VProp a b -> VProp a b
+prune = prune_ Map.empty
+
+prune_ :: Config -> VProp a b -> VProp a b
+prune_ tb (ChcB t y n) = case Map.lookup t tb of
+                             Nothing -> ChcB t
+                                        (prune_ (Map.insert t True tb) y)
+                                        (prune_ (Map.insert t False tb) n)
+                             Just True -> prune_ tb y
+                             Just False -> prune_ tb n
+prune_ tb (OpB op x)  = OpB op $ prune_ tb x
+prune_ tb (OpBB a l r) = OpBB a (prune_ tb l) (prune_ tb r)
+prune_ tb (Opn a ps)  = Opn a (prune_ tb <$> ps)
+prune_ tb (OpIB op l r)  = OpIB op (prune_' tb l) (prune_' tb r)
+prune_ _ nonRecursive = nonRecursive
+
+prune_' :: Config -> VIExpr a -> VIExpr a
+prune_' tb (ChcI t y n) =
+  case Map.lookup t tb of
+    Nothing -> ChcI t
+               (prune_' (Map.insert t True tb) y)
+               (prune_' (Map.insert t False tb) n)
+    Just True -> prune_' tb y
+    Just False -> prune_' tb n
+prune_' tb (OpI op e) = OpI op $ prune_' tb e
+prune_' tb (OpII op l r) = OpII op (prune_' tb l) (prune_' tb r)
+prune_' _ nonRecursive = nonRecursive
