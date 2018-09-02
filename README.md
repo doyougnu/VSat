@@ -415,25 +415,25 @@ coming weeks:
 
 
 
-- MoveRight
+#### MoveRight
   Moves every choice to the right of any commutative operator. This is should
   _increase_ run times because it minimizes sharing in the AST. I leave it here
   for testing purposes.
 
 
-- MoveLeft
+#### MoveLeft
   Conversely, MoveLeft maximizes sharing. This should almost always be turned on
   and is part of the defaults.
 
 
-- Shrink
+#### Shrink
   This uses basic `C_2` logic equivalences to reduce the size of terms. Things
   like `false /\ __ == false`. This can be a costly optimization if you
   proposition is not likely to have tautolgies available for reduction because
   it actually makes trivial calls to the sat solver instead of manipulating the
   AST directly.
 
-- Atomize
+#### Atomize
   Atomization is the process of driving variational terms as far down the AST as
   possible. This, taken in conjunction with `toCNF` and `moveLeft` maximizes the
   amount of sharing among plain terms that is possible for any given
@@ -446,14 +446,14 @@ coming weeks:
   part of defaults and should always be turned on in conjunction with `toCNF`
   and `moveLeft`.
 
-- CNF
+#### CNF
   This manipulates the prop's AST to remove implications, equivalences and
   xor's. It then transforms the prop in [conjuctive normal
   form](https://en.wikipedia.org/wiki/Conjunctive_normal_form). Use this if
   you're going to turn on structural optimizations like `Atomize` and
   `MoveLeft`.
 
-- Prune
+#### Prune
   This inspects choice expressions to look for nested equivalent dimensions, it
   then cleaves off expressions that are impossible to reach. This is part of
   defaults, should almost always be turned on, and should be the last
