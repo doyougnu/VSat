@@ -20,13 +20,13 @@ instance (Show a, Ord a) => SAT (VProp a a) where
 
 -- TODO fix this repetition
 -- | Evaluate a feature expression against a configuration.
-evalPropExpr :: DimBool
-             -> VConfig a SNum
-             -> VConfig a S.SBool
-             -> VProp a a
+evalPropExpr :: (a -> S.SBool)
+             -> VConfig b SNum
+             -> VConfig b S.SBool
+             -> VProp a b
              -> S.SBool
-evalPropExpr _ _ _ (LitB b)    = S.literal b
-evalPropExpr _ _ !c (RefB f)   = c f
+evalPropExpr _ _  _ (LitB b)    = S.literal b
+evalPropExpr _ _  !c (RefB f)   = c f
 evalPropExpr d !i !c !(OpB Not e)   = S.bnot (evalPropExpr d i c e)
 evalPropExpr d !i !c !(Opn And ps)  = foldr1 (&&&) $ evalPropExpr d i c <$> ps
 evalPropExpr d !i !c !(Opn Or ps)   = foldr1 (|||) $ evalPropExpr d i c <$> ps
@@ -47,7 +47,7 @@ evalPropExpr d !i !c !(ChcB dim l r)
 
 -- | Eval the numeric expressions, VIExpr, assume everything is an integer until
 -- absolutely necessary to coerce
-evalPropExpr' :: DimBool -> VConfig a SNum -> VIExpr a -> SNum
+evalPropExpr' :: (a -> S.SBool) -> VConfig b SNum -> VIExpr a b -> SNum
 evalPropExpr' _  _ !(LitI (I i)) = SI . S.literal . fromIntegral $ i
 evalPropExpr' _  _ !(LitI (D d)) = SD $ S.literal d
 evalPropExpr' _ !i !(Ref _ f)    = i f
@@ -63,7 +63,7 @@ evalPropExpr' d !i !(ChcI dim l r)
   = S.ite (d dim) (evalPropExpr' d i l) (evalPropExpr' d i r)
 
 -- | Generate a symbolic predicate for a feature expression.
-symbolicPropExpr :: (Show a, Ord a) => VProp a a -> S.Predicate
+symbolicPropExpr :: (Show a, Ord a, Show b, Ord b) => VProp a b -> S.Predicate
 symbolicPropExpr e = do
     let vs = Set.toList (vars e)
         is = Set.toList (ivars e)
@@ -75,7 +75,7 @@ symbolicPropExpr e = do
         helper (RefI, i) = SI <$> S.sInt64 (show i)
 
     syms  <- fmap (fromList . zip vs) (S.sBools (show <$> vs))
-    dims  <- fmap (fromList . zip ds) (S.sBools (map dimName ds))
+    dims  <- fmap (fromList . zip ds) (S.sBools (map show ds))
     isyms <- fmap (fromList . zip is) (traverse helper isType)
     let look f  = fromMaybe err  (lookup f syms)
         lookd d = fromMaybe errd (lookup d dims)
@@ -86,7 +86,7 @@ symbolicPropExpr e = do
         erri = error "symbolicPropExpr: Internal error, no int symbol found."
 
 -- | Perform andDecomposition, removing all choices from a proposition
-andDecomp :: (Show a) => (VProp a a) -> (Dim -> a) -> (VProp a a)
+andDecomp :: VProp Dim b -> (Dim -> b) -> VProp Dim b
 andDecomp !(ChcB d l r) f = (dimToVar f d &&& andDecomp l f) |||
                             (S.bnot (dimToVar f d) &&& andDecomp r f)
 andDecomp !(OpB op x)    f = OpB  op (andDecomp x f)

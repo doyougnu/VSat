@@ -156,7 +156,7 @@ selectVariant' _  x             = Just x
 
 
 -- | Convert a dimension to a variable
-dimToVar :: Show a => (Dim -> b) -> Dim -> (VProp a b)
+dimToVar :: Show a => (a -> b) -> a -> (VProp a b)
 dimToVar f = RefB . f
 
 -- --------------------------- Descriptors ----------------------------------------
