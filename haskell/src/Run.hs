@@ -34,7 +34,7 @@ import Config
 
 -- | The satisfiable dictionary, this is actually the "state" keys are configs
 -- and values are whether that config is satisfiable or not (a bool)
-type SatDict a = (M.Map Config Bool, M.Map a Bool) -- keys may incur perf penalty
+type SatDict a = (M.Map (Config a) Bool, M.Map a Bool) -- keys may incur perf penalty
 
 -- | Type convenience for Log
 type Log = String
@@ -115,7 +115,7 @@ runBruteForce prop = lift $ flip evalStateT _emptySt $
 runAndDecomp :: (MonadTrans t, Monad (t IO)) => VProp String String -> t IO Result
 runAndDecomp prop = do
   res <- lift . S.runSMT $ do
-    p <- symbolicPropExpr $ andDecomp prop dimName
+    p <- symbolicPropExpr $ andDecomp prop show
     SC.query $ do S.constrain p; getVSMTModel
   lift . return $ V [res]
 
@@ -199,16 +199,16 @@ propToSBool !(RefB x)     = RefB   <$> smtBool x
 propToSBool !(OpB o e)    = OpB  o <$> propToSBool e
 propToSBool !(OpBB o l r) = OpBB o <$> propToSBool l <*> propToSBool r
 propToSBool !(Opn o xs)   = Opn  o <$> traverse propToSBool xs
-propToSBool !(ChcB d l r) = ChcB d <$> propToSBool l <*> propToSBool r
+propToSBool !(ChcB d l r) = ChcB <$> smtBool d <*> propToSBool l <*> propToSBool r
 propToSBool !(OpIB o l r) = OpIB o <$> propToSBool' l <*> propToSBool' r
 propToSBool !(LitB b)     = return $ LitB b
 
-propToSBool' :: VIExpr String -> IncPack String (VIExpr SNum)
+propToSBool' :: VIExpr String String -> IncPack String (VIExpr S.SBool SNum)
 propToSBool' !(Ref RefI i) = Ref RefI <$> smtInt i
 propToSBool' !(Ref RefD d) = Ref RefD <$> smtDouble d
 propToSBool' !(OpI o e)    = OpI o    <$> propToSBool' e
 propToSBool' !(OpII o l r) = OpII o <$> propToSBool' l <*> propToSBool' r
-propToSBool' !(ChcI d l r) = ChcI d <$> propToSBool' l <*> propToSBool' r
+propToSBool' !(ChcI d l r) = ChcI <$> smtBool d <*> propToSBool' l <*> propToSBool' r
 propToSBool' !(LitI x)     = return $ LitI x
 
 -- | convert every reference to a boolean, keeping track of what you've seen
@@ -328,11 +328,11 @@ vSMTSolve_ !(ChcB d l r) =
                         return b
 
 -- | The incremental solve algorithm just for VIExprs
-vSMTSolve'_ :: VIExpr SNum -> IncVSMTSolve SNum
-vSMTSolve'_ !(Ref RefI i) = return i
-vSMTSolve'_ !(Ref RefD d) = return d
-vSMTSolve'_ !(LitI (I i)) = return . SI . S.literal . fromIntegral $ i
-vSMTSolve'_ !(LitI (D d)) = return . SD . S.literal $ d
+vSMTSolve'_ :: VIExpr S.SBool SNum -> IncVSMTSolve (V S.SBool SNum)
+vSMTSolve'_ !(Ref RefI i) = return . Plain $ i
+vSMTSolve'_ !(Ref RefD d) = return . Plain $ d
+vSMTSolve'_ !(LitI (I i)) = return . Plain . SI . S.literal . fromIntegral $ i
+vSMTSolve'_ !(LitI (D d)) = return . Plain . SD . S.literal $ d
 vSMTSolve'_ !(OpI op e) = do e' <- vSMTSolve'_ e
                              return $ (handler op) e'
   where handler Neg  = negate
@@ -353,7 +353,7 @@ vSMTSolve'_ !(ChcI d l r) =
        Just False -> vSMTSolve'_ r
        Nothing    -> do St.modify . second $ M.insert d True
                         lift $ SC.push 1
-                        _ <- vSMTSolve'_ l
+                        l' <- vSMTSolve'_ l
                         lmodel <- lift $ getVSMTModel
                         lift $ SC.pop 1
 
@@ -367,7 +367,7 @@ vSMTSolve'_ !(ChcI d l r) =
                         St.modify . first $ ((:) (VChc (dimName d) lmodel rmodel))
 
                         St.modify . second $ M.delete d
-                        return r'
+                        return $ VChc d l' r'
 
 -- | The main solver algorithm. You can think of this as the sem function for
 -- the dsl
@@ -410,7 +410,7 @@ vSolve_ !(ChcB d l r) =
                         rmodel <- lift $ getVSMTModel
                         lift $ SC.pop 1
 
-                        St.modify . first $ ((:) (VChc (dimName d) lmodel rmodel))
+                        St.modify . first $ ((:) (VChc (show d) lmodel rmodel))
 
                         St.modify . second $ M.delete d
                         return b

@@ -5,7 +5,6 @@ import Data.SBV (isSatisfiable)
 import GHC.Generics (Generic)
 
 import VProp.Types
-import VProp.Gen
 import VProp.SBV (SAT, toPredicate)
 import Data.List (sort)
 import Data.Foldable (foldr')
@@ -43,7 +42,7 @@ moveChcToRight !(OpB op e)    = OpB op  (moveChcToRight e)
 moveChcToRight !(OpBB op l r) = OpBB op (moveChcToRight l) (moveChcToRight r)
 moveChcToRight nonRecursive = nonRecursive
 
-moveChcToRight' :: (Ord a) => VIExpr a -> VIExpr a
+moveChcToRight' :: Ord a => VIExpr a b -> VIExpr a b
   -- structural instances
 moveChcToRight' !(OpII Add x@(ChcI _ _ _) r)  = OpII Add (moveChcToRight' r) (moveChcToRight' x)
 moveChcToRight' !(OpII Mult x@(ChcI _ _ _) r) = OpII Mult (moveChcToRight' r) (moveChcToRight' x)
@@ -72,7 +71,7 @@ moveChcToLeft !(OpB op e)    = OpB op  (moveChcToLeft e)
 moveChcToLeft !(OpBB op l r) = OpBB op (moveChcToLeft l) (moveChcToLeft r)
 moveChcToLeft nonRecursive = nonRecursive
 
-moveChcToLeft' :: (Ord a) => VIExpr a -> VIExpr a
+moveChcToLeft' :: Ord a => VIExpr a b -> VIExpr a b
   -- structural instances
 moveChcToLeft' !(OpII Add l x@(ChcI _ _ _))  = OpII Add (moveChcToLeft' x) (moveChcToLeft' l)
 moveChcToLeft' !(OpII Mult l x@(ChcI _ _ _)) = OpII Mult (moveChcToLeft' x) (moveChcToLeft' l)
@@ -134,7 +133,7 @@ atomize !(OpBB op l r) = OpBB op (atomize l) (atomize r)
 atomize !(ChcB d l r)  = ChcB d (atomize l) (atomize r)
 atomize x = x
 
-atomize' :: VIExpr a -> VIExpr a
+atomize' :: VIExpr a b -> VIExpr a b
   -- structural instances
 atomize' !x@(ChcI d (OpII op l r) (OpII op' l' r'))
   | op == op' = OpII op
@@ -166,7 +165,7 @@ isNormalForm !(OpIB _ l r) = isNormalForm' l && isNormalForm' r
 isNormalForm !(Opn _ os)   = foldr (\x acc -> acc && isNormalForm x) True os
 isNormalForm _            = False
 
-isNormalForm' :: VIExpr a -> Bool
+isNormalForm' :: VIExpr a b -> Bool
 isNormalForm' !(LitI _)  = True
 isNormalForm' !(Ref _ _) = True
 isNormalForm' !(ChcI _ (LitI _) (LitI _))   = True
@@ -179,10 +178,10 @@ isNormalForm' _ = False
 
 
 -- | Given a config and variational expression remove redundant choices
-prune :: VProp a b -> VProp a b
+prune :: Ord a => VProp a b -> VProp a b
 prune = prune_ Map.empty
 
-prune_ :: Config -> VProp a b -> VProp a b
+prune_ :: Ord a => Config a -> VProp a b -> VProp a b
 prune_ tb !(ChcB t y n) = case Map.lookup t tb of
                              Nothing -> ChcB t
                                         (prune_ (Map.insert t True tb) y)
@@ -195,7 +194,7 @@ prune_ tb !(Opn a ps)  = Opn a (prune_ tb <$> ps)
 prune_ tb !(OpIB op l r)  = OpIB op (prune_' tb l) (prune_' tb r)
 prune_ _ nonRecursive = nonRecursive
 
-prune_' :: Config -> VIExpr a -> VIExpr a
+prune_' :: Ord a => Config a -> VIExpr a b -> VIExpr a b
 prune_' tb !(ChcI t y n) = case Map.lookup t tb of
                              Nothing -> ChcI t
                                         (prune_' (Map.insert t True tb) y)
