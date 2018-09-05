@@ -29,7 +29,7 @@ instance Arbitrary Var where arbitrary = Var <$> genAlphaNumStr
 
 
 -- | arbritrary instance for the generator monad
-instance (Arbitrary a, Ord a) => Arbitrary (VProp a a) where
+instance (Arbitrary a, Ord a) => Arbitrary (VProp Dim a) where
   arbitrary = sized $ arbVProp genSharedDim arbitrary (repeat 3, repeat 3)
 
 -- | Generate only alphabetical characters
@@ -95,14 +95,14 @@ genOpn = elements [And, Or]
 -- | Generate an arbritrary prop where any variable name in the boolean language
 -- _does not_ occur in the integer language
 arbVProp :: (Arbitrary a, Ord a) =>
-  Gen Dim -> Gen a -> ([Int], [Int]) -> Int -> Gen (VProp a a)
+  Gen Dim -> Gen a -> ([Int], [Int]) -> Int -> Gen (VProp Dim a)
 arbVProp gd gv fs n = flip suchThat noDupRefs $ arbVProp_ gd gv fs n
 
 -- | Generate an Arbitrary VProp, given a generator and counter these
 -- frequencies can change for different depths. The counter is merely for a
 -- `sized` call
 arbVProp_ :: Arbitrary a =>
-  Gen Dim -> Gen a -> ([Int], [Int]) -> Int -> Gen (VProp a a)
+  Gen Dim -> Gen a -> ([Int], [Int]) -> Int -> Gen (VProp Dim a)
 arbVProp_ _  gv _     0 = RefB <$> gv
 arbVProp_ gd gv fs@(bfreqs, ifreqs) n
   = frequency $ zip bfreqs [ LitB <$> arbitrary
@@ -118,7 +118,7 @@ arbVProp_ gd gv fs@(bfreqs, ifreqs) n
         l' = arbVIExpr gd gv ifreqs (n `div` 2)
 
 arbVIExpr :: Arbitrary a =>
-  Gen Dim -> Gen a -> [Int] -> Int -> Gen (VIExpr a)
+  Gen Dim -> Gen a -> [Int] -> Int -> Gen (VIExpr Dim a)
 arbVIExpr _ gv _ 0 = liftM2 Ref genRefN gv
 arbVIExpr gd gv ifreqs n = frequency $ zip ifreqs [ LitI <$> genPrim
                                                   , liftM2 OpI genN_N l
@@ -129,16 +129,16 @@ arbVIExpr gd gv ifreqs n = frequency $ zip ifreqs [ LitI <$> genPrim
   where l = arbVIExpr gd gv ifreqs (n `div` 2)
 
 -- | Generate a random prop term with no sharing among dimensions
-vPropNoShare :: [Int] -> Gen (VProp Var Var)
+vPropNoShare :: [Int] -> Gen (VProp Dim Var)
 vPropNoShare = sized . arbVProp genDim genVar . (id A.&&& id)
 
-vPropShare :: [Int] -> Gen (VProp Var Var)
+vPropShare :: [Int] -> Gen (VProp Dim Var)
 vPropShare = sized . arbVProp genSharedDim genSharedVar . (id A.&&& id)
 
 -- | Generate a random prop according to its arbritrary type class instance,
 -- this has a strong likelihood of sharing
 -- | generate with $ x <- genVProp :: (IO (VProp Var Var))
-genVProp :: (Arbitrary a, Ord a) => IO (VProp a a)
+genVProp :: (Arbitrary a, Ord a) => IO (VProp Dim a)
 genVProp = generate arbitrary
 
 -- | run With $ x <- generate . genBoolProp $ vPropNoShare (repeat 30)
@@ -149,6 +149,6 @@ genVPropAtSize :: (Arbitrary a, Arbitrary b) =>
   Int -> Gen (VProp a b) -> Gen (VProp a b)
 genVPropAtSize = resize
 
-genVPropAtShare :: (Arbitrary a, Arbitrary b) =>
+genVPropAtShare :: (Arbitrary a, Arbitrary b, Show a) =>
   Int -> Gen (VProp a b) -> Gen (VProp a b)
 genVPropAtShare n = flip suchThat $ (==n) . maxShared
