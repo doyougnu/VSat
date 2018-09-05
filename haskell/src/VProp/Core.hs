@@ -34,14 +34,14 @@ instance Show BB_B where show Impl   = "→"
                          show BiImpl = "↔"
                          show XOr    = "⊻"
 
-instance Show a => Show (VIExpr a) where
+instance (Show a, Show b) => Show (VIExpr a b) where
   show (LitI a) = show a
   show (Ref _ a) = show a
   show (OpI Neg a) = "¬" <> "(" <> show a <> ")"
   show (OpI Abs a) = "|" <> show a <> "|"
   show (OpI Sign a) = "signum " <> show a
   show (OpII f l r) = mconcat [show l, " ", show f, " ", show r]
-  show (ChcI d l r) = mconcat [dimName d, "≺", show l, ", ", show r, "≻"]
+  show (ChcI d l r) = mconcat [show d, "≺", show l, ", ", show r, "≻"]
 
 instance Show B_B where show Not = "¬"
 
@@ -53,7 +53,7 @@ prettyPropExpr = top
     top (Opn And ps)    = intercalate " ∧ " $ sub <$> ps
     top (OpBB b l r)    = mconcat [sub l, " ", show b, " ", sub r]
     top (OpIB nb l r)    = mconcat [show l, " ", show nb, " ", show r]
-    top (ChcB d ls rs) = dimName d ++ "≺" ++ top ls ++ ", " ++ top rs++ "≻"
+    top (ChcB d ls rs) = show d ++ "≺" ++ top ls ++ ", " ++ top rs++ "≻"
     top e           = sub e
 
     sub :: (Show a, Show b) => VProp a b -> String
@@ -72,7 +72,7 @@ isPlain (OpBB _ l r) = isPlain l && isPlain r
 isPlain (OpIB _ l r) = isPlain' l && isPlain' r
 isPlain _           = True
 
-isPlain' :: VIExpr a -> Bool
+isPlain' :: VIExpr a b -> Bool
 isPlain' (ChcI _ _ _) = False
 isPlain' (OpII _ l r) = isPlain' l && isPlain' r
 isPlain' (OpI _ e)    = isPlain' e
@@ -100,7 +100,7 @@ onlyInts (OpBB _ l r) = onlyInts l && onlyInts r
 onlyInts (OpB _ e)    = onlyInts e
 onlyInts _            = True
 
-onlyInts' :: VIExpr a -> Bool
+onlyInts' :: VIExpr a b -> Bool
 onlyInts' (LitI (D _)) = False
 onlyInts' (OpI _ e)    = onlyInts' e
 onlyInts' (OpII _ l r) = onlyInts' l && onlyInts' r
@@ -117,7 +117,7 @@ onlyLits (Opn _ xs)   = foldr (\x acc -> acc && onlyLits x) True xs
 onlyLits (OpBB _ l r) =  onlyLits l && onlyLits r
 onlyLits (OpB _ e)    = onlyLits e
 
-onlyLits' :: VIExpr a -> Bool
+onlyLits' :: VIExpr a b -> Bool
 onlyLits' (LitI _)  = True
 onlyLits' (Ref _ _) = False
 onlyLits' (OpI _ e) = onlyLits' e
@@ -132,7 +132,7 @@ noDupRefs prop = Set.null $ (bvars prop) `Set.intersection` (ivars prop)
 -- ----------------------------- Choice Manipulation ------------------------------
 -- | Given a config and a Variational VProp term select the element out that the
 -- config points to
-selectVariant :: Config -> VProp a b -> Maybe (VProp a b)
+selectVariant :: Config -> VProp Dim b -> Maybe (VProp Dim b)
 selectVariant tbs x@(ChcB t y n) = case Map.lookup t tbs of
                                      Nothing    -> Just x
                                      Just True  -> selectVariant tbs y
@@ -145,7 +145,7 @@ selectVariant tb (OpBB a l r)  = liftM2 (OpBB a)
 selectVariant tb (OpIB op l r) = OpIB op <$> selectVariant' tb l <*> selectVariant' tb r
 selectVariant _  x             = Just x
 
-selectVariant' :: Config -> VIExpr a -> Maybe (VIExpr a)
+selectVariant' :: Config -> VIExpr Dim b -> Maybe (VIExpr Dim b)
 selectVariant' tb x@(ChcI t y n) = case Map.lookup t tb of
                                      Nothing    -> Just x
                                      Just True  -> selectVariant' tb y
@@ -156,7 +156,7 @@ selectVariant' _  x             = Just x
 
 
 -- | Convert a dimension to a variable
-dimToVar :: Show a => (Dim -> a) -> Dim -> (VProp a b)
+dimToVar :: Show a => (Dim -> b) -> Dim -> (VProp a b)
 dimToVar f = RefB . f
 
 -- --------------------------- Descriptors ----------------------------------------
@@ -187,7 +187,7 @@ numPlain = toInteger . length . filter isPlain . toList
 numSharedDims :: (Eq a, Eq b) => VProp a b -> Integer
 numSharedDims = toInteger . length . filter (flip (>=) 2 . length) . group . flip go []
   where
-    go :: VProp a b -> [Dim] -> [Dim]
+    go :: VProp a b -> [a] -> [a]
     go (OpB _ a) acc    = go a acc
     go (OpIB _ l r) acc = go' l (go' r acc)
     go (OpBB _ l r) acc = go l (go r acc)
@@ -195,7 +195,7 @@ numSharedDims = toInteger . length . filter (flip (>=) 2 . length) . group . fli
     go (ChcB d l r) acc = go l (go r $ d:acc)
     go _    acc         = acc
 
-    go' :: VIExpr a -> [Dim] -> [Dim]
+    go' :: VIExpr a b -> [a] -> [a]
     go' (ChcI d l r) acc = go' l (go' r $ d:acc)
     go' (OpII _ l r) acc = go' l (go' r acc)
     go' (OpI  _ e)   acc = go' e acc
@@ -216,18 +216,18 @@ numSharedPlain = toInteger . length . filter (flip (>=) 2 . length) . group . fi
 --     go _ acc           = acc
 
 -- | Given a prop return the maximum number of times a given dimension was shared
-maxShared :: VProp a b -> Int
+maxShared :: Show a => VProp a b -> Int
 maxShared = safeMaximum . fmap length . group . sort . go
-  where go :: VProp a b -> [String]
-        go (ChcB d l r) = (dimName d) : go l ++ go r
+  where go :: Show a =>  VProp a b -> [String]
+        go (ChcB d l r) = (show d) : go l ++ go r
         go (OpB _ l)     = go l
         go (Opn _ ps)  = foldMap go ps
         go (OpBB _ l r) = go l ++ go r
         go (OpIB _ l r) = go' l ++ go' r
         go _           = []
 
-        go' :: VIExpr a -> [String]
-        go' (ChcI d l r) = (dimName d) : go' l ++ go' r
+        go' :: Show a => VIExpr a b -> [String]
+        go' (ChcI d l r) = (show d) : go' l ++ go' r
         go' (OpI _ l)    = go' l
         go' (OpII _ l r) = go' l ++ go' r
         go' _            = []
@@ -237,7 +237,7 @@ maxShared = safeMaximum . fmap length . group . sort . go
 
 -- --------------------------- Destructors -----------------------------------------
 -- | The set of features referenced in a feature expression.
-vars :: Ord a => (VProp a a) -> Set.Set a
+vars :: Ord b => (VProp a b) -> Set.Set b
 vars (LitB _)     = Set.empty
 vars (RefB f)     = Set.singleton f
 vars (OpB _ e)    = vars e
@@ -246,7 +246,7 @@ vars (OpIB _ _ _) = Set.empty
 vars (Opn _ ps)   = Set.unions $ vars <$> ps
 vars (ChcB _ l r) = vars l `Set.union` vars r
 
-vars' :: Ord a => (VIExpr a) -> Set.Set a
+vars' :: Ord b => VIExpr a b -> Set.Set b
 vars' (LitI _) = Set.empty
 vars' (Ref _ f) = Set.singleton f
 vars' (OpI _ e) = vars' e
@@ -254,7 +254,7 @@ vars' (OpII _ l r) = vars' l `Set.union` vars' r
 vars' (ChcI _ l r) = vars' l `Set.union` vars' r
 
 -- | The set of dimensions in a propositional expression
-dimensions :: (VProp a b) -> Set.Set Dim
+dimensions :: Ord a => (VProp a b) -> Set.Set a
 dimensions (LitB _)     = Set.empty
 dimensions (RefB _)     = Set.empty
 dimensions (OpB _ e)    = dimensions e
@@ -264,7 +264,7 @@ dimensions (Opn _ ps)   = Set.unions $ dimensions <$> ps
 dimensions (ChcB d l r) = Set.singleton d `Set.union`
                             dimensions l `Set.union` dimensions r
 
-dimensions' :: (VIExpr a) -> Set.Set Dim
+dimensions' :: Ord a => VIExpr a b -> Set.Set a
 dimensions' (LitI _)     = Set.empty
 dimensions' (Ref _ _)     = Set.empty
 dimensions' (OpI _ e)    = dimensions' e
@@ -282,7 +282,7 @@ ivars (OpIB _ l r) = ivars' l `Set.union` ivars' r
 ivars (Opn _ ps)   = Set.unions $ ivars <$> ps
 ivars (ChcB _ l r) = ivars l `Set.union` ivars r
 
-ivars' :: Ord a => VIExpr a -> Set.Set a
+ivars' :: (Ord b) => VIExpr a b -> Set.Set b
 ivars' (LitI _)     = Set.empty
 ivars' (OpI _ e)    = ivars' e
 ivars' (OpII _ l r) = ivars' l `Set.union` ivars' r
@@ -301,7 +301,7 @@ ivarsWithType (OpIB _ l r) = ivarsWithType' l `Set.union` ivarsWithType' r
 ivarsWithType (Opn _ ps)   = Set.unions $ ivarsWithType <$> ps
 ivarsWithType (ChcB _ l r) = ivarsWithType l `Set.union` ivarsWithType r
 
-ivarsWithType' :: Ord a => VIExpr a -> Set.Set (RefN, a)
+ivarsWithType' :: (Ord a, Ord b) => VIExpr a b -> Set.Set (RefN, b)
 ivarsWithType' (LitI _)     = Set.empty
 ivarsWithType' (OpI _ e)    = ivarsWithType' e
 ivarsWithType' (OpII _ l r) = ivarsWithType' l `Set.union` ivarsWithType' r
@@ -313,7 +313,7 @@ bvars :: Ord a => VProp a a -> Set.Set a
 bvars prop = vars prop `Set.difference` ivars prop
 
 -- | The set of all choices
-configs :: VProp a b -> [[(Dim, Bool)]]
+configs :: Ord a => VProp a b -> [[(a, Bool)]]
 configs prop = go (Set.toList $ dimensions prop)
   where
     go []     = [[]]
