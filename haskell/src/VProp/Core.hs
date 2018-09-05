@@ -132,7 +132,7 @@ noDupRefs prop = Set.null $ (bvars prop) `Set.intersection` (ivars prop)
 -- ----------------------------- Choice Manipulation ------------------------------
 -- | Given a config and a Variational VProp term select the element out that the
 -- config points to
-selectVariant :: Config -> VProp Dim b -> Maybe (VProp Dim b)
+selectVariant :: Ord a => Config a -> VProp a b -> Maybe (VProp a b)
 selectVariant tbs x@(ChcB t y n) = case Map.lookup t tbs of
                                      Nothing    -> Just x
                                      Just True  -> selectVariant tbs y
@@ -145,7 +145,7 @@ selectVariant tb (OpBB a l r)  = liftM2 (OpBB a)
 selectVariant tb (OpIB op l r) = OpIB op <$> selectVariant' tb l <*> selectVariant' tb r
 selectVariant _  x             = Just x
 
-selectVariant' :: Config -> VIExpr Dim b -> Maybe (VIExpr Dim b)
+selectVariant' :: Ord a => Config a -> VIExpr a b -> Maybe (VIExpr a b)
 selectVariant' tb x@(ChcI t y n) = case Map.lookup t tb of
                                      Nothing    -> Just x
                                      Just True  -> selectVariant' tb y

@@ -58,7 +58,7 @@ newtype Dim = Dim { dimName :: String }
 
 type VConfig a b = a -> b
 type DimBool = Dim -> S.SBool
-type Config = Map Dim Bool
+type Config a = Map a Bool
 
 --
 -- * Syntax
