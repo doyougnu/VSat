@@ -67,14 +67,14 @@ type Config a = Map a Bool
 -- | This Design taken from Eric Walkingshaw with great respect :)
 
 -- | Boolean expressions with choices
-data VProp a b
+data VProp a b c
    = LitB Bool
    | RefB b
-   | OpB  B_B  !(VProp a b)
-   | OpBB BB_B !(VProp a b) !(VProp a b)
-   | OpIB NN_B !(VIExpr a b)  !(VIExpr a b)
-   | Opn  Opn  ![(VProp a b)]
-   | ChcB a !(VProp a b) !(VProp a b)
+   | OpB  B_B  !(VProp a b c)
+   | OpBB BB_B !(VProp a b c) !(VProp a b c)
+   | OpIB NN_B !(VIExpr a c)  !(VIExpr a c)
+   | Opn  Opn  ![(VProp a b c)]
+   | ChcB a !(VProp a b c) !(VProp a b c)
   deriving (Eq,Generic,Typeable,Functor,Traversable,Foldable,Ord)
 
 -- | Integer Expressions with Choices
@@ -141,10 +141,10 @@ dLit = LitI . D
 dRef :: String -> VIExpr a String
 dRef = Ref RefD
 
-bRef :: String -> VProp a String
+bRef :: String -> VProp a String c
 bRef = RefB
 
-bChc :: String -> VProp String b -> VProp String b -> VProp String b
+bChc :: String -> VProp String b c -> VProp String b c -> VProp String b c
 bChc = ChcB
 
 iChc ::  String -> VIExpr String b -> VIExpr String b -> VIExpr String b
@@ -176,7 +176,7 @@ instance Prim Bool Double where
   (.>=) = (>=)
   (.>)  = (>)
 
-instance Prim (VProp a b) Integer where
+instance Prim (VProp a b c) Integer where
   (.<)  i j = OpIB LT  (LitI $ I i) (LitI $ I j)
   (.<=) i j = OpIB LTE (LitI $ I i) (LitI $ I j)
   (.==) i j = OpIB EQ  (LitI $ I i) (LitI $ I j)
@@ -184,7 +184,7 @@ instance Prim (VProp a b) Integer where
   (.>=) i j = OpIB GTE (LitI $ I i) (LitI $ I j)
   (.>)  i j = OpIB GT  (LitI $ I i) (LitI $ I j)
 
-instance Prim (VProp a b) Double where
+instance Prim (VProp a b c) Double where
   (.<)  i j = OpIB LT  (LitI $ D i) (LitI $ D j)
   (.<=) i j = OpIB LTE (LitI $ D i) (LitI $ D j)
   (.==) i j = OpIB EQ  (LitI $ D i) (LitI $ D j)
@@ -363,13 +363,13 @@ instance Prim S.SBool S.SDouble where
   (.>)  = (S..>)
 
 -- | make prop mergeable so choices can use symbolic conditionals
-instance S.Mergeable (VProp a b) where
+instance S.Mergeable (VProp a b c) where
   symbolicMerge _ b thn els
     | Just result <- S.unliteral b = if result then thn else els
   symbolicMerge _ _ _ _ = undefined -- quite -WALL
 
 -- | We can treat a variational proposition as a boolean formulae
-instance S.Boolean (VProp a b) where
+instance S.Boolean (VProp a b c) where
   true  = LitB True
   false = LitB False
   bnot  = OpB Not
@@ -404,7 +404,7 @@ instance PrimN (VIExpr a b) where
   (./) = OpII Div
   (.%) = OpII Mod
 
-instance Prim (VProp a b) (VIExpr a b) where
+instance Prim (VProp a b c) (VIExpr a c) where
   (.<)  = OpIB LT
   (.<=) = OpIB LTE
   (.==) = OpIB EQ
@@ -442,32 +442,32 @@ instance Bitraversable VIExpr where
   bitraverse _ _ (LitI (I a))  = LitI . I <$> pure a
   bitraverse _ _ (LitI (D a))  = LitI . D <$> pure a
 
-instance Bifunctor VProp where
-  bimap _ g (RefB v)      = RefB $ g v
-  bimap f g (OpB op e)    = OpB op (bimap f g e)
-  bimap f g (OpBB op l r) = OpBB op (bimap f g l) (bimap f g r)
-  bimap f g (OpIB op l r) = OpIB op (bimap f g l) (bimap f g r)
-  bimap f g (ChcB d l r)  = ChcB (f d) (bimap f g l) (bimap f g r)
-  bimap f g (Opn op l)    = Opn op $ fmap (bimap f g) l
-  bimap _ _ (LitB b)      = LitB b
+-- instance Bifunctor VProp where
+--   bimap _ g (RefB v)      = RefB $ g v
+--   bimap f g (OpB op e)    = OpB op (bimap f g e)
+--   bimap f g (OpBB op l r) = OpBB op (bimap f g l) (bimap f g r)
+--   bimap f g (OpIB op l r) = OpIB op (bimap f g l) (bimap f g r)
+--   bimap f g (ChcB d l r)  = ChcB (f d) (bimap f g l) (bimap f g r)
+--   bimap f g (Opn op l)    = Opn op $ fmap (bimap f g) l
+--   bimap _ _ (LitB b)      = LitB b
 
-instance Bifoldable VProp where
-  bifoldMap _ g (RefB a)     = g a
-  bifoldMap f g (OpB _ e)    = bifoldMap f g e
-  bifoldMap f g (OpBB _ l r) = bifoldMap f g l <> bifoldMap f g r
-  bifoldMap _ g (OpIB _ l r) = foldMap g l <> foldMap g r
-  bifoldMap f g (ChcB d l r) = f d <> bifoldMap f g l <> bifoldMap f g r
-  bifoldMap f g (Opn _ l)    = foldMap (bifoldMap f g) l
-  bifoldMap _ _ (LitB _)     = mempty
+-- instance Bifoldable VProp where
+--   bifoldMap _ g (RefB a)     = g a
+--   bifoldMap f g (OpB _ e)    = bifoldMap f g e
+--   bifoldMap f g (OpBB _ l r) = bifoldMap f g l <> bifoldMap f g r
+--   bifoldMap _ g (OpIB _ l r) = foldMap g l <> foldMap g r
+--   bifoldMap f g (ChcB d l r) = f d <> bifoldMap f g l <> bifoldMap f g r
+--   bifoldMap f g (Opn _ l)    = foldMap (bifoldMap f g) l
+--   bifoldMap _ _ (LitB _)     = mempty
 
-instance Bitraversable VProp where
-  bitraverse _ g (RefB v) = RefB <$> g v
-  bitraverse f g (OpB op e) = OpB op <$> bitraverse f g e
-  bitraverse f g (OpBB op l r) = OpBB op <$> bitraverse f g l <*> bitraverse f g r
-  bitraverse f g (OpIB op l r) = OpIB op <$> bitraverse f g l <*> bitraverse f g r
-  bitraverse f g (Opn op ls) = Opn op <$> traverse (bitraverse f g) ls
-  bitraverse f g (ChcB d l r) = ChcB
-                                <$> f d
-                                <*> bitraverse f g l
-                                <*> bitraverse f g r
-  bitraverse _ _ (LitB a)   = LitB <$> pure a
+-- instance Bitraversable VProp where
+--   bitraverse _ g (RefB v) = RefB <$> g v
+--   bitraverse f g (OpB op e) = OpB op <$> bitraverse f g e
+--   bitraverse f g (OpBB op l r) = OpBB op <$> bitraverse f g l <*> bitraverse f g r
+--   bitraverse f g (OpIB op l r) = OpIB op <$> bitraverse f g l <*> bitraverse f g r
+--   bitraverse f g (Opn op ls) = Opn op <$> traverse (bitraverse f g) ls
+--   bitraverse f g (ChcB d l r) = ChcB
+--                                 <$> f d
+--                                 <*> bitraverse f g l
+--                                 <*> bitraverse f g r
+--   bitraverse _ _ (LitB a)   = LitB <$> pure a
