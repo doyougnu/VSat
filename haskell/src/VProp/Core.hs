@@ -126,7 +126,7 @@ onlyLits' (ChcI _ l r) = onlyLits' l && onlyLits' r
 
 -- | Are there any variables in the boolean language that shadow variables in
 -- the integer language?
-noDupRefs :: Ord a => VProp a a -> Bool
+noDupRefs :: Ord b => VProp a b -> Bool
 noDupRefs prop = Set.null $ (bvars prop) `Set.intersection` (ivars prop)
 
 -- ----------------------------- Choice Manipulation ------------------------------
@@ -273,7 +273,7 @@ dimensions' (ChcI d l r) = Set.singleton d `Set.union`
                              dimensions' l `Set.union` dimensions' r
 
 -- | The set of integar variable references for an expression
-ivars :: (Ord a, Ord b) => VProp a b -> Set.Set b
+ivars :: Ord b => VProp a b -> Set.Set b
 ivars (LitB _)     = Set.empty
 ivars (RefB _)     = Set.empty
 ivars (OpB _ e)    = ivars e
@@ -282,7 +282,7 @@ ivars (OpIB _ l r) = ivars' l `Set.union` ivars' r
 ivars (Opn _ ps)   = Set.unions $ ivars <$> ps
 ivars (ChcB _ l r) = ivars l `Set.union` ivars r
 
-ivars' :: (Ord b) => VIExpr a b -> Set.Set b
+ivars' :: Ord b => VIExpr a b -> Set.Set b
 ivars' (LitI _)     = Set.empty
 ivars' (OpI _ e)    = ivars' e
 ivars' (OpII _ l r) = ivars' l `Set.union` ivars' r
@@ -309,7 +309,7 @@ ivarsWithType' (ChcI _ l r) = ivarsWithType' l `Set.union` ivarsWithType' r
 ivarsWithType' (Ref x a)    = Set.singleton (x, a)
 
 -- | The set of boolean variable references for an expression
-bvars :: Ord a => VProp a a -> Set.Set a
+bvars :: Ord b => VProp a b -> Set.Set b
 bvars prop = vars prop `Set.difference` ivars prop
 
 -- | The set of all choices
