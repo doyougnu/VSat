@@ -15,15 +15,15 @@ import VProp.Core
 import SAT
 
 
-instance (Show a, Ord a) => SAT (VProp a a) where
+instance (Show a, Ord a) => SAT (VProp a a a) where
   toPredicate = symbolicPropExpr
 
 -- TODO fix this repetition
 -- | Evaluate a feature expression against a configuration.
 evalPropExpr :: (a -> S.SBool)
-             -> VConfig b SNum
+             -> VConfig c SNum
              -> VConfig b S.SBool
-             -> VProp a b
+             -> VProp a b c
              -> S.SBool
 evalPropExpr _ _  _ (LitB b)    = S.literal b
 evalPropExpr _ _  !c (RefB f)   = c f
@@ -63,9 +63,10 @@ evalPropExpr' d !i !(ChcI dim l r)
   = S.ite (d dim) (evalPropExpr' d i l) (evalPropExpr' d i r)
 
 -- | Generate a symbolic predicate for a feature expression.
-symbolicPropExpr :: (Show a, Ord a, Show b, Ord b) => VProp a b -> S.Predicate
+symbolicPropExpr :: (Show a, Ord a, Show b, Ord b, Show c, Ord c) =>
+  VProp a b c -> S.Predicate
 symbolicPropExpr e = do
-    let vs = Set.toList (vars e)
+    let vs = Set.toList (bvars e)
         is = Set.toList (ivars e)
         ds = Set.toList (dimensions e)
         isType = Set.toList (ivarsWithType e)
@@ -86,9 +87,9 @@ symbolicPropExpr e = do
         erri = error "symbolicPropExpr: Internal error, no int symbol found."
 
 -- | Perform andDecomposition, removing all choices from a proposition
-andDecomp :: Show a => VProp a b -> (a -> b) -> VProp a b
-andDecomp !(ChcB d l r) f = (dimToVar f d &&& andDecomp l f) |||
-                            (S.bnot (dimToVar f d) &&& andDecomp r f)
+andDecomp :: Show a => VProp a b c -> (a -> b) -> VProp a b c
+andDecomp !(ChcB d l r) f = (dimToBvar f d &&& andDecomp l f) |||
+                            (S.bnot (dimToBvar f d) &&& andDecomp r f)
 andDecomp !(OpB op x)    f = OpB  op (andDecomp x f)
 andDecomp !(OpBB op l r) f = OpBB op (andDecomp l f) (andDecomp r f)
 andDecomp !(Opn op ps)   f = Opn  op (flip andDecomp f <$> ps)
