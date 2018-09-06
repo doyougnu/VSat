@@ -11,7 +11,7 @@ import           Prelude hiding      (LT, GT, EQ)
 import VProp.Types
 
 instance Show Var where show = varName
-instance (Show a, Show b) => Show (VProp a b c) where show = prettyPropExpr
+instance (Show a, Show b,Show c) => Show (VProp a b c) where show = prettyPropExpr
 
 -- | Pretty print a feature expression.
 instance Show NPrim where show (I i) = show i
@@ -48,7 +48,7 @@ instance Show B_B where show Not = "¬"
 prettyPropExpr :: (Show a, Show b, Show c) => VProp a b c -> String
 prettyPropExpr = top
   where
-    top :: (Show a, Show b) => VProp a b c -> String
+    top :: (Show a, Show b,Show c) => VProp a b c -> String
     top (Opn Or ps)     = intercalate " ∨ " $ sub <$> ps
     top (Opn And ps)    = intercalate " ∧ " $ sub <$> ps
     top (OpBB b l r)    = mconcat [sub l, " ", show b, " ", sub r]
@@ -126,8 +126,9 @@ onlyLits' (ChcI _ l r) = onlyLits' l && onlyLits' r
 
 -- | Are there any variables in the boolean language that shadow variables in
 -- the integer language?
-noDupRefs :: Ord b => VProp a b c -> Bool
-noDupRefs prop = Set.null $ (bvars prop) `Set.intersection` (ivars prop)
+noDupRefs :: (Ord b,Ord c, Show b, Show c) => VProp a b c -> Bool
+noDupRefs prop = Set.null $
+  (Set.map show $ bvars prop) `Set.intersection` (Set.map show $ ivars prop)
 
 -- ----------------------------- Choice Manipulation ------------------------------
 -- | Given a config and a Variational VProp term select the element out that the
@@ -159,8 +160,11 @@ selectVariant' _  x             = Just x
 dimToBvar :: Show a => (a -> b) -> a -> VProp a b c
 dimToBvar f = RefB . f
 
-dimToIvar :: Show a => (a -> c) -> a -> VProp a b c
-dimToIvar f = RefB . f
+dimToIvar :: (a -> b) -> a -> VIExpr a b
+dimToIvar f = Ref RefI . f
+
+dimToDvar :: (a -> b) -> a -> VIExpr a b
+dimToDvar f = Ref RefD . f
 
 -- --------------------------- Descriptors ----------------------------------------
 -- | TODO fix all this redundancy by abstracting the dimensions and instancing Bifoldable
@@ -204,7 +208,7 @@ numSharedDims = toInteger . length . filter (flip (>=) 2 . length) . group . fli
     go' (OpI  _ e)   acc = go' e acc
     go' _            acc = acc
 
-numSharedPlain :: (Eq a, Eq b) => VProp a b c -> Integer
+numSharedPlain :: (Eq a, Eq b,Eq c) => VProp a b c -> Integer
 numSharedPlain = toInteger . length . filter (flip (>=) 2 . length) . group . filter isPlain . toList
 
 -- -- | Depth of the Term tree
@@ -240,21 +244,8 @@ maxShared = safeMaximum . fmap length . group . sort . go
 
 -- --------------------------- Destructors -----------------------------------------
 -- | The set of features referenced in a feature expression.
-vars :: Ord b => (VProp a b b) -> Set.Set b
-vars (LitB _)     = Set.empty
-vars (RefB f)     = Set.singleton f
-vars (OpB _ e)    = vars e
-vars (OpBB _ l r) = vars l `Set.union` vars r
-vars (OpIB _ _ _) = Set.empty
-vars (Opn _ ps)   = Set.unions $ vars <$> ps
-vars (ChcB _ l r) = vars l `Set.union` vars r
-
-vars' :: Ord b => VIExpr a b -> Set.Set b
-vars' (LitI _) = Set.empty
-vars' (Ref _ f) = Set.singleton f
-vars' (OpI _ e) = vars' e
-vars' (OpII _ l r) = vars' l `Set.union` vars' r
-vars' (ChcI _ l r) = vars' l `Set.union` vars' r
+vars :: (Ord b,Ord c) => VProp a b c -> (b -> c) -> Set.Set c
+vars p f = (Set.map f $ bvars p) `Set.union` ivars p
 
 -- | The set of dimensions in a propositional expression
 dimensions :: Ord a => VProp a b c -> Set.Set a
@@ -269,14 +260,14 @@ dimensions (ChcB d l r) = Set.singleton d `Set.union`
 
 dimensions' :: Ord a => VIExpr a b -> Set.Set a
 dimensions' (LitI _)     = Set.empty
-dimensions' (Ref _ _)     = Set.empty
+dimensions' (Ref _ _)    = Set.empty
 dimensions' (OpI _ e)    = dimensions' e
 dimensions' (OpII _ l r) = dimensions' l `Set.union` dimensions' r
 dimensions' (ChcI d l r) = Set.singleton d `Set.union`
                              dimensions' l `Set.union` dimensions' r
 
 -- | The set of integar variable references for an expression
-ivars :: Ord b => VProp a b c -> Set.Set b
+ivars :: Ord c => VProp a b c -> Set.Set c
 ivars (LitB _)     = Set.empty
 ivars (RefB _)     = Set.empty
 ivars (OpB _ e)    = ivars e
@@ -304,7 +295,7 @@ ivarsWithType (OpIB _ l r) = ivarsWithType' l `Set.union` ivarsWithType' r
 ivarsWithType (Opn _ ps)   = Set.unions $ ivarsWithType <$> ps
 ivarsWithType (ChcB _ l r) = ivarsWithType l `Set.union` ivarsWithType r
 
-ivarsWithType' :: (Ord a, Ord b) => VIExpr a b -> Set.Set (RefN, b)
+ivarsWithType' :: (Ord b) => VIExpr a b -> Set.Set (RefN, b)
 ivarsWithType' (LitI _)     = Set.empty
 ivarsWithType' (OpI _ e)    = ivarsWithType' e
 ivarsWithType' (OpII _ l r) = ivarsWithType' l `Set.union` ivarsWithType' r
@@ -312,8 +303,14 @@ ivarsWithType' (ChcI _ l r) = ivarsWithType' l `Set.union` ivarsWithType' r
 ivarsWithType' (Ref x a)    = Set.singleton (x, a)
 
 -- | The set of boolean variable references for an expression
-bvars :: Ord b => VProp a b c -> (b -> c) Set.Set b
-bvars prop = vars prop `Set.difference` ivars prop
+bvars :: Ord b => VProp a b c -> Set.Set b
+bvars (LitB _)     = Set.empty
+bvars (RefB e)     = Set.singleton e
+bvars (OpB _ e)    = bvars e
+bvars (OpBB _ l r) = bvars l `Set.union` bvars r
+bvars (OpIB _ _ _) = Set.empty
+bvars (Opn _ ps)   = Set.unions $ bvars <$> ps
+bvars (ChcB _ l r) = bvars l `Set.union` bvars r
 
 -- | The set of all choices
 configs :: Ord a => VProp a b c -> [[(a, Bool)]]

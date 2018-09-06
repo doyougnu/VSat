@@ -442,8 +442,8 @@ instance Bitraversable VIExpr where
   bitraverse _ _ (LitI (I a))  = LitI . I <$> pure a
   bitraverse _ _ (LitI (D a))  = LitI . D <$> pure a
 
--- instance Bifunctor VProp where
---   bimap _ g (RefB v)      = RefB $ g v
+-- instance Bifunctor (VProp a) where
+--   bimap f _ (RefB v)      = RefB $ f v
 --   bimap f g (OpB op e)    = OpB op (bimap f g e)
 --   bimap f g (OpBB op l r) = OpBB op (bimap f g l) (bimap f g r)
 --   bimap f g (OpIB op l r) = OpIB op (bimap f g l) (bimap f g r)
@@ -451,7 +451,7 @@ instance Bitraversable VIExpr where
 --   bimap f g (Opn op l)    = Opn op $ fmap (bimap f g) l
 --   bimap _ _ (LitB b)      = LitB b
 
--- instance Bifoldable VProp where
+-- instance Bifoldable (VProp a) where
 --   bifoldMap _ g (RefB a)     = g a
 --   bifoldMap f g (OpB _ e)    = bifoldMap f g e
 --   bifoldMap f g (OpBB _ l r) = bifoldMap f g l <> bifoldMap f g r
@@ -460,7 +460,7 @@ instance Bitraversable VIExpr where
 --   bifoldMap f g (Opn _ l)    = foldMap (bifoldMap f g) l
 --   bifoldMap _ _ (LitB _)     = mempty
 
--- instance Bitraversable VProp where
+-- instance Bitraversable (VProp a) where
 --   bitraverse _ g (RefB v) = RefB <$> g v
 --   bitraverse f g (OpB op e) = OpB op <$> bitraverse f g e
 --   bitraverse f g (OpBB op l r) = OpBB op <$> bitraverse f g l <*> bitraverse f g r
