@@ -15,7 +15,8 @@ import VProp.Core
 import SAT
 
 
-instance (Show a, Ord a) => SAT (VProp a a a) where
+instance (Show a, Ord a, Show b, Ord b, Show c, Ord c) =>
+  SAT (VProp a b c) where
   toPredicate = symbolicPropExpr
 
 -- TODO fix this repetition

@@ -54,7 +54,7 @@ newtype Var = Var { varName :: String }
   deriving (Data,Eq,IsString,Ord,Typeable,Generic,NFData)
 
 newtype Dim = Dim { dimName :: String }
-  deriving (Data,Eq,IsString,Ord,Show,Typeable,Generic,NFData,Arbitrary)
+  deriving (Data,Eq,IsString,Ord,Typeable,Generic,NFData,Arbitrary)
 
 type VConfig a b = a -> b
 type DimBool = Dim -> S.SBool

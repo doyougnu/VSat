@@ -11,6 +11,7 @@ import           Prelude hiding      (LT, GT, EQ)
 import VProp.Types
 
 instance Show Var where show = varName
+instance Show Dim where show = dimName
 instance (Show a, Show b,Show c) => Show (VProp a b c) where show = prettyPropExpr
 
 -- | Pretty print a feature expression.
