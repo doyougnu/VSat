@@ -292,11 +292,27 @@ vSMTSolve_ !(OpIB op l r) = do br <- vSMTSolve'_ r
                                --     res = bl `op'` br
                                -- S.constrain res
                                -- return res
+                               -- TODO: MAKE a handle interface recursive function
                                case br of
+                                 Plain r' -> case bl of
+                                   Plain l' -> do S.constrain $ l' `op'` r'
+                                                  return $ l' `op'` r'
+                                   VChc d ll lr -> do St.modify . second $ M.adjust (const False) d
+                                                      lift $ SC.push 1
+                                                      lr' <- vSMTSolve'_ lr
+                                                      lrmodel <- lift $ getVSMTModel
+                                                      lift $ SC.pop 1
+
+                                                      St.modify . second $ M.insert d True
+                                                      lift $ SC.push 1
+                                                      ll' <- vSMTSolve'_ ll
+                                                      llmodel <- lift $ getVSMTModel
+                                                      lift $ SC.pop 1
+
+                                                      St.modify . first $ ((:) (VChc (dimName d) ll))
+
                                  VChc d l r -> case bl of
-                                   VChc d' l' r' -> vSMTSolve_ $ ChcB d
-                                                    (ChcB d' (OpIB op l l') (OpIB op l r'))
-                                                    (ChcB d' (OpIB op r l') (OpIB op r r'))
+                                   VChc d' l' r' -> return $ l `op'` l'
   where handler LT  = (.<)
         handler LTE = (.<=)
         handler GTE = (.>=)
@@ -333,11 +349,11 @@ vSMTSolve_ !(ChcB d l r) =
                         return b
 
 -- | The incremental solve algorithm just for VIExprs
-vSMTSolve'_ :: VIExpr Dim SNum -> IncVSMTSolve (VIExpr Dim SNum)
-vSMTSolve'_ !x@(Ref RefI i) = return $ x
-vSMTSolve'_ !x@(Ref RefD d) = return $ x
-vSMTSolve'_ !x@(LitI (I i)) = return . SI . S.literal . fromIntegral $ i
-vSMTSolve'_ !x@(LitI (D d)) = return . SD . S.literal $ d
+vSMTSolve'_ :: VIExpr Dim SNum -> IncVSMTSolve (V Dim SNum)
+vSMTSolve'_ !(Ref RefI i) = return . Plain $ i
+vSMTSolve'_ !(Ref RefD d) = return . Plain $ d
+vSMTSolve'_ !(LitI (I i)) = return . Plain . SI . S.literal . fromIntegral $ i
+vSMTSolve'_ !(LitI (D d)) = return . Plain . SD . S.literal $ d
 vSMTSolve'_ !(OpI op e) = do e' <- vSMTSolve'_ e
                              return $ (handler op) e'
   where handler Neg  = negate
@@ -372,7 +388,7 @@ vSMTSolve'_ !(ChcI d l r) =
                         St.modify . first $ ((:) (VChc (dimName d) lmodel rmodel))
 
                         St.modify . second $ M.delete d
-                        return $ ChcI d l' r'
+                        return $ VChc d l' r'
 
 -- | The main solver algorithm. You can think of this as the sem function for
 -- the dsl

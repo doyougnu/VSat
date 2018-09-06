@@ -12,7 +12,7 @@ import qualified Data.Map.Strict     as Map
 import GHC.Generics
 import Control.DeepSeq        (NFData)
 import Data.Aeson
-import Data.SBV               (SBool)
+import qualified Data.SBV as S
 
 import VProp.Types (PrimN(..),Prim(..),SNum)
 
@@ -88,6 +88,12 @@ instance (Num a) => Num (V d a) where
   abs = bimap id abs
   signum = bimap id signum
   fromInteger = Plain . fromInteger
+
+instance (PrimN a, PrimN b, S.OrdSymbolic a, S.OrdSymbolic b) =>
+  Prim S.SBool (V a b) where
+  (Plain a) .< (Plain b) = a S..< b
+  (Plain a) .< (VChc d l r) = VChc d (a S..< )a S..< b
+
 
 
 -- | Given a tag tree, fmap over the tree with respect to a config
