@@ -194,7 +194,7 @@ vSMTSolve prop = do prop' <- prop
 -- | This ensures two things: 1st we need all variables to be symbolic before
 -- starting query mode. 2nd we cannot allow any duplicates to be called on a
 -- string -> symbolic a function or missiles will launch.
-propToSBool :: VProp String String -> IncPack String (VProp S.SBool SNum)
+propToSBool :: VProp String String -> IncPack String (VProp S.SBool S.SBool)
 propToSBool !(RefB x)     = RefB   <$> smtBool x
 propToSBool !(OpB o e)    = OpB  o <$> propToSBool e
 propToSBool !(OpBB o l r) = OpBB o <$> propToSBool l <*> propToSBool r

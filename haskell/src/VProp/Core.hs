@@ -11,7 +11,7 @@ import           Prelude hiding      (LT, GT, EQ)
 import VProp.Types
 
 instance Show Var where show = varName
-instance (Show a, Show b) => Show (VProp a b) where show = prettyPropExpr
+instance (Show a, Show b) => Show (VProp a b c) where show = prettyPropExpr
 
 -- | Pretty print a feature expression.
 instance Show NPrim where show (I i) = show i
@@ -45,10 +45,10 @@ instance (Show a, Show b) => Show (VIExpr a b) where
 
 instance Show B_B where show Not = "¬"
 
-prettyPropExpr :: (Show a, Show b) => VProp a b -> String
+prettyPropExpr :: (Show a, Show b, Show c) => VProp a b c -> String
 prettyPropExpr = top
   where
-    top :: (Show a, Show b) => VProp a b -> String
+    top :: (Show a, Show b) => VProp a b c -> String
     top (Opn Or ps)     = intercalate " ∨ " $ sub <$> ps
     top (Opn And ps)    = intercalate " ∧ " $ sub <$> ps
     top (OpBB b l r)    = mconcat [sub l, " ", show b, " ", sub r]
@@ -56,7 +56,7 @@ prettyPropExpr = top
     top (ChcB d ls rs) = show d ++ "≺" ++ top ls ++ ", " ++ top rs++ "≻"
     top e           = sub e
 
-    sub :: (Show a, Show b) => VProp a b -> String
+    sub :: (Show a, Show b, Show c) => VProp a b c -> String
     sub (LitB b) = if b then "#T" else "#F"
     sub (RefB f) = show f
     sub (OpB b e) = show b <> sub e
@@ -64,7 +64,7 @@ prettyPropExpr = top
 
 ----------------------------- Predicates ---------------------------------------
 -- | true if a propositions has no chcs whatsoever
-isPlain :: VProp a b -> Bool
+isPlain :: VProp a b c -> Bool
 isPlain (ChcB _ _ _) = False
 isPlain (OpB _ x)     = isPlain x
 isPlain (Opn _ ps)  = all isPlain ps
@@ -79,11 +79,11 @@ isPlain' (OpI _ e)    = isPlain' e
 isPlain' _            = True
 
 -- | Does the prop contain choices
-isChc :: VProp a b -> Bool
+isChc :: VProp a b c -> Bool
 isChc = not . isPlain
 
 -- | Does the prop only contain boolean values? No ints or floats
-onlyBools :: VProp a a -> Bool
+onlyBools :: VProp a b c -> Bool
 onlyBools (OpIB _ _ _ ) = False
 onlyBools (ChcB _ l r)  = onlyBools l && onlyBools r
 onlyBools (Opn _ xs)    = foldr (\x acc -> acc && onlyBools x) True xs
@@ -92,7 +92,7 @@ onlyBools (OpB  _ e)    = onlyBools e
 onlyBools _             = True
 
 -- | Does the prop only contain Ints
-onlyInts :: VProp a a -> Bool
+onlyInts :: VProp a b c -> Bool
 onlyInts (OpIB _ l r) = onlyInts' l && onlyInts' r
 onlyInts (ChcB _ l r) = onlyInts l && onlyInts r
 onlyInts (Opn _ xs)   = foldr (\x acc -> acc && onlyInts x) True xs
@@ -108,7 +108,7 @@ onlyInts' (ChcI _ l r) = onlyInts' l && onlyInts' r
 onlyInts' _            = True
 
 -- | Does the prop contain no variables?
-onlyLits :: VProp a a -> Bool
+onlyLits :: VProp a b c -> Bool
 onlyLits (LitB _) = True
 onlyLits (RefB _) = False
 onlyLits (OpIB _ l r) = onlyLits' l && onlyLits' r
@@ -126,13 +126,13 @@ onlyLits' (ChcI _ l r) = onlyLits' l && onlyLits' r
 
 -- | Are there any variables in the boolean language that shadow variables in
 -- the integer language?
-noDupRefs :: Ord b => VProp a b -> Bool
+noDupRefs :: Ord b => VProp a b c -> Bool
 noDupRefs prop = Set.null $ (bvars prop) `Set.intersection` (ivars prop)
 
 -- ----------------------------- Choice Manipulation ------------------------------
 -- | Given a config and a Variational VProp term select the element out that the
 -- config points to
-selectVariant :: Ord a => Config a -> VProp a b -> Maybe (VProp a b)
+selectVariant :: Ord a => Config a -> VProp a b c -> Maybe (VProp a b c)
 selectVariant tbs x@(ChcB t y n) = case Map.lookup t tbs of
                                      Nothing    -> Just x
                                      Just True  -> selectVariant tbs y
@@ -156,38 +156,41 @@ selectVariant' _  x             = Just x
 
 
 -- | Convert a dimension to a variable
-dimToVar :: Show a => (a -> b) -> a -> (VProp a b)
-dimToVar f = RefB . f
+dimToBvar :: Show a => (a -> b) -> a -> VProp a b c
+dimToBvar f = RefB . f
+
+dimToIvar :: Show a => (a -> c) -> a -> VProp a b c
+dimToIvar f = RefB . f
 
 -- --------------------------- Descriptors ----------------------------------------
 -- | TODO fix all this redundancy by abstracting the dimensions and instancing Bifoldable
 -- | Convert a prop into a list of Terms
-toList :: VProp a b -> [VProp a b]
+toList :: VProp a b c -> [VProp a b c]
 toList prop = go prop []
   where
-    go :: VProp a b -> [VProp a b] -> [VProp a b]
+    go :: VProp a b c -> [VProp a b c] -> [VProp a b c]
     go x@(OpB _ a) acc    = go a $ x:acc
     go x@(Opn _ ps) acc   = foldr go (x:acc) ps
     go x@(ChcB _ l r) acc = go r . go l $ x:acc
     go x@(OpBB _ l r) acc = go r . go l $ x:acc
     go a acc = a:acc
 
-numTerms :: VProp a b -> Integer
+numTerms :: VProp a b c -> Integer
 numTerms = toInteger. length . toList
 
 -- | Count the choices in a tree
-numChc :: VProp a b -> Integer
+numChc :: VProp a b c -> Integer
 numChc = toInteger . length . filter isChc . toList
 
 -- | Count the plain values in a tree
-numPlain :: VProp a b -> Integer
+numPlain :: VProp a b c -> Integer
 numPlain = toInteger . length . filter isPlain . toList
 
 -- | Given a vprop how many shared dimensions were there
-numSharedDims :: (Eq a, Eq b) => VProp a b -> Integer
+numSharedDims :: (Eq a, Eq b, Eq c) => VProp a b c -> Integer
 numSharedDims = toInteger . length . filter (flip (>=) 2 . length) . group . flip go []
   where
-    go :: VProp a b -> [a] -> [a]
+    go :: VProp a b c -> [a] -> [a]
     go (OpB _ a) acc    = go a acc
     go (OpIB _ l r) acc = go' l (go' r acc)
     go (OpBB _ l r) acc = go l (go r acc)
@@ -201,7 +204,7 @@ numSharedDims = toInteger . length . filter (flip (>=) 2 . length) . group . fli
     go' (OpI  _ e)   acc = go' e acc
     go' _            acc = acc
 
-numSharedPlain :: (Eq a, Eq b) => VProp a b -> Integer
+numSharedPlain :: (Eq a, Eq b) => VProp a b c -> Integer
 numSharedPlain = toInteger . length . filter (flip (>=) 2 . length) . group . filter isPlain . toList
 
 -- -- | Depth of the Term tree
@@ -216,9 +219,9 @@ numSharedPlain = toInteger . length . filter (flip (>=) 2 . length) . group . fi
 --     go _ acc           = acc
 
 -- | Given a prop return the maximum number of times a given dimension was shared
-maxShared :: Show a => VProp a b -> Int
+maxShared :: Show a => VProp a b c -> Int
 maxShared = safeMaximum . fmap length . group . sort . go
-  where go :: Show a =>  VProp a b -> [String]
+  where go :: Show a =>  VProp a b c -> [String]
         go (ChcB d l r) = (show d) : go l ++ go r
         go (OpB _ l)     = go l
         go (Opn _ ps)  = foldMap go ps
@@ -237,7 +240,7 @@ maxShared = safeMaximum . fmap length . group . sort . go
 
 -- --------------------------- Destructors -----------------------------------------
 -- | The set of features referenced in a feature expression.
-vars :: Ord b => (VProp a b) -> Set.Set b
+vars :: Ord b => (VProp a b b) -> Set.Set b
 vars (LitB _)     = Set.empty
 vars (RefB f)     = Set.singleton f
 vars (OpB _ e)    = vars e
@@ -254,7 +257,7 @@ vars' (OpII _ l r) = vars' l `Set.union` vars' r
 vars' (ChcI _ l r) = vars' l `Set.union` vars' r
 
 -- | The set of dimensions in a propositional expression
-dimensions :: Ord a => (VProp a b) -> Set.Set a
+dimensions :: Ord a => VProp a b c -> Set.Set a
 dimensions (LitB _)     = Set.empty
 dimensions (RefB _)     = Set.empty
 dimensions (OpB _ e)    = dimensions e
@@ -273,7 +276,7 @@ dimensions' (ChcI d l r) = Set.singleton d `Set.union`
                              dimensions' l `Set.union` dimensions' r
 
 -- | The set of integar variable references for an expression
-ivars :: Ord b => VProp a b -> Set.Set b
+ivars :: Ord b => VProp a b c -> Set.Set b
 ivars (LitB _)     = Set.empty
 ivars (RefB _)     = Set.empty
 ivars (OpB _ e)    = ivars e
@@ -292,7 +295,7 @@ ivars' (Ref _ a)    = Set.singleton a
 -- | The set of integar variable references for an expression
 -- we save the leading constructors i.e. RefI or RefD so we know whether to call
 -- sInteger or sDouble in evalPropExpr
-ivarsWithType :: (Ord a, Ord b) => VProp a b -> Set.Set (RefN, b)
+ivarsWithType :: Ord c => VProp a b c -> Set.Set (RefN, c)
 ivarsWithType (LitB _)     = Set.empty
 ivarsWithType (RefB _)     = Set.empty
 ivarsWithType (OpB _ e)    = ivarsWithType e
@@ -309,11 +312,11 @@ ivarsWithType' (ChcI _ l r) = ivarsWithType' l `Set.union` ivarsWithType' r
 ivarsWithType' (Ref x a)    = Set.singleton (x, a)
 
 -- | The set of boolean variable references for an expression
-bvars :: Ord b => VProp a b -> Set.Set b
+bvars :: Ord b => VProp a b c -> (b -> c) Set.Set b
 bvars prop = vars prop `Set.difference` ivars prop
 
 -- | The set of all choices
-configs :: Ord a => VProp a b -> [[(a, Bool)]]
+configs :: Ord a => VProp a b c -> [[(a, Bool)]]
 configs prop = go (Set.toList $ dimensions prop)
   where
     go []     = [[]]
