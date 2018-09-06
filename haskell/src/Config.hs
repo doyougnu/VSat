@@ -14,7 +14,7 @@ data Settings = Settings { solver :: Solver
                          } deriving (Show,Generic)
 
 data SMTConf a = SMTConf { conf :: SMTConfig
-                         , opts :: [VProp a a a -> VProp a a a]
+                         , opts :: [VProp Dim a a -> VProp Dim a a]
                          }
 
 data Solver = Z3
@@ -70,7 +70,7 @@ setSolver Cvc4 a = a{conf=cvc4}
 setOpts :: (Ord a, Show a) => [Opts] -> SMTConf a -> SMTConf a
 setOpts os c = c{opts=convertOpts <$> os}
 
-convertOpts :: (Ord a,Show a) =>  Opts -> VProp a a a -> VProp a a a
+convertOpts :: (Ord a,Show a) =>  Opts -> VProp Dim a a -> VProp Dim a a
 convertOpts MoveRight = moveChcToRight
 convertOpts MoveLeft  = moveChcToLeft
 convertOpts Shrink    = shrinkProp

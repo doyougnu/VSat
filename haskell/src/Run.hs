@@ -51,41 +51,41 @@ _runEnv :: Env a r -> SMTConf a -> SatDict a -> IO (r, (SatDict a),  Log)
 _runEnv m opts st = runRWST m opts st
 
 -- TODO use configurate and load the config from a file
-runEnv :: (VProp String String-> Env String Result)
+runEnv :: (VProp String String String -> Env String Result)
        -> SMTConf String
-       -> VProp String String-> IO (Result, (SatDict String), Log)
+       -> VProp String String String -> IO (Result, (SatDict String), Log)
 runEnv f conf !x = _runEnv (f x) conf (initSt x)
 
 runAD :: SMTConf String
-      -> VProp String String
+      -> VProp String String String
       -> IO [V String (Maybe S.SatResult)]
 runAD os p = fmap (bimap id (fmap S.SatResult)) . unbox . fst' <$>
              runEnv runAndDecomp os p
 
 -- | Run the brute force solver
 runBF :: SMTConf String
-  -> VProp String String
+  -> VProp String String String
   -> IO (Result, SatDict String, Log)
 runBF = runEnv runBruteForce
 
 -- | Run the variational sat solver given a list of optimizations and a prop.
 -- This can throw an exception if the prop has SMT terms in it
 runVS :: SMTConf String
-  -> VProp String String
+  -> VProp String String String
   -> IO (Result, SatDict String, Log)
 runVS = runEnv runVSolve
 
 -- | Run the VSMT solver given a list of optimizations and a prop
 runVSMT :: SMTConf String
-  -> VProp String String
+  -> VProp String String String
   -> IO (Result, SatDict String, Log)
 runVSMT = runEnv runVSMTSolve
 
 -- | Given a VProp a term generate the satisfiability map
-initSt :: (Show a, Ord a) => VProp a a -> (SatDict a)
+initSt :: (Show a, Ord a) => VProp a a a -> (SatDict a)
 initSt prop = (sats, vs)
   where sats = M.fromList . fmap (\x -> (x, False)) $ M.fromList <$> configs prop
-        vs = M.fromSet (const False) (vars prop)
+        vs = M.fromSet (const False) (vars prop id)
 
 -- | Some logging functions
 _logBaseline :: (Show a, MonadWriter [Char] m) => a -> m ()
@@ -101,7 +101,7 @@ _logResult x = tell $ "Got result: " ++ show x
 -- | Run the brute force baseline case, that is select every plain variant and
 -- run them to the sat solver
 runBruteForce :: (Show a, Ord a) =>
-  (MonadTrans t, MonadState (SatDict a) (t IO)) => VProp a a -> t IO Result
+  (MonadTrans t, MonadState (SatDict a) (t IO)) => VProp a a a -> t IO Result
 runBruteForce prop = lift $ flip evalStateT _emptySt $
   do
   (_confs, _) <- get
@@ -112,7 +112,7 @@ runBruteForce prop = lift $ flip evalStateT _emptySt $
 
 -- | Run the and decomposition baseline case, that is deconstruct every choice
 -- and then run the sat solver
-runAndDecomp :: (MonadTrans t, Monad (t IO)) => VProp String String -> t IO Result
+runAndDecomp :: (MonadTrans t, Monad (t IO)) => VProp String String String -> t IO Result
 runAndDecomp prop = do
   res <- lift . S.runSMT $ do
     p <- symbolicPropExpr $ andDecomp prop show
@@ -120,7 +120,7 @@ runAndDecomp prop = do
   lift . return $ V [res]
 
 runVSolve :: (MonadReader (SMTConf String) (t IO), MonadTrans t) =>
-  VProp String String -> t IO Result
+  VProp Dim String String -> t IO Result
 runVSolve prop =
   do cnf <- ask
      let prop' = foldr' ($!) prop (opts cnf)
@@ -129,7 +129,7 @@ runVSolve prop =
      lift . return . V $ result
 
 runVSMTSolve :: (MonadTrans t, MonadReader (SMTConf String) (t IO)) =>
-  VProp String String -> t IO Result
+  VProp Dim String String -> t IO Result
 runVSMTSolve prop =
   do cnf <- ask
      let prop' = foldr' ($!) prop (opts cnf)
@@ -175,14 +175,14 @@ type IncVSMTSolve a = St.StateT (IncState S.SMTResult) SC.Query a
 -- SBV. When we hit a choice we manipulate the assertion stack to maximize reuse
 -- of non-variational terms and then cons the resultant model for each branch of
 -- the choice onto the result list.
-vSolve :: S.Symbolic (VProp S.SBool SNum) -> S.Symbolic (IncState S.SMTResult)
+vSolve :: S.Symbolic (VProp Dim S.SBool SNum) -> S.Symbolic (IncState S.SMTResult)
 vSolve prop = do prop' <- prop
                  SC.query $
                    do res <- St.execStateT (vSolve_ prop') ([], M.empty)
                       return res
 
 -- | Solve a VSMT proposition
-vSMTSolve :: S.Symbolic (VProp S.SBool SNum) -> S.Symbolic (IncState S.SMTResult)
+vSMTSolve :: S.Symbolic (VProp Dim S.SBool SNum) -> S.Symbolic (IncState S.SMTResult)
 vSMTSolve prop = do prop' <- prop
                     SC.query $
                       do
@@ -194,21 +194,21 @@ vSMTSolve prop = do prop' <- prop
 -- | This ensures two things: 1st we need all variables to be symbolic before
 -- starting query mode. 2nd we cannot allow any duplicates to be called on a
 -- string -> symbolic a function or missiles will launch.
-propToSBool :: VProp String String -> IncPack String (VProp S.SBool S.SBool)
+propToSBool :: VProp Dim String String -> IncPack String (VProp Dim S.SBool SNum)
 propToSBool !(RefB x)     = RefB   <$> smtBool x
 propToSBool !(OpB o e)    = OpB  o <$> propToSBool e
 propToSBool !(OpBB o l r) = OpBB o <$> propToSBool l <*> propToSBool r
 propToSBool !(Opn o xs)   = Opn  o <$> traverse propToSBool xs
-propToSBool !(ChcB d l r) = ChcB <$> smtBool d <*> propToSBool l <*> propToSBool r
+propToSBool !(ChcB d l r) = ChcB d <$> propToSBool l <*> propToSBool r
 propToSBool !(OpIB o l r) = OpIB o <$> propToSBool' l <*> propToSBool' r
 propToSBool !(LitB b)     = return $ LitB b
 
-propToSBool' :: VIExpr String String -> IncPack String (VIExpr S.SBool SNum)
+propToSBool' :: VIExpr Dim String -> IncPack String (VIExpr Dim SNum)
 propToSBool' !(Ref RefI i) = Ref RefI <$> smtInt i
 propToSBool' !(Ref RefD d) = Ref RefD <$> smtDouble d
 propToSBool' !(OpI o e)    = OpI o    <$> propToSBool' e
 propToSBool' !(OpII o l r) = OpII o <$> propToSBool' l <*> propToSBool' r
-propToSBool' !(ChcI d l r) = ChcI <$> smtBool d <*> propToSBool' l <*> propToSBool' r
+propToSBool' !(ChcI d l r) = ChcI d <$> propToSBool' l <*> propToSBool' r
 propToSBool' !(LitI x)     = return $ LitI x
 
 -- | convert every reference to a boolean, keeping track of what you've seen
@@ -259,12 +259,12 @@ instance (Monad m, I.SolverContext m) =>
 
 
 -- | Helper functoins for the n-ary cases
-vSolveHelper :: S.SBool -> [VProp S.SBool SNum] ->
+vSolveHelper :: S.SBool -> [VProp Dim S.SBool SNum] ->
   (S.SBool -> S.SBool -> S.SBool) -> IncVSolve S.SBool
 vSolveHelper !acc ![]     _ = return acc
 vSolveHelper !acc !(x:xs) f = do b <- vSolve_ x; vSolveHelper (b `f` acc) xs f
 
-vSMTSolveHelper :: S.SBool -> [VProp S.SBool SNum] ->
+vSMTSolveHelper :: S.SBool -> [VProp Dim S.SBool SNum] ->
   (S.SBool -> S.SBool -> S.SBool) -> IncVSMTSolve S.SBool
 vSMTSolveHelper !acc ![]     _ = return acc
 vSMTSolveHelper !acc !(x:xs) f = do b <- vSMTSolve_ x
@@ -272,7 +272,7 @@ vSMTSolveHelper !acc !(x:xs) f = do b <- vSMTSolve_ x
 
 -- | The main solver algorithm. You can think of this as the sem function for
 -- the dsl
-vSMTSolve_ :: VProp S.SBool SNum -> IncVSMTSolve S.SBool
+vSMTSolve_ :: VProp Dim S.SBool SNum -> IncVSMTSolve S.SBool
 vSMTSolve_ !(RefB b) = return b
 vSMTSolve_ !(LitB b) = return $ S.literal b
 vSMTSolve_ !(OpB Not bs)= do b <- vSMTSolve_ bs
@@ -289,9 +289,14 @@ vSMTSolve_ !(OpBB op l r) = do br <- vSMTSolve_ r
 vSMTSolve_ !(OpIB op l r) = do br <- vSMTSolve'_ r
                                bl <- vSMTSolve'_ l
                                let op' = handler op
-                                   res = bl `op'` br
-                               S.constrain res
-                               return res
+                               --     res = bl `op'` br
+                               -- S.constrain res
+                               -- return res
+                               case br of
+                                 VChc d l r -> case bl of
+                                   VChc d' l' r' -> vSMTSolve_ $ ChcB d
+                                                    (ChcB d' (OpIB op l l') (OpIB op l r'))
+                                                    (ChcB d' (OpIB op r l') (OpIB op r r'))
   where handler LT  = (.<)
         handler LTE = (.<=)
         handler GTE = (.>=)
@@ -328,7 +333,7 @@ vSMTSolve_ !(ChcB d l r) =
                         return b
 
 -- | The incremental solve algorithm just for VIExprs
-vSMTSolve'_ :: VIExpr S.SBool SNum -> IncVSMTSolve (V S.SBool SNum)
+vSMTSolve'_ :: VIExpr Dim SNum -> IncVSMTSolve (V Dim SNum)
 vSMTSolve'_ !(Ref RefI i) = return . Plain $ i
 vSMTSolve'_ !(Ref RefD d) = return . Plain $ d
 vSMTSolve'_ !(LitI (I i)) = return . Plain . SI . S.literal . fromIntegral $ i
@@ -371,7 +376,7 @@ vSMTSolve'_ !(ChcI d l r) =
 
 -- | The main solver algorithm. You can think of this as the sem function for
 -- the dsl
-vSolve_ :: VProp S.SBool SNum -> IncVSolve S.SBool
+vSolve_ :: VProp Dim S.SBool SNum -> IncVSolve S.SBool
 vSolve_ !(RefB b) = return b
 vSolve_ !(LitB b) = return $ S.literal b
 vSolve_ !(OpB Not bs)= do b <- vSolve_ (S.bnot bs)
@@ -410,7 +415,7 @@ vSolve_ !(ChcB d l r) =
                         rmodel <- lift $ getVSMTModel
                         lift $ SC.pop 1
 
-                        St.modify . first $ ((:) (VChc (show d) lmodel rmodel))
+                        St.modify . first $ ((:) (VChc (dimName d) lmodel rmodel))
 
                         St.modify . second $ M.delete d
                         return b
