@@ -333,11 +333,11 @@ vSMTSolve_ !(ChcB d l r) =
                         return b
 
 -- | The incremental solve algorithm just for VIExprs
-vSMTSolve'_ :: VIExpr Dim SNum -> IncVSMTSolve (V Dim SNum)
-vSMTSolve'_ !(Ref RefI i) = return . Plain $ i
-vSMTSolve'_ !(Ref RefD d) = return . Plain $ d
-vSMTSolve'_ !(LitI (I i)) = return . Plain . SI . S.literal . fromIntegral $ i
-vSMTSolve'_ !(LitI (D d)) = return . Plain . SD . S.literal $ d
+vSMTSolve'_ :: VIExpr Dim SNum -> IncVSMTSolve (VIExpr Dim SNum)
+vSMTSolve'_ !x@(Ref RefI i) = return $ x
+vSMTSolve'_ !x@(Ref RefD d) = return $ x
+vSMTSolve'_ !x@(LitI (I i)) = return . SI . S.literal . fromIntegral $ i
+vSMTSolve'_ !x@(LitI (D d)) = return . SD . S.literal $ d
 vSMTSolve'_ !(OpI op e) = do e' <- vSMTSolve'_ e
                              return $ (handler op) e'
   where handler Neg  = negate
@@ -372,7 +372,7 @@ vSMTSolve'_ !(ChcI d l r) =
                         St.modify . first $ ((:) (VChc (dimName d) lmodel rmodel))
 
                         St.modify . second $ M.delete d
-                        return $ VChc d l' r'
+                        return $ ChcI d l' r'
 
 -- | The main solver algorithm. You can think of this as the sem function for
 -- the dsl
