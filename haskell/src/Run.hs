@@ -186,10 +186,14 @@ vSMTSolve :: S.Symbolic (VProp S.SBool SNum) -> S.Symbolic (IncState S.SMTResult
 vSMTSolve prop = do prop' <- prop
                     SC.query $
                       do
-                      res <- St.execStateT (vSMTSolve_ prop') ([], M.empty)
-                      prf <- SC.getSMTResult
-                      return $ first ((:) (Plain . Just $ prf)) res
-
+                      res' <- St.execStateT (vSMTSolve_ prop') ([], M.empty)
+                      -- res <-
+                      --   if isPlain prop'
+                      --   then do
+                      --     prf <- SC.getSMTResult
+                      --     return $ first ((:) (Plain . Just $ prf)) res'
+                      --   else return res'
+                      return res'
 
 -- | This ensures two things: 1st we need all variables to be symbolic before
 -- starting query mode. 2nd we cannot allow any duplicates to be called on a
@@ -276,12 +280,12 @@ vSMTSolve_ :: VProp S.SBool SNum -> IncVSMTSolve S.SBool
 vSMTSolve_ !(RefB b) = return b
 vSMTSolve_ !(LitB b) = return $ S.literal b
 vSMTSolve_ !(OpB Not bs)= do b <- vSMTSolve_ bs
-                             S.constrain $ S.bnot b
+                             -- S.constrain $ S.bnot b
                              return b
 vSMTSolve_ !(OpBB op l r) = do br <- vSMTSolve_ r
                                bl <- vSMTSolve_ l
                                let op' = handler op
-                               S.constrain $ bl `op'` br
+                               -- S.constrain $ bl `op'` br
                                return $ bl `op'` br
   where handler Impl   = (==>)
         handler BiImpl = (<=>)
@@ -298,10 +302,9 @@ vSMTSolve_ !(OpIB op l r) = do br <- vSMTSolve'_ r
         handler GT  = (.>)
         handler EQ  = (.==)
         handler NEQ = (./=)
-vSMTSolve_ !(Opn And ps) = do
-  b <- vSMTSolveHelper S.true ps (&&&)
-  S.constrain b
-  return b
+vSMTSolve_ !(Opn And ps) = do b <- vSMTSolveHelper S.true ps (&&&)
+                              S.constrain b
+                              return b
 vSMTSolve_ !(Opn Or ps) = do b <- vSMTSolveHelper S.true ps (|||)
                              S.constrain b
                              return b
@@ -310,22 +313,26 @@ vSMTSolve_ !(ChcB d l r) =
      case M.lookup d used of
        Just True  -> vSMTSolve_ l
        Just False -> vSMTSolve_ r
-       Nothing    -> do St.modify . second $ M.adjust (const False) d
+       Nothing    -> do St.modify . second $ M.insert d False
                         lift $ SC.push 1
-                        b <- vSMTSolve_ r
+                        r' <- vSMTSolve_ r
+                        S.constrain r'
                         rmodel <- lift $ getVSMTModel
                         lift $ SC.pop 1
 
-                        St.modify . second $ M.insert d True
+                        St.modify . second $ M.adjust (const True) d
                         lift $ SC.push 1
-                        _ <- vSMTSolve_ l
+                        l' <- vSMTSolve_ l
+                        S.constrain l'
                         lmodel <- lift $ getVSMTModel
                         lift $ SC.pop 1
 
                         St.modify . first $ ((:) (VChc (dimName d) lmodel rmodel))
 
                         St.modify . second $ M.delete d
-                        return b
+     -- this return statement should never matter because we've reset the
+     -- assertion stack. So I just return r' here to fulfill the type
+                        return r'
 
 -- | The incremental solve algorithm just for VIExprs
 vSMTSolve'_ :: VIExpr SNum -> IncVSMTSolve SNum
@@ -351,17 +358,17 @@ vSMTSolve'_ !(ChcI d l r) =
      case M.lookup d used of
        Just True  -> vSMTSolve'_ l
        Just False -> vSMTSolve'_ r
-       Nothing    -> do St.modify . second $ M.insert d True
-                        lift $ SC.push 1
-                        _ <- vSMTSolve'_ l
-                        lmodel <- lift $ getVSMTModel
-                        lift $ SC.pop 1
-
-                        St.modify . second $ M.adjust (const False) d
+       Nothing    -> do
+                        St.modify . second $ M.insert d False
                         lift $ SC.push 1
                         r' <- vSMTSolve'_ r
-     -- TODO FIX THIS LATER
                         rmodel <- lift $ getVSMTModel
+                        lift $ SC.pop 1
+
+                        St.modify . second $ M.adjust (const True) d
+                        lift $ SC.push 1
+                        l' <- vSMTSolve'_ l
+                        lmodel <- lift $ getVSMTModel
                         lift $ SC.pop 1
 
                         St.modify . first $ ((:) (VChc (dimName d) lmodel rmodel))

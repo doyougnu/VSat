@@ -9,7 +9,7 @@ module Api ( SatResult(..)
 import Data.SBV (SatResult(..), ThmResult(..))
 
 import VProp.Types
-import Config (defConf,SMTConf(..))
+import Config (defConf, debugConf, SMTConf(..))
 import Run
 import V
 import Utils (fst')
