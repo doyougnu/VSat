@@ -46,6 +46,9 @@ defConf = SMTConf{conf=z3, opts=[moveChcToLeft, shrinkProp]}
 emptyConf :: SMTConf a
 emptyConf = SMTConf{conf=z3, opts=[]}
 
+debugConf :: SMTConf a
+debugConf = SMTConf{conf=z3{verbose=True}, opts=[]}
+
 allOptsConf :: (Ord a,Show a) => SMTConf a
 allOptsConf = toConf allOptsSettings
 
