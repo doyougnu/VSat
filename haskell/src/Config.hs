@@ -43,6 +43,9 @@ allOptsSettings = Settings{ solver=Z3
 defConf :: (Ord a,Show a) => SMTConf a
 defConf = SMTConf{conf=z3, opts=[moveChcToLeft, shrinkProp]}
 
+emptyConf :: SMTConf a
+emptyConf = SMTConf{conf=z3, opts=[]}
+
 allOptsConf :: (Ord a,Show a) => SMTConf a
 allOptsConf = toConf allOptsSettings
 
