@@ -3,6 +3,7 @@ module VProp.Core where
 import           Control.Monad       (liftM, liftM2)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
+import           Data.SBV (literal)
 import           Data.List           (intercalate,group,sort)
 import           Data.Monoid         ((<>))
 import           Prelude hiding      (LT, GT, EQ)
@@ -61,6 +62,13 @@ prettyPropExpr = top
     sub (RefB f) = show f
     sub (OpB b e) = show b <> sub e
     sub e       = "(" ++ top e ++ ")"
+
+----------------------------- Conversion --------------------------------------
+iToSNum :: Integer -> SNum
+iToSNum = SI . literal . fromIntegral
+
+dToSNum :: Double -> SNum
+dToSNum = SD . literal
 
 ----------------------------- Predicates ---------------------------------------
 -- | true if a propositions has no chcs whatsoever
