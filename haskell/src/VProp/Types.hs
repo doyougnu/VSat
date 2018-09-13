@@ -441,3 +441,5 @@ instance Bitraversable VProp where
   bitraverse f g (Opn op ls) = Opn op <$> traverse (bitraverse f g) ls
   bitraverse f g (ChcB d l r) = ChcB d <$> bitraverse f g l <*> bitraverse f g r
   bitraverse _ _ (LitB x)    = pure $ LitB x
+
+instance Applicative VIExpr where

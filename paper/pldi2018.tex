@@ -198,14 +198,24 @@
 
 
 \section{Introduction}
+Programming with explicit variation has seen successful application in areas
+such as gradual typing, software product lines, and counter-factual typing in
+non-variational programming languages. A fundamental operation for each of these
+applications is satisfiability solving (henceforth sat solvers) to check for
+type unification, a valid software product line, or a counter-factual typing
+relation. Current sat solvers are variationally naive, the smtlib2 interface
+provides an \verbatum{ite} operator to model if-then-else branching points, but
+such an operator only provides naive implicit variational support. Thus, it
+cannot take advantage of variational optimization rules, nor can it return
+explicit variational results where such results may be desirable. This paper ...
 
-ext of paper tons fo text \cite{CCEric} \ldots
 
+
+\section{Background and Related Work}
 \subsection{Choice Calculus}
 \subsection{Incremental Satisfiability Solvers}
 \subsection{Gradual Typing}
 
-\section{Background and Related Work}
 \section{Experimental Setup}
 \section{Results}
 \section{Discussion}
