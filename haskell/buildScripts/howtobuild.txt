@@ -4,6 +4,7 @@
 - run `docker build haskell --no-cache -t vsat:latest`
 - tag the docker image: `docker tag vsat:latest registry.heroku.com/vsatcc/web`
 - now push it: `docker push registry.heroku.com/vsatcc/web`
+- and scale: `heroku ps:scale web=1 --app vsatcc`
 
 # Resources
 [1]: https://medium.com/travis-on-docker/how-to-run-dockerized-apps-on-heroku-and-its-pretty-great-76e07e610e22
