@@ -273,29 +273,31 @@ vSolveHelper !acc !(x:xs) f = do b <- vSolve_ x; vSolveHelper (b `f` acc) xs f
 vSMTSolveHelper :: S.SBool -> [VProp S.SBool SNum] ->
   (S.SBool -> S.SBool -> S.SBool) -> IncVSMTSolve S.SBool
 vSMTSolveHelper !acc ![]     _ = return acc
-vSMTSolveHelper !acc !(x:xs) f = do (b,m) <- vSMTSolve_ x
+vSMTSolveHelper !acc !(x:xs) f = do b <- vSMTSolve_ x
                                     vSMTSolveHelper (b `f` acc) xs f
 
 -- | The main solver algorithm. You can think of this as the sem function for
 -- the dsl
-vSMTSolve_ :: VProp S.SBool SNum -> IncVSMTSolve (S.SBool, V String [S.SMTResult])
-vSMTSolve_ !(RefB b) = return (b, Plain [])
-vSMTSolve_ !(LitB b) = return $ (S.literal b, Plain [])
-vSMTSolve_ !(OpB Not bs)= do (b, m) <- vSMTSolve_ bs
+vSMTSolve_ :: VProp S.SBool SNum -> IncVSMTSolve S.SBool
+vSMTSolve_ !(RefB b) = return b
+vSMTSolve_ !(LitB b) = return $ S.literal b
+vSMTSolve_ !(OpB Not bs)= do b <- vSMTSolve_ bs
                              S.constrain $ S.bnot b
-                             return (b, m)
-vSMTSolve_ !(OpBB op l r) = do (br, rm) <- vSMTSolve_ r
-                               (bl, lm) <- vSMTSolve_ l
+                             return b
+vSMTSolve_ !(OpBB op l r) = do br <- vSMTSolve_ r
+                               bl <- vSMTSolve_ l
                                let op' = handler op
                                S.constrain $ bl `op'` br
-                               return $ (bl `op'` br, Plain [])
+                               return $ bl `op'` br
   where handler Impl   = (==>)
         handler BiImpl = (<=>)
         handler XOr    = (<+>)
 vSMTSolve_ !(OpIB op l r) = do l' <- vSMTSolve'_ l
                                r' <- vSMTSolve'_ r
-                               test l' r' (handler op)
-                               return (true, Plain [])
+                               _ <- test l' r' (handler op)
+  -- this result should, and will never matter the return values from the
+  -- handler are handled in side effects
+                               return true
   where handler LT  = (.<)
         handler LTE = (.<=)
         handler GTE = (.>=)
@@ -304,10 +306,10 @@ vSMTSolve_ !(OpIB op l r) = do l' <- vSMTSolve'_ l
         handler NEQ = (./=)
 vSMTSolve_ !(Opn And ps) = do b <- vSMTSolveHelper S.true ps (&&&)
                               S.constrain b
-                              return (b, Plain [])
+                              return b
 vSMTSolve_ !(Opn Or ps) = do b <- vSMTSolveHelper S.true ps (|||)
                              S.constrain b
-                             return (b, Plain [])
+                             return b
 vSMTSolve_ !(ChcB d l r) =
   do (_, used) <- get
      case M.lookup d used of
@@ -315,31 +317,31 @@ vSMTSolve_ !(ChcB d l r) =
        Just False -> vSMTSolve_ r
        Nothing    -> do St.modify . second $ M.insert d False
                         lift $ SC.push 1
-                        (r', rm) <- vSMTSolve_ r
+                        r' <- vSMTSolve_ r
                         S.constrain r'
                         rmodel <- lift $ getVSMTModel
                         lift $ SC.pop 1
 
                         St.modify . second $ M.adjust (const True) d
                         lift $ SC.push 1
-                        (l', lm) <- vSMTSolve_ l
+                        l' <- vSMTSolve_ l
                         S.constrain l'
                         lmodel <- lift $ getVSMTModel
                         lift $ SC.pop 1
 
                         St.modify . first $
                           (:) (VChc (dimName d)
-                                 ((++) lmodel <$> lm)
-                                 ((++) rmodel <$> rm))
+                               (Plain lmodel)
+                               (Plain rmodel))
 
                         St.modify . second $ M.delete d
      -- this return statement should never matter because we've reset the
      -- assertion stack. So I just return r' here to fulfill the type
-                        return (r', VChc (dimName d) (Plain lmodel) (Plain rmodel))
+                        return (r')
 
-test' :: V Dim S.SBool -> IncVSMTSolve (S.SBool, V String [S.SMTResult])
+test' :: V Dim S.SBool -> IncVSMTSolve S.SBool
 test' (Plain a) = do S.constrain a
-                     return (a, Plain [])
+                     return a
 test' (VChc d l r) =
   do (_, used) <- get
      case M.lookup d used of
@@ -348,26 +350,26 @@ test' (VChc d l r) =
 
        Nothing    -> do St.modify . second $ M.insert d False
                         lift $ SC.push 1
-                        (br, brm) <- test' r
+                        br <- test' r
                         S.constrain br
                         rmodel <- lift $ getVSMTModel
                         lift $ SC.pop 1
 
                         St.modify . second $ M.adjust (const True) d
                         lift $ SC.push 1
-                        (bl, blm) <-test' l
+                        bl <-test' l
                         S.constrain bl
                         lmodel <- lift $ getVSMTModel
                         lift $ SC.pop 1
 
                         St.modify . first $
                           (:) (VChc (dimName d)
-                               ((++) lmodel <$> blm)
-                               ((++) rmodel <$> brm))
+                               (Plain lmodel)
+                               (Plain rmodel))
 
                         St.modify . second $ M.delete d
 
-                        return (bl, VChc (dimName d) (Plain lmodel) (Plain rmodel))
+                        return bl
 
 test :: V Dim SNum -> V Dim SNum -> (SNum -> SNum -> S.SBool)
   -> IncVSMTSolve (V Dim S.SBool)
@@ -402,7 +404,7 @@ test (VChc ad al ar) (VChc bd bl br) op =
                                   St.modify . second $ M.insert bd False
                                   lift $ SC.push 1
                                   resr <- test al br op
-                                  (br', brm) <- test' resr
+                                  br' <- test' resr
                                   S.constrain br'
                                   rmodel <- lift $ getVSMTModel
                                   lift $ SC.pop 1
@@ -410,15 +412,15 @@ test (VChc ad al ar) (VChc bd bl br) op =
                                   St.modify . second $ M.adjust (const True) ad
                                   lift $ SC.push 1
                                   resl <- test al bl op
-                                  (bl', blm) <- test' resl
+                                  bl' <- test' resl
                                   S.constrain bl'
                                   lmodel <- lift $ getVSMTModel
                                   lift $ SC.pop 1
 
                                   St.modify . first $
                                     (:) (VChc (dimName ad)
-                                          ((++) lmodel <$> blm)
-                                          ((++) rmodel <$> brm))
+                                          (Plain lmodel)
+                                          (Plain rmodel))
 
 
                                   St.modify . second $ M.delete bd
@@ -428,7 +430,7 @@ test (VChc ad al ar) (VChc bd bl br) op =
                                    St.modify . second $ M.insert bd False
                                    lift $ SC.push 1
                                    resr <- test ar br op
-                                   (br', brm) <- test' resr
+                                   br' <- test' resr
                                    S.constrain br'
                                    rmodel <- lift $ getVSMTModel
                                    lift $ SC.pop 1
@@ -436,15 +438,15 @@ test (VChc ad al ar) (VChc bd bl br) op =
                                    St.modify . second $ M.adjust (const True) ad
                                    lift $ SC.push 1
                                    resl <- test ar bl op
-                                   (bl', blm) <- test' resr
+                                   bl' <- test' resr
                                    S.constrain bl'
                                    lmodel <- lift $ getVSMTModel
                                    lift $ SC.pop 1
 
                                    St.modify . first $
                                      (:) (VChc (dimName ad)
-                                           ((++) lmodel <$> blm)
-                                           ((++) rmodel <$> brm))
+                                           (Plain lmodel)
+                                           (Plain rmodel))
 
                                    St.modify . second $ M.delete bd
                                    return resl
@@ -453,7 +455,7 @@ test (VChc ad al ar) (VChc bd bl br) op =
                                    St.modify . second $ M.insert ad False
                                    lift $ SC.push 1
                                    resr <- test ar br op
-                                   (br', brm) <- test' resr
+                                   br' <- test' resr
                                    S.constrain br'
                                    rmodel <- lift $ getVSMTModel
                                    lift $ SC.pop 1
@@ -461,15 +463,15 @@ test (VChc ad al ar) (VChc bd bl br) op =
                                    St.modify . second $ M.adjust (const True) ad
                                    lift $ SC.push 1
                                    resl <- test al bl op
-                                   (bl', blm) <- test' resl
+                                   bl' <- test' resl
                                    S.constrain bl'
                                    lmodel <- lift $ getVSMTModel
                                    lift $ SC.pop 1
 
                                    St.modify . first $
                                      (:) (VChc (dimName bd)
-                                           ((++) lmodel <$> blm)
-                                           ((++) rmodel <$> brm))
+                                           (Plain lmodel)
+                                           (Plain rmodel))
 
                                    St.modify . second $ M.delete ad
                                    return resl
@@ -478,7 +480,7 @@ test (VChc ad al ar) (VChc bd bl br) op =
                                   St.modify . second $ M.insert ad False
                                   lift $ SC.push 1
                                   resr <- test ar bl op
-                                  (br', brm) <- test' resr
+                                  br' <- test' resr
                                   S.constrain br'
                                   rmodel <- lift $ getVSMTModel
                                   lift $ SC.pop 1
@@ -486,15 +488,15 @@ test (VChc ad al ar) (VChc bd bl br) op =
                                   St.modify . second $ M.adjust (const True) ad
                                   lift $ SC.push 1
                                   resl <- test al bl op
-                                  (bl', blm) <- test' resl
+                                  bl' <- test' resl
                                   S.constrain bl'
                                   lmodel <- lift $ getVSMTModel
                                   lift $ SC.pop 1
 
                                   St.modify . first $
                                     (:) (VChc (dimName bd)
-                                          ((++) lmodel <$> blm)
-                                          ((++) rmodel <$> brm))
+                                          (Plain lmodel)
+                                          (Plain rmodel))
 
                                   St.modify . second $ M.delete ad
                                   return resl
@@ -505,7 +507,7 @@ test (VChc ad al ar) (VChc bd bl br) op =
                                 St.modify . second $ M.insert ad False
                                 lift $ SC.push 1
                                 resrr <- test ar br op
-                                (brr, resrrm) <- test' resrr
+                                brr <- test' resrr
                                 S.constrain brr
                                 rrmodel <- lift $ getVSMTModel
                                 lift $ SC.pop 1
@@ -513,7 +515,7 @@ test (VChc ad al ar) (VChc bd bl br) op =
                                 St.modify . second $ M.adjust (const True) ad
                                 lift $ SC.push 1
                                 reslr <- test al br op
-                                (blr, reslrm) <- test' reslr
+                                blr <- test' reslr
                                 S.constrain blr
                                 lrmodel <- lift $ getVSMTModel
                                 lift $ SC.pop 1
@@ -524,7 +526,7 @@ test (VChc ad al ar) (VChc bd bl br) op =
                                 St.modify . second $ M.insert ad False
                                 lift $ SC.push 1
                                 resrl <- test ar bl op
-                                (brl, resrlm) <- test' resrl
+                                brl <- test' resrl
                                 S.constrain brl
                                 rlmodel <- lift $ getVSMTModel
                                 lift $ SC.pop 1
@@ -532,7 +534,7 @@ test (VChc ad al ar) (VChc bd bl br) op =
                                 St.modify . second $ M.adjust (const True) ad
                                 lift $ SC.push 1
                                 resll <- test al bl op
-                                (bll, resllm) <- test' resll
+                                bll <- test' resll
                                 S.constrain bll
                                 llmodel <- lift $ getVSMTModel
                                 lift $ SC.pop 1
@@ -542,11 +544,11 @@ test (VChc ad al ar) (VChc bd bl br) op =
                                 St.modify . first
                                   $ ((:) (VChc (dimName bd)
                                            (VChc (dimName ad)
-                                            ((++) llmodel <$> resllm)
-                                            ((++) lrmodel <$> reslrm))
+                                            (Plain llmodel)
+                                            (Plain lrmodel))
                                            (VChc (dimName ad)
-                                            ((++) rlmodel <$> resrlm)
-                                            ((++) rrmodel <$> resrrm))))
+                                            (Plain rlmodel)
+                                            (Plain rrmodel))))
                                 return resll
 
 vSMTSolve'_ :: VIExpr SNum -> IncVSMTSolve (V Dim SNum)
