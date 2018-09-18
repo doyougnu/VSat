@@ -311,11 +311,12 @@ vSMTSolve_ !(Opn Or ps) = do b <- vSMTSolveHelper S.true ps (|||)
                              S.constrain b
                              return b
 vSMTSolve_ !(ChcB d l r) =
-  do (st, _, used) <- get
+  do (_, _, used) <- get
      case M.lookup d used of
        Just True  -> vSMTSolve_ l
        Just False -> vSMTSolve_ r
-       Nothing    -> do St.modify . onThd $ M.insert d False
+       Nothing    -> do St.modify . onSnd $ const (Plain [])
+                        St.modify . onThd $ M.insert d False
                         lift $ SC.push 1
                         r' <- vSMTSolve_ r
                         S.constrain r'
@@ -324,6 +325,7 @@ vSMTSolve_ !(ChcB d l r) =
                         lift $ SC.pop 1
 
                         St.modify (onThd $ M.adjust (const True) d)
+                        St.modify . onSnd $ const (Plain [])
                         lift $ SC.push 1
                         l' <- vSMTSolve_ l
                         S.constrain l'
@@ -331,24 +333,23 @@ vSMTSolve_ !(ChcB d l r) =
                         (_,lRes, _) <- get
                         lift $ SC.pop 1
 
-                        let
-                          res :: V String [S.SMTResult]
-                          res = VChc (dimName d) lRes rRes
+                        let res = VChc (dimName d) lRes rRes
+                            res' = VChc (dimName d) (Plain lmodel) (Plain rmodel)
+                            isNull (Plain _) = True
+                            isNull _          = False
 
-                          res' = VChc (dimName d) (Plain lmodel) (Plain rmodel)
-                          isNull (Plain []) = True
-                          isNull _          = False
+                        if (isNull lRes && isNull rRes)
+                          then St.modify . onSnd $ const res'
+                          else St.modify . onSnd $ const res
 
-                        trace (show (isNull rRes)) $ return ()
-
-                        if (isNull lRes)
-                          then St.put (st, res', used)
-                          else St.put (res:st, Plain [], used)
+  -- TODO test out passing the parameter explicitly so that the recursive steps
+  -- don't share the global state
+                        St.modify . onFst $ (:) res
 
                         St.modify . onThd $ M.delete d
      -- this return statement should never matter because we've reset the
      -- assertion stack. So I just return r' here to fulfill the type
-                        return (r')
+                        return r'
 
 handleSBoolChc :: V Dim S.SBool -> IncVSMTSolve S.SBool
 handleSBoolChc (Plain a) = do S.constrain a
