@@ -120,3 +120,8 @@ recompile xs = sequence $ go (tail xs') (_recompile conf val)
     go :: Ord d => [(VConfig d, a)] -> V d (Maybe a) -> V d (Maybe a)
     go []          acc = acc
     go ((c, v):cs) acc = go cs $ replace c v acc
+
+-- Predicates
+isPlain :: V d a -> Bool
+isPlain (Plain _) = True
+isPlain _          = False
