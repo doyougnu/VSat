@@ -119,7 +119,7 @@ runAndDecomp prop = do
   res <- lift . S.runSMT $ do
     p <- symbolicPropExpr $ andDecomp prop dimName
     SC.query $ do S.constrain p; getVSMTModel
-  lift . return . V . pure $ Plain res
+  lift . return . V $ Plain res
 
 runVSolve :: (MonadReader (SMTConf String) (t IO), MonadTrans t) =>
   VProp String String -> t IO Result
@@ -140,13 +140,13 @@ runVSMTSolve prop =
      lift . return . V $ res
 
 -- | main workhorse for running the SAT solver
-data Result = L [S.SatResult]
-            | V [V String [S.SMTResult]]
+data Result = L (Maybe S.SatResult)
+            | V (V String (Maybe S.SMTResult))
             deriving (Generic)
 
 -- | unbox a result to get the SMTResults
-unbox :: Result -> [V String [S.SMTResult]]
-unbox (L _) = []
+unbox :: Result -> V String (Maybe S.SMTResult)
+unbox (L _) = Plain Nothing
 unbox (V xs) = xs
 
 instance NFData Result
@@ -164,7 +164,7 @@ type UsedDims a = M.Map a Bool
 
 -- | the internal state for the incremental solve algorithm, it holds a result
 -- list, and the used dims map
-type IncState a = ([V String [a]], V String [a], UsedDims Dim)
+type IncState a = (V String (Maybe a), V String (Maybe a), UsedDims Dim)
 
 -- | the incremental solve monad, with the base monad being the query monad so
 -- we can pull out sbv models Hardcoding so that I don't have to write the mtl
@@ -180,7 +180,8 @@ type IncVSMTSolve a = St.StateT (IncState S.SMTResult) SC.Query a
 vSolve :: S.Symbolic (VProp S.SBool SNum) -> S.Symbolic (IncState S.SMTResult)
 vSolve prop = do prop' <- prop
                  SC.query $
-                   do res <- St.execStateT (vSolve_ prop') ([], Plain [], M.empty)
+                   do res <- St.execStateT (vSolve_ prop')
+                        (Plain Nothing, Plain Nothing, M.empty)
                       return res
 
 -- | Solve a VSMT proposition
@@ -188,7 +189,8 @@ vSMTSolve :: S.Symbolic (VProp S.SBool SNum) -> S.Symbolic (IncState S.SMTResult
 vSMTSolve prop = do prop' <- prop
                     SC.query $
                       do
-                      res' <- St.execStateT (vSMTSolve_ prop') ([], Plain [], M.empty)
+                      res' <- St.execStateT (vSMTSolve_ prop')
+                        (Plain Nothing, Plain Nothing, M.empty)
                       -- res <-
                       --   if isPlain prop'
                       --   then do
@@ -249,11 +251,11 @@ smtDouble str = do (_,st) <- get
                                    return b'
                      Just x  -> return x
 
-getVSMTModel :: SC.Query [S.SMTResult]
+getVSMTModel :: SC.Query (Maybe S.SMTResult)
 getVSMTModel = do cs <- SC.checkSat
                   case cs of
                     SC.Unk   -> error "Unknown Error from solver!"
-                    SC.Unsat -> return mempty
+                    SC.Unsat -> return Nothing
                     SC.Sat   -> SC.getSMTResult >>= return . pure
 
 -- | type class needed to avoid lifting for constraints in the IncSolve monad
@@ -315,37 +317,44 @@ vSMTSolve_ !(ChcB d l r) =
      case M.lookup d used of
        Just True  -> vSMTSolve_ l
        Just False -> vSMTSolve_ r
-       Nothing    -> do St.modify . onSnd $ const (Plain [])
+       Nothing    -> do let isNull (Plain _) = True
+                            isNull _          = False
+                        St.modify . onFst $ const (Plain Nothing)
                         St.modify . onThd $ M.insert d False
                         lift $ SC.push 1
                         r' <- vSMTSolve_ r
                         S.constrain r'
                         rmodel <- lift $ getVSMTModel
-                        (_,rRes, _) <- get
+                        (rRes',_, _) <- get
+                        rRes <- if isNull rRes'
+                                then return $ Plain rmodel
+                                else return $ rRes'
                         lift $ SC.pop 1
 
+                        St.modify . onSnd $ const (Plain Nothing)
                         St.modify (onThd $ M.adjust (const True) d)
-                        St.modify . onSnd $ const (Plain [])
                         lift $ SC.push 1
                         l' <- vSMTSolve_ l
                         S.constrain l'
                         lmodel <- lift $ getVSMTModel
-                        (_,lRes, _) <- get
+                        (lRes',_, _) <- get
+                        lRes <- if isNull lRes'
+                                then return $ Plain lmodel
+                                else return $ lRes'
                         lift $ SC.pop 1
 
                         let res = VChc (dimName d) lRes rRes
                             res' = VChc (dimName d) (Plain lmodel) (Plain rmodel)
-                            isNull (Plain _) = True
-                            isNull _          = False
 
-                        if (isNull lRes && isNull rRes)
-                          then St.modify . onSnd $ const res'
-                          else St.modify . onSnd $ const res
+                        -- if (isNull lRes && isNull rRes)
+                        --   then St.modify . onSnd $ const res'
+                        --   else return ()
 
-  -- TODO test out passing the parameter explicitly so that the recursive steps
-  -- don't share the global state
-                        St.modify . onFst $ (:) res
 
+                        -- St.modify . onSnd $ const (Plain Nothing)
+
+                        St.modify . onFst $ const res
+                        St.modify . onSnd $ const res
                         St.modify . onThd $ M.delete d
      -- this return statement should never matter because we've reset the
      -- assertion stack. So I just return r' here to fulfill the type

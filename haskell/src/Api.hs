@@ -15,17 +15,19 @@ import V
 import Utils (fst')
 
 -- | Run VSMT and return variable bindings
-sat :: VProp String String -> IO [V String [S.SatResult]]
+sat :: VProp String String -> IO (V String (Maybe S.SatResult))
 sat = satWith defConf
 
 -- | prove a proposition and return a counter example if it exists
-prove :: VProp String String -> IO [V String [S.ThmResult]]
+prove :: VProp String String -> IO (V String (Maybe S.ThmResult))
 prove = proveWith defConf
 
-satWith :: SMTConf String -> VProp String String -> IO [V String [S.SatResult]]
-satWith conf p = fmap (bimap id (fmap S.SatResult)) . unbox . fst'
+satWith :: SMTConf String -> VProp String String
+  -> IO (V String (Maybe S.SatResult))
+satWith conf p = bimap id (fmap S.SatResult) . unbox . fst'
                  <$> runVSMT conf p
 
-proveWith :: SMTConf String -> VProp String String -> IO [V String [S.ThmResult]]
-proveWith conf p = fmap (bimap id (fmap S.ThmResult)) . unbox . fst'
+proveWith :: SMTConf String -> VProp String String
+  -> IO (V String (Maybe S.ThmResult))
+proveWith conf p = bimap id (fmap S.ThmResult) . unbox . fst'
                    <$> runVSMT conf p
