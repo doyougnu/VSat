@@ -411,15 +411,15 @@ reifyArithChcs (Plain a) (VChc d l r) op =
                         _ <- handleSBoolChc x
                         return x
 
-reifyArithChcs (VChc d l r) (Plain a) op =
+reifyArithChcs z@(VChc d l r) zz@(Plain a) op =
   do (_, used) <- get
+     trace (show z ++ " :::: " ++ show zz) $ return ()
      case M.lookup d used of
        Just True  -> return $ l >>= return . flip op a
        Just False -> return $ r >>= return . flip op a
        Nothing    -> do let x = flip op a <$> (VChc d l r)
                         _ <- handleSBoolChc x
                         return x
-
 
 reifyArithChcs (VChc ad al ar) (VChc bd bl br) op =
   do (_, used) <- get
@@ -428,152 +428,134 @@ reifyArithChcs (VChc ad al ar) (VChc bd bl br) op =
        (Just True, Just False)  -> reifyArithChcs al br op
        (Just False, Just True)  -> reifyArithChcs ar bl op
        (Just False, Just False) -> reifyArithChcs ar br op
-       (Just True, Nothing) -> do clearSt
-                                  St.modify . second $ M.insert bd False
+       (Just True, Nothing) -> do St.modify . second $ M.insert bd False
                                   lift $ SC.push 1
+                                  clearSt
                                   resr <- reifyArithChcs al br op
                                   br' <- handleSBoolChc resr
-                                  S.constrain br'
-                                  resr <- getResult
+                                  resR <- getResult
                                   lift $ SC.pop 1
 
-                                  clearSt
                                   St.modify . second $ M.adjust (const True) ad
                                   lift $ SC.push 1
+                                  clearSt
                                   resl <- reifyArithChcs al bl op
                                   bl' <- handleSBoolChc resl
-                                  S.constrain bl'
                                   resL <- getResult
                                   lift $ SC.pop 1
 
-                                  -- store $ VChc (ad) resl resr
+                                  store $ VChc (dimName bd) resL resR
 
                                   St.modify . second $ M.delete bd
-                                  return resl
+                                  return $ VChc bd (Plain bl') (Plain br')
 
-       (Just False, Nothing) -> do
-                                   St.modify . second $ M.insert bd False
+       (Just False, Nothing) -> do St.modify . second $ M.insert bd False
                                    lift $ SC.push 1
+                                   clearSt
                                    resr <- reifyArithChcs ar br op
                                    br' <- handleSBoolChc resr
-                                   S.constrain br'
-                                   rmodel <- lift $ getVSMTModel
+                                   resR <- getResult
                                    lift $ SC.pop 1
 
                                    St.modify . second $ M.adjust (const True) ad
                                    lift $ SC.push 1
+                                   clearSt
                                    resl <- reifyArithChcs ar bl op
-                                   bl' <- handleSBoolChc resr
-                                   S.constrain bl'
-                                   lmodel <- lift $ getVSMTModel
+                                   bl' <- handleSBoolChc resl
+                                   resL <- getResult
                                    lift $ SC.pop 1
 
-                                   -- St.modify . first $
-                                   --   (:) (VChc (dimName ad)
-                                   --         (Plain lmodel)
-                                   --         (Plain rmodel))
+                                   store $ VChc (dimName bd) resL resR
 
                                    St.modify . second $ M.delete bd
-                                   return resl
+                                   return $ VChc bd (Plain bl') (Plain br')
 
-       (Nothing, Just False) -> do
-                                   St.modify . second $ M.insert ad False
+       (Nothing, Just False) -> do St.modify . second $ M.insert bd False
                                    lift $ SC.push 1
+                                   clearSt
                                    resr <- reifyArithChcs ar br op
                                    br' <- handleSBoolChc resr
-                                   S.constrain br'
-                                   rmodel <- lift $ getVSMTModel
+                                   resR <- getResult
                                    lift $ SC.pop 1
 
                                    St.modify . second $ M.adjust (const True) ad
                                    lift $ SC.push 1
-                                   resl <- reifyArithChcs al bl op
+                                   clearSt
+                                   resl <- reifyArithChcs al br op
                                    bl' <- handleSBoolChc resl
-                                   S.constrain bl'
-                                   lmodel <- lift $ getVSMTModel
+                                   resL <- getResult
                                    lift $ SC.pop 1
 
-                                   -- St.modify . first $
-                                   --   (:) (VChc (dimName bd)
-                                   --         (Plain lmodel)
-                                   --         (Plain rmodel))
+                                   store $ VChc (dimName ad) resL resR
 
-                                   St.modify . second $ M.delete ad
-                                   return resl
+                                   St.modify . second $ M.delete bd
+                                   return $ VChc ad (Plain bl') (Plain br')
 
-       (Nothing, Just True) -> do
-                                  St.modify . second $ M.insert ad False
+       (Nothing, Just True) -> do St.modify . second $ M.insert ad False
                                   lift $ SC.push 1
+                                  clearSt
                                   resr <- reifyArithChcs ar bl op
                                   br' <- handleSBoolChc resr
-                                  S.constrain br'
-                                  rmodel <- lift $ getVSMTModel
+                                  rRes <- getResult
                                   lift $ SC.pop 1
 
                                   St.modify . second $ M.adjust (const True) ad
                                   lift $ SC.push 1
+                                  clearSt
                                   resl <- reifyArithChcs al bl op
                                   bl' <- handleSBoolChc resl
-                                  S.constrain bl'
-                                  lmodel <- lift $ getVSMTModel
+                                  lRes <- getResult
                                   lift $ SC.pop 1
 
-                                  -- St.modify . first $
-                                  --   (:) (VChc (dimName bd)
-                                  --         (Plain lmodel)
-                                  --         (Plain rmodel))
-
                                   St.modify . second $ M.delete ad
-                                  return resl
+                                  store $ VChc (dimName ad) lRes rRes
+                                  return $ VChc ad (Plain bl') (Plain br')
 
        (Nothing, Nothing) -> do St.modify . second $ M.insert bd False
-
                                 St.modify . second $ M.insert ad False
                                 lift $ SC.push 1
+                                clearSt
                                 resrr <- reifyArithChcs ar br op
                                 brr <- handleSBoolChc resrr
-                                S.constrain brr
-                                rrmodel <- lift $ getVSMTModel
+                                rrRes <- getResult
                                 lift $ SC.pop 1
 
                                 St.modify . second $ M.adjust (const True) ad
                                 lift $ SC.push 1
+                                clearSt
                                 reslr <- reifyArithChcs al br op
                                 blr <- handleSBoolChc reslr
-                                S.constrain blr
-                                lrmodel <- lift $ getVSMTModel
+                                lrRes <- getResult
                                 lift $ SC.pop 1
 
                                 St.modify . second $ M.adjust (const True) bd
-                                lift $ SC.push 1
+                                St.modify . second $ M.adjust (const False) ad
 
-                                St.modify . second $ M.insert ad False
                                 lift $ SC.push 1
+                                clearSt
                                 resrl <- reifyArithChcs ar bl op
                                 brl <- handleSBoolChc resrl
-                                S.constrain brl
-                                rlmodel <- lift $ getVSMTModel
+                                rlRes <- getResult
                                 lift $ SC.pop 1
 
                                 St.modify . second $ M.adjust (const True) ad
                                 lift $ SC.push 1
+                                clearSt
                                 resll <- reifyArithChcs al bl op
                                 bll <- handleSBoolChc resll
-                                S.constrain bll
-                                llmodel <- lift $ getVSMTModel
+                                llRes <- getResult
                                 lift $ SC.pop 1
 
                                 St.modify . second $ M.delete ad
                                 St.modify . second $ M.delete bd
-                                -- St.modify . first
-                                --   $ ((:) (VChc (dimName bd)
-                                --            (VChc (dimName ad)
-                                --             (Plain llmodel)
-                                --             (Plain lrmodel))
-                                --            (VChc (dimName ad)
-                                --             (Plain rlmodel)
-                                --             (Plain rrmodel))))
-                                return resll
+
+                                store $ VChc (dimName bd)
+                                  (VChc (dimName ad) llRes lrRes)
+                                  (VChc (dimName ad) rlRes rrRes)
+
+                                return $ VChc bd
+                                  (VChc ad (Plain bll) (Plain blr))
+                                  (VChc ad (Plain brl) (Plain brr))
 
 vSMTSolve'_ :: VIExpr SNum -> IncVSMTSolve (V Dim SNum)
 vSMTSolve'_ !(Ref RefI i) = return . Plain $ i
