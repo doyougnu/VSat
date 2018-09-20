@@ -12,9 +12,8 @@ import qualified Data.Map.Strict     as Map
 import GHC.Generics
 import Control.DeepSeq        (NFData)
 import Data.Aeson
-import Data.SBV               (SBool)
 
-import VProp.Types (PrimN(..),Prim(..),SNum)
+import VProp.Types (PrimN(..))
 
 -- | a choice data type, without the object language
 data V d a = Plain a | VChc d (V d a) (V d a) deriving (Show,Generic,Eq)
