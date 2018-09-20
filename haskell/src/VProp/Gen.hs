@@ -123,8 +123,7 @@ arbVIExpr _ gv _ 0 = liftM2 Ref genRefN gv
 arbVIExpr gd gv ifreqs n = frequency $ zip ifreqs [ LitI <$> genPrim
                                                   , liftM2 OpI genN_N l
                                                   , liftM3 OpII genNN_N l l
-                                                  -- TODO fix this or cut it out altogether
-                                                  -- , liftM3 ChcI gd l l
+                                                  , liftM3 ChcI gd l l
                                                   ]
   where l = arbVIExpr gd gv ifreqs (n `div` 2)
 

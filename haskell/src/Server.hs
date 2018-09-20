@@ -23,7 +23,7 @@ import Json()
 import V()
 import Opts
 import Config
-import VProp.Types hiding (appendFile)
+import VProp.Types
 import VProp.Core
 
 -- * Api is the type for the spock server. I leave each config parameter as Unit
