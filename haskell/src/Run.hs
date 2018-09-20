@@ -280,6 +280,59 @@ vSMTSolveHelper !acc ![]     _ = return acc
 vSMTSolveHelper !acc !(x:xs) f = do b <- vSMTSolve_ x
                                     vSMTSolveHelper (b `f` acc) xs f
 
+-- | smartly grab a result from the state checking to make sure that if the
+-- result is variational than that is preferred over a redundant model. Or in
+-- other words, models only occur in leaves of the V tree
+getResult :: IncVSMTSolve (V String (Maybe S.SMTResult))
+getResult = do (res, _) <- get
+               if V.isPlain res
+                 then lift getVSMTModel >>= return . Plain
+                 else return res
+
+clearSt :: IncVSMTSolve ()
+clearSt = St.modify . first $ const (Plain Nothing)
+
+store :: V String (Maybe S.SMTResult) -> IncVSMTSolve ()
+store = St.modify . first . const
+
+-- | Handle a choice in the IncVSMTSolve monad, we check to make sure that if a
+-- choice is already selected then the selection is maintained. If not then we
+-- solve both branches by first clearing the state, recursively solving, if the
+-- recursive answer is plain then we'll get back a model from the solver, if not
+-- then we'll get back a variational model, if we get back a variational model
+-- then we reconstruct the choice expression representing the model and store it
+-- in the state
+handleChc :: (VProp a b -> IncVSMTSolve S.SBool)
+  -> VProp a b -> IncVSMTSolve S.SBool
+handleChc f !(ChcB d l r) =
+  do (_, used) <- get
+     case M.lookup d used of
+       Just True  -> f l
+       Just False -> f r
+       Nothing    -> do clearSt
+                        St.modify . second $ M.insert d False
+                        lift $ SC.push 1
+                        r' <- f r
+                        S.constrain r'
+                        rRes <- getResult
+                        lift $ SC.pop 1
+
+                        clearSt
+                        St.modify . second $ M.adjust (const True) d
+                        lift $ SC.push 1
+                        l' <- f l
+                        S.constrain l'
+                        lRes <- getResult
+                        lift $ SC.pop 1
+
+                        store $ VChc (dimName d) lRes rRes
+                        St.modify . second $ M.delete d
+     -- this return statement should never matter because we've reset the
+     -- assertion stack. So I just return r' here to fulfill the type
+                        return r'
+handleChc f x = f x
+
+
 -- | The main solver algorithm. You can think of this as the sem function for
 -- the dsl
 vSMTSolve_ :: VProp S.SBool SNum -> IncVSMTSolve S.SBool
@@ -314,38 +367,7 @@ vSMTSolve_ !(Opn And ps) = do b <- vSMTSolveHelper S.true ps (&&&)
 vSMTSolve_ !(Opn Or ps) = do b <- vSMTSolveHelper S.true ps (|||)
                              S.constrain b
                              return b
-vSMTSolve_ !(ChcB d l r) =
-  do (_, used) <- get
-     case M.lookup d used of
-       Just True  -> vSMTSolve_ l
-       Just False -> vSMTSolve_ r
-       Nothing    -> do St.modify . first $ const (Plain Nothing)
-                        St.modify . second $ M.insert d False
-                        lift $ SC.push 1
-                        r' <- vSMTSolve_ r
-                        S.constrain r'
-                        rRes <- do (rRes', _) <- get
-                                   if V.isPlain rRes'
-                                     then lift getVSMTModel >>= return . Plain
-                                     else return rRes'
-                        lift $ SC.pop 1
-
-                        St.modify . first $ const (Plain Nothing)
-                        St.modify . second $ M.adjust (const True) d
-                        lift $ SC.push 1
-                        l' <- vSMTSolve_ l
-                        S.constrain l'
-                        lRes <- do (lRes', _) <- get
-                                   if V.isPlain lRes'
-                                     then lift getVSMTModel >>= return . Plain
-                                     else return lRes'
-                        lift $ SC.pop 1
-
-                        St.modify . first . const $ VChc (dimName d) lRes rRes
-                        St.modify . second $ M.delete d
-     -- this return statement should never matter because we've reset the
-     -- assertion stack. So I just return r' here to fulfill the type
-                        return r'
+vSMTSolve_ x = handleChc vSMTSolve_ x
 
 handleSBoolChc :: V Dim S.SBool -> IncVSMTSolve S.SBool
 handleSBoolChc (Plain a) = do S.constrain a
@@ -355,29 +377,26 @@ handleSBoolChc (VChc d l r) =
      case M.lookup d used of
        Just True  -> handleSBoolChc l
        Just False -> handleSBoolChc r
-
-       Nothing    -> do St.modify . second $ M.insert d False
+       Nothing    -> do clearSt
+                        St.modify . second $ M.insert d False
                         lift $ SC.push 1
-                        br <- handleSBoolChc r
-                        S.constrain br
-                        rmodel <- lift $ getVSMTModel
+                        r' <- handleSBoolChc r
+                        S.constrain r'
+                        rRes <- getResult
                         lift $ SC.pop 1
 
+                        clearSt
                         St.modify . second $ M.adjust (const True) d
                         lift $ SC.push 1
-                        bl <-handleSBoolChc l
-                        S.constrain bl
-                        lmodel <- lift $ getVSMTModel
+                        l' <- handleSBoolChc l
+                        S.constrain l'
+                        lRes <- getResult
                         lift $ SC.pop 1
 
-                        St.modify . first $
-                          (:) (VChc (dimName d)
-                               (Plain lmodel)
-                               (Plain rmodel))
-
+                        store $ VChc (dimName d) lRes rRes
                         St.modify . second $ M.delete d
 
-                        return bl
+                        return r'
 
 reifyArithChcs :: V Dim SNum -> V Dim SNum
   -> (SNum -> SNum -> S.SBool)
@@ -409,28 +428,25 @@ reifyArithChcs (VChc ad al ar) (VChc bd bl br) op =
        (Just True, Just False)  -> reifyArithChcs al br op
        (Just False, Just True)  -> reifyArithChcs ar bl op
        (Just False, Just False) -> reifyArithChcs ar br op
-       (Just True, Nothing) -> do
+       (Just True, Nothing) -> do clearSt
                                   St.modify . second $ M.insert bd False
                                   lift $ SC.push 1
                                   resr <- reifyArithChcs al br op
                                   br' <- handleSBoolChc resr
                                   S.constrain br'
-                                  rmodel <- lift $ getVSMTModel
+                                  resr <- getResult
                                   lift $ SC.pop 1
 
+                                  clearSt
                                   St.modify . second $ M.adjust (const True) ad
                                   lift $ SC.push 1
                                   resl <- reifyArithChcs al bl op
                                   bl' <- handleSBoolChc resl
                                   S.constrain bl'
-                                  lmodel <- lift $ getVSMTModel
+                                  resL <- getResult
                                   lift $ SC.pop 1
 
-                                  St.modify . first $
-                                    (:) (VChc (dimName ad)
-                                          (Plain lmodel)
-                                          (Plain rmodel))
-
+                                  -- store $ VChc (ad) resl resr
 
                                   St.modify . second $ M.delete bd
                                   return resl
@@ -452,10 +468,10 @@ reifyArithChcs (VChc ad al ar) (VChc bd bl br) op =
                                    lmodel <- lift $ getVSMTModel
                                    lift $ SC.pop 1
 
-                                   St.modify . first $
-                                     (:) (VChc (dimName ad)
-                                           (Plain lmodel)
-                                           (Plain rmodel))
+                                   -- St.modify . first $
+                                   --   (:) (VChc (dimName ad)
+                                   --         (Plain lmodel)
+                                   --         (Plain rmodel))
 
                                    St.modify . second $ M.delete bd
                                    return resl
@@ -477,10 +493,10 @@ reifyArithChcs (VChc ad al ar) (VChc bd bl br) op =
                                    lmodel <- lift $ getVSMTModel
                                    lift $ SC.pop 1
 
-                                   St.modify . first $
-                                     (:) (VChc (dimName bd)
-                                           (Plain lmodel)
-                                           (Plain rmodel))
+                                   -- St.modify . first $
+                                   --   (:) (VChc (dimName bd)
+                                   --         (Plain lmodel)
+                                   --         (Plain rmodel))
 
                                    St.modify . second $ M.delete ad
                                    return resl
@@ -502,17 +518,16 @@ reifyArithChcs (VChc ad al ar) (VChc bd bl br) op =
                                   lmodel <- lift $ getVSMTModel
                                   lift $ SC.pop 1
 
-                                  St.modify . first $
-                                    (:) (VChc (dimName bd)
-                                          (Plain lmodel)
-                                          (Plain rmodel))
+                                  -- St.modify . first $
+                                  --   (:) (VChc (dimName bd)
+                                  --         (Plain lmodel)
+                                  --         (Plain rmodel))
 
                                   St.modify . second $ M.delete ad
                                   return resl
 
        (Nothing, Nothing) -> do St.modify . second $ M.insert bd False
 
-                                trace ("here") $ return ()
                                 St.modify . second $ M.insert ad False
                                 lift $ SC.push 1
                                 resrr <- reifyArithChcs ar br op
@@ -550,14 +565,14 @@ reifyArithChcs (VChc ad al ar) (VChc bd bl br) op =
 
                                 St.modify . second $ M.delete ad
                                 St.modify . second $ M.delete bd
-                                St.modify . first
-                                  $ ((:) (VChc (dimName bd)
-                                           (VChc (dimName ad)
-                                            (Plain llmodel)
-                                            (Plain lrmodel))
-                                           (VChc (dimName ad)
-                                            (Plain rlmodel)
-                                            (Plain rrmodel))))
+                                -- St.modify . first
+                                --   $ ((:) (VChc (dimName bd)
+                                --            (VChc (dimName ad)
+                                --             (Plain llmodel)
+                                --             (Plain lrmodel))
+                                --            (VChc (dimName ad)
+                                --             (Plain rlmodel)
+                                --             (Plain rrmodel))))
                                 return resll
 
 vSMTSolve'_ :: VIExpr SNum -> IncVSMTSolve (V Dim SNum)
@@ -606,25 +621,4 @@ vSolve_ !(Opn And ps) = do b <- vSolveHelper S.true ps (&&&)
 vSolve_ !(Opn Or ps) = do b <- vSolveHelper S.false ps (|||)
                           S.constrain b
                           return b
-vSolve_ !(ChcB d l r) =
-  do (_, used) <- get
-     case M.lookup d used of
-       Just True  -> vSolve_ l
-       Just False -> vSolve_ r
-       Nothing    -> do St.modify . second $ M.insert d True
-                        lift $ SC.push 1
-                        _ <- vSolve_ l
-                        lmodel <- lift $ getVSMTModel
-                        lift $ SC.pop 1
-
-                        St.modify . second $ M.adjust (const False) d
-                        lift $ SC.push 1
-                        b <- vSolve_ r
-                        rmodel <- lift $ getVSMTModel
-                        lift $ SC.pop 1
-
-                        St.modify . first $
-                          ((:) (VChc (dimName d) (Plain lmodel) (Plain rmodel)))
-
-                        St.modify . second $ M.delete d
-                        return b
+vSolve_ x = handleChc vSolve_ x
