@@ -13,7 +13,7 @@ import Data.Aeson (decode)
 import qualified Data.ByteString.Lazy.Char8 as B (putStrLn)
 import Server
 
-print = B.putStrLn
+pprint = B.putStrLn
 
 main :: IO ()
 main = do

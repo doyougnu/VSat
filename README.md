@@ -503,7 +503,7 @@ them, or run the tool:
 -- Generating a random proposition
 -> generatedProp <- genVProp :: IO (VProp Var Var)
 -> generatedProp
-(BB≺CC≺(DD≺djfzjapa , yfrndabwslxnvrydbsf≻) ∨ (tipauin < yqfoyxvbvsmkxaacuelaqr) , aqtkkieqoxoaudcoymsyysggajzxuy≻ , #T ∨ (DD≺AA≺lcensknidrerfjdswkcqq , mrxujjsqlwgyfytqmf≻ , #T≻)≻) ∨ ((||qtuuzekibwtxttsthrrvy|| ≠ mdhwpofheikqyffykyfswchb * rpsxbapcipkhjewapjltbdb * svxcvirohqfidk * pvhdjs) ∨ ¬((j ≤ kk) ∧ msvqsgkuzqbsuzsahmrlt))
+(|-23.923303271170415| ≠ 12.278288137198295 - signum DD≺spcpvvdpbme, xzxvyxaauolkvdha≻) ∨ (DD≺|signum ukvjsdf|, jrakfejhhbhfwmdoqlnppmzyjpmhiu - kfhcfaruar + 0≻ ≥ |18| / ¬(-23))
 
 -- encoding it to JSON
 -> let x = encodePretty generatedProp
@@ -511,42 +511,52 @@ them, or run the tool:
 x :: Data.ByteString.Lazy.Internal.ByteString
 
 -- Pretty printing it
--> B.putStrLn x
+-- "B.putStrLn x" will also work
+-> pprint x
 {
     "tag": "Opn",
     "contents": [
         "Or",
         [
             {
-                "tag": "ChcB",
+                "tag": "OpIB",
                 "contents": [
+                    "NEQ",
                     {
-                        "dimName": "BB"
+                        "tag": "OpI",
+                        "contents": [
+                            "Abs",
+                            {
+                                "tag": "LitI",
+                                "contents": {
+                                    "tag": "D",
+                                    "contents": -23.923303271170415
+                                }
+                            }
+                        ]
                     },
                     {
-                        "tag": "ChcB",
-                        "contents": [
-                            {
-                                "dimName": "CC"
 ...
 ...
 
 -- decoding it
 -> decode x :: Maybe (VProp Var Var)
-Just (BB≺CC≺(DD≺djfzjapa , yfrndabwslxnvrydbsf≻) ∨ (tipauin < yqfoyxvbvsmkxaacuelaqr) , aqtkkieqoxoaudcoymsyysggajzxuy≻ , #T ∨ (DD≺AA≺lcensknidrerfjdswkcqq , mrxujjsqlwgyfytqmf≻ , #T≻)≻) ∨ ((||qtuuzekibwtxttsthrrvy|| ≠ mdhwpofheikqyffykyfswchb * rpsxbapcipkhjewapjltbdb * svxcvirohqfidk * pvhdjs) ∨ ¬((j ≤ kk) ∧ msvqsgkuzqbsuzsahmrlt))
+Just (|-23.923303271170415| ≠ 12.278288137198295 - signum DD≺spcpvvdpbme, xzxvyxaauolkvdha≻) ∨ (DD≺|signum ukvjsdf|, jrakfejhhbhfwmdoqlnppmzyjpmhiu - kfhcfaruar + 0≻ ≥ |18| / ¬(-23))
 
--- Running the solver directly
--> prove (bimap show show generatedProp)
-[Plain (Just Q.E.D.),VChc "BB" (Plain (Just Falsifiable. Counter-example:
-  djfzjapa                       = False :: Bool
-  yfrndabwslxnvrydbsf            = False :: Bool
-  tipauin                        =     0 :: Int64
-  yqfoyxvbvsmkxaacuelaqr         =   NaN :: Double
-  aqtkkieqoxoaudcoymsyysggajzxuy = False :: Bool
-  lcensknidrerfjdswkcqq          = False :: Bool
-  mrxujjsqlwgyfytqmf             = False :: Bool
-  qtuuzekibwtxttsthrrvy          =   NaN :: Double
-  mdhwpofheikqyffykyfswchb       =   NaN :: Double
+
+--> prove (bimap show show generatedProp)
+VChc "DD" (Plain (Just Falsifiable. Counter-example:
+  spcpvvdpbme                    =                     NaN :: Double
+  xzxvyxaauolkvdha               =                     NaN :: Double
+  ukvjsdf                        = 2.2250738585072034e-308 :: Double
+  jrakfejhhbhfwmdoqlnppmzyjpmhiu =                       0 :: Int64
+  kfhcfaruar                     =                     NaN :: Double)) (Plain (Just Falsifiable. Counter-example:
+  spcpvvdpbme                    =                    NaN :: Double
+  xzxvyxaauolkvdha               =                    NaN :: Double
+  ukvjsdf                        =                    NaN :: Double
+  jrakfejhhbhfwmdoqlnppmzyjpmhiu =             -134489152 :: Int64
+  kfhcfaruar                     = -1.3003684354267704e10 :: Double))
+- Running the solver directly
 ...
 ...
 ```
@@ -557,21 +567,6 @@ Be careful with modulus operator and the `Double` numeric type. These can easily
 lead to non-linear constraints and consume all the memory available. This
 behavior will depend on the solver, and I've only tested with `z3` which will
 happily accept and then eventually blow up once it runs out of memory.
-
-### Choices are not supported in the Arithmetic language
-The solver is flexible enough to allow you write something like this:
-
-```hs
--- We have a choice in the arithmetic language!
-ChcI "DD" (iRef "a") (iRef b) .< (LitI (I 100)) &&& some-boolean-proposition
-```
-
-However you'll never be able to run this because I've explicitly turned it off
-in the solving routine for performance and memory concern reasons. Essentially
-what happens when one has choices in the arithmetic language is that the choices
-end up distributing over any binary connective, leading to a large amount of
-redundancy and limited sharing. These both explode the runtime performance and
-the memory performance of the tool.
 
 ## Opening Issues
 If you would like to raise an issue with this project please do so on the

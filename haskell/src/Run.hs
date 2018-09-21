@@ -368,9 +368,9 @@ vSMTSolve_ !(Opn Or ps) = do b <- vSMTSolveHelper S.true ps (|||)
 vSMTSolve_ x = handleChc vSMTSolve_ x
 
 handleSBoolChc :: V Dim S.SBool -> IncVSMTSolve S.SBool
-handleSBoolChc (Plain a) = do S.constrain a
-                              return a
-handleSBoolChc (VChc d l r) =
+handleSBoolChc !(Plain a) = do S.constrain a
+                               return a
+handleSBoolChc !(VChc d l r) =
   do (_, used) <- get
      case M.lookup d used of
        Just True  -> handleSBoolChc l
@@ -399,8 +399,8 @@ handleSBoolChc (VChc d l r) =
 reifyArithChcs :: V Dim SNum -> V Dim SNum
   -> (SNum -> SNum -> S.SBool)
   -> IncVSMTSolve (V Dim S.SBool)
-reifyArithChcs (Plain a) (Plain b) op = return . Plain $ a `op` b
-reifyArithChcs (Plain a) (VChc d l r) op =
+reifyArithChcs !(Plain a) !(Plain b) op = return . Plain $ a `op` b
+reifyArithChcs !(Plain a) !(VChc d l r) op =
   do (_, used) <- get
      case M.lookup d used of
        Just True  -> return $ l >>= return . op a
@@ -409,7 +409,7 @@ reifyArithChcs (Plain a) (VChc d l r) op =
                         _ <- handleSBoolChc x
                         return x
 
-reifyArithChcs z@(VChc d l r) zz@(Plain a) op =
+reifyArithChcs !(VChc d l r) !(Plain a) op =
   do (_, used) <- get
      case M.lookup d used of
        Just True  -> return $ l >>= return . flip op a
@@ -418,7 +418,7 @@ reifyArithChcs z@(VChc d l r) zz@(Plain a) op =
                         _ <- handleSBoolChc x
                         return x
 
-reifyArithChcs (VChc ad al ar) (VChc bd bl br) op =
+reifyArithChcs !(VChc ad al ar) !(VChc bd bl br) op =
   do (_, used) <- get
      case (M.lookup ad used, M.lookup bd used) of
        (Just True, Just True)   -> reifyArithChcs al bl op
