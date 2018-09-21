@@ -257,7 +257,7 @@ instance PrimN S.SInt64 where
 instance S.Mergeable SNum where
   symbolicMerge _ b thn els
     | Just result <- S.unliteral b = if result then thn else els
-  symbolicMerge _ _ _ _ = undefined -- quite -WALL
+    | otherwise = els
 
 instance S.EqSymbolic SNum where
   (.==) (SI i) (SI i') = (S..==) i i'
