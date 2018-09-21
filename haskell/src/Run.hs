@@ -32,8 +32,6 @@ import V
 import Utils
 import Config
 
-import Debug.Trace (trace)
-
 -- | The satisfiable dictionary, this is actually the "state" keys are configs
 -- and values are whether that config is satisfiable or not (a bool)
 type SatDict a = (M.Map Config Bool, M.Map a Bool) -- keys may incur perf penalty
@@ -413,7 +411,6 @@ reifyArithChcs (Plain a) (VChc d l r) op =
 
 reifyArithChcs z@(VChc d l r) zz@(Plain a) op =
   do (_, used) <- get
-     trace (show z ++ " :::: " ++ show zz) $ return ()
      case M.lookup d used of
        Just True  -> return $ l >>= return . flip op a
        Just False -> return $ r >>= return . flip op a
