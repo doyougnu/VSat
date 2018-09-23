@@ -4,10 +4,10 @@ packages:
 extra-deps: []
 
 ## uncomment the following lines to tell stack you are in a nix environment
-# nix:
-#   enable: true
-#   pure: false
-#   packages: [ z3, pkgconfig ]
+nix:
+  enable: true
+  pure: false
+  packages: [ z3, pkgconfig, zlib ]
 
 resolver: lts-11.14
 build:

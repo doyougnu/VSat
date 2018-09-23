@@ -9,6 +9,7 @@ module Api ( S.SatResult(..)
 import qualified Data.SBV as S
 
 import VProp.Types
+import VProp.Gen (genVProp)
 import Config (defConf, debugConf, SMTConf(..))
 import Run
 import V
