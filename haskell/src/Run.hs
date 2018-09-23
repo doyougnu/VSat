@@ -23,7 +23,8 @@ import Control.DeepSeq               (NFData)
 
 import Control.Arrow                 (first, second)
 
-import Data.Maybe                    (catMaybes, isNothing, maybe)
+import Data.Maybe                    (fromJust, catMaybes, isNothing, maybe)
+import Debug.Trace (trace)
 
 import VProp.Types
 import VProp.SBV
@@ -54,7 +55,7 @@ _runEnv m opts st = runRWST m opts st
 runEnv :: (VProp String String-> Env String Result)
        -> SMTConf String
        -> VProp String String-> IO (Result, (SatDict String), Log)
-runEnv f conf !x = _runEnv (f x) conf (initSt x)
+runEnv f conf !x = _runEnv (f x) conf _emptySt
 
 runAD :: SMTConf String
       -> VProp String String
@@ -62,11 +63,11 @@ runAD :: SMTConf String
 runAD os p = (bimap id (fmap S.SatResult)) . unbox . fst' <$>
              runEnv runAndDecomp os p
 
--- | Run the brute force solver
 runBF :: SMTConf String
-  -> VProp String String
-  -> IO (Result, SatDict String, Log)
-runBF = runEnv runBruteForce
+      -> VProp String String
+      -> IO (V Dim S.SatResult)
+runBF os p = unRes . fst' <$> runEnv runBruteForce os p
+  where unRes (BF x) = x
 
 -- | Run the variational sat solver given a list of optimizations and a prop.
 -- This can throw an exception if the prop has SMT terms in it
@@ -102,13 +103,13 @@ _logResult x = tell $ "Got result: " ++ show x
 -- run them to the sat solver
 runBruteForce :: (Show a, Ord a) =>
   (MonadTrans t, MonadState (SatDict a) (t IO)) => VProp a a -> t IO Result
-runBruteForce prop = lift $ flip evalStateT _emptySt $
+runBruteForce prop = lift $ flip evalStateT (initSt prop) $
   do
   (_confs, _) <- get
   let confs = M.keys _confs
       plainProps = (\y -> sequence $! (y, selectVariant y prop)) <$> confs
-  plainMs <- lift $ mapM (S.sat . symbolicPropExpr . snd) $! catMaybes plainProps
-  return . BF $ plainMs
+  plainMs <- lift $ mapM (bitraverse pure (S.sat . symbolicPropExpr)) $! catMaybes plainProps
+  return . BF . fromJust $ recompile plainMs
 
 -- | Run the and decomposition baseline case, that is deconstruct every choice
 -- and then run the sat solver
@@ -139,14 +140,14 @@ runVSMTSolve prop =
 
 -- | main workhorse for running the SAT solver
 data Result = L (Maybe S.SatResult)
-            | BF [S.SatResult]
+            | BF (V Dim S.SatResult)
             | V (V String (Maybe S.SMTResult))
             deriving (Generic)
 
 -- | unbox a result to get the SMTResults
 unbox :: Result -> V String (Maybe S.SMTResult)
 unbox (L _) = Plain Nothing
-unbox (BF _) = Plain Nothing
+unbox (BF xs) = Plain Nothing -- short circuiting the BF solution
 unbox (V xs) = xs
 
 instance NFData Result

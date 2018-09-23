@@ -544,6 +544,7 @@ x :: Data.ByteString.Lazy.Internal.ByteString
 Just (|-23.923303271170415| ≠ 12.278288137198295 - signum DD≺spcpvvdpbme, xzxvyxaauolkvdha≻) ∨ (DD≺|signum ukvjsdf|, jrakfejhhbhfwmdoqlnppmzyjpmhiu - kfhcfaruar + 0≻ ≥ |18| / ¬(-23))
 
 
+- Running the solver directly
 --> prove (bimap show show generatedProp)
 VChc "DD" (Plain (Just Falsifiable. Counter-example:
   spcpvvdpbme                    =                     NaN :: Double
@@ -556,7 +557,6 @@ VChc "DD" (Plain (Just Falsifiable. Counter-example:
   ukvjsdf                        =                    NaN :: Double
   jrakfejhhbhfwmdoqlnppmzyjpmhiu =             -134489152 :: Int64
   kfhcfaruar                     = -1.3003684354267704e10 :: Double))
-- Running the solver directly
 ...
 ...
 ```
