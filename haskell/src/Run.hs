@@ -134,7 +134,7 @@ runVSMTSolve :: (MonadTrans t, MonadReader (SMTConf String) (t IO)) =>
 runVSMTSolve prop =
   do cnf <- ask
      let prop' = foldr' ($!) prop (opts cnf)
-     (res,_) <- lift . S.runSMTWith (conf cnf) . vSMTSolve $
+     res <- lift . S.runSMTWith (conf cnf) . vSMTSolve $
        St.evalStateT (propToSBool prop') (M.empty, M.empty)
      lift . return . V $ res
 
@@ -186,19 +186,18 @@ vSolve prop = do prop' <- prop
                       return res
 
 -- | Solve a VSMT proposition
-vSMTSolve :: S.Symbolic (VProp S.SBool SNum) -> S.Symbolic (IncState S.SMTResult)
+vSMTSolve :: S.Symbolic (VProp S.SBool SNum) -> S.Symbolic (V String (Maybe S.SMTResult))
 vSMTSolve prop = do prop' <- prop
                     SC.query $
                       do
-                      res' <- St.execStateT (vSMTSolve_ prop')
-                        (Plain Nothing, M.empty)
-                      -- res <-
-                      --   if isPlain prop'
-                      --   then do
-                      --     prf <- SC.getSMTResult
-                      --     return $ first ((:) (Plain . Just $ prf)) res'
-                      --   else return res'
-                      return res'
+                      (b, (res',_)) <- St.runStateT (vSMTSolve_ prop')
+                              (Plain Nothing, M.empty)
+                      res <- if V.isPlain res'
+                             then do S.constrain b
+                                     prf <- SC.getSMTResult
+                                     return . Plain . Just $ prf
+                             else return res'
+                      return res
 
 -- | This ensures two things: 1st we need all variables to be symbolic before
 -- starting query mode. 2nd we cannot allow any duplicates to be called on a
@@ -284,9 +283,11 @@ vSMTSolveHelper !acc !(x:xs) f = do b <- vSMTSolve_ x
 -- other words, models only occur in leaves of the V tree
 getResult :: IncVSMTSolve (V String (Maybe S.SMTResult))
 getResult = do (res, _) <- get
-               if V.isPlain res
+               if isEmpty res
                  then lift getVSMTModel >>= return . Plain
                  else return res
+  where isEmpty (Plain Nothing) = True
+        isEmpty _               = False
 
 clearSt :: IncVSMTSolve ()
 clearSt = St.modify . first $ const (Plain Nothing)
@@ -363,7 +364,7 @@ vSMTSolve_ !(OpIB op l r) = do l' <- vSMTSolve'_ l
 vSMTSolve_ !(Opn And ps) = do b <- vSMTSolveHelper S.true ps (&&&)
                               S.constrain b
                               return b
-vSMTSolve_ !(Opn Or ps) = do b <- vSMTSolveHelper S.true ps (|||)
+vSMTSolve_ !(Opn Or ps) = do b <- vSMTSolveHelper S.false ps (|||)
                              S.constrain b
                              return b
 vSMTSolve_ x = handleChc vSMTSolve_ x
