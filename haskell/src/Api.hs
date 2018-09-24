@@ -10,7 +10,7 @@ import qualified Data.SBV as S
 
 import VProp.Types
 import VProp.Gen (genVProp)
-import Config (defConf, debugConf, SMTConf(..))
+import Config (defConf, debugConf, SMTConf(..), emptyConf)
 import Run
 import V
 import Utils (fst')
