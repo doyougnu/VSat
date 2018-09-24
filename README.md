@@ -417,14 +417,12 @@ coming weeks:
 
 #### MoveRight
   Moves every choice to the right of any commutative operator. This is should
-  _increase_ run times because it minimizes sharing in the AST. I leave it here
-  for testing purposes.
-
+  _decrease_ run times because it maximizes sharing in the AST.
 
 #### MoveLeft
-  Conversely, MoveLeft maximizes sharing. This should almost always be turned on
-  and is part of the defaults.
-
+  Conversely, MoveLeft _minimizes_ sharing because the recursive solving
+  algorithm is forced to start with a left fold. This should almost always be
+  turned off. I leave it here for testing purposes.
 
 #### Shrink
   This uses basic `C_2` logic equivalences to reduce the size of terms. Things
