@@ -27,27 +27,32 @@ data Solver = Z3
 
 -- | Convert an interfacial interface to an SMT one
 toConf :: (Ord a, Show a) => Settings -> SMTConf a
-toConf Settings{..} = foldr' ($!) defConf ss
+toConf Settings{..} = foldr' ($!) emptyConf ss
   where ss = [setSeed seed, setSolver solver, setOpts optimizations]
 
 -- | A default configuration uses z3 and tries to shrink propositions
 defSettings :: Settings
 defSettings = Settings{solver=Z3, optimizations=defs, seed=Nothing}
-  where defs = [MoveLeft, Atomize, CNF, Prune]
+  where defs = [MoveRight, Atomize, CNF, Prune]
 
 allOptsSettings :: Settings
 allOptsSettings = Settings{ solver=Z3
-                          , optimizations=[MoveLeft,Shrink]
+                          , optimizations=[MoveRight,Atomize,CNF,Prune,Shrink]
                           , seed=Nothing}
 
+debugSettings :: Settings
+debugSettings = Settings{ solver=Z3
+                        , optimizations=[MoveRight,Atomize,CNF]
+                        , seed=Nothing}
+
 defConf :: (Ord a,Show a) => SMTConf a
-defConf = SMTConf{conf=z3, opts=[moveChcToLeft, shrinkProp]}
+defConf = toConf defSettings
 
 emptyConf :: SMTConf a
 emptyConf = SMTConf{conf=z3, opts=[]}
 
-debugConf :: SMTConf a
-debugConf = SMTConf{conf=z3{verbose=True}, opts=[]}
+debugConf :: (Ord a,Show a) => SMTConf a
+debugConf = toConf debugSettings
 
 allOptsConf :: (Ord a,Show a) => SMTConf a
 allOptsConf = toConf allOptsSettings
@@ -66,12 +71,12 @@ setSeed (Just x) c = addOption ((RandomSeed x):) c
 setSeed Nothing  c = c
 
 setSolver :: Solver -> SMTConf a -> SMTConf a
-setSolver Z3 a = a{conf=z3}
-setSolver Yices a = a{conf=yices}
-setSolver MathSat a = a{conf=mathSAT}
+setSolver Z3 a        = a{conf=z3}
+setSolver Yices a     = a{conf=yices}
+setSolver MathSat a   = a{conf=mathSAT}
 setSolver Boolector a = a{conf=boolector}
-setSolver Abc a = a{conf=abc}
-setSolver Cvc4 a = a{conf=cvc4}
+setSolver Abc a       = a{conf=abc}
+setSolver Cvc4 a      = a{conf=cvc4}
 
 setOpts :: (Ord a, Show a) => [Opts] -> SMTConf a -> SMTConf a
 setOpts os c = c{opts=convertOpts <$> os}
