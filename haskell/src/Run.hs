@@ -188,6 +188,7 @@ vSolve prop = do prop' <- prop
 -- | Solve a VSMT proposition
 vSMTSolve :: S.Symbolic (VProp S.SBool SNum) -> S.Symbolic (V String (Maybe S.SMTResult))
 vSMTSolve prop = do prop' <- prop
+                    S.setOption $ SC.ProduceAssertions True
                     SC.query $
                       do
                       (b, (res',_)) <- St.runStateT (vSMTSolve_ prop')
@@ -255,7 +256,9 @@ getVSMTModel :: SC.Query (Maybe S.SMTResult)
 getVSMTModel = do cs <- SC.checkSat
                   case cs of
                     SC.Unk   -> error "Unknown Error from solver!"
-                    SC.Unsat -> return Nothing
+  -- if unsat the return unsat, just passing default config to get the unsat constructor
+  -- TODO return correct conf
+                    SC.Unsat -> return . Just $ S.Unsatisfiable S.defaultSMTCfg
                     SC.Sat   -> SC.getSMTResult >>= return . pure
 
 -- | type class needed to avoid lifting for constraints in the IncSolve monad
@@ -270,13 +273,18 @@ instance (Monad m, I.SolverContext m) =>
 vSolveHelper :: S.SBool -> [VProp S.SBool SNum] ->
   (S.SBool -> S.SBool -> S.SBool) -> IncVSolve S.SBool
 vSolveHelper !acc ![]     _ = return acc
-vSolveHelper !acc !(x:xs) f = do b <- vSolve_ x; vSolveHelper (b `f` acc) xs f
+vSolveHelper !acc !(x:xs) f = do b <- vSolve_ x
+                                 let res = b `f` acc
+                                 S.constrain res
+                                 vSolveHelper res xs f
 
 vSMTSolveHelper :: S.SBool -> [VProp S.SBool SNum] ->
   (S.SBool -> S.SBool -> S.SBool) -> IncVSMTSolve S.SBool
 vSMTSolveHelper !acc ![]     _ = return acc
 vSMTSolveHelper !acc !(x:xs) f = do b <- vSMTSolve_ x
-                                    vSMTSolveHelper (b `f` acc) xs f
+                                    let res = b `f` acc
+                                    S.constrain res
+                                    vSMTSolveHelper res xs f
 
 -- | smartly grab a result from the state checking to make sure that if the
 -- result is variational than that is preferred over a redundant model. Or in
@@ -311,19 +319,23 @@ handleChc f !(ChcB d l r) =
        Just False -> f r
        Nothing    -> do clearSt
                         St.modify . second $ M.insert d False
-                        lift $ SC.push 1
+                        lift $ SC.queryDebug ["pushing right hand side"]
+                        lift $! SC.push 1
+                        lift $ SC.queryDebug ["right hand side"]
                         r' <- f r
                         S.constrain r'
                         rRes <- getResult
-                        lift $ SC.pop 1
+                        lift $ SC.queryDebug ["popping right hand side"]
+                        lift $! SC.pop 1
 
                         clearSt
                         St.modify . second $ M.adjust (const True) d
-                        lift $ SC.push 1
+                        lift $! SC.push 1
+                        lift $ SC.queryDebug ["left hand side"]
                         l' <- f l
                         S.constrain l'
                         lRes <- getResult
-                        lift $ SC.pop 1
+                        lift $! SC.pop 1
 
                         store $ VChc (dimName d) lRes rRes
                         St.modify . second $ M.delete d
@@ -336,7 +348,8 @@ handleChc f x = f x
 -- | The main solver algorithm. You can think of this as the sem function for
 -- the dsl
 vSMTSolve_ :: VProp S.SBool SNum -> IncVSMTSolve S.SBool
-vSMTSolve_ !(RefB b) = return b
+vSMTSolve_ !(RefB b) = do lift $ SC.queryDebug ["adding var: ", show b]
+                          return b
 vSMTSolve_ !(LitB b) = return $ S.literal b
 vSMTSolve_ !(OpB Not bs)= do b <- vSMTSolve_ bs
                              S.constrain $ S.bnot b
@@ -361,10 +374,10 @@ vSMTSolve_ !(OpIB op l r) = do l' <- vSMTSolve'_ l
         handler GT  = (.>)
         handler EQ  = (.==)
         handler NEQ = (./=)
-vSMTSolve_ !(Opn And ps) = do b <- vSMTSolveHelper S.true ps (&&&)
+vSMTSolve_ !(Opn And ps) = do b <- vSMTSolveHelper S.true ps (S.&&&)
                               S.constrain b
                               return b
-vSMTSolve_ !(Opn Or ps) = do b <- vSMTSolveHelper S.false ps (|||)
+vSMTSolve_ !(Opn Or ps) = do b <- vSMTSolveHelper S.false ps (S.|||)
                              S.constrain b
                              return b
 vSMTSolve_ x = handleChc vSMTSolve_ x
