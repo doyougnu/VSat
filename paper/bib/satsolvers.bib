@@ -1,0 +1,57 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%% Journal Papers    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%% Texbook Chapters  %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%% Conference Papers %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%% The base minisat paper that describes incremental solvers %%%%
+@InProceedings{10.1007/978-3-540-24605-3_37,
+author="E{\'e}n, Niklas
+and S{\"o}rensson, Niklas",
+editor="Giunchiglia, Enrico
+and Tacchella, Armando",
+title="An Extensible SAT-solver",
+booktitle="Theory and Applications of Satisfiability Testing",
+year="2004",
+publisher="Springer Berlin Heidelberg",
+address="Berlin, Heidelberg",
+pages="502--518",
+abstract="In this article, we present a small, complete, and efficient SAT-solver in the style of conflict-driven learning, as exemplified by Chaff. We aim to give sufficient details about implementation to enable the reader to construct his or her own solver in a very short time. This will allow users of SAT-solvers to make domain specific extensions or adaptions of current state-of-the-art SAT-techniques, to meet the needs of a particular application area. The presented solver is designed with this in mind, and includes among other things a mechanism for adding arbitrary boolean constraints. It also supports solving a series of related SAT-problems efficiently by an incremental SAT-interface.",
+isbn="978-3-540-24605-3"
+}
+
+
+%%% The paper on chaff which lead to work on minisat
+@inproceedings{Moskewicz:2001:CEE:378239.379017,
+ author = {Moskewicz, Matthew W. and Madigan, Conor F. and Zhao, Ying and Zhang, Lintao and Malik, Sharad},
+ title = {Chaff: Engineering an Efficient SAT Solver},
+ booktitle = {Proceedings of the 38th Annual Design Automation Conference},
+ series = {DAC '01},
+ year = {2001},
+ isbn = {1-58113-297-2},
+ location = {Las Vegas, Nevada, USA},
+ pages = {530--535},
+ numpages = {6},
+ url = {http://doi.acm.org/10.1145/378239.379017},
+ doi = {10.1145/378239.379017},
+ acmid = {379017},
+ publisher = {ACM},
+ address = {New York, NY, USA},
+ keywords = {boolean satisfiability, design verification},
+}
+
+%%%% This thesis is directly related, it solves configuration in spl via human in the loop interaction
+@PhdThesis{Janota10,
+  author =       { Mikol{\'a}\v{s} Janota },
+  title =        { {SAT} Solving in Interactive Configuration },
+  school =       { University College Dublin },
+  year =         2010,
+  month =        nov
+}
+
+%%%%% This paper directly relates sat solvers to spl configurators and is close to vsat
+@InProceedings{Janota08,
+  author =       {Mikol\'a\v{s} Janota},
+  title =        {Do {SAT} Solvers Make Good Configurators?},
+  booktitle =    {First Workshop on Analyses of Software Product Lines
+                  ({ASPL'08})},
+  year =         2008,
+  month =        sep
+}

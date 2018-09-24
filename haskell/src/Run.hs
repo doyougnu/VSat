@@ -319,19 +319,15 @@ handleChc f !(ChcB d l r) =
        Just False -> f r
        Nothing    -> do clearSt
                         St.modify . second $ M.insert d False
-                        lift $ SC.queryDebug ["pushing right hand side"]
                         lift $! SC.push 1
-                        lift $ SC.queryDebug ["right hand side"]
                         r' <- f r
                         S.constrain r'
                         rRes <- getResult
-                        lift $ SC.queryDebug ["popping right hand side"]
                         lift $! SC.pop 1
 
                         clearSt
                         St.modify . second $ M.adjust (const True) d
                         lift $! SC.push 1
-                        lift $ SC.queryDebug ["left hand side"]
                         l' <- f l
                         S.constrain l'
                         lRes <- getResult
@@ -348,8 +344,7 @@ handleChc f x = f x
 -- | The main solver algorithm. You can think of this as the sem function for
 -- the dsl
 vSMTSolve_ :: VProp S.SBool SNum -> IncVSMTSolve S.SBool
-vSMTSolve_ !(RefB b) = do lift $ SC.queryDebug ["adding var: ", show b]
-                          return b
+vSMTSolve_ !(RefB b) = return b
 vSMTSolve_ !(LitB b) = return $ S.literal b
 vSMTSolve_ !(OpB Not bs)= do b <- vSMTSolve_ bs
                              S.constrain $ S.bnot b
