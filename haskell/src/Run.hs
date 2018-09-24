@@ -24,7 +24,6 @@ import Control.DeepSeq               (NFData)
 import Control.Arrow                 (first, second)
 
 import Data.Maybe                    (fromJust, catMaybes, isNothing, maybe)
-import Debug.Trace (trace)
 
 import VProp.Types
 import VProp.SBV
@@ -146,8 +145,8 @@ data Result = L (Maybe S.SatResult)
 
 -- | unbox a result to get the SMTResults
 unbox :: Result -> V String (Maybe S.SMTResult)
-unbox (L _) = Plain Nothing
-unbox (BF xs) = Plain Nothing -- short circuiting the BF solution
+unbox (L _)  = Plain Nothing
+unbox (BF _) = Plain Nothing -- short circuiting the BF solution
 unbox (V xs) = xs
 
 instance NFData Result
@@ -278,6 +277,7 @@ vSolveHelper !acc !(x:xs) f = do b <- vSolve_ x
                                  S.constrain res
                                  vSolveHelper res xs f
 
+-- notice that we are doing a left fold here
 vSMTSolveHelper :: S.SBool -> [VProp S.SBool SNum] ->
   (S.SBool -> S.SBool -> S.SBool) -> IncVSMTSolve S.SBool
 vSMTSolveHelper !acc ![]     _ = return acc
@@ -317,20 +317,23 @@ handleChc f !(ChcB d l r) =
      case M.lookup d used of
        Just True  -> f l
        Just False -> f r
-       Nothing    -> do clearSt
-                        St.modify . second $ M.insert d False
-                        lift $! SC.push 1
-                        r' <- f r
-                        S.constrain r'
-                        rRes <- getResult
-                        lift $! SC.pop 1
-
+       Nothing    -> do
                         clearSt
                         St.modify . second $ M.adjust (const True) d
+                        lift $ SC.queryDebug ["pushing left side"]
                         lift $! SC.push 1
                         l' <- f l
                         S.constrain l'
                         lRes <- getResult
+                        lift $! SC.pop 1
+
+                        clearSt
+                        St.modify . second $ M.insert d False
+                        lift $ SC.queryDebug ["pushing right side"]
+                        lift $! SC.push 1
+                        r' <- f r
+                        S.constrain r'
+                        rRes <- getResult
                         lift $! SC.pop 1
 
                         store $ VChc (dimName d) lRes rRes
@@ -344,13 +347,17 @@ handleChc f x = f x
 -- | The main solver algorithm. You can think of this as the sem function for
 -- the dsl
 vSMTSolve_ :: VProp S.SBool SNum -> IncVSMTSolve S.SBool
-vSMTSolve_ !(RefB b) = return b
-vSMTSolve_ !(LitB b) = return $ S.literal b
+vSMTSolve_ !(RefB b) = do
+  lift $ SC.queryDebug ["got a ref: ", show b]
+  return b
+vSMTSolve_ !(LitB b) = do
+  lift $ SC.queryDebug ["got a literal: ", show b]
+  return $ S.literal b
 vSMTSolve_ !(OpB Not bs)= do b <- vSMTSolve_ bs
                              S.constrain $ S.bnot b
                              return b
-vSMTSolve_ !(OpBB op l r) = do br <- vSMTSolve_ r
-                               bl <- vSMTSolve_ l
+vSMTSolve_ !(OpBB op l r) = do bl <- vSMTSolve_ l
+                               br <- vSMTSolve_ r
                                let op' = handler op
                                S.constrain $ bl `op'` br
                                return $ bl `op'` br
@@ -386,19 +393,19 @@ handleSBoolChc !(VChc d l r) =
        Just True  -> handleSBoolChc l
        Just False -> handleSBoolChc r
        Nothing    -> do clearSt
-                        St.modify . second $ M.insert d False
-                        lift $ SC.push 1
-                        r' <- handleSBoolChc r
-                        S.constrain r'
-                        rRes <- getResult
-                        lift $ SC.pop 1
-
-                        clearSt
                         St.modify . second $ M.adjust (const True) d
                         lift $ SC.push 1
                         l' <- handleSBoolChc l
                         S.constrain l'
                         lRes <- getResult
+                        lift $ SC.pop 1
+
+                        clearSt
+                        St.modify . second $ M.insert d False
+                        lift $ SC.push 1
+                        r' <- handleSBoolChc r
+                        S.constrain r'
+                        rRes <- getResult
                         lift $ SC.pop 1
 
                         store $ VChc (dimName d) lRes rRes
@@ -435,15 +442,7 @@ reifyArithChcs !(VChc ad al ar) !(VChc bd bl br) op =
        (Just True, Just False)  -> reifyArithChcs al br op
        (Just False, Just True)  -> reifyArithChcs ar bl op
        (Just False, Just False) -> reifyArithChcs ar br op
-       (Just True, Nothing) -> do St.modify . second $ M.insert bd False
-                                  lift $ SC.push 1
-                                  clearSt
-                                  resr <- reifyArithChcs al br op
-                                  br' <- handleSBoolChc resr
-                                  resR <- getResult
-                                  lift $ SC.pop 1
-
-                                  St.modify . second $ M.adjust (const True) ad
+       (Just True, Nothing) -> do St.modify . second $ M.adjust (const True) ad
                                   lift $ SC.push 1
                                   clearSt
                                   resl <- reifyArithChcs al bl op
@@ -451,20 +450,22 @@ reifyArithChcs !(VChc ad al ar) !(VChc bd bl br) op =
                                   resL <- getResult
                                   lift $ SC.pop 1
 
+                                  St.modify . second $ M.insert bd False
+
+                                  lift $ SC.push 1
+                                  clearSt
+                                  resr <- reifyArithChcs al br op
+                                  br' <- handleSBoolChc resr
+                                  resR <- getResult
+                                  lift $ SC.pop 1
+
+
                                   store $ VChc (dimName bd) resL resR
 
                                   St.modify . second $ M.delete bd
                                   return $ VChc bd (Plain bl') (Plain br')
 
-       (Just False, Nothing) -> do St.modify . second $ M.insert bd False
-                                   lift $ SC.push 1
-                                   clearSt
-                                   resr <- reifyArithChcs ar br op
-                                   br' <- handleSBoolChc resr
-                                   resR <- getResult
-                                   lift $ SC.pop 1
-
-                                   St.modify . second $ M.adjust (const True) ad
+       (Just False, Nothing) -> do St.modify . second $ M.adjust (const True) ad
                                    lift $ SC.push 1
                                    clearSt
                                    resl <- reifyArithChcs ar bl op
@@ -472,12 +473,7 @@ reifyArithChcs !(VChc ad al ar) !(VChc bd bl br) op =
                                    resL <- getResult
                                    lift $ SC.pop 1
 
-                                   store $ VChc (dimName bd) resL resR
-
-                                   St.modify . second $ M.delete bd
-                                   return $ VChc bd (Plain bl') (Plain br')
-
-       (Nothing, Just False) -> do St.modify . second $ M.insert bd False
+                                   St.modify . second $ M.insert bd False
                                    lift $ SC.push 1
                                    clearSt
                                    resr <- reifyArithChcs ar br op
@@ -485,7 +481,12 @@ reifyArithChcs !(VChc ad al ar) !(VChc bd bl br) op =
                                    resR <- getResult
                                    lift $ SC.pop 1
 
-                                   St.modify . second $ M.adjust (const True) ad
+                                   store $ VChc (dimName bd) resL resR
+
+                                   St.modify . second $ M.delete bd
+                                   return $ VChc bd (Plain bl') (Plain br')
+
+       (Nothing, Just False) -> do St.modify . second $ M.adjust (const True) ad
                                    lift $ SC.push 1
                                    clearSt
                                    resl <- reifyArithChcs al br op
@@ -493,20 +494,21 @@ reifyArithChcs !(VChc ad al ar) !(VChc bd bl br) op =
                                    resL <- getResult
                                    lift $ SC.pop 1
 
+                                   St.modify . second $ M.insert bd False
+
+                                   lift $ SC.push 1
+                                   clearSt
+                                   resr <- reifyArithChcs ar br op
+                                   br' <- handleSBoolChc resr
+                                   resR <- getResult
+                                   lift $ SC.pop 1
+
                                    store $ VChc (dimName ad) resL resR
 
                                    St.modify . second $ M.delete bd
                                    return $ VChc ad (Plain bl') (Plain br')
 
-       (Nothing, Just True) -> do St.modify . second $ M.insert ad False
-                                  lift $ SC.push 1
-                                  clearSt
-                                  resr <- reifyArithChcs ar bl op
-                                  br' <- handleSBoolChc resr
-                                  rRes <- getResult
-                                  lift $ SC.pop 1
-
-                                  St.modify . second $ M.adjust (const True) ad
+       (Nothing, Just True) -> do St.modify . second $ M.adjust (const True) ad
                                   lift $ SC.push 1
                                   clearSt
                                   resl <- reifyArithChcs al bl op
@@ -514,19 +516,22 @@ reifyArithChcs !(VChc ad al ar) !(VChc bd bl br) op =
                                   lRes <- getResult
                                   lift $ SC.pop 1
 
+                                  St.modify . second $ M.insert ad False
+
+                                  lift $ SC.push 1
+                                  clearSt
+                                  resr <- reifyArithChcs ar bl op
+                                  br' <- handleSBoolChc resr
+                                  rRes <- getResult
+                                  lift $ SC.pop 1
+
+
                                   St.modify . second $ M.delete ad
                                   store $ VChc (dimName ad) lRes rRes
                                   return $ VChc ad (Plain bl') (Plain br')
 
        (Nothing, Nothing) -> do St.modify . second $ M.insert bd False
                                 St.modify . second $ M.insert ad False
-                                lift $ SC.push 1
-                                clearSt
-                                resrr <- reifyArithChcs ar br op
-                                brr <- handleSBoolChc resrr
-                                rrRes <- getResult
-                                lift $ SC.pop 1
-
                                 St.modify . second $ M.adjust (const True) ad
                                 lift $ SC.push 1
                                 clearSt
@@ -535,15 +540,15 @@ reifyArithChcs !(VChc ad al ar) !(VChc bd bl br) op =
                                 lrRes <- getResult
                                 lift $ SC.pop 1
 
-                                St.modify . second $ M.adjust (const True) bd
-                                St.modify . second $ M.adjust (const False) ad
-
                                 lift $ SC.push 1
                                 clearSt
-                                resrl <- reifyArithChcs ar bl op
-                                brl <- handleSBoolChc resrl
-                                rlRes <- getResult
+                                resrr <- reifyArithChcs ar br op
+                                brr <- handleSBoolChc resrr
+                                rrRes <- getResult
                                 lift $ SC.pop 1
+
+                                St.modify . second $ M.adjust (const True) bd
+                                St.modify . second $ M.adjust (const False) ad
 
                                 St.modify . second $ M.adjust (const True) ad
                                 lift $ SC.push 1
@@ -551,6 +556,13 @@ reifyArithChcs !(VChc ad al ar) !(VChc bd bl br) op =
                                 resll <- reifyArithChcs al bl op
                                 bll <- handleSBoolChc resll
                                 llRes <- getResult
+                                lift $ SC.pop 1
+
+                                lift $ SC.push 1
+                                clearSt
+                                resrl <- reifyArithChcs ar bl op
+                                brl <- handleSBoolChc resrl
+                                rlRes <- getResult
                                 lift $ SC.pop 1
 
                                 St.modify . second $ M.delete ad
@@ -574,16 +586,16 @@ vSMTSolve'_ !(OpI op e) = do e' <- vSMTSolve'_ e
   where handler Neg  = negate
         handler Abs  = abs
         handler Sign = signum
-vSMTSolve'_ !(OpII op l r) = do r' <- vSMTSolve'_ r
-                                l' <- vSMTSolve'_ l
+vSMTSolve'_ !(OpII op l r) = do l' <- vSMTSolve'_ l
+                                r' <- vSMTSolve'_ r
                                 return $ handler op l' r'
   where handler Add  = (+)
         handler Sub  = (-)
         handler Mult = (*)
         handler Div  = (./)
         handler Mod  = (.%)
-vSMTSolve'_ (ChcI d l r) = do l' <- vSMTSolve'_ l
-                              r' <- vSMTSolve'_ r
+vSMTSolve'_ (ChcI d l r) = do r' <- vSMTSolve'_ r
+                              l' <- vSMTSolve'_ l
                               return $ VChc d l' r'
 
 -- | The main solver algorithm. You can think of this as the sem function for
