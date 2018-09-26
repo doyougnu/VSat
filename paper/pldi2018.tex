@@ -59,15 +59,24 @@
 \usepackage{subcaption} %% For complex figures with subfigures/subcaptions
                         %% http://ctan.org/pkg/subcaption
 \usepackage{lambda}     %% lambda land macros
+\usepackage{cc}         %% lambda land macros
+\usepackage{vlc}        %% lambda land macros
 \usepackage{lipsum}                     % Dummytext
-\usepackage{xargs}                      % Use more than one optional parameter in a new commands
-% \usepackage[pdftex,dvipsnames]{xcolor}  % Coloured text etc.
+\usepackage{xargs}                      % Use more than one optional parameter
+                                        % in a new commands
+
+%%%% TODOs
 \usepackage[colorinlistoftodos,prependcaption,textsize=tiny]{todonotes}
 \newcommandx{\change}[2][1=]{\todo[linecolor=blue,backgroundcolor=blue!25,bordercolor=blue,#1]{#2}}
 \newcommandx{\improvement}[2][1=]{\todo[linecolor=Plum,backgroundcolor=Plum!25,bordercolor=Plum,#1]{#2}}
 \newcommandx{\unsure}[2][1=]{\todo[linecolor=red,backgroundcolor=red!25,bordercolor=red,#1]{#2}}
 \newcommandx{\addcitation}[2][1=]{\todo[linecolor=OliveGreen,backgroundcolor=OliveGreen!25,bordercolor=OliveGreen,#1]{#2}}
 
+
+%%%% Math aliases
+\usepackage{mathtools}
+\newcommandx{\ceil}[1]{$\lceil#1\rceil$}
+\newcommandx{\floor}[1]{$\lfloor#1\rfloor$}
 
 \begin{document}
 
@@ -147,19 +156,19 @@
   Many program analyses can be reduced to satisfiability (SAT) problems, or more
   generally, to satisfiability modulo theories (SMT) problems. For example, dead
   code analysis can be formulated in terms of whether or not a particular
-  conjunction of conditions is satisfiable. In the context of explicit
-  variability, such as when analyzing software product lines or when introducing
-  alternative variations for counterfactual or migrational typing, we can reduce
-  the corresponding analyses to variational SAT/SMT problems. This work presents
-  \change{this whole paragraph will need to be altered with applications} a
-  series of optimizations on variational boolean propositional formulae, an
-  algorithm to solve variational propositional formulae, an incremental VSMT
-  solver that efficiently solves \textit{variants} for satisifiability, and
-  empirical results comparing standard brute force techniques, a minimal case
-  called \textit{and decomposisition} and the variational solving algorithm on
-  simulated data and application data. We report a \todo{report data performance
-    speedup, or memory cost} in simulated data, and a \todo{same as above} in
-  application data.
+  conjunction of conditions is satisfiable. \change{reword this again, it still
+    doesn't feel direct enough} In the context of explicit variability, such as
+  when analyzing software product lines or when introducing alternative
+  variations for counterfactual or migrational typing, we can reduce the
+  corresponding analyses to variational SAT/SMT problems. However, modern
+  solvers are variationally naive, thus requiring $2^n$ calls to the sat solver,
+  where $n$ is the number of variational dimensions. This work presents an
+  incremental VSMT solver that is variationally aware, a series of optimizations
+  on variational boolean propositional formulae, an algorithm to solve such
+  formulae and an empirical evaluation of the VSMT solver compared to standard
+  brute force techniques. We report a \todo{report data performance speedup, or
+    memory cost} in simulated data, and a \todo{same as above} in application
+  data.
 \end{abstract}
 
 
@@ -198,21 +207,24 @@
 
 
 \section{Introduction}
-Programming with explicit variation has seen successful application in areas
-such as gradual typing, software product lines, and counter-factual typing in
-non-variational programming languages. A fundamental operation for each of these
-applications is satisfiability solving (henceforth sat solvers) to check for
-type unification, a valid software product line, or a counter-factual typing
-relation. Current sat solvers are variationally naive, the smtlib2 interface
-provides an \verbatum{ite} operator to model if-then-else branching points, but
-such an operator only provides naive implicit variational support. Thus, it
-cannot take advantage of variational optimization rules, nor can it return
-explicit variational results where such results may be desirable. This paper ...
+Programming with explicit variation has seen successful applications in many
+diverse areas of computer science \todo{add citations for, vdbms, counterfactual
+  typing, variational images, spl, feature models} A fundamental operation for
+each of these applications is satisfiability solving (henceforth sat solvers) to
+check for type unification, a valid software product line, or a counter-factual
+typing relation. Current sat solvers are variationally naive, the smtlib2
+interface provides an \texttt{ite} operator to model if-then-else branching
+points, but such an operator only provides naive implicit variational support.
+Thus, it cannot take advantage of variational optimization rules, nor can it
+return explicit variational results where such results may be desirable. This
+paper describes the construction
 
 
 
 \section{Background and Related Work}
-\subsection{Choice Calculus}
+\input{bkrndcc}
+\end{document}
+
 \subsection{Incremental Satisfiability Solvers}
 \subsection{Gradual Typing}
 
@@ -238,7 +250,8 @@ explicit variational results where such results may be desirable. This paper ...
 
 
 %% Bibliography
-\bibliography{references}
+\bibliographystyle{unsrt}
+\bibliography{bib/choicecalc, bib/satsolvers, bib/softprodline}
 
 
 %% Appendix
