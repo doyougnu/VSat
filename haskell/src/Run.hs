@@ -23,7 +23,7 @@ import Control.DeepSeq               (NFData)
 
 import Control.Arrow                 (first, second)
 
-import Data.Maybe                    (fromJust, catMaybes, isNothing, maybe)
+import Data.Maybe                    (fromJust, catMaybes)
 
 import VProp.Types
 import VProp.SBV
@@ -54,7 +54,8 @@ _runEnv m opts st = runRWST m opts st
 runEnv :: (VProp String String-> Env String Result)
        -> SMTConf String
        -> VProp String String-> IO (Result, (SatDict String), Log)
-runEnv f conf !x = _runEnv (f x) conf _emptySt
+runEnv f conf !x = _runEnv (f x') conf _emptySt
+  where !x' = foldr' ($!) x (opts conf)
 
 runAD :: SMTConf String
       -> VProp String String
@@ -100,8 +101,12 @@ _logResult x = tell $ "Got result: " ++ show x
 
 -- | Run the brute force baseline case, that is select every plain variant and
 -- run them to the sat solver
-runBruteForce :: (Show a, Ord a) =>
-  (MonadTrans t, MonadState (SatDict a) (t IO)) => VProp a a -> t IO Result
+runBruteForce ::
+  (MonadTrans t
+  , Show a
+  , Ord a
+  , MonadState (SatDict a) (t IO))
+  => VProp a a -> t IO Result
 runBruteForce prop = lift $ flip evalStateT (initSt prop) $
   do
   (_confs, _) <- get
@@ -122,18 +127,14 @@ runAndDecomp prop = do
 runVSolve :: (MonadReader (SMTConf String) (t IO), MonadTrans t) =>
   VProp String String -> t IO Result
 runVSolve prop =
-  do cnf <- ask
-     let prop' = foldr' ($!) prop (opts cnf)
-     (result,_) <- lift . S.runSMTWith (conf cnf) . vSolve $
+  do (result,_) <- lift . S.runSMTWith (conf cnf) . vSolve $
                    St.evalStateT (propToSBool prop') (M.empty, M.empty)
      lift . return . V $ result
 
 runVSMTSolve :: (MonadTrans t, MonadReader (SMTConf String) (t IO)) =>
   VProp String String -> t IO Result
 runVSMTSolve prop =
-  do cnf <- ask
-     let prop' = foldr' ($!) prop (opts cnf)
-     res <- lift . S.runSMTWith (conf cnf) . vSMTSolve $
+  do res <- lift . S.runSMTWith (conf cnf) . vSMTSolve $
        St.evalStateT (propToSBool prop') (M.empty, M.empty)
      lift . return . V $ res
 

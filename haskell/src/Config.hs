@@ -45,11 +45,17 @@ debugSettings = Settings{ solver=Z3
                         , optimizations=[MoveRight,Atomize,CNF]
                         , seed=Nothing}
 
+emptySettings :: Settings
+emptySettings = Settings{ solver=Z3
+                        , optimizations=[MoveRight]
+                        , seed=Nothing}
+
 defConf :: (Ord a,Show a) => SMTConf a
 defConf = toConf defSettings
 
-emptyConf :: SMTConf a
-emptyConf = SMTConf{conf=z3, opts=[]}
+-- moveRight required for proper results
+emptyConf :: (Show a, Ord a) => SMTConf a
+emptyConf = toConf emptySettings
 
 debugConf :: (Ord a,Show a) => SMTConf a
 debugConf = toConf debugSettings
