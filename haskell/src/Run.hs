@@ -101,12 +101,8 @@ _logResult x = tell $ "Got result: " ++ show x
 
 -- | Run the brute force baseline case, that is select every plain variant and
 -- run them to the sat solver
-runBruteForce ::
-  (MonadTrans t
-  , Show a
-  , Ord a
-  , MonadState (SatDict a) (t IO))
-  => VProp a a -> t IO Result
+runBruteForce :: (MonadTrans t, Show a, Ord a, MonadState (SatDict a) (t IO)) =>
+  VProp a a -> t IO Result
 runBruteForce prop = lift $ flip evalStateT (initSt prop) $
   do
   (_confs, _) <- get
