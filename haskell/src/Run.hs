@@ -126,16 +126,17 @@ runAndDecomp prop = do
 
 runVSolve :: (MonadReader (SMTConf String) (t IO), MonadTrans t) =>
   VProp String String -> t IO Result
-runVSolve prop =
-  do (result,_) <- lift . S.runSMTWith (conf cnf) . vSolve $
-                   St.evalStateT (propToSBool prop') (M.empty, M.empty)
-     lift . return . V $ result
+runVSolve prop = do cnf <- ask
+                    (result,_) <- lift . S.runSMTWith (conf cnf) . vSolve
+                                  $ St.evalStateT (propToSBool prop) (M.empty, M.empty)
+                    lift . return . V $ result
 
 runVSMTSolve :: (MonadTrans t, MonadReader (SMTConf String) (t IO)) =>
   VProp String String -> t IO Result
 runVSMTSolve prop =
-  do res <- lift . S.runSMTWith (conf cnf) . vSMTSolve $
-       St.evalStateT (propToSBool prop') (M.empty, M.empty)
+  do cnf <- ask
+     res <- lift . S.runSMTWith (conf cnf) . vSMTSolve $
+       St.evalStateT (propToSBool prop) (M.empty, M.empty)
      lift . return . V $ res
 
 -- | main workhorse for running the SAT solver
