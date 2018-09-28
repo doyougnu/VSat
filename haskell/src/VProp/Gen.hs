@@ -18,7 +18,7 @@ import Prelude hiding (LT,EQ,GT)
 import qualified Control.Arrow as A ((&&&))
 
 import VProp.Types
-import VProp.Core (maxShared, onlyBools, noDupRefs)
+import VProp.Core (maxShared, onlyBools, noDupRefs, onlyInts)
 
 -- | A wrapper to represent readable strings
 newtype Readable = Re { readStr :: String }
@@ -129,10 +129,14 @@ arbVIExpr gd gv ifreqs n = frequency $ zip ifreqs [ LitI <$> genPrim
 
 -- | Generate a random prop term with no sharing among dimensions
 vPropNoShare :: [Int] -> Gen (VProp Var Var)
-vPropNoShare = sized . arbVProp genDim genVar . (id A.&&& id)
+vPropNoShare xs = sized $ fmap (flip suchThat onlyInts) g
+  where g :: Int -> Gen (VProp Var Var)
+        g = arbVProp genDim genVar $ (id A.&&& id) xs
 
 vPropShare :: [Int] -> Gen (VProp Var Var)
-vPropShare = sized . arbVProp genSharedDim genSharedVar . (id A.&&& id)
+vPropShare xs = sized $ fmap (flip suchThat onlyInts) g
+  where g :: Int -> Gen (VProp Var Var)
+        g = arbVProp genSharedDim genSharedVar $ (id A.&&& id) xs
 
 -- | Generate a random prop according to its arbritrary type class instance,
 -- this has a strong likelihood of sharing
