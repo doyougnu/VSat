@@ -18,6 +18,7 @@ import Config
 import System.CPUTime
 import System.Environment
 import System.Timeout
+import Control.Concurrent (forkIO, ThreadId)
 
 import Data.Time.Clock
 import Data.Time.Calendar
@@ -171,9 +172,10 @@ benchRandomSample descfp timefp metrics@(_, n) = do
   time "defConf/Unique/ChcDecomp" metrics timefp $! runAD defConf noShprop
   time "emptyConf/Unique/ChcDecomp" metrics timefp $! runAD emptyConf noShprop
   time "allOpts/Unique/ChcDecomp" metrics timefp $! runAD allOptsConf noShprop
+  return ()
 
-time :: NFData a => Text -> RunMetric -> FilePath -> IO a -> IO ()
-time !desc !metrics@(rn, n) timefp !a = do
+time :: NFData a => Text -> RunMetric -> FilePath -> IO a -> IO ThreadId
+time !desc !metrics@(rn, n) timefp !a = forkIO $ do
   start <- getCPUTime
   v <- a
   end' <- timeout 300000000 (v `seq` getCPUTime)
