@@ -1,0 +1,23 @@
+\subsection{Incremental Satisfiability Solvers}
+\label{bk-sat}
+%%% Intro
+This section will give a brief overview of the internals of incremental
+satisifiability solvers that VSMT manipulates. The solver presented in this
+paper only manipulates the underlying solver via an smtlib2
+interface~\cite{BarFT-SMTLIB}, specifically using the \addcitation{for data.sbv}
+Data.SBV haskell library.
+
+% SMT Lib assertion stack description
+Smtlib compliant incremental sat solvers store boolean formulae in a global
+stack called an \textit{assertion-set stack}. An assertion includes variables,
+definitions of variables, logical formulae and function symbols. For example,
+all of the following are legal assertions that could be placed on an assertion
+stack:
+\begin{align*}
+  x == True \\
+  x \wedge y \geq \pi \\
+  y + 2 * z == 1729
+\end{align*}
+% statement about solver context
+% check-sat
+% pushing and popping
