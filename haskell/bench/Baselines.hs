@@ -70,7 +70,7 @@ main = do
 
   -- run the benchmark
   mapM_ (benchRandomSample descFile timingFile)
-    $ zip [1..] $ [1,2..10] >>= replicate 10
+    $ zip [1..] $ [1..15] >>= replicate 1
 
 -- | The run number, used to join descriptor and timing data later
 type RunNum = Int
@@ -135,7 +135,7 @@ writeTime str (rn, n) time_ timingFile = appendFile timingFile . encode $ pure r
 -- a bound pool so sharing is also very possible.
 benchRandomSample :: FilePath -> FilePath -> RunMetric -> IO ()
 benchRandomSample descfp timefp metrics@(_, n) = do
-  prop' <- generate (sequence $ repeat $ choose (10, 10)) >>=
+  prop' <- generate (sequence $ take 10 $ repeat $ choose (0, 10)) >>=
           generate . genVPropAtShare n . vPropShare
   noShprop' <- generate (sequence $ repeat $ choose (0, 10)) >>=
                generate . genVPropAtSize n .  vPropNoShare
@@ -146,16 +146,31 @@ benchRandomSample descfp timefp metrics@(_, n) = do
   writeDesc "Unique" metrics noShprop descfp
 
   -- | run brute force solve
-  -- time "defConf/Shared/BForce" metrics timefp $! runBF defConf prop
-  -- time "defConf/Unique/BForce" metrics timefp $! runBF defConf noShprop
+  time "defConf/Shared/BForce" metrics timefp $! runBF defConf prop
+  time "emptyConf/Shared/BForce" metrics timefp $! runBF emptyConf prop
+  time "allOpts/Shared/BForce" metrics timefp $! runBF allOptsConf prop
 
-  -- -- | run incremental solve
-  -- time "defConf/Shared/VSMTSolve" metrics timefp $! satWith defConf prop
-  -- time "allOpts/Shared/VSMTSolve" metrics timefp $! satWith allOptsConf prop
+  time "defConf/Unique/BForce" metrics timefp $! runBF defConf noShprop
+  time "emptyConf/Unique/BForce" metrics timefp $! runBF emptyConf noShprop
+  time "allOpts/Unique/BForce" metrics timefp $! runBF allOptsConf noShprop
 
-  -- -- | run and decomp
+  -- | run incremental solve
+  time "defConf/Shared/VSMTSolve" metrics timefp $! satWith defConf prop
+  time "emptyConf/Shared/VSMTSolve" metrics timefp $! satWith minConf prop
+  time "allOpts/Shared/VSMTSolve" metrics timefp $! satWith allOptsConf prop
+
+  time "defConf/Unique/VSMTSolve" metrics timefp $! satWith defConf noShprop
+  time "emptyConf/Unique/VSMTSolve" metrics timefp $! satWith minConf noShprop
+  time "allOpts/Unique/VSMTSolve" metrics timefp $! satWith allOptsConf noShprop
+
+  -- | run and decomp
   time "defConf/Shared/ChcDecomp" metrics timefp $! runAD defConf prop
+  time "emptyConf/Shared/ChcDecomp" metrics timefp $! runAD emptyConf prop
   time "allOpts/Shared/ChcDecomp" metrics timefp $! runAD allOptsConf prop
+
+  time "defConf/Unique/ChcDecomp" metrics timefp $! runAD defConf noShprop
+  time "emptyConf/Unique/ChcDecomp" metrics timefp $! runAD emptyConf noShprop
+  time "allOpts/Unique/ChcDecomp" metrics timefp $! runAD allOptsConf noShprop
 
 time :: NFData a => Text -> RunMetric -> FilePath -> IO a -> IO ()
 time !desc !metrics@(rn, n) timefp !a = do

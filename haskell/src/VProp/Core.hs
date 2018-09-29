@@ -110,6 +110,7 @@ onlyInts _            = True
 
 onlyInts' :: VIExpr a -> Bool
 onlyInts' (LitI (D _)) = False
+onlyInts' (Ref RefD _) = False
 onlyInts' (OpI _ e)    = onlyInts' e
 onlyInts' (OpII _ l r) = onlyInts' l && onlyInts' r
 onlyInts' (ChcI _ l r) = onlyInts' l && onlyInts' r
@@ -245,21 +246,21 @@ maxShared = safeMaximum . fmap length . group . sort . go
 
 -- --------------------------- Destructors -----------------------------------------
 -- | The set of features referenced in a feature expression.
-vars :: Ord a => (VProp a a) -> Set.Set a
-vars (LitB _)     = Set.empty
-vars (RefB f)     = Set.singleton f
-vars (OpB _ e)    = vars e
-vars (OpBB _ l r) = vars l `Set.union` vars r
-vars (OpIB _ _ _) = Set.empty
-vars (Opn _ ps)   = Set.unions $ vars <$> ps
-vars (ChcB _ l r) = vars l `Set.union` vars r
+bvars :: Ord a => (VProp a a) -> Set.Set a
+bvars (LitB _)     = Set.empty
+bvars (RefB f)     = Set.singleton f
+bvars (OpB _ e)    = bvars e
+bvars (OpBB _ l r) = bvars l `Set.union` bvars r
+bvars (OpIB _ _ _) = Set.empty
+bvars (Opn _ ps)   = Set.unions $ bvars <$> ps
+bvars (ChcB _ l r) = bvars l `Set.union` bvars r
 
-vars' :: Ord a => (VIExpr a) -> Set.Set a
-vars' (LitI _) = Set.empty
-vars' (Ref _ f) = Set.singleton f
-vars' (OpI _ e) = vars' e
-vars' (OpII _ l r) = vars' l `Set.union` vars' r
-vars' (ChcI _ l r) = vars' l `Set.union` vars' r
+-- vars' :: Ord a => (VIExpr a) -> Set.Set a
+-- vars' (LitI _) = Set.empty
+-- vars' (Ref _ f) = Set.singleton f
+-- vars' (OpI _ e) = vars' e
+-- vars' (OpII _ l r) = vars' l `Set.union` vars' r
+-- vars' (ChcI _ l r) = vars' l `Set.union` vars' r
 
 -- | The set of dimensions in a propositional expression
 dimensions :: (VProp a b) -> Set.Set Dim
@@ -317,8 +318,8 @@ ivarsWithType' (ChcI _ l r) = ivarsWithType' l `Set.union` ivarsWithType' r
 ivarsWithType' (Ref x a)    = Set.singleton (x, a)
 
 -- | The set of boolean variable references for an expression
-bvars :: Ord a => VProp a a -> Set.Set a
-bvars prop = vars prop `Set.difference` ivars prop
+vars :: Ord a => VProp a a -> Set.Set a
+vars prop = bvars prop `Set.union` ivars prop
 
 -- | The set of all choices
 configs :: VProp a b -> [[(Dim, Bool)]]

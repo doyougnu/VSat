@@ -35,6 +35,11 @@ defSettings :: Settings
 defSettings = Settings{solver=Z3, optimizations=defs, seed=Nothing}
   where defs = [MoveRight, Atomize, CNF, Prune]
 
+-- moveRight required for proper results
+minSettings :: Settings
+minSettings = Settings{solver=Z3, optimizations=defs, seed=Nothing}
+  where defs = [MoveRight, CNF]
+
 allOptsSettings :: Settings
 allOptsSettings = Settings{ solver=Z3
                           , optimizations=[MoveRight,Atomize,CNF,Prune,Shrink]
@@ -45,20 +50,17 @@ debugSettings = Settings{ solver=Z3
                         , optimizations=[MoveRight,Atomize,CNF]
                         , seed=Nothing}
 
-emptySettings :: Settings
-emptySettings = Settings{ solver=Z3
-                        , optimizations=[MoveRight]
-                        , seed=Nothing}
-
 defConf :: (Ord a,Show a) => SMTConf a
 defConf = toConf defSettings
 
--- moveRight required for proper results
 emptyConf :: (Show a, Ord a) => SMTConf a
-emptyConf = toConf emptySettings
+emptyConf = SMTConf{conf=z3, opts=[]}
 
 debugConf :: (Ord a,Show a) => SMTConf a
 debugConf = toConf debugSettings
+
+minConf :: (Ord a,Show a) => SMTConf a
+minConf = toConf minSettings
 
 allOptsConf :: (Ord a,Show a) => SMTConf a
 allOptsConf = toConf allOptsSettings
