@@ -1,29 +1,59 @@
-\section{Choice Calculus}
+\subsection{Choice Calculus}
 \label{bk-cc}
-The choice calculus~\cite{Walk13thesis, Erwig:2011:CCR:2063239.2063245} is a
+%%% Intro
+This section is a brief introduction to the choice calculus~\cite{Walk13thesis,
+  Erwig:2011:CCR:2063239.2063245}. It is meant as a brief overview meant to
+equip the reader with enough concepts of the calculus to understand the
+rest of the paper. For a more exhaustive treatment see
+
+
+%% Syntax
+The choice calculus is a
 formal metalanguage for the static, explicit representation of
 \textit{variation} of an object language. For example, in predicate logic, given
-two expressions \[ex_1\] and \[ex_2\]:
+two expressions $ex_1$ and $ex_2$:
 
 \[ex_1 = b \Leftrightarrow c \wedge (d \vee e) \wedge \neg c \]
 
-\[ex_2 = a \wedge \wedge (d \vee e) \wedge \neg c \]
+\[ex_2 = a \wedge (d \vee e) \wedge \neg c \]
 
 We can collapse both expressions to a single example that makes the variation
 distinguishing the two explicit via a \textit{choice} :
-
-\[ex_{\chc[A]{1,2}} = \chc[A]{b \Leftrightarrow c, a} d \wedge \neg c  \]
-
+\[ex_{\chc[A]{1,2}} = \chc[A]{b \Leftrightarrow c, a} \wedge (d \vee e) \wedge
+  \neg c \]
 A Choice is a ternary relationship between a choice variable, called a
-\textit{dimension}, and two alternatives. In $ex_{\chc{A}[1,2]}$ the choice is
+\textit{dimension}, and two alternatives. In $ex_{\chc[A]{1,2}}$ the choice is
 indexed by dimension \textit{A}, with the left alternative being $ b
 \Leftrightarrow c$ and its right alternative being $a$. Any expression that
 includes a choice is called \textit{variational}, while we call any expression
-that does not include a choice \textit{plain}, such as $ex_1$ and $ex_2$. A
-plain expression can be derived from a variational one via the process of
+that does not include a choice \textit{plain}, such as $ex_1$ and $ex_2$.
+
+%% Selection and synchronization
+A plain expression can be derived from a variational one via the process of
 \textit{selection} and is called a \textit{variant}. In order to select a
 variant, one needs to know which variant to select. This is done via a
-\textit{configuration} which is a mapping from dimensions to alternatives. To
-select the $i$th alternative, for all dimension choices indexed by $d$, in
-expression $e$, we write \tsel{e}. For example to select $ex_1$ from
-$ex_{\chc[A]{1,2}}$ we would write \tsel[A.1]{ex_{\chc[A]{1,2}}}.
+\textit{configuration} which is a mapping from \change{in code this is a mapping
+  from dimensions to booleans? Is this the right language?}dimensions to
+alternatives. To select the $i$th alternative, for all dimension choices indexed
+by $d$, in expression $e$, we write \tsel{e}. In the general case there are
+allowed to be $i$ alternatives, for the rest of this paper we will restrict the
+notation to only two. For example to select $ex_2$ from $ex_{\chc[A]{1,2}}$ we
+would write \tsel[A.2]{ex_{\chc[A]{1,2}}}, given the configuration \{$A.2$\}.
+%
+%% Synchronization
+%
+Choices that share dimensions are subject to \textit{synchronization} under
+selection. For example the expression:
+
+\[ex_{\chc[A]{1,2}} = \chc[A]{b \Leftrightarrow c, a} \wedge d \wedge \chc[A]{\neg c,
+    \chc[B]{\bot, \top}} \]
+
+has two choices ($A$, and $B$) and four variants (two variants for two choices).
+Given the configuration \{$A.1$\} the resultant variant would then be:
+
+\[ \tsel[A.1]{ex_{\chc[A]{1,2}}}= b \Leftrightarrow c \wedge d \wedge \neg c \]
+
+Notice that selection occurred for both choices indexed by $A$, which removed a
+nested choice indexed by $B$. Indeed, if we were to select the second
+alternative on $A$ then the resultant would still be variational instead of
+plain.

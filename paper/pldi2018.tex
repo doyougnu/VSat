@@ -33,7 +33,7 @@
 \bibliographystyle{ACM-Reference-Format}
 %% Citation style
 %\citestyle{acmauthoryear}  %% For author/year citations
-%\citestyle{acmnumeric}     %% For numeric citations
+\citestyle{acmnumeric}     %% For numeric citations
 %\setcitestyle{nosort}      %% With 'acmnumeric', to disable automatic
                             %% sorting of references within a single citation;
                             %% e.g., \cite{Smith99,Carpenter05,Baker12}
@@ -64,6 +64,9 @@
 \usepackage{lipsum}                     % Dummytext
 \usepackage{xargs}                      % Use more than one optional parameter
                                         % in a new commands
+\usepackage{filecontents} %% for include
+\usepackage{mathtools}    %% Math aliases
+\usepackage{xcolor}
 
 %%%% TODOs
 \usepackage[colorinlistoftodos,prependcaption,textsize=tiny]{todonotes}
@@ -73,25 +76,10 @@
 \newcommandx{\addcitation}[2][1=]{\todo[linecolor=OliveGreen,backgroundcolor=OliveGreen!25,bordercolor=OliveGreen,#1]{#2}}
 
 
-%%%% Math aliases
-\usepackage{mathtools}
-\newcommandx{\ceil}[1]{$\lceil#1\rceil$}
-\newcommandx{\floor}[1]{$\lfloor#1\rfloor$}
-
 \begin{document}
 
 %% Title information
 \title[To be determined]{TBD}           %% [Short Title] is optional;
-                                        %% when present, will be used in
-                                        %% header instead of Full Title.
-% \titlenote{with title note}             %% \titlenote is optional;
-%                                         %% can be repeated if necessary;
-%                                         %% contents suppressed with 'anonymous'
-% \subtitle{Subtitle}                     %% \subtitle is optional
-% \subtitlenote{with subtitle note}       %% \subtitlenote is optional;
-%                                         %% can be repeated if necessary;
-%                                         %% contents suppressed with 'anonymous'
-
 
 %% Author information
 %% Contents and number of authors suppressed with 'anonymous'.
@@ -150,8 +138,6 @@
 
 
 %% Abstract
-%% Note: \begin{abstract}...\end{abstract} environment must come
-%% before \maketitle command
 \begin{abstract}
   Many program analyses can be reduced to satisfiability (SAT) problems, or more
   generally, to satisfiability modulo theories (SMT) problems. For example, dead
@@ -203,10 +189,9 @@
 %% Note: \maketitle command must come after title commands, author
 %% commands, abstract environment, Computing Classification System
 %% environment and commands, and keywords command.
-\maketitle
-
 
 \section{Introduction}
+\include{intro}
 Programming with explicit variation has seen successful applications in many
 diverse areas of computer science \todo{add citations for, vdbms, counterfactual
   typing, variational images, spl, feature models} A fundamental operation for
@@ -222,15 +207,23 @@ paper describes the construction
 
 
 \section{Background and Related Work}
-\input{bkrndcc}
-\end{document}
+In this section we give the background information that a reader will require to
+understand the inner workings of the VSMT solver. Section \ref{bk-cc} goes over
+fundamentals of the choice calculus, the theoretical model of variation the
+solver is built on. Section \ref{bk-sat} presents an overview of incremental
+satisifiability solvers, \todo{add the rest of background sat to overview}
+% include CC background
+\include{bkrndcc}
+% include SAT background
+\include{bkrndsat}
 
-\subsection{Incremental Satisfiability Solvers}
 \subsection{Gradual Typing}
 
 \section{Experimental Setup}
+
 \section{Results}
 \section{Discussion}
+
 %% Acknowledgments
 \begin{acks}                            %% acks environment is optional
                                         %% contents suppressed with 'anonymous'
@@ -249,10 +242,9 @@ paper describes the construction
 \end{acks}
 
 
-%% Bibliography
-\bibliographystyle{unsrt}
-\bibliography{bib/choicecalc, bib/satsolvers, bib/softprodline}
-
+% bibliography
+% \bibliography{bib/choicecalc}
+\bibliography{/bib/choicecalc, /bib/satsolvers, /bib/softprodline}
 
 %% Appendix
 \appendix
