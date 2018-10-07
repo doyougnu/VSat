@@ -117,6 +117,23 @@ arbVProp_ gd gv fs@(bfreqs, ifreqs) n
   where l = arbVProp_ gd gv fs (n `div` 2)
         l' = arbVIExpr gd gv ifreqs (n `div` 2)
 
+
+arbVPropIntOnly_ :: Arbitrary a =>
+  Gen Dim -> Gen a -> ([Int], [Int]) -> Int -> Gen (VProp a a)
+arbVPropIntOnly_ _  gv _     0 = RefB <$> gv
+arbVPropIntOnly_ gd gv fs@(bfreqs, ifreqs) n
+  = frequency $ zip bfreqs [ LitB <$> arbitrary
+                           , RefB <$> gv
+                           , (liftM3 ChcB gd l l)
+                           , liftM2 OpB genB_B l
+                           , (liftM2 (&&&) l l)
+                           , (liftM2 (|||) l l)
+                           , liftM3 OpBB genBB_B l l
+                           , liftM3 OpIB genNN_B l' l'
+                           ]
+  where l = arbVProp_ gd gv fs (n `div` 2)
+        l' = arbVIExprIntOnly gd gv ifreqs (n `div` 2)
+
 arbVIExpr :: Arbitrary a =>
   Gen Dim -> Gen a -> [Int] -> Int -> Gen (VIExpr a)
 arbVIExpr _ gv _ 0 = liftM2 Ref genRefN gv
@@ -127,14 +144,36 @@ arbVIExpr gd gv ifreqs n = frequency $ zip ifreqs [ LitI <$> genPrim
                                                   ]
   where l = arbVIExpr gd gv ifreqs (n `div` 2)
 
+
+arbVIExprIntOnly :: Arbitrary a =>
+  Gen Dim -> Gen a -> [Int] -> Int -> Gen (VIExpr a)
+arbVIExprIntOnly _ gv _ 0 = liftM2 Ref genRefN gv
+arbVIExprIntOnly gd gv ifreqs n = frequency $ zip ifreqs [ LitI <$> genInt
+                                                  , liftM2 OpI genN_N l
+                                                  , liftM3 OpII genNN_N l l
+                                                  , liftM3 ChcI gd l l
+                                                  ]
+  where l = arbVIExpr gd gv ifreqs (n `div` 2)
+
 -- | Generate a random prop term with no sharing among dimensions
 vPropNoShare :: [Int] -> Gen (VProp Var Var)
-vPropNoShare xs = sized $ fmap (flip suchThat onlyInts) g
+vPropNoShare xs = sized g
   where g :: Int -> Gen (VProp Var Var)
         g = arbVProp genDim genVar $ (id A.&&& id) xs
 
 vPropShare :: [Int] -> Gen (VProp Var Var)
-vPropShare xs = sized $ fmap (flip suchThat onlyInts) g
+vPropShare xs = sized g
+  where g :: Int -> Gen (VProp Var Var)
+        g = arbVProp genSharedDim genSharedVar $ (id A.&&& id) xs
+
+
+vPropNoShareIntOnly :: [Int] -> Gen (VProp Var Var)
+vPropNoShareIntOnly xs = sized g
+  where g :: Int -> Gen (VProp Var Var)
+        g = arbVProp genDim genVar $ (id A.&&& id) xs
+
+vPropShareIntOnly :: [Int] -> Gen (VProp Var Var)
+vPropShareIntOnly xs = sized g
   where g :: Int -> Gen (VProp Var Var)
         g = arbVProp genSharedDim genSharedVar $ (id A.&&& id) xs
 
@@ -155,3 +194,11 @@ genVPropAtSize = resize
 genVPropAtShare :: (Arbitrary a, Arbitrary b) =>
   Int -> Gen (VProp a b) -> Gen (VProp a b)
 genVPropAtShare n = flip suchThat $ (==n) . maxShared
+
+genVPropAtSizeIntOnly :: (Arbitrary a, Arbitrary b) =>
+  Int -> Gen (VProp a b) -> Gen (VProp a b)
+genVPropAtSizeIntOnly = resize
+
+genVPropAtShareIntOnly :: (Arbitrary a, Arbitrary b) =>
+  Int -> Gen (VProp a b) -> Gen (VProp a b)
+genVPropAtShareIntOnly n = flip suchThat $ (==n) . maxShared

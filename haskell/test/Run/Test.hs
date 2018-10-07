@@ -71,7 +71,7 @@ instance Eq ThmResult where (ThmResult x) == (ThmResult y) = x == y
 
 runProperties :: TestTree
 runProperties = testGroup "Run Properties" [
-  andDecomp_terminatesSh
+  -- andDecomp_terminatesSh
   -- , sat_term
   -- sat_error
   -- , sat_error2
