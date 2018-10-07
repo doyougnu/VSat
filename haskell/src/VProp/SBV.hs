@@ -7,12 +7,14 @@ module VProp.SBV ( andDecomp
 import qualified Data.SBV as S
 import           Prelude    hiding   (lookup,LT,EQ,GT)
 import           Data.Maybe          (fromMaybe)
-import           Data.Map            (fromList, lookup)
+import           Data.Map            (fromList, lookup, size)
 import qualified Data.Set as Set     (toList)
 
 import VProp.Types
 import VProp.Core
 import SAT
+
+import Debug.Trace (trace)
 
 
 instance (Show a, Ord a) => SAT (VProp a a) where
@@ -65,18 +67,17 @@ evalPropExpr' d !i !(ChcI dim l r)
 -- | Generate a symbolic predicate for a feature expression.
 symbolicPropExpr :: (Show a, Ord a) => VProp a a -> S.Predicate
 symbolicPropExpr e = do
-    let vs = Set.toList (vars e)
-        is = Set.toList (ivars e)
+    let vs = Set.toList (bvars e)
         ds = Set.toList (dimensions e)
         isType = Set.toList (ivarsWithType e)
 
-        helper :: Show a => (RefN, a) -> S.Symbolic SNum
-        helper (RefD, d) = SD <$> S.sDouble (show d)
-        helper (RefI, i) = SI <$> S.sInt64 (show i)
+        helper :: Show a => (RefN, a) -> S.Symbolic (a, SNum)
+        helper (RefD, d) = sequence $ (d, SD <$> S.sDouble (show d))
+        helper (RefI, i) = sequence $ (i, SI <$> S.sInt64 (show i))
 
     syms  <- fmap (fromList . zip vs) (S.sBools (show <$> vs))
     dims  <- fmap (fromList . zip ds) (S.sBools (map dimName ds))
-    isyms <- fmap (fromList . zip is) (traverse helper isType)
+    isyms <- fromList <$> traverse helper isType
     let look f  = fromMaybe err  (lookup f syms)
         lookd d = fromMaybe errd (lookup d dims)
         looki i = fromMaybe erri (lookup i isyms)
