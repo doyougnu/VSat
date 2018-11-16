@@ -32,6 +32,7 @@ dependencies:
 - aeson
 - Spock
 - wai-extra
+- heaps
 
 library:
   source-dirs: src
