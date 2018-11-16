@@ -17,6 +17,7 @@ import qualified Data.SBV            as S
 import qualified Data.SBV.Control    as SC
 import           Prelude hiding (LT, GT, EQ)
 import Data.Foldable (foldr')
+import qualified Data.Heap           as H
 
 import GHC.Generics
 import Control.DeepSeq               (NFData)
@@ -345,12 +346,8 @@ handleChc f x = f x
 -- | The main solver algorithm. You can think of this as the sem function for
 -- the dsl
 vSMTSolve_ :: VProp S.SBool SNum -> IncVSMTSolve S.SBool
-vSMTSolve_ !(RefB b) = do
-  lift $ SC.queryDebug ["got a ref: ", show b]
-  return b
-vSMTSolve_ !(LitB b) = do
-  lift $ SC.queryDebug ["got a literal: ", show b]
-  return $ S.literal b
+vSMTSolve_ !(RefB b) = return b
+vSMTSolve_ !(LitB b) = return $ S.literal b
 vSMTSolve_ !(OpB Not bs)= do b <- vSMTSolve_ bs
                              S.constrain $ S.bnot b
                              return b

@@ -71,7 +71,7 @@ main = do
 
   -- run the benchmark
   mapM_ (benchRandomSample descFile timingFile)
-    $ zip [1..] $ [1..15] >>= replicate 1
+    $ zip [1..] $ [1..8] >>= replicate 1
 
 -- | The run number, used to join descriptor and timing data later
 type RunNum = Int
@@ -137,9 +137,9 @@ writeTime str (rn, n) time_ timingFile = appendFile timingFile . encode $ pure r
 benchRandomSample :: FilePath -> FilePath -> RunMetric -> IO ()
 benchRandomSample descfp timefp metrics@(_, n) = do
   prop' <- generate (sequence $ take 10 $ repeat $ choose (0, 10)) >>=
-          generate . genVPropAtShare n . vPropShare
+          generate . genVPropAtShareIntOnly n . vPropShare
   noShprop' <- generate (sequence $ repeat $ choose (0, 10)) >>=
-               generate . genVPropAtSize n .  vPropNoShare
+               generate . genVPropAtSizeIntOnly n .  vPropNoShare
   let prop = bimap show show prop'
       noShprop = bimap show show noShprop'
 
@@ -147,35 +147,43 @@ benchRandomSample descfp timefp metrics@(_, n) = do
   writeDesc "Unique" metrics noShprop descfp
 
   -- | run brute force solve
-  time "defConf/Shared/BForce" metrics timefp $! runBF defConf prop
-  time "emptyConf/Shared/BForce" metrics timefp $! runBF emptyConf prop
-  time "allOpts/Shared/BForce" metrics timefp $! runBF allOptsConf prop
+  -- time "defConf/Shared/BForce" metrics timefp $! runBF defConf prop
+  -- time "emptyConf/Shared/BForce" metrics timefp $! runBF emptyConf prop
+  -- time "allOpts/Shared/BForce" metrics timefp $! runBF allOptsConf prop
 
-  time "defConf/Unique/BForce" metrics timefp $! runBF defConf noShprop
-  time "emptyConf/Unique/BForce" metrics timefp $! runBF emptyConf noShprop
-  time "allOpts/Unique/BForce" metrics timefp $! runBF allOptsConf noShprop
+  -- time "defConf/Unique/BForce" metrics timefp $! runBF defConf noShprop
+  -- time "emptyConf/Unique/BForce" metrics timefp $! runBF emptyConf noShprop
+  -- time "allOpts/Unique/BForce" metrics timefp $! runBF allOptsConf noShprop
 
   -- | run incremental solve
-  time "defConf/Shared/VSMTSolve" metrics timefp $! satWith defConf prop
-  time "emptyConf/Shared/VSMTSolve" metrics timefp $! satWith minConf prop
-  time "allOpts/Shared/VSMTSolve" metrics timefp $! satWith allOptsConf prop
+  putStrLn mempty
+  print "---------------------------"
+  print prop'
+  print $ "ivars: " ++ (show $ ivars prop')
+  print $ "bvars: " ++ (show $ bvars prop')
+  print $ "vars: " ++ (show $ vars prop')
+  print "---------------------------"
+  putStrLn mempty
+  -- time "defConf/Shared/VSMTSolve" metrics timefp $ satWith defConf prop
+  -- time "emptyConf/Shared/VSMTSolve" metrics timefp $! satWith minConf prop
+  -- time "allOpts/Shared/VSMTSolve" metrics timefp $! satWith allOptsConf prop
 
-  time "defConf/Unique/VSMTSolve" metrics timefp $! satWith defConf noShprop
-  time "emptyConf/Unique/VSMTSolve" metrics timefp $! satWith minConf noShprop
-  time "allOpts/Unique/VSMTSolve" metrics timefp $! satWith allOptsConf noShprop
+  -- time "defConf/Unique/VSMTSolve" metrics timefp $! satWith defConf noShprop
+  -- time "emptyConf/Unique/VSMTSolve" metrics timefp $! satWith minConf noShprop
+  -- time "allOpts/Unique/VSMTSolve" metrics timefp $! satWith allOptsConf noShprop
 
-  -- | run and decomp
+  -- -- | run and decomp
   time "defConf/Shared/ChcDecomp" metrics timefp $! runAD defConf prop
-  time "emptyConf/Shared/ChcDecomp" metrics timefp $! runAD emptyConf prop
-  time "allOpts/Shared/ChcDecomp" metrics timefp $! runAD allOptsConf prop
+  -- time "emptyConf/Shared/ChcDecomp" metrics timefp $! runAD emptyConf prop
+  -- time "allOpts/Shared/ChcDecomp" metrics timefp $! runAD allOptsConf prop
 
-  time "defConf/Unique/ChcDecomp" metrics timefp $! runAD defConf noShprop
-  time "emptyConf/Unique/ChcDecomp" metrics timefp $! runAD emptyConf noShprop
-  time "allOpts/Unique/ChcDecomp" metrics timefp $! runAD allOptsConf noShprop
+  -- time "defConf/Unique/ChcDecomp" metrics timefp $! runAD defConf noShprop
+  -- time "emptyConf/Unique/ChcDecomp" metrics timefp $! runAD emptyConf noShprop
+  -- time "allOpts/Unique/ChcDecomp" metrics timefp $! runAD allOptsConf noShprop
   return ()
 
 time :: NFData a => Text -> RunMetric -> FilePath -> IO a -> IO ThreadId
-time !desc !metrics@(rn, n) timefp !a = forkIO $ do
+time desc metrics@(rn, n) timefp !a = forkIO $ do
   start <- getCPUTime
   v <- a
   end' <- timeout 300000000 (v `seq` getCPUTime)
