@@ -1,6 +1,7 @@
-module Auto where
+module CaseStudy.Auto.Auto where
 
 import Data.Aeson
+import Data.Text
 
 import VProp.Types
 import VProp.Core
@@ -18,7 +19,7 @@ type Context = (Integer, Integer)
 -- | The auto type encodes the context of the automotive encoding, and the
 -- constraints that range over the features in the automotive model
 data Auto = Auto { contexts :: Context
-                 , constraints :: [String]}
+                 , constraints :: [Text]}
           deriving Show
 
 instance FromJSON Auto where

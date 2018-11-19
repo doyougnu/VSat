@@ -9,10 +9,12 @@ nix:
   pure: false
   packages: [ z3, pkgconfig, zlib ]
 
-resolver: lts-11.14
+resolver: lts-11.22
 build:
   library-profiling: false
   executable-profiling: false
+
+# allow-newer: true
 
 # docker:
 #   enable: true

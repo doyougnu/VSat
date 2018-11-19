@@ -21,11 +21,12 @@ dependencies:
 - mtl
 - bifunctors
 - deepseq
+# sbv forces us to use LTS-11.22 ghc 8.2.2
 - sbv
 - cassava
 - bytestring
 - text
-- vector
+# - vector
 - time
 - tasty-quickcheck
 - aeson-pretty
@@ -33,6 +34,8 @@ dependencies:
 - Spock
 - wai-extra
 - heaps
+- megaparsec >= 6.4
+# - parser-combinators >= 1.0
 
 library:
   source-dirs: src
