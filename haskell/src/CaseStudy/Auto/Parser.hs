@@ -7,14 +7,12 @@ import Text.Megaparsec.Char
 import qualified Text.Megaparsec.Char.Lexer as L
 import Text.Megaparsec.Expr
 
-import VProp.Types
-import VProp.Core()
-import Prelude hiding (EQ, LT, GT)
+import CaseStudy.Auto.Lang
 
 type Parser = Parsec Void T.Text
 
-langParser :: Parser (VProp T.Text T.Text)
-langParser = bExpr
+langParser :: Parser (AutoLang T.Text)
+langParser = between sc eof bExpr
 
 sc :: Parser ()
 sc = L.space space1 empty empty
@@ -43,56 +41,54 @@ comma = symbol ","
 dash :: Parser T.Text
 dash = symbol "-"
 
-andExpr :: Parser (VProp T.Text T.Text)
-andExpr = Opn And <$> sepBy1 bTerm (reserved "and")
-
-orExpr :: Parser (VProp T.Text T.Text)
-orExpr = Opn Or <$> sepBy1 bTerm (reserved "or")
-
 reserved :: T.Text -> Parser ()
 reserved str = lexeme $ string str >> notFollowedBy alphaNumChar
 
-aOperators :: [[Operator Parser (VIExpr a)]]
+aOperators :: [[Operator Parser (ALang a)]]
 aOperators =
-  [ [ Prefix (OpI Neg   <$ symbol "-")]
-  , [ InfixL (OpII Mult <$ symbol "*")
-    , InfixL (OpII Div  <$ symbol "/")
-    , InfixL (OpII Add  <$ symbol "+")
-    , InfixL (OpII Sub  <$ symbol "-")
-    , InfixL (OpII Mod  <$ symbol "%")
+  [ [ Prefix (Neg <$ symbol "-")]
+  , [ InfixL (ABinary Multiply <$ symbol "*")
+    , InfixL (ABinary Divide <$ symbol "/")
+    , InfixL (ABinary Add <$ symbol "+")
+    , InfixL (ABinary Subtract <$ symbol "-")
+    , InfixL (ABinary Modulus <$ symbol "%")
     ]
   ]
 
-bExpr :: Parser (VProp T.Text T.Text)
+bExpr :: Parser (AutoLang T.Text)
 bExpr = makeExprParser bTerm bOperators
 
-bTerm :: Parser (VProp T.Text T.Text)
+bTerm :: Parser (AutoLang T.Text)
 bTerm = parens bExpr
-        <|> (LitB True <$ reserved "true")
-        <|> (LitB False <$ reserved "false")
+        <|> (AutoLit True <$ reserved "true")
+        <|> (AutoLit False <$ reserved "false")
         <|> rExpr
         <|> boolRef
 
-aTerm :: Parser (VIExpr T.Text)
+aTerm :: Parser (ALang T.Text)
 aTerm = parens aExpr
-        <|> LitI . I <$> integer
-        <|> LitI . D <$> L.float
+        <|> ALit <$> integer
         <|> arithRef
         <|> contextRef
 
-boolRef :: Parser (VProp T.Text b)
+contextRef :: Parser (ALang a)
+contextRef = do reserved "context"
+                _ <- brackets (many anyChar)
+                return Ctx
+
+boolRef :: Parser (AutoLang T.Text)
 boolRef = do reserved "feature"
              uuid <- brackets $ do
                _ <- anyChar
                aVariable
-             return . RefB $ uuid
+             return . AutoRef $ uuid
 
-arithRef :: Parser (VIExpr T.Text)
+arithRef :: Parser (ALang T.Text)
 arithRef = lexeme $ do reserved "feature"
                        uuid <- brackets $ do
                          _ <- symbol "_"
                          aVariable
-                       return $ Ref RefI uuid
+                       return $ AVar uuid
 
 aVariable :: Parser T.Text
 aVariable = do a <- T.pack <$> many alphaNumChar
@@ -106,33 +102,33 @@ aVariable = do a <- T.pack <$> many alphaNumChar
                e <- T.pack <$> many alphaNumChar
                return . mconcat $ [a,f,b,g,c,h,d,i,e]
 
-bOperators :: [[Operator Parser (VProp a b)]]
+bOperators :: [[Operator Parser (AutoLang a)]]
 bOperators =
-  [ [ Prefix (OpB Not <$ reserved "not") ]
+  [ [ Prefix (AutoNot <$ reserved "not") ]
   ,
-    [ InfixL ((\x y -> Opn And [x,y]) <$ reserved "and")
-    , InfixL ((\x y -> Opn Or [x,y]) <$ reserved "or")
-    , InfixR (OpBB Impl <$ reserved "impl")
-    , InfixN (OpBB BiImpl <$ reserved "iff")
-    , InfixN (OpBB XOr <$ reserved "???") -- not sure what Xor is for this lang
+    [ InfixL (BBinary And <$ reserved "and")
+    , InfixL (BBinary Or <$ reserved "or")
+    , InfixR (BBinary Impl <$ reserved "impl")
+    , InfixN (BBinary Eqv <$ reserved "iff")
+    , InfixN (BBinary Xor <$ reserved "???") -- not sure what Xor is for this lang
     ]
   ]
 
-relation :: Parser NN_B
-relation = pure EQ <* symbol "="
-           <|> pure LT  <* symbol "<"
-           <|> pure GTE <* symbol "<="
-           <|> pure LTE <* symbol ">="
-           <|> pure GT  <* symbol ">"
-           <|> pure NEQ <* symbol "!="
+relation :: Parser RBOp
+relation = pure EQL <* symbol "="
+           <|> pure LST  <* symbol "<"
+           <|> pure GRTE <* symbol "<="
+           <|> pure LSTE <* symbol ">="
+           <|> pure GRT  <* symbol ">"
+           <|> pure NEQL <* symbol "!="
 
-rExpr :: Parser (VProp a T.Text)
+rExpr :: Parser (AutoLang T.Text)
 rExpr = do
   a <- (lexeme aTerm)
   op <- relation
   b <- (lexeme aTerm)
-  return (OpIB op a b)
+  return (RBinary op a b)
 
 
-aExpr :: Parser (VIExpr T.Text)
+aExpr :: Parser (ALang T.Text)
 aExpr = makeExprParser aTerm aOperators
