@@ -69,11 +69,13 @@ aTerm :: Parser (ALang T.Text)
 aTerm = parens aExpr
         <|> ALit <$> integer
         <|> arithRef
-        <|> contextRef
+        <|> dbg "ctx" contextRef
 
 contextRef :: Parser (ALang a)
 contextRef = do reserved "context"
-                _ <- brackets (many anyChar)
+                _ <- brackets $ do
+                  _ <- symbol "_"
+                  reserved "evolution-context"
                 return Ctx
 
 boolRef :: Parser (AutoLang T.Text)
