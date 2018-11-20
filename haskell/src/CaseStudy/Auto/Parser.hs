@@ -40,11 +40,8 @@ underscore = symbol "_" >> return ()
 comma :: Parser T.Text
 comma = symbol ","
 
-constraint :: Parser [VProp String String]
-constraint = sepBy1 constraint' comma
-
-constraint' :: Parser (VProp String String)
-constraint' = undefined
+dash :: Parser T.Text
+dash = symbol "-"
 
 andExpr :: Parser (VProp T.Text T.Text)
 andExpr = Opn And <$> sepBy1 bTerm (reserved "and")
@@ -73,10 +70,10 @@ bTerm :: Parser (VProp T.Text T.Text)
 bTerm = parens bExpr
         <|> (LitB True <$ reserved "true")
         <|> (LitB False <$ reserved "false")
-        <|> boolRef
         <|> rExpr
         <|> andExpr
         <|> orExpr
+        <|> boolRef
 
 aTerm :: Parser (VIExpr T.Text)
 aTerm = parens aExpr
@@ -88,15 +85,27 @@ boolRef :: Parser (VProp T.Text b)
 boolRef = do reserved "feature"
              uuid <- brackets $ do
                _ <- anyChar
-               many alphaNumChar
-             return . RefB $ T.pack uuid
+               aVariable
+             return . RefB $ uuid
 
 arithRef :: Parser (VIExpr T.Text)
 arithRef = do reserved "feature"
               uuid <- brackets $ do
-                _ <- anyChar
-                many alphaNumChar
-              return . Ref RefI $ T.pack uuid
+                _ <- symbol "_"
+                aVariable
+              return $ Ref RefI uuid
+
+aVariable :: Parser T.Text
+aVariable = do a <- T.pack <$> many alphaNumChar
+               f <- dash
+               b <- T.pack <$> many alphaNumChar
+               g <- dash
+               c <- T.pack <$> many alphaNumChar
+               h <- dash
+               d <- T.pack <$> many alphaNumChar
+               i <- dash
+               e <- T.pack <$> many alphaNumChar
+               return . mconcat $ [a,f,b,g,c,h,d,i,e]
 
 bOperators :: [[Operator Parser (VProp a b)]]
 bOperators =
@@ -118,9 +127,9 @@ relation = pure EQ <* symbol "="
 
 rExpr :: Parser (VProp a T.Text)
 rExpr = do
-  a <- aExpr
+  a <- aTerm
   op <- relation
-  b <- aExpr
+  b <- aTerm
   return (OpIB op a b)
 
 
