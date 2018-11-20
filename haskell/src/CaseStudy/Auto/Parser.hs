@@ -14,7 +14,7 @@ import Prelude hiding (EQ, LT, GT)
 type Parser = Parsec Void T.Text
 
 langParser :: Parser (VProp T.Text T.Text)
-langParser = between sc eof bTerm
+langParser = bExpr
 
 sc :: Parser ()
 sc = L.space space1 empty empty
@@ -71,8 +71,6 @@ bTerm = parens bExpr
         <|> (LitB True <$ reserved "true")
         <|> (LitB False <$ reserved "false")
         <|> rExpr
-        <|> andExpr
-        <|> orExpr
         <|> boolRef
 
 aTerm :: Parser (VIExpr T.Text)
@@ -80,6 +78,7 @@ aTerm = parens aExpr
         <|> LitI . I <$> integer
         <|> LitI . D <$> L.float
         <|> arithRef
+        <|> contextRef
 
 boolRef :: Parser (VProp T.Text b)
 boolRef = do reserved "feature"
@@ -89,11 +88,11 @@ boolRef = do reserved "feature"
              return . RefB $ uuid
 
 arithRef :: Parser (VIExpr T.Text)
-arithRef = do reserved "feature"
-              uuid <- brackets $ do
-                _ <- symbol "_"
-                aVariable
-              return $ Ref RefI uuid
+arithRef = lexeme $ do reserved "feature"
+                       uuid <- brackets $ do
+                         _ <- symbol "_"
+                         aVariable
+                       return $ Ref RefI uuid
 
 aVariable :: Parser T.Text
 aVariable = do a <- T.pack <$> many alphaNumChar
@@ -111,9 +110,11 @@ bOperators :: [[Operator Parser (VProp a b)]]
 bOperators =
   [ [ Prefix (OpB Not <$ reserved "not") ]
   ,
-    [ InfixL (OpBB Impl <$ reserved "impl")
-    , InfixL (OpBB BiImpl <$ reserved "iff")
-    , InfixL (OpBB XOr <$ reserved "???") -- not sure what Xor is for this lang
+    [ InfixL ((\x y -> Opn And [x,y]) <$ reserved "and")
+    , InfixL ((\x y -> Opn Or [x,y]) <$ reserved "or")
+    , InfixR (OpBB Impl <$ reserved "impl")
+    , InfixN (OpBB BiImpl <$ reserved "iff")
+    , InfixN (OpBB XOr <$ reserved "???") -- not sure what Xor is for this lang
     ]
   ]
 
@@ -127,9 +128,9 @@ relation = pure EQ <* symbol "="
 
 rExpr :: Parser (VProp a T.Text)
 rExpr = do
-  a <- aTerm
+  a <- (lexeme aTerm)
   op <- relation
-  b <- aTerm
+  b <- (lexeme aTerm)
   return (OpIB op a b)
 
 
