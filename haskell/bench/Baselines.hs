@@ -1,3 +1,5 @@
+module Baselines where
+
 import Run
 import Data.Csv
 import Data.Text (Text,pack,unpack)

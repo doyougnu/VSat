@@ -26,7 +26,7 @@ dependencies:
 - cassava
 - bytestring
 - text
-# - vector
+- vector
 - time
 - tasty-quickcheck
 - aeson-pretty
@@ -79,6 +79,16 @@ benchmarks:
     - -rtsopts
     - -with-rtsopts=-N
 
+  auto:
+    main:                AutoBench.hs
+    source-dirs:
+      - bench
+      - src
+    ghc-options:
+    - -O2
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
 
 tests:
   vsat-test:
