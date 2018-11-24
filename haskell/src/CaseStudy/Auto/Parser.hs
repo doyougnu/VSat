@@ -8,6 +8,7 @@ import qualified Text.Megaparsec.Char.Lexer as L
 import Text.Megaparsec.Expr
 
 import CaseStudy.Auto.Lang
+import Debug.Trace (trace)
 
 type Parser = Parsec Void T.Text
 
@@ -59,7 +60,8 @@ bExpr :: Parser (AutoLang T.Text)
 bExpr = makeExprParser bTerm bOperators
 
 bTerm :: Parser (AutoLang T.Text)
-bTerm = parens bExpr
+bTerm = try contextRef
+        <|> parens bExpr
         <|> (AutoLit True <$ reserved "true")
         <|> (AutoLit False <$ reserved "false")
         <|> rExpr
@@ -69,14 +71,21 @@ aTerm :: Parser (ALang T.Text)
 aTerm = parens aExpr
         <|> ALit <$> integer
         <|> arithRef
-        <|> dbg "ctx" contextRef
 
-contextRef :: Parser (ALang a)
-contextRef = do reserved "context"
-                _ <- brackets $ do
-                  _ <- symbol "_"
-                  reserved "evolution-context"
-                return Ctx
+contextRef_ :: Parser (AutoLang a -> AutoLang a)
+contextRef_ = do reserved "context"
+                 _ <- brackets $ do
+                     _ <- symbol "_"
+                     reserved "evolution-context"
+                 op <- relation
+                 rhs <- integer
+                 return $ Ctx op (ALit rhs)
+
+contextRef :: Parser (AutoLang T.Text)
+contextRef = do f <- parens contextRef_
+                reserved "impl"
+                rest <- bTerm
+                return $ f rest
 
 boolRef :: Parser (AutoLang T.Text)
 boolRef = do reserved "feature"
@@ -123,6 +132,14 @@ relation = pure EQL <* symbol "="
            <|> pure LSTE <* symbol ">="
            <|> pure GRT  <* symbol ">"
            <|> pure NEQL <* symbol "!="
+
+
+aRelation :: Parser AOp
+aRelation = pure Add <* symbol "+"
+           <|> pure Subtract <* symbol "-"
+           <|> pure Multiply <* symbol "*"
+           <|> pure Divide <* symbol "/"
+           <|> pure Modulus <* symbol "%"
 
 rExpr :: Parser (AutoLang T.Text)
 rExpr = do
