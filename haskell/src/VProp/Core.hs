@@ -10,7 +10,7 @@ import           Prelude hiding      (LT, GT, EQ)
 
 
 import VProp.Types
-
+import Debug.Trace (trace)
 instance Show Var where show = varName
 instance (Show a, Show b) => Show (VProp a b) where show = prettyPropExpr
 
@@ -341,7 +341,37 @@ configs prop = go (Set.toList $ dimensions prop)
 --         go (Opn _ ps)  = concatMap go $ ps
 --         go _           = [Map.empty]
 
--- ------------------------------ Manipulation ------------------------------------
+------------------------------ Manipulation ------------------------------------
+-- ivarsWithType :: (Ord a, Ord b) => VProp a b -> Set.Set (RefN, b)
+-- ivarsWithType (LitB _)     = Set.empty
+-- ivarsWithType (RefB _)     = Set.empty
+-- ivarsWithType (OpB _ e)    = ivarsWithType e
+-- ivarsWithType (OpBB _ l r) = ivarsWithType l `Set.union` ivarsWithType r
+-- ivarsWithType (OpIB _ l r) = ivarsWithType' l `Set.union` ivarsWithType' r
+-- ivarsWithType (Opn _ ps)   = Set.unions $ ivarsWithType <$> ps
+-- ivarsWithType (ChcB _ l r) = ivarsWithType l `Set.union` ivarsWithType r
+
+-- ivarsWithType' :: Ord a => VIExpr a -> Set.Set (RefN, a)
+-- ivarsWithType' (LitI _)     = Set.empty
+-- ivarsWithType' (OpI _ e)    = ivarsWithType' e
+-- ivarsWithType' (OpII _ l r) = ivarsWithType' l `Set.union` ivarsWithType' r
+-- ivarsWithType' (ChcI _ l r) = ivarsWithType' l `Set.union` ivarsWithType' r
+-- ivarsWithType' (Ref x a)    = Set.singleton (x, a)
+
+-- | remove redundant operators
+flatten :: (Show a, Show b) => VProp a b -> VProp a b
+flatten a@(Opn op [Opn op' ps])
+  | op == op' = flatten $ Opn op ps
+  | otherwise = a
+flatten (Opn op ((Opn op' ps):rest))
+  | op == op' = flatten $ Opn op $ ps ++ rest
+  | otherwise = Opn op ((Opn op' (flatten <$> ps)) : (flatten <$> rest))
+flatten (OpB op e) = OpB op $ flatten e
+flatten (OpBB op l r) = OpBB op (flatten l) (flatten r)
+flatten (ChcB d l r) = ChcB d (flatten l) (flatten r)
+flatten e = e
+
+
 -- -- | Given a tag tree, fmap over the tree with respect to a config
 -- replace :: Config -> a -> VProp a -> VProp a
 -- replace _    v (Ref _) = Ref v
