@@ -44,6 +44,7 @@ autoToVSat (Ctx op a b) = V.ChcB "AA" (autoToVSat b) (V.LitB True)
 autoToVSat (AutoRef a) = V.RefB a
 autoToVSat (AutoNot a) = V.OpB V.Not $ autoToVSat a
 autoToVSat (BBinary And l r) = V.Opn V.And $ autoToVSat <$> [l,r]
+autoToVSat (BBinary Or l r) = V.Opn V.Or $ autoToVSat <$> [l,r]
 autoToVSat (BBinary op l r) = V.OpBB (dispatch op) (autoToVSat l) (autoToVSat r)
 autoToVSat (RBinary op l r) = V.OpIB (dispatch' op) (autoToVSat' l) (autoToVSat' r)
 
