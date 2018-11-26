@@ -10,7 +10,7 @@ import           Prelude hiding      (LT, GT, EQ)
 
 
 import VProp.Types
-import Debug.Trace (trace)
+
 instance Show Var where show = varName
 instance (Show a, Show b) => Show (VProp a b) where show = prettyPropExpr
 
