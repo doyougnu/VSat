@@ -6,18 +6,18 @@ data AutoLang a = AutoLit Bool
                 | AutoNot (AutoLang a)
                 | BBinary BOp (AutoLang a) (AutoLang a)
                 | RBinary RBOp (ALang a) (ALang a)
-                deriving (Show)
+                deriving (Show, Eq)
 
-data BOp = And | Or | Impl | Eqv | Xor
-data RBOp = GRT | GRTE | EQL | LST | LSTE  | NEQL
+data BOp = And | Or | Impl | Eqv | Xor deriving Eq
+data RBOp = GRT | GRTE | EQL | LST | LSTE  | NEQL deriving Eq
 
 data ALang a = ALit Integer
              | AVar a
              | Neg (ALang a)
              | ABinary AOp (ALang a) (ALang a)
-             deriving Show
+             deriving (Show, Eq)
 
-data AOp = Add | Subtract | Multiply | Divide | Modulus
+data AOp = Add | Subtract | Multiply | Divide | Modulus deriving Eq
 
 prettyAuto :: (Show a) => AutoLang a -> String
 prettyAuto = top
