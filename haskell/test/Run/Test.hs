@@ -12,6 +12,7 @@ import Data.SBV ( SatResult(..)
                 , Solver(..))
 import Data.SBV.Internals (showModel, SMTModel(..))
 import Control.Monad.Trans (liftIO)
+import Data.Monoid (Sum)
 
 import VProp.Types
 import VProp.Core
@@ -20,6 +21,7 @@ import VProp.Gen
 import Config (defConf, allOptsConf)
 import Run
 import Api
+import V
 
 instance Eq SMTResult where
   (Unsatisfiable x) == (Unsatisfiable y) = x == y
@@ -74,6 +76,7 @@ runProperties = testGroup "Run Properties" [
   -- andDecomp_terminatesSh
   -- , sat_term
   -- sat_error
+  dim_homo
   -- , sat_error2
   -- , sat_error3
                                            -- ad_term2
@@ -88,11 +91,20 @@ unitTests = testGroup "Unit Tests" [
   , sat_error4
   , andDecomp_duplicate
   , andDecomp_duplicateChc
+  , dim_homo'
   ]
 
 sat_term = QC.testProperty
            "Satisfiability terminates on any input"
            sat_terminates
+
+dim_homo = QC.testProperty
+           "Dimensions are homomorphic over solving i.e. dimensions are preserved, always"
+           dim_homomorphism
+
+dim_homo' = H.testCase
+            "dim homomorphism for simplest nested case"
+            dim_homo_unit
 
 andDecomp_terminatesSh = QC.testProperty
                          "And decomp terminates with shared generated props"
@@ -150,6 +162,23 @@ ad_terminates x = onlyInts x QC.==> QCM.monadicIO
        -- liftIO $ print $ "prop Dup?: " ++ show (noDupRefs x)
        a <- QCM.run . runAD defConf . bimap show show $ (x :: VProp Var Var)
        QCM.assert (not $ null a)
+
+dim_homomorphism x = onlyInts x QC.==> QCM.monadicIO
+  $ do a <- QCM.run . sat . bimap show show $ (x :: VProp Var Var)
+       -- liftIO $ print $ "prop: " ++ show (x :: VProp Var Var)
+       -- liftIO $ print $ "dims: " ++ show (dimensions x)
+       -- liftIO $ print $ "num dims: " ++ show (length $ dimensions x)
+
+       QCM.assert ((toInteger $ length (dimensions x)) == numDimensions a)
+
+dim_homo_unit = do a <- sat prop
+                   let numDimsAfter = numDimensions a
+                       numDimsBefore = toInteger $ length $ dimensions prop
+                   putStrLn $ "\nbefore: " ++ show prop
+                   putStrLn $ "after: " ++ show a
+                   H.assertBool "" (numDimsBefore == numDimsAfter)
+  where prop :: VProp String String
+        prop = (ChcB "AA" (bRef "x") (bRef "y")) ==> (ChcB "DD" true false)
 
 sat_error_unit = do a <- sat prop
                     H.assertBool "" (not $ null a)

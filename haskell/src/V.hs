@@ -6,7 +6,7 @@ import Data.Bifoldable        (Bifoldable, bifoldMap, bifoldr')
 import Data.Foldable          (Foldable)
 import Data.Traversable       (Traversable)
 import Control.Monad          (ap)
-import Data.Monoid            ((<>))
+import Data.Monoid            ((<>), Sum(..))
 import Data.List              (sortOn)
 import qualified Data.Map.Strict     as Map
 import GHC.Generics
@@ -119,6 +119,11 @@ recompile xs = sequence $ go (tail xs') (_recompile conf val)
     go :: Ord d => [(VConfig d, a)] -> V d (Maybe a) -> V d (Maybe a)
     go []          acc = acc
     go ((c, v):cs) acc = go cs $ replace c v acc
+
+
+-- Get the dimensions in a choice tree
+numDimensions :: V d a -> Integer
+numDimensions = getSum . bifoldMap (const 1) (const mempty)
 
 -- Predicates
 isPlain :: V d a -> Bool
