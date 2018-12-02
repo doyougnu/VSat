@@ -138,6 +138,17 @@ onlyLits' (ChcI _ l r) = onlyLits' l && onlyLits' r
 noDupRefs :: Ord a => VProp a a -> Bool
 noDupRefs prop = Set.null $ (bvars prop) `Set.intersection` (ivars prop)
 
+-- | returns true if there are terms in the ast like (Opn And [Opn And ...]...)
+redundantOps :: VProp a b -> Bool
+redundantOps (Opn op ((Opn op' hs):ts)) =
+  op == op' || foldr (\x acc -> redundantOps x || acc) False (hs ++ ts)
+redundantOps (Opn _ ps)   = foldr (\x acc -> redundantOps x || acc) False ps
+redundantOps (ChcB _ l r) = redundantOps l || redundantOps r
+redundantOps (OpBB _ l r) = redundantOps l || redundantOps r
+redundantOps (OpB _ l)    = redundantOps l
+redundantOps _            = False
+
+
 -- ----------------------------- Choice Manipulation ------------------------------
 -- | Given a config and a Variational VProp term select the element out that the
 -- config points to
@@ -360,17 +371,22 @@ configs prop = go (Set.toList $ dimensions prop)
 
 -- | remove redundant operators
 flatten :: (Show a, Show b) => VProp a b -> VProp a b
-flatten a@(Opn op [Opn op' ps])
-  | op == op' = flatten $ Opn op ps
-  | otherwise = a
-flatten (Opn op ((Opn op' ps):rest))
-  | op == op' = flatten $ Opn op $ ps ++ rest
-  | otherwise = Opn op ((Opn op' (flatten <$> ps)) : (flatten <$> rest))
-flatten (OpB op e) = OpB op $ flatten e
-flatten (OpBB op l r) = OpBB op (flatten l) (flatten r)
-flatten (ChcB d l r) = ChcB d (flatten l) (flatten r)
-flatten e = e
+flatten p
+  | redundantOps p = flatten $ flatten_ p
+  | otherwise = p
 
+flatten_ :: (Show a, Show b) => VProp a b -> VProp a b
+flatten_ (Opn op [Opn op' ps])
+  | op == op' = Opn op $ flatten_ <$> ps
+  | otherwise = (Opn op [Opn op' $ flatten_ <$> ps])
+flatten_ (Opn op ((Opn op' ps):rest))
+  | op == op' = Opn op $ flatten_ <$> (ps ++ rest)
+  | otherwise = Opn op ((Opn op' (flatten_ <$> ps)) : (flatten_ <$> rest))
+flatten_ (Opn op ps)   = Opn op $ flatten_ <$> ps
+flatten_ (OpB op e)    = OpB op $ flatten_ e
+flatten_ (OpBB op l r) = OpBB op (flatten_ l) (flatten_ r)
+flatten_ (ChcB d l r)  = ChcB d (flatten_ l) (flatten_ r)
+flatten_ e = e
 
 -- -- | Given a tag tree, fmap over the tree with respect to a config
 -- replace :: Config -> a -> VProp a -> VProp a
