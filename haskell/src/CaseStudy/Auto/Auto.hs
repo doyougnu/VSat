@@ -40,8 +40,9 @@ instance FromJSON Auto where
     return Auto{contexts=(mn,mx), constraints=constraints}
 
 -- | run the state monad and get a vprop expression back
-autoToVSat :: (Show a, Eq a, Ord a) => AutoLang a -> V.VProp a a
-autoToVSat = flip S.evalState (M.empty, 0) . autoToVSat_
+autoToVSat :: (Show a, Eq a, Ord a) =>
+  AutoLang a -> (V.VProp a a, (DimMap a, Integer))
+autoToVSat = flip S.runState (M.empty, 0) . autoToVSat_
 
 -- | convert an autolang expression to a vprop lang expression. State monad to
 -- keep track of which evolution contexts have been observed and which
@@ -101,5 +102,9 @@ dispatch'' Modulus = V.Mod
 
 -- | take a list of autolangs queries and conjoin them as a single query. The
 -- conjunction is domain specific and appropriate in this context
-combine :: [AutoLang a] -> AutoLang a
-combine = Prelude.foldr1 (BBinary And)
+conjoin :: [AutoLang a] -> AutoLang a
+conjoin = Prelude.foldr1 (BBinary And)
+
+
+disjoin :: [AutoLang a] -> AutoLang a
+disjoin = Prelude.foldr1 (BBinary Or)
