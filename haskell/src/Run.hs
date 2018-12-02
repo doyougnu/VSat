@@ -184,7 +184,8 @@ vSolve prop = do prop' <- prop
                       return res
 
 -- | Solve a VSMT proposition
-vSMTSolve :: S.Symbolic (VProp S.SBool SNum) -> S.Symbolic (V String (Maybe S.SMTResult))
+vSMTSolve :: S.Symbolic (VProp S.SBool SNum)
+          -> S.Symbolic (V String (Maybe S.SMTResult))
 vSMTSolve prop = do prop' <- prop
                     S.setOption $ SC.ProduceAssertions True
                     SC.query $
