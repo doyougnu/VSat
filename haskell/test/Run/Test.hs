@@ -18,10 +18,10 @@ import VProp.Types
 import VProp.Core
 import VProp.SBV
 import VProp.Gen
-import Config (defConf, allOptsConf)
+import Config (defConf, allOptsConf, emptyConf)
 import Run
 import Api
-import V
+import qualified V as V
 
 instance Eq SMTResult where
   (Unsatisfiable x) == (Unsatisfiable y) = x == y
@@ -164,18 +164,17 @@ ad_terminates x = onlyInts x QC.==> QCM.monadicIO
        QCM.assert (not $ null a)
 
 dim_homomorphism x = onlyInts x QC.==> QCM.monadicIO
-  $ do a <- QCM.run . sat . bimap show show $ (x :: VProp Var Var)
+  $ do a <- QCM.run . satWith emptyConf . bimap show show $ (x :: VProp Var Var)
        -- liftIO $ print $ "prop: " ++ show (x :: VProp Var Var)
        -- liftIO $ print $ "dims: " ++ show (dimensions x)
        -- liftIO $ print $ "num dims: " ++ show (length $ dimensions x)
 
-       QCM.assert ((toInteger $ length (dimensions x)) == numDimensions a)
+       QCM.assert (length (dimensions x) == length (V.dimensions a))
 
 dim_homo_unit = do a <- sat prop
-                   let numDimsAfter = numDimensions a
-                       numDimsBefore = toInteger $ length $ dimensions prop
-                   putStrLn $ "\nbefore: " ++ show prop
-                   putStrLn $ "after: " ++ show a
+                   let numDimsAfter = length $ V.dimensions a
+                       numDimsBefore = length $ dimensions prop
+
                    H.assertBool "" (numDimsBefore == numDimsAfter)
   where prop :: VProp String String
         prop = (ChcB "AA" (bRef "x") (bRef "y")) ==> (ChcB "DD" true false)

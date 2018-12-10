@@ -5,6 +5,7 @@ import Data.Bitraversable     (Bitraversable, bitraverse)
 import Data.Bifoldable        (Bifoldable, bifoldMap, bifoldr')
 import Data.Foldable          (Foldable)
 import Data.Traversable       (Traversable)
+import qualified Data.Set as S
 import Control.Monad          (ap)
 import Data.Monoid            ((<>), Sum(..))
 import Data.List              (sortOn)
@@ -124,6 +125,9 @@ recompile xs = sequence $ go (tail xs') (_recompile conf val)
 -- Get the dimensions in a choice tree
 numDimensions :: V d a -> Integer
 numDimensions = getSum . bifoldMap (const 1) (const mempty)
+
+dimensions :: Ord d => V d a -> S.Set d
+dimensions = bifoldr' S.insert (const $ const S.empty) S.empty
 
 -- Predicates
 isPlain :: V d a -> Bool
