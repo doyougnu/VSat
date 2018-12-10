@@ -150,8 +150,7 @@ atomize' (OpII op l r) = OpII op (atomize' l) (atomize' r)
 atomize' (ChcI d l r)  = ChcI d (atomize' l) (atomize' r)
 atomize' x = x
 
--- | The normal form is CNF with choices driven as close to leaves as possible
-isNormalForm :: VProp a b -> Bool
+-- | malForm :: VProp a b -> Bool
 isNormalForm !(LitB _) = True
 isNormalForm !(RefB _) = True
 isNormalForm !(ChcB _ (LitB _) (LitB _ )) = True
@@ -240,7 +239,7 @@ moveNot !(Opn Or os)   = Opn Or $ fmap moveNot os
 moveNot !(OpBB op l r) = OpBB op (moveNot l) (moveNot r)
 moveNot !(OpB op e)    = OpB op (moveNot e)
 moveNot !(ChcB d l r)  = ChcB d (moveNot l) (moveNot r)
-moveNot nonRecursive  = nonRecursive
+moveNot nonRecursive   = nonRecursive
 
 -- | distribute ands over ors
 distributeAndOverOr :: VProp a b -> VProp a b
