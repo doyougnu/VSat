@@ -7,8 +7,9 @@ import GHC.Generics (Generic)
 import VProp.Types
 import VProp.Gen
 import VProp.SBV (SAT, toPredicate)
-import Data.List (sort)
+import qualified Data.Sequence as SE
 import Data.Foldable (foldr')
+import Data.Monoid ((<>))
 import qualified Data.Map.Strict as Map
 import Prelude hiding (LT,GT,EQ)
 
@@ -27,7 +28,7 @@ data Opts = MoveRight
 -- | Given any arbritrary prop move any choices to the right
 moveChcToRight :: (Ord a, Ord b) => VProp a b -> VProp a b
   -- structural instances
-moveChcToRight !(Opn op xs) = Opn op . sort $ fmap moveChcToRight xs
+moveChcToRight !(Opn op xs) = Opn op . SE.sort $ fmap moveChcToRight xs
 moveChcToRight !(OpBB XOr x@(ChcB _ _ _) r) = OpBB XOr r x
 moveChcToRight !(OpBB BiImpl x@(ChcB _ _ _) r) = OpBB Impl r x
 moveChcToRight !(OpIB LT x@(ChcI _ _ _) r) = OpIB GT (moveChcToRight' r) (moveChcToRight' x)
@@ -56,7 +57,7 @@ moveChcToRight' nonRecursive  = nonRecursive
 -- | Given any arbritrary prop move any choices to the left
 moveChcToLeft :: (Ord a, Ord b) => VProp a b -> VProp a b
   -- structural instances
-moveChcToLeft !(Opn op xs) = Opn op . reverse . sort . fmap moveChcToLeft $ xs
+moveChcToLeft !(Opn op xs) = Opn op . SE.reverse . SE.sort . fmap moveChcToLeft $ xs
 moveChcToLeft !(OpBB XOr    l x@(ChcB _ _ _)) = OpBB XOr (moveChcToLeft x) (moveChcToLeft l)
 moveChcToLeft !(OpBB BiImpl l x@(ChcB _ _ _)) = OpBB BiImpl (moveChcToLeft x) (moveChcToLeft l)
 moveChcToLeft !(OpIB LT l x@(ChcI _ _ _)) = OpIB GT (moveChcToLeft' x) (moveChcToLeft' l)
@@ -85,8 +86,8 @@ moveChcToLeft' nonRecursive  = nonRecursive
 -- | Given a VProp try to eliminate some terms based on simple rules
 shrinkProp :: (Show a, Ord a) => VProp a a -> VProp a a
 shrinkProp !(OpB Not (OpB Not x)) = shrinkProp x
-shrinkProp !(Opn And xs) = Opn And $ filter (not . tautology) xs
-shrinkProp !(Opn Or xs) = Opn Or $ filter (not . unsatisfiable) xs
+shrinkProp !(Opn And xs) = Opn And $ SE.filter (not . tautology) xs
+shrinkProp !(Opn Or xs) = Opn Or $ SE.filter (not . unsatisfiable) xs
 shrinkProp e
   | unsatisfiable e = false
   | tautology e     = true
@@ -124,7 +125,7 @@ atomize !x@(ChcB d (OpB op l) (OpB op' l'))
   | op == op' = OpB op (ChcB d (atomize l) (atomize l'))
   | otherwise = x
 atomize !x@(ChcB d (Opn op es) (Opn op' es'))
-  | op == op' = Opn op $ zipWith (\a b -> ChcB d (atomize a) (atomize b)) es es'
+  | op == op' = Opn op $ SE.zipWith (\a b -> ChcB d (atomize a) (atomize b)) es es'
   | otherwise = x
   -- recursive instances
 atomize !(OpIB op l r) = OpIB op (atomize' l) (atomize' r)
@@ -150,7 +151,7 @@ atomize' (OpII op l r) = OpII op (atomize' l) (atomize' r)
 atomize' (ChcI d l r)  = ChcI d (atomize' l) (atomize' r)
 atomize' x = x
 
--- | malForm :: VProp a b -> Bool
+isNormalForm :: VProp a b -> Bool
 isNormalForm !(LitB _) = True
 isNormalForm !(RefB _) = True
 isNormalForm !(ChcB _ (LitB _) (LitB _ )) = True
@@ -212,18 +213,32 @@ toCNF = associate . distributeAndOverOr . moveNot . elimImplXor
 
 -- | eliminate all implications and equivalences
 elimImplXor :: VProp a b -> VProp a b
-elimImplXor !(OpBB BiImpl l r) = Opn And [ Opn Or [bnot l', r']
-                                         , Opn Or [bnot r', l']
-                                         ]
+-- elimImplXor !(OpBB BiImpl l r) = Opn And [ Opn Or [bnot l', r']
+--                                          , Opn Or [bnot r', l']
+--                                          ]
+
+elimImplXor !(OpBB BiImpl l r) = Opn And $
+                                 Opn Or lthenr SE.<| SE.singleton (Opn Or rthenl)
   where l' = elimImplXor l
         r' = elimImplXor r
-elimImplXor !(OpBB Impl l r) = Opn Or [bnot $ elimImplXor l, elimImplXor r]
+  -- this is the lthenr, rthenl pattern in lists:
+  -- -- Opn And [ Opn Or [bnot l', r']
+            --  , Opn Or [bnot r', l']
+            --  ]
+        lthenr = (bnot l' SE.<| SE.singleton r')
+        rthenl = (bnot r' SE.<| SE.singleton l')
+elimImplXor !(OpBB Impl l r) = Opn Or $
+                               (bnot $ elimImplXor l) SE.<|
+                               (SE.singleton $ elimImplXor r)
   -- xor is elminated via equivalence p `xor` q === (p or q) and (not p or not q)
-elimImplXor !(OpBB XOr l r)  = Opn And [ Opn Or [l',r']
-                                       , Opn Or [bnot l', bnot r']
-                                       ]
+elimImplXor !(OpBB XOr l r)  = Opn And $
+                               Opn Or <$>
+                               lthenr SE.<|
+                               SE.singleton lthenrNot
   where l' = elimImplXor l
         r' = elimImplXor r
+        lthenr = l' SE.<| SE.singleton r'
+        lthenrNot = bnot <$> lthenr
 elimImplXor !(Opn op os)     = Opn op $ fmap elimImplXor os
 elimImplXor !(OpB op e)      = OpB op $ elimImplXor e
 elimImplXor !(ChcB d l r)    = ChcB d (elimImplXor l) (elimImplXor r)
@@ -246,12 +261,18 @@ distributeAndOverOr :: VProp a b -> VProp a b
 distributeAndOverOr (Opn Or es) = foldr1 helper $ fmap distributeAndOverOr es
   where
     helper (Opn And as) x = Opn And $
-                            distributeAndOverOr <$> [Opn Or [a,x] | a <- as ]
+                            distributeAndOverOr <$>
+                            -- this is just list comp e.g.:
+                            -- [Opn Or [a,x] | a <- as ]
+                            do a <- as
+                               return . Opn Or $ a SE.<| SE.singleton x
     helper x (Opn And as) = Opn And $
-                            distributeAndOverOr <$> [Opn Or [x,a] | a <- as ]
-    helper (Opn Or as) e = Opn Or $ e:as -- or is commutative
-    helper e (Opn Or as) = Opn Or $ e:as
-    helper p q           = Opn Or [p,q]
+                            distributeAndOverOr <$>
+                            do a <- as
+                               return . Opn Or $ x SE.<| SE.singleton a
+    helper (Opn Or as) e = Opn Or $ e SE.<| as -- or is commutative
+    helper e (Opn Or as) = Opn Or $ e SE.<| as
+    helper p q           = Opn Or $ p SE.<| SE.singleton q
 distributeAndOverOr (Opn And es) = Opn And $ fmap distributeAndOverOr es
 distributeAndOverOr (OpB op e)   = OpB op $ distributeAndOverOr e
 distributeAndOverOr (OpBB op l r) = OpBB op
@@ -265,12 +286,12 @@ distributeAndOverOr nonRecursive = nonRecursive
 
 -- | flatten all nested lists
 associate :: VProp a b -> VProp a b
-associate (Opn And es) = Opn And $ foldr' f [] (fmap associate es)
-  where f (Opn And as) bs = as ++ bs
-        f e bs            = e:bs
-associate (Opn Or es) = Opn Or $ foldr' f [] (fmap associate es)
-  where f (Opn Or as) bs = as ++ bs
-        f e bs            = e:bs
+associate (Opn And es) = Opn And $ foldr' f SE.empty (fmap associate es)
+  where f (Opn And as) bs = as <> bs
+        f e bs            = e SE.<| bs
+associate (Opn Or es) = Opn Or $ foldr' f SE.empty (fmap associate es)
+  where f (Opn Or as) bs = as <> bs
+        f e bs            = e SE.<| bs
 associate (OpB op e)    = OpB op $ associate e
 associate (OpBB op l r) = OpBB op (associate l) (associate r)
 associate (ChcB d l r)  = ChcB d (associate l) (associate r)
