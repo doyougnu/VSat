@@ -3,7 +3,6 @@ module Run ( Result (..)
            , Log
            , runAD
            , runBF
-           , runVS
            , runVSMT
            , unbox
            , fst'
@@ -17,7 +16,7 @@ import qualified Data.SBV            as S
 import qualified Data.SBV.Control    as SC
 import           Prelude hiding (LT, GT, EQ)
 import Data.Foldable (foldr')
-import qualified Data.Heap           as H
+import qualified Data.Sequence as SE
 
 import GHC.Generics
 import Control.DeepSeq               (NFData)
@@ -25,6 +24,8 @@ import Control.DeepSeq               (NFData)
 import Control.Arrow                 (first, second)
 
 import Data.Maybe                    (fromJust, catMaybes)
+
+import Debug.Trace (trace)
 
 import VProp.Types
 import VProp.SBV
@@ -42,6 +43,16 @@ type Log = String
 
 -- | Takes a dimension d, a value a, and a result r
 type Env a r = RWST (SMTConf a) Log (SatDict a) IO r -- ^ the monad stack
+
+-- | A zipper for evaluation. This is required so that everytime we have a
+-- choice we have access to the rest of the proposition that we are evaluation.
+-- If we do not have access then there is no way to perform a selection,
+-- manipulate the assertion stack and then continue evaluating.
+data Op = CAnd | COr
+
+data Ctx a b = InOpN Op !(SE.Seq (VProp a b), VProp a b)
+             | InNot !(Ctx a b)
+             | InOpIB Op !(Ctx a b, VProp a b)
 
 -- | An empty reader monad environment, in the future read these from config file
 _emptySt :: SatDict a
@@ -69,13 +80,6 @@ runBF :: SMTConf String
       -> IO (V Dim S.SatResult)
 runBF os p = unRes . fst' <$> runEnv runBruteForce os p
   where unRes (BF x) = x
-
--- | Run the variational sat solver given a list of optimizations and a prop.
--- This can throw an exception if the prop has SMT terms in it
-runVS :: SMTConf String
-  -> VProp String String
-  -> IO (Result, SatDict String, Log)
-runVS = runEnv runVSolve
 
 -- | Run the VSMT solver given a list of optimizations and a prop
 runVSMT :: SMTConf String
@@ -121,13 +125,6 @@ runAndDecomp prop = do
     SC.query $ do S.constrain p; getVSMTModel
   lift . return . V $ Plain res
 
-runVSolve :: (MonadReader (SMTConf String) (t IO), MonadTrans t) =>
-  VProp String String -> t IO Result
-runVSolve prop = do cnf <- ask
-                    (result,_) <- lift . S.runSMTWith (conf cnf) . vSolve
-                                  $ St.evalStateT (propToSBool prop) (M.empty, M.empty)
-                    lift . return . V $ result
-
 runVSMTSolve :: (MonadTrans t, MonadReader (SMTConf String) (t IO)) =>
   VProp String String -> t IO Result
 runVSMTSolve prop =
@@ -168,20 +165,7 @@ type IncState a = (V String (Maybe a), UsedDims Dim)
 -- | the incremental solve monad, with the base monad being the query monad so
 -- we can pull out sbv models Hardcoding so that I don't have to write the mtl
 -- typeclass. I do not expect these to change much
-type IncVSolve a    = St.StateT (IncState S.SMTResult) SC.Query a
 type IncVSMTSolve a = St.StateT (IncState S.SMTResult) SC.Query a
-
--- | Given a VProp with references at the boolean level as SBools, and at the
--- number level as SDoubles, recur through the proposition loading terms into
--- SBV. When we hit a choice we manipulate the assertion stack to maximize reuse
--- of non-variational terms and then cons the resultant model for each branch of
--- the choice onto the result list.
-vSolve :: S.Symbolic (VProp S.SBool SNum) -> S.Symbolic (IncState S.SMTResult)
-vSolve prop = do prop' <- prop
-                 SC.query $
-                   do res <- St.execStateT (vSolve_ prop')
-                        (Plain Nothing, M.empty)
-                      return res
 
 -- | Solve a VSMT proposition
 vSMTSolve :: S.Symbolic (VProp S.SBool SNum)
@@ -255,8 +239,8 @@ getVSMTModel :: SC.Query (Maybe S.SMTResult)
 getVSMTModel = do cs <- SC.checkSat
                   case cs of
                     SC.Unk   -> error "Unknown Error from solver!"
-  -- if unsat the return unsat, just passing default config to get the unsat constructor
-  -- TODO return correct conf
+  -- if unsat the return unsat, just passing default config to get the unsat
+  -- constructor TODO return correct conf
                     SC.Unsat -> return . Just $ S.Unsatisfiable S.defaultSMTCfg
                     SC.Sat   -> SC.getSMTResult >>= return . pure
 
@@ -267,15 +251,6 @@ instance (Monad m, I.SolverContext m) =>
   namedConstraint = (lift .) . S.namedConstraint
   setOption = lift . S.setOption
 
-
--- | Helper functoins for the n-ary cases
-vSolveHelper :: S.SBool -> [VProp S.SBool SNum] ->
-  (S.SBool -> S.SBool -> S.SBool) -> IncVSolve S.SBool
-vSolveHelper !acc ![]     _ = return acc
-vSolveHelper !acc !(x:xs) f = do b <- vSolve_ x
-                                 let res = b `f` acc
-                                 S.constrain res
-                                 vSolveHelper res xs f
 
 -- notice that we are doing a left fold here
 vSMTSolveHelper :: S.SBool -> [VProp S.SBool SNum] ->
@@ -310,39 +285,54 @@ store = St.modify . first . const
 -- then we'll get back a variational model, if we get back a variational model
 -- then we reconstruct the choice expression representing the model and store it
 -- in the state
-handleChc :: (VProp a b -> IncVSMTSolve S.SBool)
-  -> VProp a b -> IncVSMTSolve S.SBool
-handleChc f !(ChcB d l r) =
+handleChc :: (Ctx a b -> IncVSMTSolve S.SBool)
+          -> Ctx a b -> IncVSMTSolve S.SBool
+handleChc f (InOpN op (ctx, ChcB d l r)) =
   do (_, used) <- get
      case M.lookup d used of
-       Just True  -> f l
-       Just False -> f r
+       Just True  -> f goLeft
+       Just False -> f goRight
        Nothing    -> do
-                        clearSt
                         St.modify . second $ M.adjust (const True) d
                         lift $ SC.queryDebug ["pushing left side"]
+                        trace "\npushing left side" $ return ()
                         lift $! SC.push 1
-                        l' <- f l
-                        S.constrain l'
+                        f goLeft >>= S.constrain
                         lRes <- getResult
                         lift $! SC.pop 1
 
-                        clearSt
                         St.modify . second $ M.insert d False
                         lift $ SC.queryDebug ["pushing right side"]
+                        trace "pushing right side" $ return ()
                         lift $! SC.push 1
-                        r' <- f r
-                        S.constrain r'
+                        f goRight >>= S.constrain
                         rRes <- getResult
                         lift $! SC.pop 1
 
                         store $ VChc (dimName d) lRes rRes
+                        trace ("storing " ++ (dimName d)) (return ())
                         St.modify . second $ M.delete d
      -- this return statement should never matter because we've reset the
      -- assertion stack. So I just return r' here to fulfill the type
-                        return r'
+                        return true
+  where goLeft  = InOpN op (ctx, l)
+        goRight = InOpN op (ctx, r)
 handleChc f x = f x
 
+-- | Given a zipper over VProps, run the appropriate evaluation function, and
+-- generate new contexts. In a sense, this function ties the loop between
+-- vSMTSolver_ and handleChc
+vSMTSolve__ :: Ctx S.SBool SNum -> IncVSMTSolve S.SBool
+vSMTSolve__ (InOpN _  (SE.Empty, fcs)) = vSMTSolve_ fcs
+vSMTSolve__ (InOpN op (ctx, fcs)) = do
+  fcs' <- vSMTSolve_ fcs
+  let (newCtx SE.:> newFocus) = SE.viewr ctx
+      op' = handler op
+  b <- (vSMTSolve__ $ InOpN op (newCtx, newFocus)) >>= return . op' fcs'
+  S.constrain b
+  return b
+  where handler CAnd = (S.&&&)
+        handler COr  = (S.|||)
 
 -- | The main solver algorithm. You can think of this as the sem function for
 -- the dsl
@@ -372,13 +362,12 @@ vSMTSolve_ !(OpIB op l r) = do l' <- vSMTSolve'_ l
         handler GT  = (.>)
         handler EQ  = (.==)
         handler NEQ = (./=)
-vSMTSolve_ !(Opn And ps) = do b <- vSMTSolveHelper S.true ps (S.&&&)
-                              S.constrain b
-                              return b
-vSMTSolve_ !(Opn Or ps) = do b <- vSMTSolveHelper S.false ps (S.|||)
-                             S.constrain b
-                             return b
-vSMTSolve_ x = handleChc vSMTSolve_ x
+
+vSMTSolve_ !(Opn And ps) = vSMTSolve__  . InOpN CAnd $ (ctx, fcs)
+  where (ctx SE.:> fcs) = SE.viewr ps
+vSMTSolve_ !(Opn Or ps) = vSMTSolve__  . InOpN COr $ (ctx, fcs)
+  where (ctx SE.:> fcs) = SE.viewr ps
+vSMTSolve_ x = handleChc vSMTSolve__ (InOpN CAnd (SE.empty, x))
 
 handleSBoolChc :: V Dim S.SBool -> IncVSMTSolve S.SBool
 handleSBoolChc !(Plain a) = do S.constrain a
@@ -593,29 +582,3 @@ vSMTSolve'_ !(OpII op l r) = do l' <- vSMTSolve'_ l
 vSMTSolve'_ (ChcI d l r) = do r' <- vSMTSolve'_ r
                               l' <- vSMTSolve'_ l
                               return $ VChc d l' r'
-
--- | The main solver algorithm. You can think of this as the sem function for
--- the dsl
-vSolve_ :: VProp S.SBool SNum -> IncVSolve S.SBool
-vSolve_ !(RefB b) = return b
-vSolve_ !(LitB b) = return $ S.literal b
-vSolve_ !(OpB Not bs)= do b <- vSolve_ (S.bnot bs)
-                          S.constrain b
-                          return b
-vSolve_ !(OpBB op l r) = do bl <- vSolve_ l
-                            br <- vSolve_ r
-                            let op' = handler op
-                                res = bl `op'` br
-                            S.constrain res
-                            return $ res
-  where handler Impl   = (==>)
-        handler BiImpl = (<=>)
-        handler XOr    = (<+>)
-vSolve_ !(OpIB _ _ _) = error "You called the SAT Solver with SMT Exprs! Launching the missiles like you asked!"
-vSolve_ !(Opn And ps) = do b <- vSolveHelper S.true ps (&&&)
-                           S.constrain b
-                           return b
-vSolve_ !(Opn Or ps) = do b <- vSolveHelper S.false ps (|||)
-                          S.constrain b
-                          return b
-vSolve_ x = handleChc vSolve_ x

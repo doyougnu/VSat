@@ -47,6 +47,7 @@ import           Data.Bifunctor      (Bifunctor, bimap)
 import           Data.Bitraversable  (Bitraversable, bitraverse)
 import           Data.Bifoldable     (Bifoldable, bifoldMap, bifoldr)
 import           Prelude  hiding     (LT, GT, EQ, lookup)
+import qualified Data.Sequence as SE
 
 
 -- | A feature is a named, boolean configuration option.
@@ -73,7 +74,7 @@ data VProp a b
    | OpB  B_B  !(VProp a b)
    | OpBB BB_B !(VProp a b) !(VProp a b)
    | OpIB NN_B !(VIExpr b)  !(VIExpr b)
-   | Opn  Opn  ![(VProp a b)]
+   | Opn  Opn  !(SE.Seq (VProp a b))
    | ChcB Dim  !(VProp a b) !(VProp a b)
   deriving (Eq,Generic,Typeable,Functor,Traversable,Foldable,Ord)
 
@@ -373,8 +374,8 @@ instance S.Boolean (VProp a b) where
   true  = LitB True
   false = LitB False
   bnot  = OpB Not
-  l &&& r = Opn And [l,r]
-  l ||| r = Opn Or  [l,r]
+  l &&& r = Opn And $ l SE.<| (SE.singleton r)
+  l ||| r = Opn Or  $ l SE.<| (SE.singleton r)
   (<+>) = OpBB XOr
   (==>) = OpBB Impl
   (<=>) = OpBB BiImpl
