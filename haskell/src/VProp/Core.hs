@@ -1,12 +1,14 @@
 module VProp.Core where
 
 import           Control.Monad       (liftM, liftM2)
+import qualified Data.Foldable as F  (toList)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import           Data.SBV (literal)
 import           Data.List           (intercalate,group,sort)
 import           Data.Monoid         ((<>))
 import           Prelude hiding      (LT, GT, EQ)
+import qualified Data.Sequence as SE
 
 
 import VProp.Types
@@ -50,8 +52,8 @@ prettyPropExpr :: (Show a, Show b) => VProp a b -> String
 prettyPropExpr = top
   where
     top :: (Show a, Show b) => VProp a b -> String
-    top (Opn Or ps)     = intercalate " ∨ " $ sub <$> ps
-    top (Opn And ps)    = intercalate " ∧ " $ sub <$> ps
+    top (Opn Or ps)     = intercalate " ∨ " $ sub <$> (F.toList ps)
+    top (Opn And ps)    = intercalate " ∧ " $ sub <$> (F.toList ps)
     top (OpBB b l r)    = mconcat [sub l, " ", show b, " ", sub r]
     top (OpIB nb l r)    = mconcat [show l, " ", show nb, " ", show r]
     top (ChcB d ls rs) = dimName d ++ "≺" ++ top ls ++ ", " ++ top rs++ "≻"
@@ -140,8 +142,8 @@ noDupRefs prop = Set.null $ (bvars prop) `Set.intersection` (ivars prop)
 
 -- | returns true if there are terms in the ast like (Opn And [Opn And ...]...)
 redundantOps :: VProp a b -> Bool
-redundantOps (Opn op ((Opn op' hs):ts)) =
-  op == op' || foldr (\x acc -> redundantOps x || acc) False (hs ++ ts)
+redundantOps (Opn op ((Opn op' hs) SE.:<| ts)) =
+  op == op' || foldr (\x acc -> redundantOps x || acc) False (hs <> ts)
 redundantOps (Opn _ ps)   = foldr (\x acc -> redundantOps x || acc) False ps
 redundantOps (ChcB _ l r) = redundantOps l || redundantOps r
 redundantOps (OpBB _ l r) = redundantOps l || redundantOps r
@@ -263,15 +265,8 @@ bvars (RefB f)     = Set.singleton f
 bvars (OpB _ e)    = bvars e
 bvars (OpBB _ l r) = bvars l `Set.union` bvars r
 bvars (OpIB _ _ _) = Set.empty
-bvars (Opn _ ps)   = Set.unions $ bvars <$> ps
+bvars (Opn _ ps)   = Set.unions . fmap bvars . F.toList $ ps
 bvars (ChcB _ l r) = bvars l `Set.union` bvars r
-
--- vars' :: Ord a => (VIExpr a) -> Set.Set a
--- vars' (LitI _) = Set.empty
--- vars' (Ref _ f) = Set.singleton f
--- vars' (OpI _ e) = vars' e
--- vars' (OpII _ l r) = vars' l `Set.union` vars' r
--- vars' (ChcI _ l r) = vars' l `Set.union` vars' r
 
 -- | The set of dimensions in a propositional expression
 dimensions :: (VProp a b) -> Set.Set Dim
@@ -280,7 +275,7 @@ dimensions (RefB _)     = Set.empty
 dimensions (OpB _ e)    = dimensions e
 dimensions (OpBB _ l r) = dimensions l `Set.union` dimensions r
 dimensions (OpIB _ l r) = dimensions' l `Set.union` dimensions' r
-dimensions (Opn _ ps)   = Set.unions $ dimensions <$> ps
+dimensions (Opn _ ps)   = Set.unions . fmap dimensions . F.toList $ ps
 dimensions (ChcB d l r) = Set.singleton d `Set.union`
                             dimensions l `Set.union` dimensions r
 
@@ -299,7 +294,7 @@ ivars (RefB _)     = Set.empty
 ivars (OpB _ e)    = ivars e
 ivars (OpBB _ l r) = ivars l `Set.union` ivars r
 ivars (OpIB _ l r) = ivars' l `Set.union` ivars' r
-ivars (Opn _ ps)   = Set.unions $ ivars <$> ps
+ivars (Opn _ ps)   = Set.unions . fmap ivars . F.toList $ ps
 ivars (ChcB _ l r) = ivars l `Set.union` ivars r
 
 ivars' :: Ord a => VIExpr a -> Set.Set a
@@ -318,7 +313,7 @@ ivarsWithType (RefB _)     = Set.empty
 ivarsWithType (OpB _ e)    = ivarsWithType e
 ivarsWithType (OpBB _ l r) = ivarsWithType l `Set.union` ivarsWithType r
 ivarsWithType (OpIB _ l r) = ivarsWithType' l `Set.union` ivarsWithType' r
-ivarsWithType (Opn _ ps)   = Set.unions $ ivarsWithType <$> ps
+ivarsWithType (Opn _ ps)   = Set.unions . fmap ivarsWithType . F.toList $  ps
 ivarsWithType (ChcB _ l r) = ivarsWithType l `Set.union` ivarsWithType r
 
 ivarsWithType' :: Ord a => VIExpr a -> Set.Set (RefN, a)
@@ -340,35 +335,6 @@ configs prop = go (Set.toList $ dimensions prop)
     go (d:ds) = fmap ((d, True) :) cs ++ fmap ((d, False) :) cs
           where cs = go ds
 
-
--- -- | Given a Variational Prop term, get all possible paths in the choice tree
--- paths :: VProp a -> Set.Set Config
--- paths = Set.fromList . filter (not . Map.null) . go
---   where go (Chc d l r) = do someL <- go l
---                             someR <- go r
---                             [Map.insert d True someL, Map.insert d False someR]
---         go (Not x)     = go x
---         go (Op2 _ l r) = go l <> go r
---         go (Opn _ ps)  = concatMap go $ ps
---         go _           = [Map.empty]
-
------------------------------- Manipulation ------------------------------------
--- ivarsWithType :: (Ord a, Ord b) => VProp a b -> Set.Set (RefN, b)
--- ivarsWithType (LitB _)     = Set.empty
--- ivarsWithType (RefB _)     = Set.empty
--- ivarsWithType (OpB _ e)    = ivarsWithType e
--- ivarsWithType (OpBB _ l r) = ivarsWithType l `Set.union` ivarsWithType r
--- ivarsWithType (OpIB _ l r) = ivarsWithType' l `Set.union` ivarsWithType' r
--- ivarsWithType (Opn _ ps)   = Set.unions $ ivarsWithType <$> ps
--- ivarsWithType (ChcB _ l r) = ivarsWithType l `Set.union` ivarsWithType r
-
--- ivarsWithType' :: Ord a => VIExpr a -> Set.Set (RefN, a)
--- ivarsWithType' (LitI _)     = Set.empty
--- ivarsWithType' (OpI _ e)    = ivarsWithType' e
--- ivarsWithType' (OpII _ l r) = ivarsWithType' l `Set.union` ivarsWithType' r
--- ivarsWithType' (ChcI _ l r) = ivarsWithType' l `Set.union` ivarsWithType' r
--- ivarsWithType' (Ref x a)    = Set.singleton (x, a)
-
 -- | remove redundant operators
 flatten :: (Show a, Show b) => VProp a b -> VProp a b
 flatten p
@@ -376,32 +342,14 @@ flatten p
   | otherwise = p
 
 flatten_ :: (Show a, Show b) => VProp a b -> VProp a b
-flatten_ (Opn op [Opn op' ps])
+flatten_ (Opn op (Opn op' ps SE.:<| SE.Empty))
   | op == op' = Opn op $ flatten_ <$> ps
-  | otherwise = (Opn op [Opn op' $ flatten_ <$> ps])
-flatten_ (Opn op ((Opn op' ps):rest))
-  | op == op' = Opn op $ flatten_ <$> (ps ++ rest)
-  | otherwise = Opn op ((Opn op' (flatten_ <$> ps)) : (flatten_ <$> rest))
+  | otherwise = Opn op $ (Opn op' $ flatten_ <$> ps) SE.:<| SE.Empty
+flatten_ (Opn op ((Opn op' ps) SE.:<| rest))
+  | op == op' = Opn op $ flatten_ <$> (ps <> rest)
+  | otherwise = Opn op ((Opn op' (flatten_ <$> ps)) SE.:<| (flatten_ <$> rest))
 flatten_ (Opn op ps)   = Opn op $ flatten_ <$> ps
 flatten_ (OpB op e)    = OpB op $ flatten_ e
 flatten_ (OpBB op l r) = OpBB op (flatten_ l) (flatten_ r)
 flatten_ (ChcB d l r)  = ChcB d (flatten_ l) (flatten_ r)
 flatten_ e = e
-
--- -- | Given a tag tree, fmap over the tree with respect to a config
--- replace :: Config -> a -> VProp a -> VProp a
--- replace _    v (Ref _) = Ref v
--- replace conf v (Chc d l r) =
---   case Map.lookup d conf of
---     Nothing    -> Chc d (replace conf v l) (replace conf v r)
---     Just True  -> Chc d (replace conf v l) r
---     Just False -> Chc d l (replace conf v r)
--- replace conf v (Not x) = Not $ replace conf v x
--- replace conf v (Op2 a l r) = Op2 a (replace conf v l) (replace conf v r)
--- replace conf v (Opn a ps)  = Opn a (replace conf v <$> ps)
--- replace _    _ x           = x
-
--- -- | Given a Vprop term with an associated list of elements with their
--- -- configurations, replace each dimension with its associated value
--- recompile :: VProp a -> [(Config, a)] -> VProp a
--- recompile = foldr' (\(conf, val) acc -> replace conf val acc)
