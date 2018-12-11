@@ -3,6 +3,7 @@ module CaseStudy.Auto.Auto where
 import Data.Aeson
 import Data.Text
 import qualified Control.Monad.State.Strict as S
+import qualified Data.Sequence as SE
 import qualified Data.Map as M
 import Data.Bifunctor (bimap)
 
@@ -65,10 +66,14 @@ autoToVSat_ (Ctx op aexpr boolexpr) =
      flip (V.ChcB dim) (V.LitB True) <$> (autoToVSat_ boolexpr)
 autoToVSat_ (AutoRef a) = return $ V.RefB a
 autoToVSat_ (AutoNot a) = V.OpB V.Not <$> autoToVSat_ a
-autoToVSat_ (BBinary And l r) = V.Opn V.And <$> traverse autoToVSat_ [l,r]
-autoToVSat_ (BBinary Or l r) = V.Opn V.Or <$> traverse autoToVSat_ [l,r]
-autoToVSat_ (BBinary op l r) = V.OpBB (dispatch op) <$> (autoToVSat_ l) <*> (autoToVSat_ r)
-autoToVSat_ (RBinary op l r) = return $ V.OpIB (dispatch' op) (autoToVSat' l) (autoToVSat' r)
+autoToVSat_ (BBinary And l r) = V.Opn V.And <$>
+                                traverse autoToVSat_ (l SE.<| (SE.singleton r))
+autoToVSat_ (BBinary Or l r) = V.Opn V.Or <$>
+                               traverse autoToVSat_ (l SE.<| (SE.singleton r))
+autoToVSat_ (BBinary op l r) = V.OpBB (dispatch op) <$>
+                               (autoToVSat_ l) <*> (autoToVSat_ r)
+autoToVSat_ (RBinary op l r) = return $ V.OpIB
+                               (dispatch' op) (autoToVSat' l) (autoToVSat' r)
 
 -- | sister function to the non-ticked version for handling the arithmetic sub
 -- lang
