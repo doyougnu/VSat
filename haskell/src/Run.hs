@@ -253,13 +253,13 @@ instance (Monad m, I.SolverContext m) =>
 
 
 -- notice that we are doing a left fold here
-vSMTSolveHelper :: S.SBool -> [VProp S.SBool SNum] ->
-  (S.SBool -> S.SBool -> S.SBool) -> IncVSMTSolve S.SBool
-vSMTSolveHelper !acc ![]     _ = return acc
-vSMTSolveHelper !acc !(x:xs) f = do b <- vSMTSolve_ x
-                                    let res = b `f` acc
-                                    S.constrain res
-                                    vSMTSolveHelper res xs f
+-- vSMTSolveHelper :: S.SBool -> [VProp S.SBool SNum] ->
+--   (S.SBool -> S.SBool -> S.SBool) -> IncVSMTSolve S.SBool
+-- vSMTSolveHelper !acc ![]     _ = return acc
+-- vSMTSolveHelper !acc !(x:xs) f = do b <- vSMTSolve_ x
+--                                     let res = b `f` acc
+--                                     S.constrain res
+--                                     vSMTSolveHelper res xs f
 
 -- | smartly grab a result from the state checking to make sure that if the
 -- result is variational than that is preferred over a redundant model. Or in
@@ -285,50 +285,42 @@ store = St.modify . first . const
 -- then we'll get back a variational model, if we get back a variational model
 -- then we reconstruct the choice expression representing the model and store it
 -- in the state
-handleChc :: (Ctx a b -> IncVSMTSolve S.SBool)
-          -> Ctx a b -> IncVSMTSolve S.SBool
-handleChc f (InOpN op (ctx, ChcB d l r)) =
+handleChc :: Ctx S.SBool SNum -> IncVSMTSolve S.SBool
+handleChc (InOpN op (ctx, ChcB d l r)) =
   do (_, used) <- get
      case M.lookup d used of
-       Just True  -> f goLeft
-       Just False -> f goRight
+       Just True  -> handleChc goLeft
+       Just False -> handleChc goRight
        Nothing    -> do
-                        St.modify . second $ M.adjust (const True) d
-                        lift $ SC.queryDebug ["pushing left side"]
-                        trace "\npushing left side" $ return ()
+                        clearSt
+                        St.modify . second $ M.insert d True
                         lift $! SC.push 1
-                        f goLeft >>= S.constrain
+                        handleChc goLeft >>= S.constrain
                         lRes <- getResult
                         lift $! SC.pop 1
 
-                        St.modify . second $ M.insert d False
-                        lift $ SC.queryDebug ["pushing right side"]
-                        trace "pushing right side" $ return ()
+                        clearSt
+                        St.modify . second $ M.adjust (const False) d
                         lift $! SC.push 1
-                        f goRight >>= S.constrain
+                        handleChc goRight >>= S.constrain
                         rRes <- getResult
                         lift $! SC.pop 1
 
                         store $ VChc (dimName d) lRes rRes
-                        trace ("storing " ++ (dimName d)) (return ())
                         St.modify . second $ M.delete d
      -- this return statement should never matter because we've reset the
      -- assertion stack. So I just return r' here to fulfill the type
                         return true
+
   where goLeft  = InOpN op (ctx, l)
         goRight = InOpN op (ctx, r)
-handleChc f x = f x
 
--- | Given a zipper over VProps, run the appropriate evaluation function, and
--- generate new contexts. In a sense, this function ties the loop between
--- vSMTSolver_ and handleChc
-vSMTSolve__ :: Ctx S.SBool SNum -> IncVSMTSolve S.SBool
-vSMTSolve__ (InOpN _  (SE.Empty, fcs)) = vSMTSolve_ fcs
-vSMTSolve__ (InOpN op (ctx, fcs)) = do
+handleChc (InOpN _  (SE.Empty, fcs)) = vSMTSolve_ fcs
+handleChc (InOpN op (ctx, fcs)) = do
   fcs' <- vSMTSolve_ fcs
   let (newCtx SE.:> newFocus) = SE.viewr ctx
       op' = handler op
-  b <- (vSMTSolve__ $ InOpN op (newCtx, newFocus)) >>= return . op' fcs'
+  b <- (handleChc $ InOpN op (newCtx, newFocus)) >>= return . op' fcs'
   S.constrain b
   return b
   where handler CAnd = (S.&&&)
@@ -363,11 +355,11 @@ vSMTSolve_ !(OpIB op l r) = do l' <- vSMTSolve'_ l
         handler EQ  = (.==)
         handler NEQ = (./=)
 
-vSMTSolve_ !(Opn And ps) = vSMTSolve__  . InOpN CAnd $ (ctx, fcs)
+vSMTSolve_ !(Opn And ps) = handleChc  . InOpN CAnd $ (ctx, fcs)
   where (ctx SE.:> fcs) = SE.viewr ps
-vSMTSolve_ !(Opn Or ps) = vSMTSolve__  . InOpN COr $ (ctx, fcs)
+vSMTSolve_ !(Opn Or ps) = handleChc  . InOpN COr $ (ctx, fcs)
   where (ctx SE.:> fcs) = SE.viewr ps
-vSMTSolve_ x = handleChc vSMTSolve__ (InOpN CAnd (SE.empty, x))
+vSMTSolve_ x = handleChc (InOpN CAnd (SE.empty, x))
 
 handleSBoolChc :: V Dim S.SBool -> IncVSMTSolve S.SBool
 handleSBoolChc !(Plain a) = do S.constrain a
