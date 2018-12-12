@@ -76,7 +76,7 @@ runProperties = testGroup "Run Properties" [
   -- andDecomp_terminatesSh
   -- , sat_term
   -- sat_error
-  dim_homo
+  -- dim_homo
   -- , sat_error2
   -- , sat_error3
                                            -- ad_term2
@@ -86,12 +86,13 @@ runProperties = testGroup "Run Properties" [
 
 unitTests :: TestTree
 unitTests = testGroup "Unit Tests" [
-  sat_error
-  , sat_error2
-  , sat_error4
-  , andDecomp_duplicate
-  , andDecomp_duplicateChc
-  , dim_homo'
+  -- sat_error
+  -- , sat_error2
+  -- , sat_error4
+  -- , andDecomp_duplicate
+  -- , andDecomp_duplicateChc
+  -- , dim_homo'
+  dupDimensions
   ]
 
 sat_term = QC.testProperty
@@ -105,6 +106,10 @@ dim_homo = QC.testProperty
 dim_homo' = H.testCase
             "dim homomorphism for simplest nested case"
             dim_homo_unit
+
+dupDimensions = H.testCase
+                 "If we have duplicate dimensions on input, they are merged on output"
+                 dupDimensions'
 
 andDecomp_terminatesSh = QC.testProperty
                          "And decomp terminates with shared generated props"
@@ -178,6 +183,20 @@ dim_homo_unit = do a <- sat prop
                    H.assertBool "" (numDimsBefore == numDimsAfter)
   where prop :: VProp String String
         prop = (ChcB "AA" (bRef "x") (bRef "y")) ==> (ChcB "DD" true false)
+
+
+dupDimensions' = do a <- satWith emptyConf prop
+                    let numDimsAfter = length $ V.dimensions a
+                        numDimsBefore = length $ dimensions prop
+
+                    -- print numDimsBefore
+                    -- print numDimsAfter
+                    print prop
+                    print a
+                    H.assertBool "" (numDimsBefore >= numDimsAfter)
+  where prop :: VProp String String
+        prop = (ChcB "AA" (bRef "x") (bRef "y")) &&& ((bRef "z") ==> (ChcB "AA" true false))
+        -- prop = (ChcB "AA" (bRef "x") (bRef "y")) &&& (ChcB "AA" true false)
 
 sat_error_unit = do a <- sat prop
                     H.assertBool "" (not $ null a)

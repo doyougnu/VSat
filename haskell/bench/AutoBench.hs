@@ -5,6 +5,7 @@ import Data.Text (unpack)
 import Data.Bifunctor (bimap)
 import Data.Map.Internal.Debug (showTree)
 import Control.Arrow (first, second)
+import System.IO
 
 import CaseStudy.Auto.Auto
 import CaseStudy.Auto.Parser (langParser)
@@ -26,8 +27,10 @@ main = do
       ps' = parse langParser "" <$> cs
       ps = rights ps'
       prop = bimap unpack unpack <$> autoToVSat $ conjoin ps
-  -- res <- sat . flatten $ prop
-  print $ dimensions $ flatten prop
+  -- print $ take 5 $ autoToVSat <$> ps
+  res <- sat . flatten $ prop
+  writeFile "testoutput" (show res)
+  -- print $ VProp.Core.dimensions $ flatten prop
   -- print res
   -- return res
   -- mapM (putStrLn . show) $ (second flatten) <$> (zip [1..] $ prop)
