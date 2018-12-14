@@ -19,17 +19,22 @@ import Data.Aeson (decodeStrict)
 autoFile :: FilePath
 autoFile = "src/CaseStudy/Auto/Automotive02_merged_evolution_history_integer.json"
 
+
+smAutoFile :: FilePath
+smAutoFile = "src/CaseStudy/Auto/vsat_small_example.json"
+
 -- main :: IO (V String (Maybe ThmResult))
 main = do
-  jsn <- BS.readFile autoFile
+  jsn <- BS.readFile smAutoFile
   let (Just auto) = decodeStrict jsn :: Maybe Auto
       cs = constraints auto
-      ps' = parse langParser "" <$> cs
-      ps = rights ps'
-      prop = bimap unpack unpack <$> autoToVSat $ conjoin ps
+      -- ps' = parse langParser "" <$> cs
+      -- ps = rights ps'
+      -- prop = bimap unpack unpack <$> autoToVSat $ conjoin ps
   -- print $ take 5 $ autoToVSat <$> ps
-  res <- sat . flatten $ prop
-  writeFile "testoutput" (show res)
+  -- res <- sat . flatten $ prop
+  print cs
+  -- writeFile "testoutput" (show res)
   -- print $ VProp.Core.dimensions $ flatten prop
   -- print res
   -- return res

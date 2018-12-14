@@ -8,7 +8,6 @@ import qualified Text.Megaparsec.Char.Lexer as L
 import Text.Megaparsec.Expr
 
 import CaseStudy.Auto.Lang
-import Debug.Trace (trace)
 
 type Parser = Parsec Void T.Text
 
@@ -61,11 +60,11 @@ bExpr = makeExprParser bTerm bOperators
 
 bTerm :: Parser (AutoLang T.Text)
 bTerm = try contextRef
+        <|> boolRef
         <|> parens bExpr
         <|> (AutoLit True <$ reserved "true")
         <|> (AutoLit False <$ reserved "false")
         <|> rExpr
-        <|> boolRef
 
 aTerm :: Parser (ALang T.Text)
 aTerm = parens aExpr

@@ -1,14 +1,15 @@
 module CaseStudy.Auto.Auto where
 
-import Data.Aeson
-import Data.Text
 import qualified Control.Monad.State.Strict as S
-import qualified Data.Sequence as SE
-import qualified Data.Map as M
-import Data.Bifunctor (bimap)
+import           Data.Aeson
+import           Data.Bifunctor             (bimap)
+import qualified Data.Map                   as M
+import qualified Data.Sequence              as SE
+import           Data.Text
 
-import qualified VProp.Types as V
-import CaseStudy.Auto.Lang
+import           CaseStudy.Auto.Lang
+import           CaseStudy.Auto.Parser
+import qualified VProp.Types                as V
 
 -- | A context represents an evolution context which are temporal bounds
 -- represented as integers
@@ -23,7 +24,7 @@ type Annot a = S.State (DimMap a, Integer)
 
 -- | The auto type encodes the context of the automotive encoding, and the
 -- constraints that range over the features in the automotive model
-data Auto = Auto { contexts :: Context
+data Auto = Auto { contexts    :: Context
                  , constraints :: [Text]
                  }
           deriving Show
@@ -87,26 +88,26 @@ autoToVSat' (ABinary op l r) = V.OpII (dispatch'' op) (autoToVSat' l) (autoToVSa
 -- undefined because they will never be called. This is required to convert
 -- between the binary tree And/Or in AutoLang to the n-ary And/Or in VProp Lang
 dispatch :: BOp -> V.BB_B
-dispatch And =  undefined
-dispatch Or =  undefined
+dispatch And  =  undefined
+dispatch Or   =  undefined
 dispatch Impl = V.Impl
-dispatch Eqv = V.BiImpl
-dispatch Xor = V.XOr
+dispatch Eqv  = V.BiImpl
+dispatch Xor  = V.XOr
 
 dispatch' :: RBOp -> V.NN_B
-dispatch' GRT = V.GT
+dispatch' GRT  = V.GT
 dispatch' GRTE = V.GTE
-dispatch' EQL = V.EQ
-dispatch' LST = V.LT
+dispatch' EQL  = V.EQ
+dispatch' LST  = V.LT
 dispatch' LSTE = V.LTE
 dispatch' NEQL = V.NEQ
 
 dispatch'' :: AOp -> V.NN_N
-dispatch'' Add = V.Add
+dispatch'' Add      = V.Add
 dispatch'' Subtract = V.Sub
 dispatch'' Multiply = V.Mult
-dispatch'' Divide = V.Div
-dispatch'' Modulus = V.Mod
+dispatch'' Divide   = V.Div
+dispatch'' Modulus  = V.Mod
 
 -- | take a list of autolangs queries and conjoin them as a single query. The
 -- conjunction is domain specific and appropriate in this context
