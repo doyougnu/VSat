@@ -1,10 +1,11 @@
-import Test.Tasty
-import Test.Tasty.QuickCheck
-import System.Environment
+import           System.Environment
+import           Test.Tasty
+import           Test.Tasty.QuickCheck
 
-import VProp.Core.Test
-import VProp.Json.Test
-import Run.Test
+import qualified CaseStudy.Auto.Parser.Test as CAP
+import           Run.Test
+import           VProp.Core.Test
+import           VProp.Json.Test
 
 main :: IO ()
 main = do
@@ -12,7 +13,8 @@ main = do
   defaultMain tests
   where tests = testGroup "All" [ -- jsonProperties
                                  unitTests
+                                , CAP.unitTests
                                 -- coreProperties
                                 -- ,
-                                , runProperties
+                                -- , runProperties
                                 ]
