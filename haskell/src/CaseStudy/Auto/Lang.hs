@@ -13,6 +13,7 @@ data RBOp = GRT | GRTE | EQL | LST | LSTE  | NEQL deriving (Eq, Ord)
 
 data ALang a = ALit Integer
              | AVar a
+             | ACtx (ALang a)
              | Neg (ALang a)
              | ABinary AOp (ALang a) (ALang a)
              deriving (Show, Eq, Ord)

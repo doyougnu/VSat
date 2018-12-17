@@ -28,12 +28,12 @@ main = do
   jsn <- BS.readFile smAutoFile
   let (Just auto) = decodeStrict jsn :: Maybe Auto
       cs = constraints auto
-      -- ps' = parse langParser "" <$> cs
-      -- ps = rights ps'
+      ps' = parse langParser "" <$> cs
+      ps = rights ps'
       -- prop = bimap unpack unpack <$> autoToVSat $ conjoin ps
   -- print $ take 5 $ autoToVSat <$> ps
   -- res <- sat . flatten $ prop
-  print cs
+  traverse print $ (simpleEncoding . autoToVSat) <$> ps
   -- writeFile "testoutput" (show res)
   -- print $ VProp.Core.dimensions $ flatten prop
   -- print res

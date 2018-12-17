@@ -5,10 +5,10 @@ import           Data.Aeson
 import           Data.Bifunctor             (bimap)
 import qualified Data.Map                   as M
 import qualified Data.Sequence              as SE
+import           Data.String                (IsString)
 import           Data.Text
 
 import           CaseStudy.Auto.Lang
-import           CaseStudy.Auto.Parser
 import qualified VProp.Types                as V
 
 -- | A context represents an evolution context which are temporal bounds
@@ -42,18 +42,28 @@ instance FromJSON Auto where
     return Auto{contexts=(mn,mx), constraints=constraints}
 
 -- | run the state monad and get a vprop expression back
-autoToVSat :: (Show a, Eq a, Ord a) => AutoLang a -> V.VProp a a
-autoToVSat = fst . autoToVSat__
+autoToVSat :: (IsString a, Show a, Eq a, Ord a) => AutoLang a -> V.VProp a a
+autoToVSat = fst . runAutoToVSat__
 
-autoToVSat__ :: (Show a, Eq a, Ord a) =>
+runAutoToVSat__ :: (IsString a, Show a, Eq a, Ord a) =>
   AutoLang a -> (V.VProp a a, (DimMap a, Integer))
-autoToVSat__ = flip S.runState (M.empty, 0) . autoToVSat_
+runAutoToVSat__ = flip S.runState (M.empty, 0) . autoToVSat_
+
+-- | A hole that is used as a placeholder for reifying nested choices in
+-- autoToVsat
+hole :: (IsString a, Show a, Eq a, Ord a) => V.VProp a b
+hole = V.RefB "_"
+
+isHole :: (IsString a, Show a, Eq a, Eq b, Ord a) => V.VProp a b -> Bool
+isHole = (==) hole
 
 -- | convert an autolang expression to a vprop lang expression. State monad to
 -- keep track of which evolution contexts have been observed and which
 -- dimensions are assigned to those evo contexts
-autoToVSat_ :: (Show a, Eq a, Ord a) => AutoLang a -> Annot a (V.VProp a a)
+autoToVSat_ :: (IsString a, Show a, Eq a, Ord a) =>
+  AutoLang a -> Annot a (V.VProp a a)
 autoToVSat_ (AutoLit a) = return $ V.LitB a
+  -- singleton contexts can be converted to naive encoding directly
 autoToVSat_ (Ctx op aexpr boolexpr) =
   do (evos, i) <- S.get
      let newDim = V.Dim $ "D_" ++ show i
@@ -65,6 +75,19 @@ autoToVSat_ (Ctx op aexpr boolexpr) =
               -- a repeated entry so just return it
               (Just a) -> return a
      flip (V.ChcB dim) (V.LitB True) <$> (autoToVSat_ boolexpr)
+  -- compound contexts need a two step process, first encode the relation into a
+  -- choice with holes. Then call reify to generate the nested choices
+autoToVSat_ (RBinary op (ACtx _) rhs) =
+  do (evos, i) <- S.get
+     let newDim = V.Dim $ "D_" ++ show i
+         evoRng = (op, rhs)
+     dim <- case (evoRng `M.lookup` evos) of
+              -- this is a not yet observed evoRng
+              Nothing -> do S.modify $ bimap (M.insert evoRng newDim) succ
+                            return newDim
+              -- a repeated entry so just return it
+              (Just a) -> return a
+     return $ V.ChcB dim hole hole
 autoToVSat_ (AutoRef a) = return $ V.RefB a
 autoToVSat_ (AutoNot a) = V.OpB V.Not <$> autoToVSat_ a
 autoToVSat_ (BBinary And l r) = V.Opn V.And <$>
@@ -83,6 +106,7 @@ autoToVSat' (ALit i) = V.LitI $ V.I i
 autoToVSat' (AVar a) = V.Ref V.RefI a
 autoToVSat' (CaseStudy.Auto.Lang.Neg a) = V.OpI V.Neg $ autoToVSat' a
 autoToVSat' (ABinary op l r) = V.OpII (dispatch'' op) (autoToVSat' l) (autoToVSat' r)
+autoToVSat' (ACtx _) = error "[ERR in AutoToVSat': ACtx found in pattern match but AutoToVSat should have prevented this matching. Send the missiles!]"
 
 -- | Dispatch functions for operators in the autolang AST. we leave And and Or
 -- undefined because they will never be called. This is required to convert
@@ -116,3 +140,43 @@ conjoin = Prelude.foldr1 (BBinary And)
 
 disjoin :: [AutoLang a] -> AutoLang a
 disjoin = Prelude.foldr1 (BBinary Or)
+
+-- | Take a VProp term that has choices with holes and reify them to the simple
+-- encoding
+nestChoices :: (IsString a, Show a, Eq a, Ord a) => V.VProp a a -> V.VProp a a
+  -- any choice that maintains a hole is transformed into a nested choice
+nestChoices (V.Opn op (a@(V.ChcB dim l r) SE.:<| xs))
+  | l == hole && r == hole = V.ChcB dim (nestChoices (V.Opn op xs)) (V.true)
+  | otherwise = V.Opn V.And $ a SE.:<| (nestChoices <$> xs)
+
+  -- recursive cases
+nestChoices (V.OpB o os) = V.OpB o $ nestChoices os
+nestChoices (V.OpBB o l r) = V.OpBB o (nestChoices l) (nestChoices r)
+nestChoices (V.Opn o ps) = V.Opn o $ nestChoices <$> ps
+nestChoices (V.ChcB d l r) = V.ChcB d (nestChoices l) (nestChoices r)
+nestChoices x = x
+
+fillBy  :: (V.VProp a b -> Bool) -> V.VProp a b -> V.VProp a b-> V.VProp a b
+fillBy p a@(V.OpB op e) new
+  | p a = new
+  | otherwise = V.OpB  op  (fillBy p e new)
+fillBy p a@(V.OpBB op l r)  new
+  | p a = new
+  | otherwise = V.OpBB op  (fillBy p l new) (fillBy p r new)
+fillBy p a@(V.Opn op ps) new
+  | p a = new
+  | otherwise = V.Opn  op  $ flip (fillBy p) new <$> ps
+fillBy p a@(V.ChcB dim l r) new
+  | p a = new
+  | otherwise = V.ChcB dim (fillBy p l new) (fillBy p r new)
+fillBy p x new
+  | p x = new
+  | otherwise = x
+
+fill :: (IsString a, Eq a, Eq b, Ord a, Show a) =>
+  V.VProp a b -> V.VProp a b -> V.VProp a b
+fill = fillBy isHole
+
+-- naiveEncode :: (IsString a, Show a, Eq a, Ord a) => V.VProp a a -> V.VProp a a
+-- naiveEncode (V.OpBB op a@(V.ChcB l r) r)
+--   | hasHole a =
