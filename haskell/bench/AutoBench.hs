@@ -1,20 +1,21 @@
-import qualified Data.ByteString as BS (readFile)
-import Text.Megaparsec (parse)
-import Data.Either (rights)
-import Data.Text (unpack)
-import Data.Bifunctor (bimap)
-import Data.Map.Internal.Debug (showTree)
-import Control.Arrow (first, second)
-import System.IO
+import           Control.Arrow           (first, second)
+import           Data.Bifunctor          (bimap)
+import qualified Data.ByteString         as BS (readFile)
+import           Data.Either             (rights)
+import           Data.Map.Internal.Debug (showTree)
+import           Data.Text               (unpack)
+import           System.IO
+import           Text.Megaparsec         (parse)
 
-import CaseStudy.Auto.Auto
-import CaseStudy.Auto.Parser (langParser)
-import VProp.Core
-import VProp.Types
-import Api
-import V
 
-import Data.Aeson (decodeStrict)
+import           Api
+import           CaseStudy.Auto.Auto
+import           CaseStudy.Auto.Parser   (langParser)
+import           V
+import           VProp.Core
+import           VProp.Types
+
+import           Data.Aeson              (decodeStrict)
 
 autoFile :: FilePath
 autoFile = "src/CaseStudy/Auto/Automotive02_merged_evolution_history_integer.json"
@@ -33,7 +34,7 @@ main = do
       -- prop = bimap unpack unpack <$> autoToVSat $ conjoin ps
   -- print $ take 5 $ autoToVSat <$> ps
   -- res <- sat . flatten $ prop
-  traverse print $ (simpleEncoding . autoToVSat) <$> ps
+  traverse print $ (naiveEncode . nestChoices . autoToVSat) <$> ps
   -- writeFile "testoutput" (show res)
   -- print $ VProp.Core.dimensions $ flatten prop
   -- print res
