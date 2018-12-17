@@ -34,6 +34,7 @@ main = do
       -- prop = bimap unpack unpack <$> autoToVSat $ conjoin ps
   -- print $ take 5 $ autoToVSat <$> ps
   -- res <- sat . flatten $ prop
+  putStrLn "\n\n ----------------- \n\n"
   traverse print $ (naiveEncode . nestChoices . autoToVSat) <$> ps
   -- writeFile "testoutput" (show res)
   -- print $ VProp.Core.dimensions $ flatten prop

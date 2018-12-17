@@ -2,7 +2,7 @@ module CaseStudy.Auto.Auto where
 
 import qualified Control.Monad.State.Strict as S
 import           Data.Aeson
-import           Data.Bifoldable            (bifoldr)
+import           Data.Bifoldable            (bifoldr')
 import           Data.Bifunctor             (bimap)
 import qualified Data.Map                   as M
 import qualified Data.Sequence              as SE
@@ -61,8 +61,15 @@ hole = V.RefB "_"
 isHole :: (IsString a, Show a, Eq a, Eq b, Ord a) => V.VProp a b -> Bool
 isHole = (==) hole
 
-hasHole :: (IsString a, Show a, Eq a, Eq b, Ord a) => V.VProp a b -> Bool
-hasHole = bifoldr (\x acc -> trace ("[] : " ++ show x) $ x == "_" || acc) (\_ _ -> trace "]]]]]" False) False
+has :: (IsString a, Show a, Show b, Eq a, Eq b, Ord a) => (V.VProp a b -> Bool) -> V.VProp a b -> Bool
+has p a@(V.Opn  _ es) = p a || Prelude.foldr (\x acc -> p x || acc) False es
+has p a@(V.OpB  _ e) = p a || has p e
+has p a@(V.OpBB _ l r) = p a || has p l || has p r
+has p a@(V.ChcB _ l r) = p a || has p l || has p r
+has p x = p x
+
+hasHole :: (IsString a, Show a, Show b, Eq a, Eq b, Ord a) => V.VProp a b -> Bool
+hasHole = has isHole
 
 -- | convert an autolang expression to a vprop lang expression. State monad to
 -- keep track of which evolution contexts have been observed and which
@@ -164,41 +171,35 @@ nestChoices (V.ChcB d l r) = V.ChcB d (nestChoices l) (nestChoices r)
 nestChoices x = x
 
 -- | Fill holes given a predicate, an old vprop, and a replacement vprop
--- fillBy  :: (V.VProp a b -> Bool) -> V.VProp a b -> V.VProp a b-> V.VProp a b
--- fillBy p a@(V.OpB op e) new
---   | p a = new
---   | otherwise = V.OpB  op  (fillBy p e new)
--- fillBy p a@(V.OpBB op l r)  new
---   | p a = new
---   | otherwise = V.OpBB op  (fillBy p l new) (fillBy p r new)
--- fillBy p a@(V.Opn op ps) new
---   | p a = new
---   | otherwise = V.Opn  op  $ flip (fillBy p) new <$> ps
--- fillBy p a@(V.ChcB dim l r) new
---   | p a = new
---   | otherwise = V.ChcB dim (fillBy p l new) (fillBy p r new)
--- fillBy p x new
---   | p x = new
---   | otherwise = x
-
-fillBy :: (V.VProp a b -> Bool) -> V.VProp a b -> a -> b -> V.VProp a b
-fillBy f old a b = bimap
-                   (\x -> if f x then a else x)
-                   (\y -> if f y then b else y)
-                   old
+fillBy :: (Show a, Show b) => (V.VProp a b -> Bool) -> V.VProp a b -> V.VProp a b-> V.VProp a b
+fillBy p a@(V.OpB op e) new
+  | p a = new
+  | otherwise = trace ("[DBG OpB]: " ++ show a) $ V.OpB  op  (fillBy p e new)
+fillBy p a@(V.OpBB op l r)  new
+  | p a = new
+  | otherwise = trace ("[DBG OpBB]: " ++ show a) $ V.OpBB op  (fillBy p l new) (fillBy p r new)
+fillBy p a@(V.Opn op ps) new
+  | p a = new
+  | otherwise = trace ("[DBG Opn]: " ++ show a) $ V.Opn  op  $ flip (fillBy p) new <$> ps
+fillBy p a@(V.ChcB dim l r) new
+  | p a = new
+  | otherwise = trace ("[DBG Chc]" ++ show a) $ V.ChcB dim (fillBy p l new) (fillBy p r new)
+fillBy p x new
+  | p x = new
+  | otherwise = x
 
 -- | fill holes by identifying them with isHole predicate function
-fill :: (IsString a, Eq a, Eq b, Ord a, Show a) =>
+fill :: (IsString a, Eq a, Eq b, Ord a, Show a, Show b) =>
   V.VProp a b -> V.VProp a b -> V.VProp a b
 fill = fillBy isHole
 
 naiveEncode :: (IsString a, Show a, Eq a, Ord a) => V.VProp a a -> V.VProp a a
-naiveEncode x@(V.OpBB op a@(V.ChcB dim l r) rest)
+naiveEncode (V.OpBB op a@(V.ChcB dim l r) rest)
   | h = fill a rest
   | otherwise = V.OpBB op
                 (V.ChcB dim (naiveEncode l) (naiveEncode r))
                 (naiveEncode rest)
-  where h = trace (show (hasHole a) ++ " :: " ++ show a) $ hasHole a
+  where h = trace (show (hasHole a) ++ " :: " ++ show a) hasHole a
 naiveEncode (V.OpBB op l r) = V.OpBB op (naiveEncode l) (naiveEncode r)
 naiveEncode (V.OpB op e) = V.OpB op (naiveEncode e)
 naiveEncode (V.Opn op es) = V.Opn op $ naiveEncode <$> es
