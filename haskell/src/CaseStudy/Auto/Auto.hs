@@ -2,6 +2,7 @@ module CaseStudy.Auto.Auto where
 
 import qualified Control.Monad.State.Strict as S
 import           Data.Aeson
+import           Data.Bifoldable            (bifoldr)
 import           Data.Bifunctor             (bimap)
 import qualified Data.Map                   as M
 import qualified Data.Sequence              as SE
@@ -56,6 +57,9 @@ hole = V.RefB "_"
 
 isHole :: (IsString a, Show a, Eq a, Eq b, Ord a) => V.VProp a b -> Bool
 isHole = (==) hole
+
+hasHole :: (IsString a, Show a, Eq a, Eq b, Ord a) => V.VProp a b -> Bool
+hasHole = bifoldr (\x acc -> x == "_" || acc) (const id) False
 
 -- | convert an autolang expression to a vprop lang expression. State monad to
 -- keep track of which evolution contexts have been observed and which
@@ -156,6 +160,7 @@ nestChoices (V.Opn o ps) = V.Opn o $ nestChoices <$> ps
 nestChoices (V.ChcB d l r) = V.ChcB d (nestChoices l) (nestChoices r)
 nestChoices x = x
 
+-- | Fill holes given a predicate, an old vprop, and a replacement vprop
 fillBy  :: (V.VProp a b -> Bool) -> V.VProp a b -> V.VProp a b-> V.VProp a b
 fillBy p a@(V.OpB op e) new
   | p a = new
@@ -173,6 +178,7 @@ fillBy p x new
   | p x = new
   | otherwise = x
 
+-- | fill holes by identifying them with isHole predicate function
 fill :: (IsString a, Eq a, Eq b, Ord a, Show a) =>
   V.VProp a b -> V.VProp a b -> V.VProp a b
 fill = fillBy isHole
