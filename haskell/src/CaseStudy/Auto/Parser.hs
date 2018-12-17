@@ -59,23 +59,29 @@ bExpr :: Parser (AutoLang T.Text)
 bExpr = makeExprParser bTerm bOperators
 
 bTerm :: Parser (AutoLang T.Text)
-bTerm = try contextRef
+bTerm = (try contextRef)
         <|> boolRef
-        <|> parens bExpr
+        <|> (parens bExpr)
         <|> (AutoLit True <$ reserved "true")
         <|> (AutoLit False <$ reserved "false")
         <|> rExpr
 
 aTerm :: Parser (ALang T.Text)
 aTerm = parens aExpr
+        <|> aContextRef
         <|> ALit <$> integer
         <|> arithRef
 
-contextRef_ :: Parser (AutoLang a -> AutoLang a)
-contextRef_ = do reserved "context"
+
+aContextRef :: Parser (ALang T.Text)
+aContextRef = do reserved "context"
                  _ <- brackets $ do
-                     _ <- symbol "_"
-                     reserved "evolution-context"
+                   _ <- symbol "_"
+                   reserved "evolution-context"
+                 return . ACtx $ AVar "replaceMe!"
+
+contextRef_ :: Parser (AutoLang a -> AutoLang a)
+contextRef_ = do _ <- aContextRef
                  op <- relation
                  rhs <- integer
                  return $ Ctx op (ALit rhs)
@@ -120,7 +126,7 @@ bOperators =
     , InfixL (BBinary Or <$ reserved "or")
     , InfixR (BBinary Impl <$ reserved "impl")
     , InfixN (BBinary Eqv <$ reserved "iff")
-    , InfixN (BBinary Xor <$ reserved "???") -- not sure what Xor is for this lang
+    , InfixN (BBinary Xor <$ reserved "oneonly") -- not sure what Xor is for this lang
     ]
   ]
 
