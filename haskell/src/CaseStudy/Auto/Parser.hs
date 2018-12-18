@@ -59,12 +59,12 @@ bExpr :: Parser (AutoLang T.Text)
 bExpr = makeExprParser bTerm bOperators
 
 bTerm :: Parser (AutoLang T.Text)
-bTerm = (try contextRef)
-        <|> boolRef
-        <|> (parens bExpr)
-        <|> (AutoLit True <$ reserved "true")
-        <|> (AutoLit False <$ reserved "false")
-        <|> rExpr
+bTerm =  dbg "parens: " (parens bExpr)
+         <|> dbg "ctx ref: " (try contextRef)
+         <|> dbg "bool ref: " boolRef
+         <|> dbg "a relation" rExpr
+         <|> dbg "lit true" (AutoLit True <$ reserved "true")
+         <|> dbg "lit false" (AutoLit False <$ reserved "false")
 
 aTerm :: Parser (ALang T.Text)
 aTerm = parens aExpr
