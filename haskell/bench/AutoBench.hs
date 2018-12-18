@@ -31,11 +31,11 @@ main = do
       cs = constraints auto
       ps' = parse langParser "" <$> cs
       ps = rights ps'
-      -- prop = bimap unpack unpack <$> autoToVSat $ conjoin ps
+      prop = bimap unpack unpack <$> (naiveEncode . nestChoices . autoToVSat) $ conjoin ps
   -- print $ take 5 $ autoToVSat <$> ps
-  -- res <- sat . flatten $ prop
+  res <- sat . flatten $ prop
   putStrLn "\n\n ----------------- \n\n"
-  traverse print $ (naiveEncode . nestChoices . autoToVSat) <$> ps
+  traverse print $ res
   -- writeFile "testoutput" (show res)
   -- print $ VProp.Core.dimensions $ flatten prop
   -- print res
