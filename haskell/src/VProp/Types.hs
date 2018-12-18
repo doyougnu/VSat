@@ -435,10 +435,10 @@ instance Bifoldable VProp where
 
 
 instance Bitraversable VProp where
-  bitraverse f _ (RefB v) = RefB <$> f v
-  bitraverse f g (OpB op e) = OpB op <$> bitraverse f g e
+  bitraverse f _ (RefB v)      = RefB    <$> f v
+  bitraverse f g (OpB op e)    = OpB  op <$> bitraverse f g e
   bitraverse f g (OpBB op l r) = OpBB op <$> bitraverse f g l <*> bitraverse f g r
-  bitraverse _ g (OpIB op l r) = OpIB op <$> traverse g l <*> traverse g r
-  bitraverse f g (Opn op ls) = Opn op <$> traverse (bitraverse f g) ls
-  bitraverse f g (ChcB d l r) = ChcB d <$> bitraverse f g l <*> bitraverse f g r
-  bitraverse _ _ (LitB x)    = pure $ LitB x
+  bitraverse _ g (OpIB op l r) = OpIB op <$> traverse g l     <*> traverse g r
+  bitraverse f g (Opn op ls)   = Opn  op <$> traverse (bitraverse f g) ls
+  bitraverse f g (ChcB d l r)  = ChcB d  <$> bitraverse f g l <*> bitraverse f g r
+  bitraverse _ _ (LitB x)      = pure $ LitB x
