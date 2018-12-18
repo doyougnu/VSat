@@ -34,20 +34,20 @@ module VProp.Types ( Var(..)
                    , iChc
                    , bChc) where
 
-import           Data.Data           (Data, Typeable)
-import           Data.Monoid         ((<>))
-import           Data.Fixed          (mod')
+import           Control.DeepSeq       (NFData)
+import           Data.Bifoldable       (Bifoldable, bifoldMap, bifoldr)
+import           Data.Bifunctor        (Bifunctor, bimap)
+import           Data.Bitraversable    (Bitraversable, bitraverse)
+import           Data.Data             (Data, Typeable)
+import           Data.Fixed            (mod')
+import           Data.Map              (Map)
+import           Data.Monoid           ((<>))
+import qualified Data.SBV              as S
+import qualified Data.Sequence         as SE
+import           Data.String           (IsString)
+import           GHC.Generics          (Generic)
+import           Prelude               hiding (EQ, GT, LT, lookup)
 import           Test.Tasty.QuickCheck
-import           GHC.Generics        (Generic)
-import           Data.String         (IsString)
-import           Control.DeepSeq     (NFData)
-import qualified Data.SBV as S
-import           Data.Map            (Map)
-import           Data.Bifunctor      (Bifunctor, bimap)
-import           Data.Bitraversable  (Bitraversable, bitraverse)
-import           Data.Bifoldable     (Bifoldable, bifoldMap, bifoldr)
-import           Prelude  hiding     (LT, GT, EQ, lookup)
-import qualified Data.Sequence as SE
 
 
 -- | A feature is a named, boolean configuration option.
