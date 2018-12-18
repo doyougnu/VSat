@@ -2,7 +2,6 @@ module CaseStudy.Auto.Auto where
 
 import qualified Control.Monad.State.Strict as S
 import           Data.Aeson
-import           Data.Bifoldable            (bifoldr')
 import           Data.Bifunctor             (bimap)
 import qualified Data.Map                   as M
 import qualified Data.Sequence              as SE
@@ -62,11 +61,11 @@ isHole :: (IsString a, Show a, Eq a, Eq b, Ord a) => V.VProp a b -> Bool
 isHole = (==) hole
 
 has :: (IsString a, Show a, Show b, Eq a, Eq b, Ord a) => (V.VProp a b -> Bool) -> V.VProp a b -> Bool
-has p a@(V.Opn  _ es)  = trace ("[opn]  " ++ show es) $ p a || Prelude.foldr (\x acc -> p x || acc) False es
-has p a@(V.OpB  _ e)   = trace ("[opb]  " ++ show a) $ p a || has p e
-has p a@(V.OpBB _ l r) = trace ("[opbb]" ++ show a) $ p a || has p l || has p r
-has p a@(V.ChcB _ l r) = trace ("[choice]" ++ show a ) $ p a || has p l || has p r
-has p x = trace ("[Other]" ++ show x ++ "  ||  " ++ show (p x)) $ p x
+has p a@(V.Opn  _ es)  = p a || Prelude.foldr (\x acc -> p x || acc) False es
+has p a@(V.OpB  _ e)   = p a || has p e
+has p a@(V.OpBB _ l r) = p a || has p l || has p r
+has p a@(V.ChcB _ l r) = p a || has p l || has p r
+has p x = p x
 
 hasHole :: (IsString a, Show a, Show b, Eq a, Eq b, Ord a) => V.VProp a b -> Bool
 hasHole = has isHole
@@ -198,11 +197,10 @@ fill = fillBy isHole
 
 naiveEncode :: (IsString a, Show a, Eq a, Ord a) => V.VProp a a -> V.VProp a a
 naiveEncode (V.OpBB op a@(V.ChcB dim l r) rest)
-  | h = fill a rest
+  | hasHole a = fill a rest
   | otherwise = V.OpBB op
                 (V.ChcB dim (naiveEncode l) (naiveEncode r))
                 (naiveEncode rest)
-  where h = trace (show (hasHole a) ++ " :: " ++ show a) hasHole a
 naiveEncode (V.OpBB op l r) = V.OpBB op (naiveEncode l) (naiveEncode r)
 naiveEncode (V.OpB op e) = V.OpB op (naiveEncode e)
 naiveEncode (V.Opn op es) = V.Opn op $ naiveEncode <$> es
