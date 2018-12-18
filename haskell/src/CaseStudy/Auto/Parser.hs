@@ -59,18 +59,18 @@ bExpr :: Parser (AutoLang T.Text)
 bExpr = makeExprParser bTerm bOperators
 
 bTerm :: Parser (AutoLang T.Text)
-bTerm =  dbg "parens: " (parens bExpr)
-         <|> dbg "ctx ref: " (try contextRef)
-         <|> dbg "bool ref: " boolRef
-         <|> dbg "a relation" rExpr
-         <|> dbg "lit true" (AutoLit True <$ reserved "true")
-         <|> dbg "lit false" (AutoLit False <$ reserved "false")
+bTerm =  (parens bExpr)
+         <|> (try contextRef)
+         <|> (try rExpr)
+         <|> boolRef
+         <|> (AutoLit True <$ reserved "true")
+         <|> (AutoLit False <$ reserved "false")
 
 aTerm :: Parser (ALang T.Text)
 aTerm = parens aExpr
         <|> aContextRef
-        <|> ALit <$> integer
         <|> arithRef
+        <|> ALit <$> integer
 
 
 aContextRef :: Parser (ALang T.Text)
@@ -100,11 +100,11 @@ boolRef = do reserved "feature"
              return . AutoRef $ uuid
 
 arithRef :: Parser (ALang T.Text)
-arithRef = lexeme $ do reserved "feature"
-                       uuid <- brackets $ do
-                         _ <- symbol "_"
-                         aVariable
-                       return $ AVar uuid
+arithRef = do reserved "feature"
+              uuid <- brackets $ do
+                _ <- symbol "_"
+                aVariable
+              return $ AVar uuid
 
 aVariable :: Parser T.Text
 aVariable = do a <- T.pack <$> many alphaNumChar
