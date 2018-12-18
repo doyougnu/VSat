@@ -149,18 +149,29 @@ dispatch'' Modulus  = V.Mod
 conjoin :: [AutoLang a] -> AutoLang a
 conjoin = Prelude.foldr1 (BBinary And)
 
+conjoin' :: [V.VProp a b] -> V.VProp a b
+conjoin' = V.Opn V.And . SE.fromList
+
 disjoin :: [AutoLang a] -> AutoLang a
 disjoin = Prelude.foldr1 (BBinary Or)
+
+disjoin' :: [V.VProp a b] -> V.VProp a b
+disjoin' = V.Opn V.Or . SE.fromList
 
 -- | Take a VProp term that has choices with holes and reify them to the simple
 -- encoding
 nestChoices :: (IsString a, Show a, Eq a, Ord a) => V.VProp a a -> V.VProp a a
   -- base case to prevent an Opn op empty list at end of recursion
-nestChoices (V.Opn _ (a@(V.ChcB _ _ _) SE.:<| SE.Empty)) = a
+nestChoices (V.Opn V.And ((V.ChcB d l _) SE.:<| SE.Empty)) = V.ChcB d l V.true
+nestChoices (V.Opn V.Or  ((V.ChcB d l _) SE.:<| SE.Empty)) = V.ChcB d l V.true
 
   -- any choice that maintains a hole is transformed into a nested choice
-nestChoices (V.Opn op (a@(V.ChcB dim l r) SE.:<| xs))
-  | l == hole && r == hole = V.ChcB dim (nestChoices (V.Opn op xs)) (V.true)
+nestChoices (V.Opn V.And (a@(V.ChcB dim l r) SE.:<| xs))
+  | l == hole && r == hole = V.ChcB dim (nestChoices (V.Opn V.And xs)) (V.true)
+  | otherwise = V.Opn V.And $ a SE.:<| (nestChoices <$> xs)
+
+nestChoices (V.Opn V.Or (a@(V.ChcB dim l r) SE.:<| xs))
+  | l == hole && r == hole = V.ChcB dim hole (nestChoices (V.Opn V.Or xs))
   | otherwise = V.Opn V.And $ a SE.:<| (nestChoices <$> xs)
 
   -- recursive cases
