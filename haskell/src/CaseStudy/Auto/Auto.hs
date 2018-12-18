@@ -62,11 +62,11 @@ isHole :: (IsString a, Show a, Eq a, Eq b, Ord a) => V.VProp a b -> Bool
 isHole = (==) hole
 
 has :: (IsString a, Show a, Show b, Eq a, Eq b, Ord a) => (V.VProp a b -> Bool) -> V.VProp a b -> Bool
-has p a@(V.Opn  _ es) = p a || Prelude.foldr (\x acc -> p x || acc) False es
-has p a@(V.OpB  _ e) = p a || has p e
-has p a@(V.OpBB _ l r) = p a || has p l || has p r
-has p a@(V.ChcB _ l r) = p a || has p l || has p r
-has p x = p x
+has p a@(V.Opn  _ es)  = trace ("[opn]  " ++ show es) $ p a || Prelude.foldr (\x acc -> p x || acc) False es
+has p a@(V.OpB  _ e)   = trace ("[opb]  " ++ show a) $ p a || has p e
+has p a@(V.OpBB _ l r) = trace ("[opbb]" ++ show a) $ p a || has p l || has p r
+has p a@(V.ChcB _ l r) = trace ("[choice]" ++ show a ) $ p a || has p l || has p r
+has p x = trace ("[Other]" ++ show x ++ "  ||  " ++ show (p x)) $ p x
 
 hasHole :: (IsString a, Show a, Show b, Eq a, Eq b, Ord a) => V.VProp a b -> Bool
 hasHole = has isHole
@@ -158,6 +158,9 @@ disjoin = Prelude.foldr1 (BBinary Or)
 -- | Take a VProp term that has choices with holes and reify them to the simple
 -- encoding
 nestChoices :: (IsString a, Show a, Eq a, Ord a) => V.VProp a a -> V.VProp a a
+  -- base case to prevent an Opn op empty list at end of recursion
+nestChoices (V.Opn _ (a@(V.ChcB _ _ _) SE.:<| SE.Empty)) = a
+
   -- any choice that maintains a hole is transformed into a nested choice
 nestChoices (V.Opn op (a@(V.ChcB dim l r) SE.:<| xs))
   | l == hole && r == hole = V.ChcB dim (nestChoices (V.Opn op xs)) (V.true)
