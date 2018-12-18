@@ -12,8 +12,6 @@ import           CaseStudy.Auto.Lang
 import qualified VProp.Types                as V
 import VProp.Core()
 
-import Debug.Trace (trace)
-
 -- | A context represents an evolution context which are temporal bounds
 -- represented as integers
 type Context = (Integer, Integer)
@@ -176,16 +174,16 @@ nestChoices x = x
 fillBy :: (Show a, Show b) => (V.VProp a b -> Bool) -> V.VProp a b -> V.VProp a b-> V.VProp a b
 fillBy p a@(V.OpB op e) new
   | p a = new
-  | otherwise = trace ("[DBG OpB]: " ++ show a) $ V.OpB  op  (fillBy p e new)
+  | otherwise = V.OpB  op  (fillBy p e new)
 fillBy p a@(V.OpBB op l r)  new
   | p a = new
-  | otherwise = trace ("[DBG OpBB]: " ++ show a) $ V.OpBB op  (fillBy p l new) (fillBy p r new)
+  | otherwise = V.OpBB op  (fillBy p l new) (fillBy p r new)
 fillBy p a@(V.Opn op ps) new
   | p a = new
-  | otherwise = trace ("[DBG Opn]: " ++ show a) $ V.Opn  op  $ flip (fillBy p) new <$> ps
+  | otherwise = V.Opn  op  $ flip (fillBy p) new <$> ps
 fillBy p a@(V.ChcB dim l r) new
   | p a = new
-  | otherwise = trace ("[DBG Chc]" ++ show a) $ V.ChcB dim (fillBy p l new) (fillBy p r new)
+  | otherwise = V.ChcB dim (fillBy p l new) (fillBy p r new)
 fillBy p x new
   | p x = new
   | otherwise = x
