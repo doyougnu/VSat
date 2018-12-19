@@ -48,19 +48,18 @@ bExpr :: Parser (AutoLang T.Text)
 bExpr = makeExprParser bTerm bOperators
 
 bTerm :: Parser (AutoLang T.Text)
-bTerm =  dbg "parens bool: " (parens bExpr)
-         <|> dbg "trying relation: "(try rExpr)
+bTerm =  (parens bExpr)
+         <|> (try rExpr)
          <|> (try contextRef)
          <|> (AutoLit True <$ reserved "true")
          <|> (AutoLit False <$ reserved "false")
          <|> boolRef
 
 aTerm :: Parser (ALang T.Text)
-aTerm = dbg "parens arith: " (parens aExpr)
-        <|> try aContextRef
-        <|> dbg "arightRef: " (try arithRef)
-        <|> ALit <$> integer
-
+aTerm = (parens aExpr)
+        <|> (try aContextRef)
+        <|> (try arithRef)
+        <|> (ALit <$> integer)
 
 aContextRef :: Parser (ALang T.Text)
 aContextRef = do reserved "context"
