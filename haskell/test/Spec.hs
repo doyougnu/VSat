@@ -12,8 +12,8 @@ main = do
   setEnv "TASTY_QUICKCHECK_TESTS" "3000"
   defaultMain tests
   where tests = testGroup "All" [ -- jsonProperties
-                                 unitTests
-                                , CAP.unitTests
+                                 -- unitTests
+                                CAP.unitTests
                                 -- coreProperties
                                 -- ,
                                 -- , runProperties

@@ -11,22 +11,24 @@ import           Text.Megaparsec       (parse)
 
 unitTests :: TestTree
 unitTests = testGroup "Parser unit tests" $
-  [ aFeature
-  , aSimplEvoCtx
-  , aConjEvoContext
-  , twoImplClause
-  , twoImplClause2
-  , iffOneAndOnly
-  , aConjEvoContext2
-  , iffWithOrs
-  , iffSingle
-  , andNots
-  , aSimplEvoCtx2
-  , aConjEvoWithNot
-  , conjEvoiffSingle
-  , aSimplEvoCtx3
-  , aConjEvoContext3
-  , aSimplEvoCtx4
+  [
+  --   aFeature
+  -- , aSimplEvoCtx
+  -- , aConjEvoContext
+  -- , twoImplClause
+  -- , twoImplClause2
+  -- , iffOneAndOnly
+  -- , aConjEvoContext2
+  -- , iffWithOrs
+  -- , iffSingle
+  -- , andNots
+  -- , aSimplEvoCtx2
+  -- , aConjEvoWithNot
+  -- , conjEvoiffSingle
+  -- , aSimplEvoCtx3
+  -- , aConjEvoContext3
+  -- , aSimplEvoCtx4
+  arithAdd
   ]
 
 test :: [Text]
@@ -75,6 +77,7 @@ conjEvoiffSingle = H.testCase "A term with conjuction evo ctxs and a iff" conjEv
 aSimplEvoCtx3    = H.testCase "a clause with an evo context" aSimplEvoCtx3'
 aConjEvoContext3 = H.testCase "a term with an _and_ in evo context" aConjEvoContext3'
 aSimplEvoCtx4    = H.testCase "a clause with an evo context" aSimpleEvoCtx4'
+arithAdd         = H.testCase "addition with features parses" arithAdd'
 
 -- | given a string, parse the string and check that the parser succeeded
 parseSucceedsGen = H.assertBool "Failed to Parse" . isRight . parse langParser ""
@@ -95,3 +98,6 @@ conjEvoiffSingle' = parseSucceedsGen $ test !! 11
 aSimplEvoCtx3'    = parseSucceedsGen $ test !! 12
 aConjEvoContext3' = parseSucceedsGen $ test !! 13
 aSimpleEvoCtx4'   = parseSucceedsGen $ test !! 14
+
+arithAdd' = parseSucceedsGen p
+  where p = "((feature[_84928c30-724e-4e73-b9fb-733518d0e3c6] = 1) = (feature[_505abd5a-edac-4ea8-89fa-79e7297e5c3e] + feature[_c6c50923-72d1-4d46-a429-0839a91df6f2]))"
