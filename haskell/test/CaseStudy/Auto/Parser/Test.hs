@@ -100,4 +100,5 @@ aConjEvoContext3' = parseSucceedsGen $ test !! 13
 aSimpleEvoCtx4'   = parseSucceedsGen $ test !! 14
 
 arithAdd' = parseSucceedsGen p
-  where p = "((feature[_84928c30-724e-4e73-b9fb-733518d0e3c6] = 1) = (feature[_505abd5a-edac-4ea8-89fa-79e7297e5c3e] + feature[_c6c50923-72d1-4d46-a429-0839a91df6f2]))"
+  -- this is a type error?!?!?
+  where p = "(feature[_84928c30-724e-4e73-b9fb-733518d0e3c6] = 1) = (feature[_505abd5a-edac-4ea8-89fa-79e7297e5c3e] + feature[_c6c50923-72d1-4d46-a429-0839a91df6f2])"
