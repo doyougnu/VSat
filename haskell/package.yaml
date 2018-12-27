@@ -80,9 +80,9 @@ benchmarks:
     - -with-rtsopts=-N
 
   auto:
-    main:                AutoBench.hs
+    main:                Main.hs
     source-dirs:
-      - bench
+      - bench/AutoBench
       - src
     ghc-options:
     - -O2
