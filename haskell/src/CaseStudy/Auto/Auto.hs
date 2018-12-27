@@ -98,7 +98,7 @@ autoToVSat_ (RBinary op (ACtx _) rhs) =
                             return newDim
               -- a repeated entry so just return it
               (Just a) -> return a
-     return $ V.ChcB dim hole hole
+     return $ V.ChcB dim hole V.true
 autoToVSat_ (AutoRef a) = return $ V.RefB a
 autoToVSat_ (AutoNot a) = V.OpB V.Not <$> autoToVSat_ a
 autoToVSat_ (BBinary And l r) = V.Opn V.And <$>
@@ -117,7 +117,7 @@ autoToVSat' (ALit i) = V.LitI $ V.I i
 autoToVSat' (AVar a) = V.Ref V.RefI a
 autoToVSat' (CaseStudy.Auto.Lang.Neg a) = V.OpI V.Neg $ autoToVSat' a
 autoToVSat' (ABinary op l r) = V.OpII (dispatch'' op) (autoToVSat' l) (autoToVSat' r)
-autoToVSat' (ACtx _) = error "[ERR in AutoToVSat': ACtx found in pattern match but AutoToVSat should have prevented this matching. Send the missiles!]"
+autoToVSat' (ACtx _) = error "[ERR] in AutoToVSat': ACtx found in pattern match but AutoToVSat should have prevented this matching. Send the missiles!"
 
 -- | Dispatch functions for operators in the autolang AST. we leave And and Or
 -- undefined because they will never be called. This is required to convert
@@ -167,11 +167,11 @@ nestChoices (V.Opn V.Or  ((V.ChcB d l _) SE.:<| SE.Empty)) = V.ChcB d l V.true
 
   -- any choice that maintains a hole is transformed into a nested choice
 nestChoices (V.Opn V.And (a@(V.ChcB dim l r) SE.:<| xs))
-  | l == hole && r == hole = V.ChcB dim (nestChoices (V.Opn V.And xs)) (V.true)
+  | l == hole && r == V.true = V.ChcB dim (nestChoices (V.Opn V.And xs)) (V.true)
   | otherwise = V.Opn V.And $ a SE.:<| (nestChoices <$> xs)
 
 nestChoices (V.Opn V.Or (a@(V.ChcB dim l r) SE.:<| xs))
-  | l == hole && r == hole = V.ChcB dim hole (nestChoices (V.Opn V.Or xs))
+  | l == hole && r == V.true = V.ChcB dim hole (nestChoices (V.Opn V.Or xs))
   | otherwise = V.Opn V.And $ a SE.:<| (nestChoices <$> xs)
 
   -- recursive cases
