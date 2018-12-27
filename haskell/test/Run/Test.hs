@@ -4,6 +4,7 @@ import Test.Tasty
 import qualified Test.Tasty.HUnit as H
 import qualified Test.Tasty.QuickCheck as QC
 import qualified Test.QuickCheck.Monadic as QCM
+import qualified Test.Tasty.Hspec as HS
 import Data.SBV ( SatResult(..)
                 , SMTResult(..)
                 , ThmResult(..)
@@ -13,6 +14,7 @@ import Data.SBV ( SatResult(..)
 import Data.SBV.Internals (showModel, SMTModel(..))
 import Control.Monad.Trans (liftIO)
 import Data.Monoid (Sum)
+import System.IO.Unsafe (unsafePerformIO)
 
 import VProp.Types
 import VProp.Core
@@ -94,6 +96,14 @@ unitTests = testGroup "Unit Tests" [
   -- , dim_homo'
   dupDimensions
   ]
+
+specTests :: TestTree
+specTests = unsafePerformIO $ HS.testSpec "simple spec" hspecTest
+
+hspecTest :: HS.Spec
+hspecTest = HS.describe "hs describe" $ do
+  HS.it "it was found" $ do
+    1 `HS.shouldBe` 1
 
 sat_term = QC.testProperty
            "Satisfiability terminates on any input"

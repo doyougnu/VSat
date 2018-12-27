@@ -3,7 +3,7 @@ import           Test.Tasty
 import           Test.Tasty.QuickCheck
 
 import qualified CaseStudy.Auto.Parser.Test as CAP
-import           Run.Test
+import qualified Run.Test as R
 import           VProp.Core.Test
 import           VProp.Json.Test
 
@@ -12,7 +12,8 @@ main = do
   setEnv "TASTY_QUICKCHECK_TESTS" "3000"
   defaultMain tests
   where tests = testGroup "All" [ -- jsonProperties
-                                 unitTests
+                                 -- R.unitTests
+          R.specTests
                                 , CAP.unitTests
                                 -- coreProperties
                                 -- ,
