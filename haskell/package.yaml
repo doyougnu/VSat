@@ -105,3 +105,4 @@ tests:
     - tasty-hunit
     - tasty-smallcheck
     - tasty-quickcheck
+    - tasty-hspec

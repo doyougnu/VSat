@@ -4,6 +4,7 @@ import Test.Tasty
 import qualified Test.Tasty.HUnit as H
 import qualified Test.Tasty.QuickCheck as QC
 import qualified Test.QuickCheck.Monadic as QCM
+import qualified Test.Tasty.HSpec as HS
 import Data.SBV ( SatResult(..)
                 , SMTResult(..)
                 , ThmResult(..)
@@ -94,6 +95,8 @@ unitTests = testGroup "Unit Tests" [
   -- , dim_homo'
   dupDimensions
   ]
+
+hspectest =
 
 sat_term = QC.testProperty
            "Satisfiability terminates on any input"

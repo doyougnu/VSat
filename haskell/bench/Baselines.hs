@@ -183,13 +183,3 @@ benchRandomSample descfp timefp metrics@(_, n) = do
   -- time "emptyConf/Unique/ChcDecomp" metrics timefp $! runAD emptyConf noShprop
   -- time "allOpts/Unique/ChcDecomp" metrics timefp $! runAD allOptsConf noShprop
   return ()
-
-time :: NFData a => Text -> RunMetric -> FilePath -> IO a -> IO ThreadId
-time desc metrics@(rn, n) timefp !a = forkIO $ do
-  start <- getCPUTime
-  v <- a
-  end' <- timeout 300000000 (v `seq` getCPUTime)
-  let end = maybe (300 * 10^12) id end'
-      diff = (fromIntegral (end - start)) / (10 ^ 12)
-  print $ "Run: " ++ show rn ++ " Scale: " ++ show n ++ " TC: " ++ (unpack desc) ++ "Time: " ++ show diff
-  writeTime desc metrics diff timefp

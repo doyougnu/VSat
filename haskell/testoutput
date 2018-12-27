@@ -1,2 +1,1 @@
-VChc (Dim {dimName = "D_0"}) (VChc (Dim {dimName = "D_1"}) (Plain Unsatisfiable) (Plain Unsatisfiable)) (Plain Satisfiable. Model:
-  "9aa0af2e-d9da-4de1-a6d2-c36aa8950af1" = True :: Bool)
+VChc (Dim {dimName = "D_0"}) (VChc (Dim {dimName = "D_1"}) (Plain Unsatisfiable) (Plain Unsatisfiable)) (Plain Unsatisfiable)
