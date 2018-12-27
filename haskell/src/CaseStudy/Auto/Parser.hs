@@ -44,17 +44,6 @@ dash = symbol "-"
 reserved :: T.Text -> Parser ()
 reserved str = lexeme $ string str >> notFollowedBy alphaNumChar
 
-aOperators :: [[Operator Parser (ALang a)]]
-aOperators =
-  [ [ Prefix (Neg <$ symbol "-")]
-  , [ InfixL (ABinary Multiply <$ symbol "*")
-    , InfixL (ABinary Divide <$ symbol "/")
-    , InfixL (ABinary Add <$ symbol "+")
-    , InfixL (ABinary Subtract <$ symbol "-")
-    , InfixL (ABinary Modulus <$ symbol "%")
-    ]
-  ]
-
 bExpr :: Parser (AutoLang T.Text)
 bExpr = makeExprParser bTerm bOperators
 
@@ -67,11 +56,10 @@ bTerm =  (parens bExpr)
          <|> (AutoLit False <$ reserved "false")
 
 aTerm :: Parser (ALang T.Text)
-aTerm = parens aExpr
-        <|> aContextRef
-        <|> ALit <$> integer
-        <|> arithRef
-
+aTerm = (parens aExpr)
+        <|> (try aContextRef)
+        <|> (try arithRef)
+        <|> (ALit <$> integer)
 
 aContextRef :: Parser (ALang T.Text)
 aContextRef = do reserved "context"
@@ -100,11 +88,11 @@ boolRef = do reserved "feature"
              return . AutoRef $ uuid
 
 arithRef :: Parser (ALang T.Text)
-arithRef = lexeme $ do reserved "feature"
-                       uuid <- brackets $ do
-                         _ <- symbol "_"
-                         aVariable
-                       return $ AVar uuid
+arithRef = do reserved "feature"
+              uuid <- brackets $ do
+                _ <- symbol "_"
+                aVariable
+              return $ AVar uuid
 
 aVariable :: Parser T.Text
 aVariable = do a <- T.pack <$> many alphaNumChar
@@ -130,6 +118,17 @@ bOperators =
     ]
   ]
 
+aOperators :: [[Operator Parser (ALang a)]]
+aOperators =
+  [ [ Prefix (Neg <$ symbol "-")]
+  , [ InfixL (ABinary Multiply <$ symbol "*")
+    , InfixL (ABinary Divide <$ symbol "/")
+    , InfixL (ABinary Add <$ symbol "+")
+    , InfixL (ABinary Subtract <$ symbol "-")
+    , InfixL (ABinary Modulus <$ symbol "%")
+    ]
+  ]
+
 relation :: Parser RBOp
 relation = pure EQL <* symbol "="
            <|> pure LST  <* symbol "<"
@@ -139,18 +138,11 @@ relation = pure EQL <* symbol "="
            <|> pure NEQL <* symbol "!="
 
 
-aRelation :: Parser AOp
-aRelation = pure Add <* symbol "+"
-           <|> pure Subtract <* symbol "-"
-           <|> pure Multiply <* symbol "*"
-           <|> pure Divide <* symbol "/"
-           <|> pure Modulus <* symbol "%"
-
 rExpr :: Parser (AutoLang T.Text)
 rExpr = do
-  a <- (lexeme aTerm)
+  a <- aTerm
   op <- relation
-  b <- (lexeme aTerm)
+  b <- aTerm
   return (RBinary op a b)
 
 

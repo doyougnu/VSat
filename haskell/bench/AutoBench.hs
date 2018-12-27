@@ -2,7 +2,7 @@ import           Control.Arrow           (first, second)
 import           Data.Aeson              (decodeStrict)
 import           Data.Bifunctor          (bimap)
 import qualified Data.ByteString         as BS (readFile)
-import           Data.Either             (rights)
+import           Data.Either             (rights, lefts)
 import           Data.Map.Internal.Debug (showTree)
 import           Data.Text               (unpack)
 import           System.IO
@@ -32,23 +32,29 @@ chAutoFile = "src/CaseStudy/Auto/vsat_small_chunk.json"
 
 -- main :: IO (V String (Maybe ThmResult))
 main = do
-  jsn <- BS.readFile chAutoFile
+  jsn <- BS.readFile smAutoFile
   let (Just auto) = decodeStrict jsn :: Maybe Auto
       cs = constraints auto
+      -- ps' = parse langParser "" <$> (drop 15 . take 20 $ cs)
       ps' = parse langParser "" <$> cs
-      -- ps = rights ps'
-      -- prop' = (nestChoices . autoToVSat) <$> ps
-      -- prop = bimap unpack unpack <$> (naiveEncode . nestChoices . autoToVSat) <$> ps
-  print ps'
+      ps = rights ps'
+      bs = lefts ps'
+      prop = (bimap unpack unpack . naiveEncode . nestChoices . flatten . autoToVSat) <$> ps
+  -- print $ take 1 cs
+  putStrLn "\n\n ----------------- \n\n"
+
+  -- print (conjoin' prop)
   -- print $ take 5 $ autoToVSat <$> ps
-  -- res <- runBF emptyConf $ conjoin' prop
-  -- putStrLn "\n\n non-nested prop ----------------- \n\n"
-  -- mapM_ print prop'
-  -- putStrLn "\n\n prop ----------------- \n\n"
-  -- mapM_ print prop
-  -- putStrLn "\n\n conjoined ----------------- \n\n"
-  -- print $ conjoin' prop
-  -- writeFile "testoutput" (show res)
+
+  res <- runBF emptyConf $ conjoin' prop
+  res' <- satWith emptyConf $ conjoin' prop
+  res'' <- runAD emptyConf $ conjoin' prop
+  -- print res'
+  -- writeFile "rights" (show $ prop)
+  -- writeFile "lefts" (foldMap show bs)
+  writeFile "testoutputBF" (show res)
+  writeFile "testoutputSAT" (show res')
+  writeFile "testoutputAD" (show res'')
   -- print $ VProp.Core.dimensions $ flatten prop
   -- print res
   -- return res
