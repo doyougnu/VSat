@@ -49,11 +49,11 @@ bExpr = makeExprParser bTerm bOperators
 
 bTerm :: Parser (AutoLang T.Text)
 bTerm =  (parens bExpr)
-         <|> (try rExpr)
          <|> (try contextRef)
+         <|> boolRef
+         <|> rExpr
          <|> (AutoLit True <$ reserved "true")
          <|> (AutoLit False <$ reserved "false")
-         <|> boolRef
 
 aTerm :: Parser (ALang T.Text)
 aTerm = (parens aExpr)
