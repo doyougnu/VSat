@@ -14,6 +14,7 @@ import Data.SBV ( SatResult(..)
 import Data.SBV.Internals (showModel, SMTModel(..))
 import Control.Monad.Trans (liftIO)
 import Data.Monoid (Sum)
+import System.IO.Unsafe (unsafePerformIO)
 
 import VProp.Types
 import VProp.Core
@@ -96,7 +97,17 @@ unitTests = testGroup "Unit Tests" [
   dupDimensions
   ]
 
+<<<<<<< HEAD
 hspectest =
+=======
+specTests :: TestTree
+specTests = unsafePerformIO $ HS.testSpec "simple spec" hspecTest
+
+hspecTest :: HS.Spec
+hspecTest = HS.describe "hs describe" $ do
+  HS.it "it was found" $ do
+    1 `HS.shouldBe` 1
+>>>>>>> 6f77af7e81872df211879c1b9add1756725ddea6
 
 sat_term = QC.testProperty
            "Satisfiability terminates on any input"
