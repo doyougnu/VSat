@@ -4,7 +4,7 @@ import Test.Tasty
 import qualified Test.Tasty.HUnit as H
 import qualified Test.Tasty.QuickCheck as QC
 import qualified Test.QuickCheck.Monadic as QCM
-import qualified Test.Tasty.HSpec as HS
+import qualified Test.Tasty.Hspec as HS
 import Data.SBV ( SatResult(..)
                 , SMTResult(..)
                 , ThmResult(..)
@@ -81,6 +81,7 @@ runProperties = testGroup "Run Properties" [
   -- dim_homo
   -- , sat_error2
   -- , sat_error3
+  vsat_matches_BF
                                            -- ad_term2
                                            -- ad_term
                                            -- , qcProps
@@ -97,9 +98,6 @@ unitTests = testGroup "Unit Tests" [
   dupDimensions
   ]
 
-<<<<<<< HEAD
-hspectest =
-=======
 specTests :: TestTree
 specTests = unsafePerformIO $ HS.testSpec "simple spec" hspecTest
 
@@ -107,7 +105,6 @@ hspecTest :: HS.Spec
 hspecTest = HS.describe "hs describe" $ do
   HS.it "it was found" $ do
     1 `HS.shouldBe` 1
->>>>>>> 6f77af7e81872df211879c1b9add1756725ddea6
 
 sat_term = QC.testProperty
            "Satisfiability terminates on any input"
@@ -116,6 +113,11 @@ sat_term = QC.testProperty
 dim_homo = QC.testProperty
            "Dimensions are homomorphic over solving i.e. dimensions are preserved, always"
            dim_homomorphism
+
+vsat_matches_BF = QC.testProperty
+                  "VSat with an empty configuration always matches Brute Force results"
+                  vsat_matches_BF'
+
 
 dim_homo' = H.testCase
             "dim homomorphism for simplest nested case"
@@ -175,6 +177,13 @@ sat_terminates x =  onlyInts x QC.==> QCM.monadicIO
   $ do -- liftIO $ print $ "prop: " ++ show (x :: VProp Var Var) ++ " \n"
        a <- QCM.run . sat . bimap show show $ (x :: VProp Var Var)
        QCM.assert (not $ null a)
+
+vsat_matches_BF' x =  onlyInts x QC.==> QCM.monadicIO
+  $ do a <- QCM.run . satWith emptyConf . bimap show show $ (x :: VProp Var Var)
+       b <- QCM.run . runBF emptyConf . bimap show show $ x
+       liftIO $ putStrLn $ show a
+       liftIO $ putStrLn $ show b
+       QCM.assert (a == b)
 
 ad_terminates x = onlyInts x QC.==> QCM.monadicIO
   $ do -- liftIO $ print $ "prop: " ++ show (x :: VProp Var Var)
