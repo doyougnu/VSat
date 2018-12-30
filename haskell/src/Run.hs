@@ -77,7 +77,7 @@ runAD os p = (bimap id (fmap S.SatResult)) . unbox . fst' <$>
 
 runBF :: SMTConf String
       -> VProp String String
-      -> IO (V String (Maybe S.SatResult))
+      -> IO (V String (Maybe S.SMTResult))
 runBF os p = unRes . fst' <$> runEnv runBruteForce os p
   where unRes (BF x) = x
 
@@ -113,8 +113,9 @@ runBruteForce prop = lift $ flip evalStateT (initSt prop) $
   (_confs, _) <- get
   let confs = M.keys _confs
       plainProps = (\y -> sequence $! (y, selectVariant y prop)) <$> confs
-  plainMs <- lift $ mapM (bitraverse pure (S.sat . symbolicPropExpr)) $! catMaybes plainProps
+  plainMs <- lift $ mapM (bitraverse pure (fmap unsat . S.sat . symbolicPropExpr)) $! catMaybes plainProps
   return . BF . bimap dimName Just .  fromJust $ recompile plainMs
+  where unsat (S.SatResult smtModel) = smtModel
 
 -- | Run the and decomposition baseline case, that is deconstruct every choice
 -- and then run the sat solver
@@ -134,8 +135,8 @@ runVSMTSolve prop =
      lift . return . V $ res
 
 -- | main workhorse for running the SAT solver
-data Result = L (Maybe S.SatResult)
-            | BF (V String (Maybe S.SatResult))
+data Result = L (Maybe S.SMTResult)
+            | BF (V String (Maybe S.SMTResult))
             | V (V String (Maybe S.SMTResult))
             deriving (Generic)
 
