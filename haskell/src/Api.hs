@@ -8,6 +8,15 @@ module Api ( S.SatResult(..)
            , prove
            , satWith
            , proveWith
+           , changeResultType
+           , bfWith'
+           , bf'
+           , bf
+           , adWith'
+           , ad'
+           , ad
+           , toSatResult
+           , toThmResult
            ) where
 
 import qualified Data.SBV as S
@@ -23,9 +32,6 @@ import Utils (fst')
 -- | Run VSMT and return variable bindings
 sat' :: VProp String String -> IO (V String (Maybe S.SMTResult))
 sat' = satWith' defConf
-
--- changeResultType :: (S.SMTResult -> b) ->
---   VProp String String -> IO (V String (Maybe b))
 
 -- | map over a function to alter the result type. This is handy to convert
 -- SMTResult to SatResult or ThmResult for prettier printing
@@ -53,8 +59,38 @@ prove' = proveWith' defConf
 
 satWith' :: SMTConf String -> VProp String String
   -> IO (V String (Maybe S.SMTResult))
-satWith' = (fmap (unbox . fst') .) . runVSMT
+satWith' = (fmap (unRes . fst') .) . runVSMT
 
 proveWith' :: SMTConf String -> VProp String String
   -> IO (V String (Maybe S.SMTResult))
-proveWith' conf p = unbox . fst' <$> runVSMT conf p
+proveWith' conf p = unRes . fst' <$> runVSMT conf p
+
+bfWith' :: SMTConf String ->
+  VProp String String -> IO (V String (Maybe S.SMTResult))
+bfWith' = runBF
+
+bf' :: VProp String String -> IO (V String (Maybe S.SMTResult))
+bf' = bfWith' defConf
+
+bf :: VProp String String -> IO (V String (Maybe S.SatResult))
+bf = changeResultType S.SatResult bf'
+
+adWith' :: SMTConf String ->
+  VProp String String -> IO (V String (Maybe S.SMTResult))
+adWith' = runAD
+
+ad' :: VProp String String -> IO (V String (Maybe S.SMTResult))
+ad' = adWith' defConf
+
+ad :: VProp String String -> IO (V String (Maybe S.SatResult))
+ad = changeResultType S.SatResult ad'
+
+toSatResult :: (Bifunctor p, Functor f1, Functor f2) =>
+  (a2 -> f1 (p b2 (f2 S.SMTResult)))
+  -> a2 -> f1 (p b2 (f2 S.SatResult))
+toSatResult = changeResultType S.SatResult
+
+toThmResult :: (Bifunctor p, Functor f1, Functor f2) =>
+  (a2 -> f1 (p b2 (f2 S.SMTResult)))
+  -> a2 -> f1 (p b2 (f2 S.ThmResult))
+toThmResult = changeResultType S.ThmResult
