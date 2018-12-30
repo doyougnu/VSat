@@ -4,7 +4,6 @@ module Run ( Result (..)
            , runAD
            , runBF
            , runVSMT
-           , unbox
            , fst'
            ) where
 
@@ -18,14 +17,9 @@ import           Prelude hiding (LT, GT, EQ)
 import Data.Foldable (foldr')
 import qualified Data.Sequence as SE
 
-import GHC.Generics
-import Control.DeepSeq               (NFData)
-
 import Control.Arrow                 (first, second)
 
 import Data.Maybe                    (fromJust, catMaybes)
-
-import Debug.Trace (trace)
 
 import VProp.Types
 import VProp.SBV
@@ -71,15 +65,13 @@ runEnv f conf !x = _runEnv (f x') conf _emptySt
 
 runAD :: SMTConf String
       -> VProp String String
-      -> IO (V String (Maybe S.SatResult))
-runAD os p = (bimap id (fmap S.SatResult)) . unbox . fst' <$>
-             runEnv runAndDecomp os p
+      -> IO (V String (Maybe S.SMTResult))
+runAD os p = unRes . fst' <$> runEnv runAndDecomp os p
 
 runBF :: SMTConf String
       -> VProp String String
       -> IO (V String (Maybe S.SMTResult))
 runBF os p = unRes . fst' <$> runEnv runBruteForce os p
-  where unRes (BF x) = x
 
 -- | Run the VSMT solver given a list of optimizations and a prop
 runVSMT :: SMTConf String
@@ -114,7 +106,7 @@ runBruteForce prop = lift $ flip evalStateT (initSt prop) $
   let confs = M.keys _confs
       plainProps = (\y -> sequence $! (y, selectVariant y prop)) <$> confs
   plainMs <- lift $ mapM (bitraverse pure (fmap unsat . S.sat . symbolicPropExpr)) $! catMaybes plainProps
-  return . BF . bimap dimName Just .  fromJust $ recompile plainMs
+  return . Result . bimap dimName Just .  fromJust $ recompile plainMs
   where unsat (S.SatResult smtModel) = smtModel
 
 -- | Run the and decomposition baseline case, that is deconstruct every choice
@@ -124,7 +116,7 @@ runAndDecomp prop = do
   res <- lift . S.runSMT $ do
     p <- symbolicPropExpr $ andDecomp prop dimName
     SC.query $ do S.constrain p; getVSMTModel
-  lift . return . V $ Plain res
+  lift . return . Result $ Plain res
 
 runVSMTSolve :: (MonadTrans t, MonadReader (SMTConf String) (t IO)) =>
   VProp String String -> t IO Result
@@ -132,21 +124,11 @@ runVSMTSolve prop =
   do cnf <- ask
      res <- lift . S.runSMTWith (conf cnf) . vSMTSolve $
        St.evalStateT (propToSBool prop) (M.empty, M.empty)
-     lift . return . V $ res
+     lift . return . Result $ res
 
 -- | main workhorse for running the SAT solver
-data Result = L (Maybe S.SMTResult)
-            | BF (V String (Maybe S.SMTResult))
-            | V (V String (Maybe S.SMTResult))
-            deriving (Generic)
+newtype Result = Result {unRes :: V String (Maybe S.SMTResult)}
 
--- | unbox a result to get the SMTResults
-unbox :: Result -> V String (Maybe S.SMTResult)
-unbox (L _)  = Plain Nothing
-unbox (BF _) = Plain Nothing -- short circuiting the BF solution
-unbox (V xs) = xs
-
-instance NFData Result
 
 -- | wrapper around map to keep track of the variable references we've seen, a,
 -- and their symbolic type, b
