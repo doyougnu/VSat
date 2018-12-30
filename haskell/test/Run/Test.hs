@@ -179,10 +179,10 @@ sat_terminates x =  onlyInts x QC.==> QCM.monadicIO
        QCM.assert (not $ null a)
 
 vsat_matches_BF' x =  onlyInts x QC.==> QCM.monadicIO
-  $ do a <- QCM.run . satWith emptyConf . bimap show show $ (x :: VProp Var Var)
-       b <- QCM.run . runBF emptyConf . bimap show show $ x
-       liftIO $ putStrLn $ show a
+  $ do a <- QCM.run . (toThmResult $ bfWith' emptyConf) . bimap show show $ (x :: VProp Var Var)
+       b <- QCM.run . (toThmResult $ adWith' emptyConf) . bimap show show $ x
        liftIO $ putStrLn $ show b
+       liftIO $ putStrLn $ show a
        QCM.assert (a == b)
 
 ad_terminates x = onlyInts x QC.==> QCM.monadicIO

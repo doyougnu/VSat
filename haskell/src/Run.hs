@@ -53,30 +53,31 @@ _emptySt :: SatDict a
 _emptySt = (,) M.empty M.empty
 
 -- | Run the RWS monad with defaults of empty state, reader
-_runEnv :: Env a r -> SMTConf a -> SatDict a -> IO (r, (SatDict a),  Log)
+_runEnv :: Show a =>
+  Env a r -> SMTConf a -> SatDict a -> IO (r, (SatDict a),  Log)
 _runEnv m opts st = runRWST m opts st
 
 -- TODO use configurate and load the config from a file
-runEnv :: (VProp String String-> Env String Result)
-       -> SMTConf String
-       -> VProp String String-> IO (Result, (SatDict String), Log)
+runEnv :: Show a => (VProp a a -> Env a Result)
+       -> SMTConf a
+       -> VProp a a -> IO (Result, (SatDict a), Log)
 runEnv f conf !x = _runEnv (f x') conf _emptySt
   where !x' = foldr' ($!) x (opts conf)
 
-runAD :: SMTConf String
-      -> VProp String String
+runAD :: (Show a, Ord a) => SMTConf a
+      -> VProp a a
       -> IO (V String (Maybe S.SMTResult))
 runAD os p = unRes . fst' <$> runEnv runAndDecomp os p
 
-runBF :: SMTConf String
-      -> VProp String String
+runBF :: (Show a, Ord a) => SMTConf a
+      -> VProp  a a
       -> IO (V String (Maybe S.SMTResult))
 runBF os p = unRes . fst' <$> runEnv runBruteForce os p
 
 -- | Run the VSMT solver given a list of optimizations and a prop
-runVSMT :: SMTConf String
-  -> VProp String String
-  -> IO (Result, SatDict String, Log)
+runVSMT :: (Show a, Ord a) => SMTConf a
+  -> VProp a a
+  -> IO (Result, SatDict a, Log)
 runVSMT = runEnv runVSMTSolve
 
 -- | Given a VProp a term generate the satisfiability map
@@ -111,15 +112,17 @@ runBruteForce prop = lift $ flip evalStateT (initSt prop) $
 
 -- | Run the and decomposition baseline case, that is deconstruct every choice
 -- and then run the sat solver
-runAndDecomp :: (MonadTrans t, Monad (t IO)) => VProp String String -> t IO Result
+runAndDecomp :: (Show a, MonadTrans t, Monad (t IO)) =>
+  VProp a a -> t IO Result
 runAndDecomp prop = do
   res <- lift . S.runSMT $ do
     p <- symbolicPropExpr $ andDecomp prop dimName
     SC.query $ do S.constrain p; getVSMTModel
   lift . return . Result $ Plain res
 
-runVSMTSolve :: (MonadTrans t, MonadReader (SMTConf String) (t IO)) =>
-  VProp String String -> t IO Result
+runVSMTSolve ::
+  (Show a, Ord a, MonadTrans t, MonadReader (SMTConf a) (t IO)) =>
+  VProp a a -> t IO Result
 runVSMTSolve prop =
   do cnf <- ask
      res <- lift . S.runSMTWith (conf cnf) . vSMTSolve $
@@ -169,7 +172,7 @@ vSMTSolve prop = do prop' <- prop
 -- | This ensures two things: 1st we need all variables to be symbolic before
 -- starting query mode. 2nd we cannot allow any duplicates to be called on a
 -- string -> symbolic a function or missiles will launch.
-propToSBool :: VProp String String -> IncPack String (VProp S.SBool SNum)
+propToSBool :: (Show a, Ord a) => VProp a  a -> IncPack a (VProp S.SBool SNum)
 propToSBool !(RefB x)     = RefB   <$> smtBool x
 propToSBool !(OpB o e)    = OpB  o <$> propToSBool e
 propToSBool !(OpBB o l r) = OpBB o <$> propToSBool l <*> propToSBool r
@@ -178,7 +181,7 @@ propToSBool !(ChcB d l r) = ChcB d <$> propToSBool l <*> propToSBool r
 propToSBool !(OpIB o l r) = OpIB o <$> propToSBool' l <*> propToSBool' r
 propToSBool !(LitB b)     = return $ LitB b
 
-propToSBool' :: VIExpr String -> IncPack String (VIExpr SNum)
+propToSBool' :: (Show a, Ord a) => VIExpr a -> IncPack a (VIExpr SNum)
 propToSBool' !(Ref RefI i) = Ref RefI <$> smtInt i
 propToSBool' !(Ref RefD d) = Ref RefD <$> smtDouble d
 propToSBool' !(OpI o e)    = OpI o    <$> propToSBool' e
@@ -188,20 +191,20 @@ propToSBool' !(LitI x)     = return $ LitI x
 
 -- | convert every reference to a boolean, keeping track of what you've seen
 -- before
-smtBool :: String -> IncPack String S.SBool
+smtBool :: (Show a, Ord a) => a -> IncPack a S.SBool
 smtBool str = do (st,_) <- get
                  case str `M.lookup` st of
-                   Nothing -> do b <- lift $ S.sBool str
+                   Nothing -> do b <- lift . S.sBool $ show str
                                  St.modify (first $ M.insert str b)
                                  return b
                    Just x  -> return x
 
 -- | convert every reference to a Integer, keeping track of what you've seen
 -- before
-smtInt :: String -> IncPack String SNum
+smtInt :: (Show a, Ord a) => a -> IncPack a SNum
 smtInt str = do (_,st) <- get
                 case str `M.lookup` st of
-                  Nothing -> do b <- lift $ S.sInt64 str
+                  Nothing -> do b <- lift . S.sInt64 $ show str
                                 let b' = SI b
                                 St.modify (second $ M.insert str b')
                                 return b'
@@ -209,10 +212,10 @@ smtInt str = do (_,st) <- get
 
 -- | convert every reference to a Integer, keeping track of what you've seen
 -- before
-smtDouble :: String -> IncPack String SNum
+smtDouble :: (Show a, Ord a) =>  a -> IncPack a SNum
 smtDouble str = do (_,st) <- get
                    case str `M.lookup` st of
-                     Nothing -> do b <- lift $ S.sDouble str
+                     Nothing -> do b <- lift . S.sDouble $ show str
                                    let b' = SD b
                                    St.modify (second $ M.insert str b')
                                    return b'

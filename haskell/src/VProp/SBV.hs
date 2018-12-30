@@ -87,7 +87,7 @@ symbolicPropExpr e = do
         erri = error "symbolicPropExpr: Internal error, no int symbol found."
 
 -- | Perform andDecomposition, removing all choices from a proposition
-andDecomp :: (Show a) => (VProp a a) -> (Dim -> a) -> (VProp a a)
+andDecomp :: Show a => (VProp a a) -> (Dim -> a) -> (VProp a a)
 andDecomp !(ChcB d l r) f = (dimToVar f d &&& andDecomp l f) |||
                             (S.bnot (dimToVar f d) &&& andDecomp r f)
 andDecomp !(OpB op x)    f = OpB  op (andDecomp x f)
