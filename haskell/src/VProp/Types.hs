@@ -51,7 +51,7 @@ import           Test.Tasty.QuickCheck
 
 
 -- | A feature is a named, boolean configuration option.
-newtype Var a = Var { varName ::  a}
+newtype Var = Var { varName ::  String}
   deriving (Data,Eq,IsString,Ord,Typeable,Generic,NFData)
 
 newtype Dim a = Dim { dimName ::  a}
