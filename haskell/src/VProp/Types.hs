@@ -51,15 +51,15 @@ import           Test.Tasty.QuickCheck
 
 
 -- | A feature is a named, boolean configuration option.
-newtype Var = Var { varName :: String }
+newtype Var a = Var { varName ::  a}
   deriving (Data,Eq,IsString,Ord,Typeable,Generic,NFData)
 
-newtype Dim = Dim { dimName :: String }
-  deriving (Data,Eq,IsString,Ord,Show,Typeable,Generic,NFData,Arbitrary)
+newtype Dim a = Dim { dimName ::  a}
+  deriving (Data,Eq,IsString,Ord,Show,Typeable,Generic,NFData,Arbitrary,Functor,Traversable,Foldable)
 
 type VConfig a b = a -> b
-type DimBool = Dim -> S.SBool
-type Config = Map Dim Bool
+type DimBool a = (Dim a) -> S.SBool
+type Config  a = Map (Dim a) Bool
 
 --
 -- * Syntax
@@ -75,7 +75,7 @@ data VProp a b
    | OpBB BB_B !(VProp a b) !(VProp a b)
    | OpIB NN_B !(VIExpr b)  !(VIExpr b)
    | Opn  Opn  !(SE.Seq (VProp a b))
-   | ChcB Dim  !(VProp a b) !(VProp a b)
+   | ChcB (Dim a)  !(VProp a b) !(VProp a b)
   deriving (Eq,Generic,Typeable,Functor,Traversable,Foldable,Ord)
 
 -- | Integer Expressions with Choices
@@ -84,7 +84,7 @@ data VIExpr a
   | Ref RefN a
   | OpI  N_N  !(VIExpr a)
   | OpII NN_N !(VIExpr a) !(VIExpr a)
-  | ChcI Dim  !(VIExpr a) !(VIExpr a)
+  | ChcI (Dim a)  !(VIExpr a) !(VIExpr a)
   deriving (Eq,Generic,Typeable,Functor,Traversable,Foldable,Ord)
 
 -- | Mirroring NPrim with Symbolic types for the solver
@@ -145,10 +145,10 @@ dRef = Ref RefD
 bRef :: String -> VProp String b
 bRef = RefB
 
-bChc :: String -> VProp a b -> VProp a b -> VProp a b
+bChc :: a -> VProp a b -> VProp a b -> VProp a b
 bChc x = ChcB (Dim x)
 
-iChc :: String -> VIExpr a -> VIExpr a -> VIExpr a
+iChc :: a -> VIExpr a -> VIExpr a -> VIExpr a
 iChc x = ChcI (Dim x)
 
 -- | Begin primitive instances
@@ -420,7 +420,7 @@ instance Bifunctor VProp where
   bimap f g (OpB op e)    = OpB op (bimap f g e)
   bimap f g (OpBB op l r) = OpBB op (bimap f g l) (bimap f g r)
   bimap _ g (OpIB op l r) = OpIB op (g <$> l) (g <$> r)
-  bimap f g (ChcB d l r)  = ChcB d (bimap f g l) (bimap f g r)
+  bimap f g (ChcB d l r)  = ChcB (f <$> d)(bimap f g l) (bimap f g r)
   bimap f g (Opn op l)    = Opn op $ fmap (bimap f g) l
   bimap _ _ (LitB b)      = LitB b
 
@@ -440,5 +440,8 @@ instance Bitraversable VProp where
   bitraverse f g (OpBB op l r) = OpBB op <$> bitraverse f g l <*> bitraverse f g r
   bitraverse _ g (OpIB op l r) = OpIB op <$> traverse g l     <*> traverse g r
   bitraverse f g (Opn op ls)   = Opn  op <$> traverse (bitraverse f g) ls
-  bitraverse f g (ChcB d l r)  = ChcB d  <$> bitraverse f g l <*> bitraverse f g r
+  bitraverse f g (ChcB d l r)  = ChcB <$>
+                                 traverse f d <*>
+                                 bitraverse f g l <*>
+                                 bitraverse f g r
   bitraverse _ _ (LitB x)      = pure $ LitB x
