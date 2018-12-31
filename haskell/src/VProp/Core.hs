@@ -13,7 +13,7 @@ import qualified Data.Sequence as SE
 
 import VProp.Types
 
-instance Show Var where show = varName
+instance Show a => Show (Var a) where show = show . varName
 instance (Show a, Show b) => Show (VProp a b) where show = prettyPropExpr
 
 -- | Pretty print a feature expression.
@@ -44,7 +44,7 @@ instance Show a => Show (VIExpr a) where
   show (OpI Abs a) = "|" <> show a <> "|"
   show (OpI Sign a) = "signum " <> show a
   show (OpII f l r) = mconcat [show l, " ", show f, " ", show r]
-  show (ChcI d l r) = mconcat [dimName d, "≺", show l, ", ", show r, "≻"]
+  show (ChcI d l r) = mconcat [show $ dimName d, "≺", show l, ", ", show r, "≻"]
 
 instance Show B_B where show Not = "¬"
 
@@ -56,7 +56,7 @@ prettyPropExpr = top
     top (Opn And ps)    = intercalate " ∧ " $ sub <$> (F.toList ps)
     top (OpBB b l r)    = mconcat [sub l, " ", show b, " ", sub r]
     top (OpIB nb l r)    = mconcat [show l, " ", show nb, " ", show r]
-    top (ChcB d ls rs) = dimName d ++ "≺" ++ top ls ++ ", " ++ top rs++ "≻"
+    top (ChcB d ls rs) = show (dimName d) ++ "≺" ++ top ls ++ ", " ++ top rs++ "≻"
     top e           = sub e
 
     sub :: (Show a, Show b) => VProp a b -> String
@@ -154,7 +154,7 @@ redundantOps _            = False
 -- ----------------------------- Choice Manipulation ------------------------------
 -- | Given a config and a Variational VProp term select the element out that the
 -- config points to
-selectVariant :: Config -> VProp a b -> Maybe (VProp a b)
+selectVariant :: Ord a => Config a -> VProp a a -> Maybe (VProp a a)
 selectVariant tbs x@(ChcB t y n) = case Map.lookup t tbs of
                                      Nothing    -> Just x
                                      Just True  -> selectVariant tbs y
@@ -164,10 +164,12 @@ selectVariant tb (Opn a ps)    = liftM (Opn a) (sequence $ selectVariant tb <$> 
 selectVariant tb (OpBB a l r)  = liftM2 (OpBB a)
                                 (selectVariant tb l)
                                 (selectVariant tb r)
-selectVariant tb (OpIB op l r) = OpIB op <$> selectVariant' tb l <*> selectVariant' tb r
+selectVariant tb (OpIB op l r) = OpIB op <$>
+                                 selectVariant' tb l <*>
+                                 selectVariant' tb r
 selectVariant _  x             = Just x
 
-selectVariant' :: Config -> VIExpr a -> Maybe (VIExpr a)
+selectVariant' :: Ord a => Config a -> VIExpr a -> Maybe (VIExpr a)
 selectVariant' tb x@(ChcI t y n) = case Map.lookup t tb of
                                      Nothing    -> Just x
                                      Just True  -> selectVariant' tb y
@@ -178,7 +180,7 @@ selectVariant' _  x             = Just x
 
 
 -- | Convert a dimension to a variable
-dimToVar :: Show a => (Dim -> a) -> Dim -> (VProp a b)
+dimToVar :: Show a => (Dim a -> a) -> Dim a -> (VProp a b)
 dimToVar f = RefB . f
 
 -- --------------------------- Descriptors ----------------------------------------
@@ -206,10 +208,10 @@ numPlain :: VProp a b -> Integer
 numPlain = toInteger . length . filter isPlain . toList
 
 -- | Given a vprop how many shared dimensions were there
-numSharedDims :: (Eq a, Eq b) => VProp a b -> Integer
+numSharedDims :: (Eq a) => VProp a a -> Integer
 numSharedDims = toInteger . length . filter (flip (>=) 2 . length) . group . flip go []
   where
-    go :: VProp a b -> [Dim] -> [Dim]
+    go :: VProp a a -> [Dim a] -> [Dim a]
     go (OpB _ a) acc    = go a acc
     go (OpIB _ l r) acc = go' l (go' r acc)
     go (OpBB _ l r) acc = go l (go r acc)
@@ -217,7 +219,7 @@ numSharedDims = toInteger . length . filter (flip (>=) 2 . length) . group . fli
     go (ChcB d l r) acc = go l (go r $ d:acc)
     go _    acc         = acc
 
-    go' :: VIExpr a -> [Dim] -> [Dim]
+    go' :: VIExpr a -> [Dim a] -> [Dim a]
     go' (ChcI d l r) acc = go' l (go' r $ d:acc)
     go' (OpII _ l r) acc = go' l (go' r acc)
     go' (OpI  _ e)   acc = go' e acc
@@ -238,9 +240,9 @@ numSharedPlain = toInteger . length . filter (flip (>=) 2 . length) . group . fi
 --     go _ acc           = acc
 
 -- | Given a prop return the maximum number of times a given dimension was shared
-maxShared :: VProp a b -> Int
+maxShared :: (Eq a, Ord a) => VProp a a -> Int
 maxShared = safeMaximum . fmap length . group . sort . go
-  where go :: VProp a b -> [String]
+  where go :: VProp a a -> [a]
         go (ChcB d l r) = (dimName d) : go l ++ go r
         go (OpB _ l)     = go l
         go (Opn _ ps)  = foldMap go ps
@@ -248,7 +250,7 @@ maxShared = safeMaximum . fmap length . group . sort . go
         go (OpIB _ l r) = go' l ++ go' r
         go _           = []
 
-        go' :: VIExpr a -> [String]
+        go' :: VIExpr a -> [a]
         go' (ChcI d l r) = (dimName d) : go' l ++ go' r
         go' (OpI _ l)    = go' l
         go' (OpII _ l r) = go' l ++ go' r
@@ -269,7 +271,7 @@ bvars (Opn _ ps)   = Set.unions . fmap bvars . F.toList $ ps
 bvars (ChcB _ l r) = bvars l `Set.union` bvars r
 
 -- | The set of dimensions in a propositional expression
-dimensions :: (VProp a b) -> Set.Set Dim
+dimensions :: Ord a => (VProp a a) -> Set.Set (Dim a)
 dimensions (LitB _)     = Set.empty
 dimensions (RefB _)     = Set.empty
 dimensions (OpB _ e)    = dimensions e
@@ -279,7 +281,7 @@ dimensions (Opn _ ps)   = Set.unions . fmap dimensions . F.toList $ ps
 dimensions (ChcB d l r) = Set.singleton d `Set.union`
                             dimensions l `Set.union` dimensions r
 
-dimensions' :: (VIExpr a) -> Set.Set Dim
+dimensions' :: Ord a => (VIExpr a) -> Set.Set (Dim a)
 dimensions' (LitI _)     = Set.empty
 dimensions' (Ref _ _)     = Set.empty
 dimensions' (OpI _ e)    = dimensions' e
@@ -328,7 +330,7 @@ vars :: Ord a => VProp a a -> Set.Set a
 vars prop = bvars prop `Set.union` ivars prop
 
 -- | The set of all choices
-configs :: VProp a b -> [[(Dim, Bool)]]
+configs :: Ord a => VProp a a -> [[((Dim a), Bool)]]
 configs prop = go (Set.toList $ dimensions prop)
   where
     go []     = [[]]
