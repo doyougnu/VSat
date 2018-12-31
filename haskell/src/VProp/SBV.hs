@@ -22,7 +22,7 @@ instance (Show a, Ord a) => SAT (VProp a a) where
 
 -- TODO fix this repetition
 -- | Evaluate a feature expression against a configuration.
-evalPropExpr :: DimBool
+evalPropExpr :: DimBool a
              -> VConfig a SNum
              -> VConfig a S.SBool
              -> VProp a a
@@ -49,7 +49,7 @@ evalPropExpr d !i !c !(ChcB dim l r)
 
 -- | Eval the numeric expressions, VIExpr, assume everything is an integer until
 -- absolutely necessary to coerce
-evalPropExpr' :: DimBool -> VConfig a SNum -> VIExpr a -> SNum
+evalPropExpr' :: DimBool a -> VConfig a SNum -> VIExpr a -> SNum
 evalPropExpr' _  _ !(LitI (I i)) = SI . S.literal . fromIntegral $ i
 evalPropExpr' _  _ !(LitI (D d)) = SD $ S.literal d
 evalPropExpr' _ !i !(Ref _ f)    = i f
@@ -76,7 +76,7 @@ symbolicPropExpr e = do
         helper (RefI, i) = sequence $ (i, SI <$> S.sInt64 (show i))
 
     syms  <- fmap (fromList . zip vs) (S.sBools (show <$> vs))
-    dims  <- fmap (fromList . zip ds) (S.sBools (map dimName ds))
+    dims  <- fmap (fromList . zip ds) (S.sBools (map (show . dimName) ds))
     isyms <- fromList <$> traverse helper isType
     let look f  = fromMaybe err  (lookup f syms)
         lookd d = fromMaybe errd (lookup d dims)
@@ -87,7 +87,7 @@ symbolicPropExpr e = do
         erri = error "symbolicPropExpr: Internal error, no int symbol found."
 
 -- | Perform andDecomposition, removing all choices from a proposition
-andDecomp :: Show a => (VProp a a) -> (Dim -> a) -> (VProp a a)
+andDecomp :: Show a => VProp a a -> (Dim a -> a) -> (VProp a a)
 andDecomp !(ChcB d l r) f = (dimToVar f d &&& andDecomp l f) |||
                             (S.bnot (dimToVar f d) &&& andDecomp r f)
 andDecomp !(OpB op x)    f = OpB  op (andDecomp x f)
