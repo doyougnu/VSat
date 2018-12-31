@@ -13,7 +13,7 @@ import qualified Data.Sequence as SE
 
 import VProp.Types
 
-instance Show a => Show (Var a) where show = show . varName
+instance Show Var where show = varName
 instance (Show a, Show b) => Show (VProp a b) where show = prettyPropExpr
 
 -- | Pretty print a feature expression.
