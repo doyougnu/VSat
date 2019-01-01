@@ -179,10 +179,10 @@ isNormalForm' _ = False
 
 
 -- | Given a config and variational expression remove redundant choices
-prune :: VProp a b -> VProp a b
+prune :: Ord a => VProp a a -> VProp a a
 prune = prune_ Map.empty
 
-prune_ :: Config -> VProp a b -> VProp a b
+prune_ :: Ord a => Config a -> VProp a a -> VProp a a
 prune_ tb !(ChcB t y n) = case Map.lookup t tb of
                              Nothing -> ChcB t
                                         (prune_ (Map.insert t True tb) y)
@@ -195,7 +195,7 @@ prune_ tb !(Opn a ps)  = Opn a (prune_ tb <$> ps)
 prune_ tb !(OpIB op l r)  = OpIB op (prune_' tb l) (prune_' tb r)
 prune_ _ nonRecursive = nonRecursive
 
-prune_' :: Config -> VIExpr a -> VIExpr a
+prune_' :: Ord a => Config a -> VIExpr a -> VIExpr a
 prune_' tb !(ChcI t y n) = case Map.lookup t tb of
                              Nothing -> ChcI t
                                         (prune_' (Map.insert t True tb) y)
