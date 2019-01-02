@@ -14,18 +14,18 @@ import VProp.Types
 import VProp.Core
 import SAT
 
-instance (Show a, Ord a) => SAT (VProp a a) where
-  toPredicate = symbolicPropExpr
+instance (Show a, Show b, Show d, Ord a, Ord b, Ord d) =>
+  SAT (VProp d a b) where toPredicate = symbolicPropExpr
 
 -- TODO fix this repetition
 -- | Evaluate a feature expression against a configuration.
-evalPropExpr :: DimBool a
+evalPropExpr :: DimBool d
              -> VConfig b SNum
-             -> VConfig b S.SBool
-             -> VProp a b
+             -> VConfig a S.SBool
+             -> VProp d a b
              -> S.SBool
-evalPropExpr _ _ _ (LitB b)    = S.literal b
-evalPropExpr _ _ !c (RefB f)   = c f
+evalPropExpr _ _ _ (LitB b)         = S.literal b
+evalPropExpr _ _  !c (RefB f)       = c f
 evalPropExpr d !i !c !(OpB Not e)   = S.bnot (evalPropExpr d i c e)
 evalPropExpr d !i !c !(Opn And ps)  = foldr1 (&&&) $ evalPropExpr d i c <$> ps
 evalPropExpr d !i !c !(Opn Or ps)   = foldr1 (|||) $ evalPropExpr d i c <$> ps
@@ -62,7 +62,8 @@ evalPropExpr' d !i !(ChcI dim l r)
   = S.ite (d dim) (evalPropExpr' d i l) (evalPropExpr' d i r)
 
 -- | Generate a symbolic predicate for a feature expression.
-symbolicPropExpr :: (Show a, Ord a) => VProp a a -> S.Predicate
+symbolicPropExpr :: (Show a, Show b, Show d, Ord a, Ord b, Ord d) =>
+  VProp d a b -> S.Predicate
 symbolicPropExpr e = do
     let vs = Set.toList (bvars e)
         ds = Set.toList (dimensions e)
@@ -84,10 +85,13 @@ symbolicPropExpr e = do
         erri = error "symbolicPropExpr: Internal error, no int symbol found."
 
 -- | Perform andDecomposition, removing all choices from a proposition
-andDecomp :: VProp a b -> (Dim a -> b) -> (VProp a b)
-andDecomp !(ChcB d l r) f = (dimToVar f d &&& andDecomp l f) |||
-                            (S.bnot (dimToVar f d) &&& andDecomp r f)
+andDecomp :: VProp d a b -> (Dim d -> a) -> VProp d a b
+andDecomp !(ChcB d l r) f  = (newDim &&& andDecomp l f) |||
+                            (S.bnot newDim &&& andDecomp r f)
+  where newDim = dimToVar f d
 andDecomp !(OpB op x)    f = OpB  op (andDecomp x f)
 andDecomp !(OpBB op l r) f = OpBB op (andDecomp l f) (andDecomp r f)
-andDecomp !(Opn op ps)   f = Opn  op (flip andDecomp f <$> ps)
+andDecomp !(Opn op ps)   f = Opn  op $ (\x -> andDecomp x f) <$> ps
+  -- it is unclear how to unwind choices in arithmetic expressions
+-- andDecomp !(OpIB op l r) f g = OpIB op (andDecomp' g l) (andDecomp' g r)
 andDecomp !x             _ = x

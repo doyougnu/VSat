@@ -19,8 +19,9 @@ dependencies:
 - base >= 4.7 && < 5
 - containers >= 0.5
 - mtl
-- bifunctors
+# - bifunctors
 - deepseq
+# - genifunctors
 # sbv forces us to use LTS-11.22 ghc 8.2.2
 - sbv
 - cassava
@@ -53,6 +54,7 @@ default-extensions:
   - DeriveDataTypeable
   - MultiParamTypeClasses
   - RecordWildCards
+  - TemplateHaskell
 
 executables:
   vsat:
