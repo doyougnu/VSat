@@ -29,14 +29,15 @@ import Utils
 import Config
 
 -- | The satisfiable dictionary, this is actually the "state" keys are configs
--- and values are whether that config is satisfiable or not (a bool)
-type SatDict a = (M.Map Config Bool, M.Map a Bool) -- keys may incur perf penalty
+-- (an mapping from dimensions to booleans denoting selection) and values are
+-- whether that config is satisfiable or not (a bool)
+type SatDict a = M.Map (Config a) Bool
 
 -- | Type convenience for Log
 type Log = String
 
--- | Takes a dimension d, a value a, and a result r
-type Env a r = RWST (SMTConf a) Log (SatDict a) IO r -- ^ the monad stack
+-- | Takes a dimension d, a type for values a, and a result r
+type Env d a r = RWST (SMTConf d a a) Log (SatDict d) IO r -- ^ the monad stack
 
 -- | A zipper for evaluation. This is required so that everytime we have a
 -- choice we have access to the rest of the proposition that we are evaluation.
@@ -44,47 +45,50 @@ type Env a r = RWST (SMTConf a) Log (SatDict a) IO r -- ^ the monad stack
 -- manipulate the assertion stack and then continue evaluating.
 data Op = CAnd | COr
 
-data Ctx a b = InOpN Op !(SE.Seq (VProp a b), VProp a b)
-             | InNot !(Ctx a b)
-             | InOpIB Op !(Ctx a b, VProp a b)
+data Ctx d a b = InOpN Op !(SE.Seq (VProp d a b), VProp d a b)
+             | InNot !(Ctx d a b)
+             | InOpIB Op !(Ctx d a b, VProp d a b)
 
 -- | An empty reader monad environment, in the future read these from config file
-_emptySt :: SatDict a
-_emptySt = (,) M.empty M.empty
+_emptySt :: SatDict d
+_emptySt = M.empty
 
 -- | Run the RWS monad with defaults of empty state, reader
 _runEnv :: Show a =>
-  Env a r -> SMTConf a -> SatDict a -> IO (r, (SatDict a),  Log)
+  Env d a r -> SMTConf d a a -> SatDict d -> IO (r, (SatDict d),  Log)
 _runEnv m opts st = runRWST m opts st
 
 -- TODO use configurate and load the config from a file
-runEnv :: Show a => (VProp a a -> Env a Result)
-       -> SMTConf a
-       -> VProp a a -> IO (Result, (SatDict a), Log)
+runEnv :: Show a => (VProp d a a -> Env d a (Result d))
+       -> SMTConf d a a
+       -> VProp d a a -> IO (Result d, SatDict d, Log)
 runEnv f conf !x = _runEnv (f x') conf _emptySt
   where !x' = foldr' ($!) x (opts conf)
 
-runAD :: (Show a, Ord a) => SMTConf a
-      -> VProp a a
-      -> IO (V String (Maybe S.SMTResult))
-runAD os p = unRes . fst' <$> runEnv runAndDecomp os p
+runAD :: (Show a, Show d, Ord d, Ord a) =>
+         SMTConf d a a
+      -> VProp d a a
+      -> (d -> a)
+      -> IO (Result d)
+runAD os p f = fst' <$> runEnv (flip runAndDecomp f) os p
 
-runBF :: (Show a, Ord a) => SMTConf a
-      -> VProp  a a
-      -> IO (V String (Maybe S.SMTResult))
-runBF os p = unRes . fst' <$> runEnv runBruteForce os p
+runBF :: (Show a, Show d, Ord a, Ord d) =>
+         SMTConf d a a
+      -> VProp d a a
+      -> IO (Result d)
+runBF os p = fst' <$> runEnv runBruteForce os p
 
 -- | Run the VSMT solver given a list of optimizations and a prop
-runVSMT :: (Show a, Ord a) => SMTConf a
-  -> VProp a a
-  -> IO (Result, SatDict a, Log)
+runVSMT :: (Show a, Ord a, Ord d) =>
+           SMTConf d a a
+        -> VProp d a a
+        -> IO (Result d, SatDict d, Log)
 runVSMT = runEnv runVSMTSolve
 
 -- | Given a VProp a term generate the satisfiability map
-initSt :: (Show a, Ord a) => VProp a a -> (SatDict a)
-initSt prop = (sats, vs)
+initSt :: Ord d => VProp d a a -> SatDict d
+initSt prop = sats
   where sats = M.fromList . fmap (\x -> (x, False)) $ M.fromList <$> configs prop
-        vs = M.fromSet (const False) (vars prop)
 
 -- | Some logging functions
 _logBaseline :: (Show a, MonadWriter [Char] m) => a -> m ()
@@ -99,11 +103,12 @@ _logResult x = tell $ "Got result: " ++ show x
 
 -- | Run the brute force baseline case, that is select every plain variant and
 -- run them to the sat solver
-runBruteForce :: (MonadTrans t, Show a, Ord a, MonadState (SatDict a) (t IO)) =>
-  VProp a a -> t IO Result
+runBruteForce ::
+  (MonadTrans t, Show a,Show d, Ord a, Ord d, MonadState (SatDict d) (t IO)) =>
+  VProp d a a -> t IO (Result d)
 runBruteForce prop = lift $ flip evalStateT (initSt prop) $
   do
-  (_confs, _) <- get
+  _confs <- get
   let confs = M.keys _confs
       plainProps = (\y -> sequence $! (y, selectVariant y prop)) <$> confs
   plainMs <- lift $ mapM (bitraverse pure (fmap unsat . S.sat . symbolicPropExpr)) $! catMaybes plainProps
@@ -112,17 +117,17 @@ runBruteForce prop = lift $ flip evalStateT (initSt prop) $
 
 -- | Run the and decomposition baseline case, that is deconstruct every choice
 -- and then run the sat solver
-runAndDecomp :: (Show a, MonadTrans t, Monad (t IO)) =>
-  VProp a a -> t IO Result
-runAndDecomp prop = do
+runAndDecomp :: (Show a, Show d, Ord d, Ord a, MonadTrans t, Monad (t IO)) =>
+  VProp d a a -> (d -> a) -> t IO (Result d)
+runAndDecomp prop f = do
   res <- lift . S.runSMT $ do
-    p <- symbolicPropExpr $ andDecomp prop dimName
+    p <- symbolicPropExpr $ andDecomp prop (f . dimName)
     SC.query $ do S.constrain p; getVSMTModel
   lift . return . Result $ Plain res
 
 runVSMTSolve ::
-  (Show a, Ord a, MonadTrans t, MonadReader (SMTConf a) (t IO)) =>
-  VProp a a -> t IO Result
+  (Show a, Ord a, Ord d, MonadTrans t, MonadReader (SMTConf d a a) (t IO)) =>
+  VProp d a a -> t IO (Result d)
 runVSMTSolve prop =
   do cnf <- ask
      res <- lift . S.runSMTWith (conf cnf) . vSMTSolve $
@@ -130,8 +135,7 @@ runVSMTSolve prop =
      lift . return . Result $ res
 
 -- | main workhorse for running the SAT solver
-newtype Result = Result {unRes :: V String (Maybe S.SMTResult)}
-
+newtype Result a = Result {unRes :: V a (Maybe S.SMTResult)}
 
 -- | wrapper around map to keep track of the variable references we've seen, a,
 -- and their symbolic type, b
@@ -145,17 +149,18 @@ type IncPack a b = St.StateT ((UsedVars a S.SBool, UsedVars a SNum)) S.Symbolic 
 type UsedDims a = M.Map a Bool
 
 -- | the internal state for the incremental solve algorithm, it holds a result
--- list, and the used dims map
-type IncState a = (V String (Maybe a), UsedDims Dim)
+-- list, and the used dims map, and is parameterized by the types of dimensions,
+-- d
+type IncState d a = (V d (Maybe a), UsedDims (Dim d))
 
 -- | the incremental solve monad, with the base monad being the query monad so
 -- we can pull out sbv models Hardcoding so that I don't have to write the mtl
 -- typeclass. I do not expect these to change much
-type IncVSMTSolve a = St.StateT (IncState S.SMTResult) SC.Query a
+type IncVSMTSolve d a = St.StateT (IncState d S.SMTResult) SC.Query a
 
 -- | Solve a VSMT proposition
-vSMTSolve :: S.Symbolic (VProp S.SBool SNum)
-          -> S.Symbolic (V String (Maybe S.SMTResult))
+vSMTSolve :: Ord d => S.Symbolic (VProp d S.SBool SNum)
+          -> S.Symbolic (V d (Maybe S.SMTResult))
 vSMTSolve prop = do prop' <- prop
                     S.setOption $ SC.ProduceAssertions True
                     SC.query $
@@ -172,7 +177,7 @@ vSMTSolve prop = do prop' <- prop
 -- | This ensures two things: 1st we need all variables to be symbolic before
 -- starting query mode. 2nd we cannot allow any duplicates to be called on a
 -- string -> symbolic a function or missiles will launch.
-propToSBool :: (Show a, Ord a) => VProp a  a -> IncPack a (VProp S.SBool SNum)
+propToSBool :: (Show a,Ord a) => VProp d a a -> IncPack a (VProp d S.SBool SNum)
 propToSBool !(RefB x)     = RefB   <$> smtBool x
 propToSBool !(OpB o e)    = OpB  o <$> propToSBool e
 propToSBool !(OpBB o l r) = OpBB o <$> propToSBool l <*> propToSBool r
@@ -181,7 +186,7 @@ propToSBool !(ChcB d l r) = ChcB d <$> propToSBool l <*> propToSBool r
 propToSBool !(OpIB o l r) = OpIB o <$> propToSBool' l <*> propToSBool' r
 propToSBool !(LitB b)     = return $ LitB b
 
-propToSBool' :: (Show a, Ord a) => VIExpr a -> IncPack a (VIExpr SNum)
+propToSBool' :: (Ord b, Show b) => VIExpr d b -> IncPack b (VIExpr d SNum)
 propToSBool' !(Ref RefI i) = Ref RefI <$> smtInt i
 propToSBool' !(Ref RefD d) = Ref RefD <$> smtDouble d
 propToSBool' !(OpI o e)    = OpI o    <$> propToSBool' e
@@ -232,7 +237,7 @@ getVSMTModel = do cs <- SC.checkSat
 
 -- | type class needed to avoid lifting for constraints in the IncSolve monad
 instance (Monad m, I.SolverContext m) =>
-  I.SolverContext (StateT (IncState a) m) where
+  I.SolverContext (StateT (IncState d a) m) where
   constrain = lift . S.constrain
   namedConstraint = (lift .) . S.namedConstraint
   setOption = lift . S.setOption
@@ -250,7 +255,7 @@ instance (Monad m, I.SolverContext m) =>
 -- | smartly grab a result from the state checking to make sure that if the
 -- result is variational than that is preferred over a redundant model. Or in
 -- other words, models only occur in leaves of the V tree
-getResult :: IncVSMTSolve (V String (Maybe S.SMTResult))
+getResult :: IncVSMTSolve d (V d (Maybe S.SMTResult))
 getResult = do (res, _) <- get
                if isEmpty res
                  then lift getVSMTModel >>= return . Plain
@@ -258,10 +263,10 @@ getResult = do (res, _) <- get
   where isEmpty (Plain Nothing) = True
         isEmpty _               = False
 
-clearSt :: IncVSMTSolve ()
+clearSt :: IncVSMTSolve d ()
 clearSt = St.modify . first $ const (Plain Nothing)
 
-store :: V String (Maybe S.SMTResult) -> IncVSMTSolve ()
+store :: V d (Maybe S.SMTResult) -> IncVSMTSolve d ()
 store = St.modify . first . const
 
 -- | Handle a choice in the IncVSMTSolve monad, we check to make sure that if a
@@ -271,7 +276,7 @@ store = St.modify . first . const
 -- then we'll get back a variational model, if we get back a variational model
 -- then we reconstruct the choice expression representing the model and store it
 -- in the state
-handleChc :: Ctx S.SBool SNum -> IncVSMTSolve S.SBool
+handleChc :: Ord d => Ctx d S.SBool SNum -> IncVSMTSolve d S.SBool
 handleChc (InOpN op (ctx, ChcB d l r)) =
   do (_, used) <- get
      case M.lookup d used of
@@ -314,7 +319,7 @@ handleChc (InOpN op (ctx, fcs)) = do
 
 -- | The main solver algorithm. You can think of this as the sem function for
 -- the dsl
-vSMTSolve_ :: VProp S.SBool SNum -> IncVSMTSolve S.SBool
+vSMTSolve_ :: Ord d => VProp d S.SBool SNum -> IncVSMTSolve d S.SBool
 vSMTSolve_ !(RefB b) = return b
 vSMTSolve_ !(LitB b) = return $ S.literal b
 vSMTSolve_ !(OpB Not bs)= do b <- vSMTSolve_ bs
@@ -347,7 +352,7 @@ vSMTSolve_ !(Opn Or ps) = handleChc  . InOpN COr $ (ctx, fcs)
   where (ctx SE.:> fcs) = SE.viewr ps
 vSMTSolve_ x = handleChc (InOpN CAnd (SE.empty, x))
 
-handleSBoolChc :: V Dim S.SBool -> IncVSMTSolve S.SBool
+handleSBoolChc :: Ord d => V (Dim d) S.SBool -> IncVSMTSolve d S.SBool
 handleSBoolChc !(Plain a) = do S.constrain a
                                return a
 handleSBoolChc !(VChc d l r) =
@@ -376,9 +381,9 @@ handleSBoolChc !(VChc d l r) =
 
                         return r'
 
-reifyArithChcs :: V Dim SNum -> V Dim SNum
+reifyArithChcs :: Ord d => V (Dim d) SNum -> V (Dim d) SNum
   -> (SNum -> SNum -> S.SBool)
-  -> IncVSMTSolve (V Dim S.SBool)
+  -> IncVSMTSolve d (V (Dim d) S.SBool)
 reifyArithChcs !(Plain a) !(Plain b) op = return . Plain $ a `op` b
 reifyArithChcs !(Plain a) !(VChc d l r) op =
   do (_, used) <- get
@@ -539,7 +544,7 @@ reifyArithChcs !(VChc ad al ar) !(VChc bd bl br) op =
                                   (VChc ad (Plain bll) (Plain blr))
                                   (VChc ad (Plain brl) (Plain brr))
 
-vSMTSolve'_ :: VIExpr SNum -> IncVSMTSolve (V Dim SNum)
+vSMTSolve'_ :: VIExpr a SNum -> IncVSMTSolve d (V (Dim a) SNum)
 vSMTSolve'_ !(Ref RefI i) = return . Plain $ i
 vSMTSolve'_ !(Ref RefD d) = return . Plain $ d
 vSMTSolve'_ !(LitI (I i)) = return . Plain . SI . S.literal . fromIntegral $ i
