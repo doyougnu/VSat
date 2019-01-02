@@ -43,6 +43,7 @@ import           Data.Bifunctor        (Bifunctor, bimap)
 import           Data.Bitraversable    (Bitraversable, bitraverse)
 import           Data.Generics.Genifunctors
 import           Data.Data             (Data, Typeable)
+import           Data.Text             (Text)
 import           Data.Fixed            (mod')
 import           Data.Map              (Map)
 import           Data.Monoid           ((<>))
@@ -55,7 +56,7 @@ import           Test.Tasty.QuickCheck
 
 
 -- | A feature is a named, boolean configuration option.
-newtype Var = Var { varName ::  String}
+newtype Var = Var { varName :: Text}
   deriving (Data,Eq,IsString,Ord,Typeable,Generic,NFData)
 
 newtype Dim a = Dim { dimName ::  a}
@@ -134,7 +135,7 @@ infixl 7 ./, .%
 
 -- | some not so smart constructors, pinning a to string because we will be
 -- using String the most
-iRef :: a -> VIExpr d a
+iRef :: IsString a => a -> VIExpr d a
 iRef = Ref RefI
 
 iLit :: Integer -> VIExpr d a
@@ -143,17 +144,18 @@ iLit = LitI . I
 dLit :: Double -> VIExpr d a
 dLit = LitI . D
 
-dRef :: a -> VIExpr d a
+dRef :: IsString a => a -> VIExpr d a
 dRef = Ref RefD
 
-bRef :: a -> VProp d a b
+bRef :: IsString a => a -> VProp d a b
 bRef = RefB
 
-bChc :: d -> VProp d a b -> VProp d a b -> VProp d a b
-bChc x = ChcB (Dim x)
+bChc :: IsString d => d -> VProp d a b -> VProp d a b -> VProp d a b
+bChc = ChcB . Dim
 
-iChc :: d -> VIExpr d a -> VIExpr d a -> VIExpr d a
-iChc x = ChcI (Dim x)
+iChc :: IsString d => d -> VIExpr d a -> VIExpr d a -> VIExpr d a
+iChc = ChcI . Dim
+
 
 -- | Begin primitive instances
 
@@ -427,16 +429,6 @@ instance Bifunctor VIExpr where
   bimap _ _ (LitI i)      = LitI i
 
 
--- instance Bifunctor VProp where
---   bimap _ g (RefB v)      = RefB $ g v
---   bimap f g (OpB op e)    = OpB op (bimap f g e)
---   bimap f g (OpBB op l r) = OpBB op (bimap f g l) (bimap f g r)
---   bimap f g (OpIB op l r) = OpIB op (bimap f g l) (bimap f g r)
---   bimap f g (ChcB d l r)  = ChcB (f <$> d) (bimap f g l) (bimap f g r)
---   bimap f g (Opn op l)    = Opn op $ fmap (bimap f g) l
---   bimap _ _ (LitB b)      = LitB b
-
-
 instance Bifoldable VIExpr where
   bifoldMap _ g (Ref _ a)    = g a
   bifoldMap f g (OpI _ e)    = bifoldMap f g e
@@ -444,17 +436,6 @@ instance Bifoldable VIExpr where
   bifoldMap f g (ChcI d l r) = (f $ dimName d) <>
                                bifoldMap f g l <> bifoldMap f g r
   bifoldMap _ _ (LitI _)     = mempty
-
-
--- instance Bifoldable VProp where
---   bifoldMap _ g (RefB a)     = g a
---   bifoldMap f g (OpB _ e)    = bifoldMap f g e
---   bifoldMap f g (OpBB _ l r) = bifoldMap f g l <> bifoldMap f g r
---   bifoldMap f g (OpIB _ l r) = bifoldMap f g l <> bifoldMap f g r
---   bifoldMap f g (ChcB d l r) = (f $ dimName d) <>
---                                bifoldMap f g l <> bifoldMap f g r
---   bifoldMap f g (Opn _ l)    = foldMap (bifoldMap f g) l
---   bifoldMap _ _ (LitB _)     = mempty
 
 
 instance Bitraversable VIExpr where
@@ -465,19 +446,6 @@ instance Bitraversable VIExpr where
   bitraverse f g (ChcI d l r)  = ChcI <$> traverse f d <*>
                                  bitraverse f g l <*> bitraverse f g r
   bitraverse _ _ (LitI x)      = pure $ LitI x
-
-
--- instance Bitraversable VProp where
---   bitraverse _ g (RefB v)      = RefB    <$> g v
---   bitraverse f g (OpB op e)    = OpB  op <$> bitraverse f g e
---   bitraverse f g (OpBB op l r) = OpBB op <$> bitraverse f g l <*> bitraverse f g r
---   bitraverse f g (OpIB op l r) = OpIB op <$> bitraverse f g l <*> bitraverse f g r
---   bitraverse f g (Opn op ls)   = Opn  op <$> traverse (bitraverse f g) ls
---   bitraverse f g (ChcB d l r)  = ChcB <$>
---                                  traverse f d <*>
---                                  bitraverse f g l <*>
---                                  bitraverse f g r
---   bitraverse _ _ (LitB x)      = pure $ LitB x
 
 -- | Template haskell generics for n-arity folds
 $(return []) -- required to avoid reify error

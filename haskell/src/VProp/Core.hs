@@ -1,19 +1,20 @@
 module VProp.Core where
 
-import           Control.Monad       (liftM, liftM2)
-import qualified Data.Foldable as F  (toList)
-import qualified Data.Map as Map
-import qualified Data.Set as Set
-import           Data.SBV (literal)
-import           Data.List           (intercalate,group,sort)
-import           Data.Monoid         ((<>))
-import           Prelude hiding      (LT, GT, EQ)
+import           Control.Monad (liftM, liftM2)
+import qualified Data.Foldable as F (toList)
+import           Data.List     (group, intercalate, sort)
+import qualified Data.Map      as Map
+import           Data.Monoid   ((<>))
+import           Data.SBV      (literal)
 import qualified Data.Sequence as SE
+import qualified Data.Set      as Set
+import           Data.Text     (unpack)
+import           Prelude       hiding (EQ, GT, LT)
 
 
-import VProp.Types
+import           VProp.Types
 
-instance Show Var where show = varName
+instance Show Var where show = unpack . varName
 instance (Show a, Show b, Show c) => Show (VProp a b c) where
   show = prettyPropExpr
 
@@ -61,10 +62,10 @@ prettyPropExpr = top
     top e           = sub e
 
     sub :: (Show a, Show b, Show c) => VProp a b c -> String
-    sub (LitB b) = if b then "#T" else "#F"
-    sub (RefB f) = show f
+    sub (LitB b)  = if b then "#T" else "#F"
+    sub (RefB f)  = show f
     sub (OpB b e) = show b <> sub e
-    sub e       = "(" ++ top e ++ ")"
+    sub e         = "(" ++ top e ++ ")"
 
 ----------------------------- Conversion --------------------------------------
 iToSNum :: Integer -> SNum
@@ -174,7 +175,7 @@ toList prop = go prop []
     go x@(Opn _ ps) acc   = foldr go (x:acc) ps
     go x@(ChcB _ l r) acc = go r . go l $ x:acc
     go x@(OpBB _ l r) acc = go r . go l $ x:acc
-    go a acc = a:acc
+    go a acc              = a:acc
 
 numTerms :: VProp d a b -> Integer
 numTerms = toInteger. length . toList

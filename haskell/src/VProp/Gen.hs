@@ -1,52 +1,42 @@
 module VProp.Gen where
 
-import           Control.Monad       (liftM2, liftM3)
-import           Test.Tasty.QuickCheck ( oneof
-                                       , arbitrarySizedIntegral
-                                       , Arbitrary
-                                       , Gen
-                                       , arbitrary
-                                       , suchThat
-                                       , elements
-                                       , listOf
-                                       , frequency
-                                       , sized
-                                       , generate
-                                       , resize)
-import           Data.Char           (toUpper)
-import Prelude hiding (LT,EQ,GT)
-import qualified Control.Arrow as A ((&&&))
+import qualified Control.Arrow         as A ((&&&))
+import           Control.Monad         (liftM2, liftM3)
+import           Prelude               hiding (EQ, GT, LT)
+import           Test.Tasty.QuickCheck (Arbitrary, Gen, arbitrary,
+                                        arbitrarySizedIntegral, elements,
+                                        frequency, generate, listOf, oneof,
+                                        resize, sized, suchThat)
 
-import VProp.Types
-import VProp.Core (maxShared, onlyBools, noDupRefs)
+import           VProp.Core            (maxShared, noDupRefs, onlyBools)
+import           Data.Text             (Text, pack, toUpper, singleton)
+import           VProp.Types
 
 type ReadableProp = VProp Var Var Var
 
-instance Arbitrary Var where
-  arbitrary = Var <$> genAlphaNumStr
-
+instance Arbitrary Var where arbitrary = Var <$> genAlphaNumStr
 
 -- | arbritrary instance for the generator monad
 instance Arbitrary ReadableProp where
   arbitrary = sized $ arbVProp genSharedDim arbitrary (repeat 3, repeat 3)
 
 -- | Generate only alphabetical characters
-genAlphaNum :: Gen Char
-genAlphaNum = elements ['a'..'z']
+genAlphaNum :: Gen Text
+genAlphaNum = singleton <$> elements ['a'..'z']
 
 -- | generate a list of only alphabetical characters and convert to Dim
-genAlphaNumStr :: Gen String
-genAlphaNumStr = flip suchThat (not . null) $ listOf genAlphaNum
+genAlphaNumStr :: Gen Text
+genAlphaNumStr = fmap mconcat $ flip suchThat (not . null) $ listOf genAlphaNum
 
 genDim :: Gen (Dim Var)
-genDim = Dim . Var <$> (fmap . fmap) toUpper genAlphaNumStr
+genDim = Dim . Var . toUpper <$> genAlphaNumStr
 
 genSharedDim :: Gen (Dim Var)
-genSharedDim = elements $
-  zipWith  (\a b -> Dim . Var $ toUpper <$> [a, b]) ['a'..'d'] ['a'..'d']
+genSharedDim = (Dim . Var . toUpper . pack) <$>
+               elements (zipWith (\a b -> [a,b]) ['a'..'d'] ['a'..'d'])
 
 genSharedVar :: Gen Var
-genSharedVar = elements $ Var . show <$> ['a'..'j']
+genSharedVar = Var . singleton <$> elements ['a'..'j']
 
 genVar :: Gen Var
 genVar = Var <$> genAlphaNumStr
