@@ -4,13 +4,14 @@ import qualified Control.Monad.State.Strict as S
 import           Data.Aeson
 import           Data.Bifunctor             (bimap)
 import qualified Data.Map                   as M
+import           Data.Monoid                ((<>))
 import qualified Data.Sequence              as SE
 import           Data.String                (IsString)
 import           Data.Text
 
 import           CaseStudy.Auto.Lang
+import           VProp.Core                 ()
 import qualified VProp.Types                as V
-import VProp.Core()
 
 -- | A context represents an evolution context which are temporal bounds
 -- represented as integers
@@ -18,10 +19,15 @@ type Context = (Integer, Integer)
 type EvoContext a = (RBOp, ALang a)
 
 -- ^ mirrored maps to track if a dimension should be generated or not
-type DimMap a = M.Map (EvoContext a) V.Dim
+type DimMap a b = M.Map (EvoContext a) (V.Dim b)
+
+-- ^ The state for annotating the autolang to prop. We keep track of dimensions
+-- that have been seen before and a counter to generate unique dimension names
+-- when we see a new dimension
+type AnnotSt a = (DimMap a Text, Integer)
 
 -- ^ State for tagging evolution contexts to unique dimensions
-type Annot a = S.State (DimMap a, Integer)
+type Annot a = S.State (AnnotSt a)
 
 -- | The auto type encodes the context of the automotive encoding, and the
 -- constraints that range over the features in the automotive model
@@ -43,41 +49,44 @@ instance FromJSON Auto where
     return Auto{contexts=(mn,mx), constraints=constraints}
 
 -- | run the state monad and get a vprop expression back
-autoToVSat :: (IsString a, Show a, Eq a, Ord a) => AutoLang a -> V.VProp a a
+autoToVSat :: (IsString a, Show a, Eq a, Ord a, Monoid a) =>
+  AutoLang a -> V.VProp Text a a
 autoToVSat = fst . runAutoToVSat__
 
-runAutoToVSat__ :: (IsString a, Show a, Eq a, Ord a) =>
-  AutoLang a -> (V.VProp a a, (DimMap a, Integer))
+runAutoToVSat__ :: (IsString a, Show a, Eq a, Ord a, Monoid a) =>
+  AutoLang a -> (V.VProp Text a a, (DimMap a Text, Integer))
 runAutoToVSat__ = flip S.runState (M.empty, 0) . autoToVSat_
 
 -- | A hole that is used as a placeholder for reifying nested choices in
 -- autoToVsat
-hole :: (IsString a, Show a, Eq a, Ord a) => V.VProp a b
+hole :: (IsString a, Show a, Eq a, Ord a) => V.VProp d a b
 hole = V.RefB "_"
 
-isHole :: (IsString a, Show a, Eq a, Eq b, Ord a) => V.VProp a b -> Bool
+isHole :: (IsString a, Show a, Eq a, Eq b, Eq d, Ord a) => V.VProp d a b -> Bool
 isHole = (==) hole
 
-has :: (IsString a, Show a, Show b, Eq a, Eq b, Ord a) => (V.VProp a b -> Bool) -> V.VProp a b -> Bool
+has :: (IsString a, Show a, Show b, Eq a, Eq b, Ord a) =>
+  (V.VProp d a b -> Bool) -> V.VProp d a b -> Bool
 has p a@(V.Opn  _ es)  = p a || Prelude.foldr (\x acc -> p x || acc) False es
 has p a@(V.OpB  _ e)   = p a || has p e
 has p a@(V.OpBB _ l r) = p a || has p l || has p r
 has p a@(V.ChcB _ l r) = p a || has p l || has p r
-has p x = p x
+has p x                = p x
 
-hasHole :: (IsString a, Show a, Show b, Eq a, Eq b, Ord a) => V.VProp a b -> Bool
+hasHole :: (IsString a, Show a, Show b, Eq a, Eq b, Ord a, Eq d) =>
+  V.VProp d a b -> Bool
 hasHole = has isHole
 
 -- | convert an autolang expression to a vprop lang expression. State monad to
 -- keep track of which evolution contexts have been observed and which
 -- dimensions are assigned to those evo contexts
-autoToVSat_ :: (IsString a, Show a, Eq a, Ord a) =>
-  AutoLang a -> Annot a (V.VProp a a)
+-- singleton contexts can be converted to naive encoding directly
+autoToVSat_ :: (Show c, IsString c, S.MonadState (AnnotSt c) m, Ord c) =>
+               AutoLang c -> m (V.VProp Text c c)
 autoToVSat_ (AutoLit a) = return $ V.LitB a
-  -- singleton contexts can be converted to naive encoding directly
 autoToVSat_ (Ctx op aexpr boolexpr) =
   do (evos, i) <- S.get
-     let newDim = V.Dim $ "D_" ++ show i
+     let newDim = V.Dim $ "D_" <> (pack $ show i)
          evoRng = (op, aexpr)
      dim <- case (evoRng `M.lookup` evos) of
               -- this is a not yet observed evoRng
@@ -90,7 +99,7 @@ autoToVSat_ (Ctx op aexpr boolexpr) =
   -- choice with holes. Then call reify to generate the nested choices
 autoToVSat_ (RBinary op (ACtx _) rhs) =
   do (evos, i) <- S.get
-     let newDim = V.Dim $ "D_" ++ show i
+     let newDim = V.Dim $ "D_" <> (pack $ show i)
          evoRng = (op, rhs)
      dim <- case (evoRng `M.lookup` evos) of
               -- this is a not yet observed evoRng
@@ -112,7 +121,7 @@ autoToVSat_ (RBinary op l r) = return $ V.OpIB
 
 -- | sister function to the non-ticked version for handling the arithmetic sub
 -- lang
-autoToVSat' :: Show a => ALang a -> V.VIExpr a
+autoToVSat' :: Show a => ALang a -> V.VIExpr d a
 autoToVSat' (ALit i) = V.LitI $ V.I i
 autoToVSat' (AVar a) = V.Ref V.RefI a
 autoToVSat' (CaseStudy.Auto.Lang.Neg a) = V.OpI V.Neg $ autoToVSat' a
@@ -149,18 +158,19 @@ dispatch'' Modulus  = V.Mod
 conjoin :: [AutoLang a] -> AutoLang a
 conjoin = Prelude.foldr1 (BBinary And)
 
-conjoin' :: [V.VProp a b] -> V.VProp a b
+conjoin' :: [V.VProp d a b] -> V.VProp d a b
 conjoin' = V.Opn V.And . SE.fromList
 
 disjoin :: [AutoLang a] -> AutoLang a
 disjoin = Prelude.foldr1 (BBinary Or)
 
-disjoin' :: [V.VProp a b] -> V.VProp a b
+disjoin' :: [V.VProp d a b] -> V.VProp d a b
 disjoin' = V.Opn V.Or . SE.fromList
 
 -- | Take a VProp term that has choices with holes and reify them to the simple
 -- encoding
-nestChoices :: (IsString a, Show a, Eq a, Ord a) => V.VProp a a -> V.VProp a a
+nestChoices :: (IsString a, Show a, Eq a, Ord a, Eq d) =>
+  V.VProp d a a -> V.VProp d a a
   -- base case to prevent an Opn op empty list at end of recursion
 nestChoices (V.Opn V.And ((V.ChcB d l _) SE.:<| SE.Empty)) = V.ChcB d l V.true
 nestChoices (V.Opn V.Or  ((V.ChcB d l _) SE.:<| SE.Empty)) = V.ChcB d l V.true
@@ -182,7 +192,7 @@ nestChoices (V.ChcB d l r) = V.ChcB d (nestChoices l) (nestChoices r)
 nestChoices x = x
 
 -- | Fill holes given a predicate, an old vprop, and a replacement vprop
-fillBy :: (Show a, Show b) => (V.VProp a b -> Bool) -> V.VProp a b -> V.VProp a b-> V.VProp a b
+fillBy :: (Show a, Show b) => (V.VProp d a b -> Bool) -> V.VProp d a b -> V.VProp d a b-> V.VProp d a b
 fillBy p a@(V.OpB op e) new
   | p a = new
   | otherwise = V.OpB  op  (fillBy p e new)
@@ -200,11 +210,11 @@ fillBy p x new
   | otherwise = x
 
 -- | fill holes by identifying them with isHole predicate function
-fill :: (IsString a, Eq a, Eq b, Ord a, Show a, Show b) =>
-  V.VProp a b -> V.VProp a b -> V.VProp a b
+fill :: (IsString a, Eq a, Eq b, Eq d, Ord a, Show a, Show b) =>
+  V.VProp d a b -> V.VProp d a b -> V.VProp d a b
 fill = fillBy isHole
 
-naiveEncode :: (IsString a, Show a, Eq a, Ord a) => V.VProp a a -> V.VProp a a
+naiveEncode :: (IsString a, Show a, Eq a, Ord a, Eq d) => V.VProp d a a -> V.VProp d a a
 naiveEncode (V.OpBB op a@(V.ChcB dim l r) rest)
   | hasHole a = fill a rest
   | otherwise = V.OpBB op
