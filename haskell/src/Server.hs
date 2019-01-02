@@ -33,14 +33,14 @@ type Api = SpockM () () ()
 -- * ApiAction represents Spock actions, these are handlers
 type ApiAction a = SpockAction () () () a
 
-data Request a b = Request { settings :: Maybe Settings
-                           , proposition :: VProp a b
-                           }
+data Request d a b = Request { settings :: Maybe Settings
+                             , proposition :: VProp d a b
+                             }
   deriving (Generic,Show)
 
-instance FromJSONKey Dim
-instance (FromJSON a, FromJSON b) => FromJSON (Request a b)
-instance (ToJSON a, ToJSON b) => ToJSON (Request a b)
+instance (FromJSON a, FromJSONKey a) => FromJSONKey (Dim a)
+instance (FromJSON d, FromJSON a, FromJSON b) => FromJSON (Request d a b)
+instance (ToJSON d, ToJSON a, ToJSON b) => ToJSON (Request d a b)
 
 
 app :: Api ()
@@ -57,37 +57,37 @@ logfile = "timing_desc_data.csv"
 -- TODO cleanup these types and refactor out the logging to middleware
 satWithHandler :: ActionCtxT () (WebStateM () () ()) b
 satWithHandler = do
-  req <- jsonBody' :: ApiAction (Request Var Var)
+  req <- jsonBody' :: ApiAction (Request Var Var Var)
   let prop = proposition req
       sets = fromMaybe defSettings (settings req)
       conf = toConf sets
-  (runtime, res) <- liftIO . timeProc . satWith conf $ bimap show show prop
+  (runtime, res) <- liftIO . timeProc . satWith conf $ prop
   _ <- liftIO . forkIO $ logData prop sets runtime logfile
   json res
 
 proveWithHandler :: ActionCtxT () (WebStateM () () ()) b
 proveWithHandler = do
-  req <- jsonBody' :: ApiAction (Request Var Var)
+  req <- jsonBody' :: ApiAction (Request Var Var Var)
   let prop = proposition req
       sets = maybe defSettings id (settings req)
       conf = toConf sets
-  (runtime, res) <- liftIO . timeProc . proveWith conf $ bimap show show prop
+  (runtime, res) <- liftIO . timeProc . proveWith conf $ prop
   _ <- liftIO . forkIO $ logData prop sets runtime logfile
   json res
 
 satHandler :: ActionCtxT () (WebStateM () () ()) b
 satHandler = do
-  req <- jsonBody' :: ApiAction (Request Var Var)
+  req <- jsonBody' :: ApiAction (Request Var Var Var)
   let prop = proposition req
-  (runtime, res) <- liftIO . timeProc . sat $ bimap show show prop
+  (runtime, res) <- liftIO . timeProc . sat $ prop
   _ <- liftIO . forkIO $ logData prop defSettings runtime logfile
   json res
 
 proveHandler :: ActionCtxT () (WebStateM () () ()) b
 proveHandler = do
-  req <- jsonBody' :: ApiAction (Request Var Var)
+  req <- jsonBody' :: ApiAction (Request Var Var Var)
   let prop = proposition req
-  (runtime, res) <- liftIO . timeProc . prove $ bimap show show prop
+  (runtime, res) <- liftIO . timeProc . prove $ prop
   _ <- liftIO . forkIO $ logData prop defSettings runtime logfile
   json res
 
@@ -114,7 +114,7 @@ instance C.ToRecord RunData
 instance C.ToRecord Settings
 instance C.ToRecord Opts
 
-logData :: VProp Var Var -> Settings -> Double -> FilePath -> IO ()
+logData :: VProp Var Var Var -> Settings -> Double -> FilePath -> IO ()
 logData prop sets runTime fn =
   do time <- getCurrentTime
      let row = RunData time sets runTime s c p sd sp ms

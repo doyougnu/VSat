@@ -54,9 +54,9 @@ instance FromJSON NN_B
 instance FromJSON RefN
 instance FromJSON Opn
 instance FromJSON Var
-instance FromJSON Dim
-instance FromJSON a => FromJSON (VIExpr a)
-instance (FromJSON a, FromJSON b) => FromJSON (VProp a b)
+instance (FromJSON a) => FromJSON (Dim a)
+instance (FromJSON d, FromJSON a) => FromJSON (VIExpr d a)
+instance (FromJSON d, FromJSON a, FromJSON b) => FromJSON (VProp d a b)
 
 instance ToJSON B_B
 instance ToJSON NN_N
@@ -66,11 +66,11 @@ instance ToJSON BB_B
 instance ToJSON NN_B
 instance ToJSON RefN
 instance ToJSON Opn
-instance ToJSON Dim
+instance (ToJSON a) => ToJSON (Dim a)
 instance ToJSON Var
 
-instance ToJSON a => ToJSON (VIExpr a)
-instance (ToJSON a, ToJSON b) => ToJSON (VProp a b)
+instance (ToJSON a, ToJSON d) => ToJSON (VIExpr d a)
+instance (ToJSON d, ToJSON a, ToJSON b) => ToJSON (VProp d a b)
 
 instance ToJSON Opts
 instance FromJSON Opts
