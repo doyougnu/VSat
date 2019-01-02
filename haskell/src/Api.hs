@@ -10,9 +10,11 @@ module Api ( S.SatResult(..)
            , proveWith
            , changeResultType
            , bfWith'
+           , bfWith
            , bf'
            , bf
            , adWith'
+           , adWith
            , ad'
            , ad
            , toSatResult
@@ -81,9 +83,17 @@ bf :: (Show a, Ord a, Show d, Ord d) =>
   VProp d a a -> IO (V d (Maybe S.SatResult))
 bf = changeResultType S.SatResult bf'
 
+bfWith :: (Show a, Ord a, Show d, Ord d) =>
+  SMTConf d a a -> VProp d a a -> IO (V d (Maybe S.SatResult))
+bfWith = changeResultType S.SatResult . bfWith'
+
 adWith' :: (Show a, Ord a, Show d, Ord d) => SMTConf d a a ->
   (d -> a) -> VProp d a a -> IO (V d (Maybe S.SMTResult))
 adWith' conf f prop = unRes <$> runAD conf prop f
+
+adWith :: (Show a, Ord a, Show d, Ord d) => SMTConf d a a ->
+  (d -> a) -> VProp d a a -> IO (V d (Maybe S.SatResult))
+adWith = (changeResultType S.SatResult .) . adWith'
 
 ad' :: (Show a, Ord a, Show d, Ord d) =>
   (d -> a) -> VProp d a a -> IO (V d (Maybe S.SMTResult))

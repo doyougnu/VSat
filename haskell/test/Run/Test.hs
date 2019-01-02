@@ -25,12 +25,19 @@ import Run
 import Api
 import qualified V as V
 
+-- instance Eq SMTResult where
+--   (Unsatisfiable x) == (Unsatisfiable y) = x == y
+--   (Satisfiable _ x) == (Satisfiable _ y) = x == y
+--   (SatExtField _ x) == (SatExtField _ y) = x == y
+--   (Unknown _ x)     == (Unknown _ y)     = x == y
+--   (ProofError _ x)  == (ProofError _ y)  = x == y
+--   _                 == _                 = False
 instance Eq SMTResult where
-  (Unsatisfiable x) == (Unsatisfiable y) = x == y
-  (Satisfiable _ x) == (Satisfiable _ y) = x == y
-  (SatExtField _ x) == (SatExtField _ y) = x == y
-  (Unknown _ x)     == (Unknown _ y)     = x == y
-  (ProofError _ x)  == (ProofError _ y)  = x == y
+  (Unsatisfiable x) == (Unsatisfiable y) = True
+  (Satisfiable _ x) == (Satisfiable _ y) = True
+  (SatExtField _ x) == (SatExtField _ y) = True
+  -- (Unknown _ x)     == (Unknown _ y)     = x == y
+  -- (ProofError _ x)  == (ProofError _ y)  = x == y
   _                 == _                 = False
 
 instance Eq Solver where
@@ -181,10 +188,10 @@ sat_terminates x =  onlyInts x QC.==> QCM.monadicIO
        QCM.assert (not $ null a)
 
 vsat_matches_BF' x =  onlyInts x QC.==> QCM.monadicIO
-  $ do a <- QCM.run . (toThmResult $ bfWith' emptyConf) $ (x :: VProp Var Var Var)
-       b <- QCM.run . (toThmResult $ adWith' emptyConf id) $ x
-       liftIO $ putStrLn $ show b
-       liftIO $ putStrLn $ show a
+  $ do a <- QCM.run . (bfWith' emptyConf) $ (x :: VProp Var Var Var)
+       b <- QCM.run . (satWith' emptyConf) $ x
+       liftIO . putStrLn $ "[BF]:   \n" ++ show a
+       liftIO . putStrLn $ "[VSAT]: \n" ++ show b
        QCM.assert (a == b)
 
 ad_terminates x = onlyInts x QC.==> QCM.monadicIO
