@@ -1,5 +1,4 @@
 module VProp.SBV ( andDecomp
-                 -- , shrinkPropExpr
                  , evalPropExpr
                  , symbolicPropExpr
                  , SAT(..)) where
