@@ -37,7 +37,7 @@ instance Show BB_B where show Impl   = "→"
                          show BiImpl = "↔"
                          show XOr    = "⊻"
 
-instance Show a => Show (VIExpr a) where
+instance (Show a, Show b) => Show (VIExpr a b) where
   show (LitI a) = show a
   show (Ref _ a) = show a
   show (OpI Neg a) = "¬" <> "(" <> show a <> ")"
@@ -82,7 +82,7 @@ isPlain (OpBB _ l r) = isPlain l && isPlain r
 isPlain (OpIB _ l r) = isPlain' l && isPlain' r
 isPlain _           = True
 
-isPlain' :: VIExpr a -> Bool
+isPlain' :: VIExpr a b -> Bool
 isPlain' (ChcI _ _ _) = False
 isPlain' (OpII _ l r) = isPlain' l && isPlain' r
 isPlain' (OpI _ e)    = isPlain' e
@@ -110,7 +110,7 @@ onlyInts (OpBB _ l r) = onlyInts l && onlyInts r
 onlyInts (OpB _ e)    = onlyInts e
 onlyInts _            = True
 
-onlyInts' :: VIExpr a -> Bool
+onlyInts' :: VIExpr a b -> Bool
 onlyInts' (LitI (D _)) = False
 onlyInts' (Ref RefD _) = False
 onlyInts' (OpI _ e)    = onlyInts' e
@@ -128,7 +128,7 @@ onlyLits (Opn _ xs)   = foldr (\x acc -> acc && onlyLits x) True xs
 onlyLits (OpBB _ l r) =  onlyLits l && onlyLits r
 onlyLits (OpB _ e)    = onlyLits e
 
-onlyLits' :: VIExpr a -> Bool
+onlyLits' :: VIExpr a b -> Bool
 onlyLits' (LitI _)  = True
 onlyLits' (Ref _ _) = False
 onlyLits' (OpI _ e) = onlyLits' e
@@ -169,7 +169,7 @@ selectVariant tb (OpIB op l r) = OpIB op <$>
                                  selectVariant' tb r
 selectVariant _  x             = Just x
 
-selectVariant' :: Ord a => Config a -> VIExpr a -> Maybe (VIExpr a)
+selectVariant' :: Ord a => Config a -> VIExpr a b -> Maybe (VIExpr a b)
 selectVariant' tb x@(ChcI t y n) = case Map.lookup t tb of
                                      Nothing    -> Just x
                                      Just True  -> selectVariant' tb y
@@ -180,7 +180,7 @@ selectVariant' _  x             = Just x
 
 
 -- | Convert a dimension to a variable
-dimToVar :: Show a => (Dim a -> a) -> Dim a -> (VProp a b)
+dimToVar :: (Dim a -> b) -> Dim a -> (VProp a b)
 dimToVar f = RefB . f
 
 -- --------------------------- Descriptors ----------------------------------------
@@ -219,7 +219,7 @@ numSharedDims = toInteger . length . filter (flip (>=) 2 . length) . group . fli
     go (ChcB d l r) acc = go l (go r $ d:acc)
     go _    acc         = acc
 
-    go' :: VIExpr a -> [Dim a] -> [Dim a]
+    go' :: VIExpr a b -> [Dim a] -> [Dim a]
     go' (ChcI d l r) acc = go' l (go' r $ d:acc)
     go' (OpII _ l r) acc = go' l (go' r acc)
     go' (OpI  _ e)   acc = go' e acc
@@ -250,7 +250,7 @@ maxShared = safeMaximum . fmap length . group . sort . go
         go (OpIB _ l r) = go' l ++ go' r
         go _           = []
 
-        go' :: VIExpr a -> [a]
+        go' :: VIExpr a b -> [a]
         go' (ChcI d l r) = (dimName d) : go' l ++ go' r
         go' (OpI _ l)    = go' l
         go' (OpII _ l r) = go' l ++ go' r
@@ -281,7 +281,7 @@ dimensions (Opn _ ps)   = Set.unions . fmap dimensions . F.toList $ ps
 dimensions (ChcB d l r) = Set.singleton d `Set.union`
                             dimensions l `Set.union` dimensions r
 
-dimensions' :: Ord a => (VIExpr a) -> Set.Set (Dim a)
+dimensions' :: Ord a => (VIExpr a b) -> Set.Set (Dim a)
 dimensions' (LitI _)     = Set.empty
 dimensions' (Ref _ _)     = Set.empty
 dimensions' (OpI _ e)    = dimensions' e
@@ -299,7 +299,7 @@ ivars (OpIB _ l r) = ivars' l `Set.union` ivars' r
 ivars (Opn _ ps)   = Set.unions . fmap ivars . F.toList $ ps
 ivars (ChcB _ l r) = ivars l `Set.union` ivars r
 
-ivars' :: Ord a => VIExpr a -> Set.Set a
+ivars' :: (Ord a, Ord b) => VIExpr a b -> Set.Set b
 ivars' (LitI _)     = Set.empty
 ivars' (OpI _ e)    = ivars' e
 ivars' (OpII _ l r) = ivars' l `Set.union` ivars' r
@@ -318,7 +318,7 @@ ivarsWithType (OpIB _ l r) = ivarsWithType' l `Set.union` ivarsWithType' r
 ivarsWithType (Opn _ ps)   = Set.unions . fmap ivarsWithType . F.toList $  ps
 ivarsWithType (ChcB _ l r) = ivarsWithType l `Set.union` ivarsWithType r
 
-ivarsWithType' :: Ord a => VIExpr a -> Set.Set (RefN, a)
+ivarsWithType' :: (Ord a, Ord b) => VIExpr a b -> Set.Set (RefN, b)
 ivarsWithType' (LitI _)     = Set.empty
 ivarsWithType' (OpI _ e)    = ivarsWithType' e
 ivarsWithType' (OpII _ l r) = ivarsWithType' l `Set.union` ivarsWithType' r
