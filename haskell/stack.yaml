@@ -1,7 +1,7 @@
 flags: {}
 packages:
 # system-ghc: false
-extra-deps: []
+extra-deps: [genifunctors-0.4]
 
 ## uncomment the following lines to tell stack you are in a nix environment
 nix:

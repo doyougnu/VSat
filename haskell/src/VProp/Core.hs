@@ -14,7 +14,8 @@ import qualified Data.Sequence as SE
 import VProp.Types
 
 instance Show Var where show = varName
-instance (Show a, Show b) => Show (VProp a b) where show = prettyPropExpr
+instance (Show a, Show b, Show c) => Show (VProp a b c) where
+  show = prettyPropExpr
 
 -- | Pretty print a feature expression.
 instance Show NPrim where show (I i) = show i
@@ -48,10 +49,10 @@ instance (Show a, Show b) => Show (VIExpr a b) where
 
 instance Show B_B where show Not = "¬"
 
-prettyPropExpr :: (Show a, Show b) => VProp a b -> String
+prettyPropExpr :: (Show a, Show b, Show c) => VProp a b c -> String
 prettyPropExpr = top
   where
-    top :: (Show a, Show b) => VProp a b -> String
+    top :: (Show a, Show b, Show c) => VProp a b c -> String
     top (Opn Or ps)     = intercalate " ∨ " $ sub <$> (F.toList ps)
     top (Opn And ps)    = intercalate " ∧ " $ sub <$> (F.toList ps)
     top (OpBB b l r)    = mconcat [sub l, " ", show b, " ", sub r]
@@ -59,7 +60,7 @@ prettyPropExpr = top
     top (ChcB d ls rs) = show (dimName d) ++ "≺" ++ top ls ++ ", " ++ top rs++ "≻"
     top e           = sub e
 
-    sub :: (Show a, Show b) => VProp a b -> String
+    sub :: (Show a, Show b, Show c) => VProp a b c -> String
     sub (LitB b) = if b then "#T" else "#F"
     sub (RefB f) = show f
     sub (OpB b e) = show b <> sub e
@@ -73,27 +74,16 @@ dToSNum :: Double -> SNum
 dToSNum = SD . literal
 
 ----------------------------- Predicates ---------------------------------------
--- | true if a propositions has no chcs whatsoever
-isPlain :: VProp a b -> Bool
-isPlain (ChcB _ _ _) = False
-isPlain (OpB _ x)     = isPlain x
-isPlain (Opn _ ps)  = all isPlain ps
-isPlain (OpBB _ l r) = isPlain l && isPlain r
-isPlain (OpIB _ l r) = isPlain' l && isPlain' r
-isPlain _           = True
-
-isPlain' :: VIExpr a b -> Bool
-isPlain' (ChcI _ _ _) = False
-isPlain' (OpII _ l r) = isPlain' l && isPlain' r
-isPlain' (OpI _ e)    = isPlain' e
-isPlain' _            = True
+-- | true iff a propositions has no chcs whatsoever
+isPlain :: VProp a b c -> Bool
+isPlain = null . trifoldMap (:[]) mempty mempty
 
 -- | Does the prop contain choices
-isChc :: VProp a b -> Bool
+isChc :: VProp a b c -> Bool
 isChc = not . isPlain
 
 -- | Does the prop only contain boolean values? No ints or floats
-onlyBools :: VProp a a -> Bool
+onlyBools :: VProp d a b -> Bool
 onlyBools (OpIB _ _ _ ) = False
 onlyBools (ChcB _ l r)  = onlyBools l && onlyBools r
 onlyBools (Opn _ xs)    = foldr (\x acc -> acc && onlyBools x) True xs
@@ -101,8 +91,9 @@ onlyBools (OpBB _ l r)  = onlyBools l && onlyBools r
 onlyBools (OpB  _ e)    = onlyBools e
 onlyBools _             = True
 
--- | Does the prop only contain Ints
-onlyInts :: VProp a a -> Bool
+-- | true iff the prop only contains references and literals that are integers
+-- no doubles. This is mainly used for random generators
+onlyInts :: VProp d a b -> Bool
 onlyInts (OpIB _ l r) = onlyInts' l && onlyInts' r
 onlyInts (ChcB _ l r) = onlyInts l && onlyInts r
 onlyInts (Opn _ xs)   = foldr (\x acc -> acc && onlyInts x) True xs
@@ -110,7 +101,7 @@ onlyInts (OpBB _ l r) = onlyInts l && onlyInts r
 onlyInts (OpB _ e)    = onlyInts e
 onlyInts _            = True
 
-onlyInts' :: VIExpr a b -> Bool
+onlyInts' :: VIExpr d b -> Bool
 onlyInts' (LitI (D _)) = False
 onlyInts' (Ref RefD _) = False
 onlyInts' (OpI _ e)    = onlyInts' e
@@ -118,30 +109,19 @@ onlyInts' (OpII _ l r) = onlyInts' l && onlyInts' r
 onlyInts' (ChcI _ l r) = onlyInts' l && onlyInts' r
 onlyInts' _            = True
 
--- | Does the prop contain no variables?
-onlyLits :: VProp a a -> Bool
-onlyLits (LitB _) = True
-onlyLits (RefB _) = False
-onlyLits (OpIB _ l r) = onlyLits' l && onlyLits' r
-onlyLits (ChcB _ l r) = onlyLits l && onlyLits r
-onlyLits (Opn _ xs)   = foldr (\x acc -> acc && onlyLits x) True xs
-onlyLits (OpBB _ l r) =  onlyLits l && onlyLits r
-onlyLits (OpB _ e)    = onlyLits e
-
-onlyLits' :: VIExpr a b -> Bool
-onlyLits' (LitI _)  = True
-onlyLits' (Ref _ _) = False
-onlyLits' (OpI _ e) = onlyLits' e
-onlyLits' (OpII _ l r) = onlyLits' l && onlyLits' r
-onlyLits' (ChcI _ l r) = onlyLits' l && onlyLits' r
+-- TODO fix this double traversal
+-- | true iff the prop only contains literals, no variable references
+onlyLits :: VProp d a b -> Bool
+onlyLits p = (null $ trifoldMap mempty (:[]) mempty p) &&
+             (null $ trifoldMap mempty mempty (:[]) p)
 
 -- | Are there any variables in the boolean language that shadow variables in
 -- the integer language?
-noDupRefs :: Ord a => VProp a a -> Bool
+noDupRefs :: Ord a => VProp d a a -> Bool
 noDupRefs prop = Set.null $ (bvars prop) `Set.intersection` (ivars prop)
 
 -- | returns true if there are terms in the ast like (Opn And [Opn And ...]...)
-redundantOps :: VProp a b -> Bool
+redundantOps :: VProp d a b -> Bool
 redundantOps (Opn op ((Opn op' hs) SE.:<| ts)) =
   op == op' || foldr (\x acc -> redundantOps x || acc) False (hs <> ts)
 redundantOps (Opn _ ps)   = foldr (\x acc -> redundantOps x || acc) False ps
@@ -154,7 +134,7 @@ redundantOps _            = False
 -- ----------------------------- Choice Manipulation ------------------------------
 -- | Given a config and a Variational VProp term select the element out that the
 -- config points to
-selectVariant :: Ord a => Config a -> VProp a a -> Maybe (VProp a a)
+selectVariant :: Ord d => Config d -> VProp d a b -> Maybe (VProp d a b)
 selectVariant tbs x@(ChcB t y n) = case Map.lookup t tbs of
                                      Nothing    -> Just x
                                      Just True  -> selectVariant tbs y
@@ -169,7 +149,7 @@ selectVariant tb (OpIB op l r) = OpIB op <$>
                                  selectVariant' tb r
 selectVariant _  x             = Just x
 
-selectVariant' :: Ord a => Config a -> VIExpr a b -> Maybe (VIExpr a b)
+selectVariant' :: Ord d => Config d -> VIExpr d b -> Maybe (VIExpr d b)
 selectVariant' tb x@(ChcI t y n) = case Map.lookup t tb of
                                      Nothing    -> Just x
                                      Just True  -> selectVariant' tb y
@@ -180,136 +160,64 @@ selectVariant' _  x             = Just x
 
 
 -- | Convert a dimension to a variable
-dimToVar :: (Dim a -> b) -> Dim a -> (VProp a b)
+dimToVar :: (Dim d -> a) -> Dim d -> (VProp d a b)
 dimToVar f = RefB . f
 
 -- --------------------------- Descriptors ----------------------------------------
 -- | TODO fix all this redundancy by abstracting the dimensions and instancing Bifoldable
 -- | Convert a prop into a list of Terms
-toList :: VProp a b -> [VProp a b]
+toList :: VProp d a b -> [VProp d a b]
 toList prop = go prop []
   where
-    go :: VProp a b -> [VProp a b] -> [VProp a b]
+    go :: VProp d a b -> [VProp d a b] -> [VProp d a b]
     go x@(OpB _ a) acc    = go a $ x:acc
     go x@(Opn _ ps) acc   = foldr go (x:acc) ps
     go x@(ChcB _ l r) acc = go r . go l $ x:acc
     go x@(OpBB _ l r) acc = go r . go l $ x:acc
     go a acc = a:acc
 
-numTerms :: VProp a b -> Integer
+numTerms :: VProp d a b -> Integer
 numTerms = toInteger. length . toList
 
 -- | Count the choices in a tree
-numChc :: VProp a b -> Integer
-numChc = toInteger . length . filter isChc . toList
+numChc :: VProp d a b -> Integer
+numChc = toInteger . length . trifoldMap (:[]) mempty mempty
 
 -- | Count the plain values in a tree
-numPlain :: VProp a b -> Integer
+numPlain :: VProp d a b -> Integer
 numPlain = toInteger . length . filter isPlain . toList
 
 -- | Given a vprop how many shared dimensions were there
-numSharedDims :: (Eq a) => VProp a a -> Integer
-numSharedDims = toInteger . length . filter (flip (>=) 2 . length) . group . flip go []
-  where
-    go :: VProp a a -> [Dim a] -> [Dim a]
-    go (OpB _ a) acc    = go a acc
-    go (OpIB _ l r) acc = go' l (go' r acc)
-    go (OpBB _ l r) acc = go l (go r acc)
-    go (Opn _ ps) acc   = foldr go acc ps
-    go (ChcB d l r) acc = go l (go r $ d:acc)
-    go _    acc         = acc
+numSharedDims :: (Eq d) => VProp d a b -> Integer
+numSharedDims = toInteger . length . filter (flip (>=) 2 . length) . group . trifoldMap (:[]) mempty mempty
 
-    go' :: VIExpr a b -> [Dim a] -> [Dim a]
-    go' (ChcI d l r) acc = go' l (go' r $ d:acc)
-    go' (OpII _ l r) acc = go' l (go' r acc)
-    go' (OpI  _ e)   acc = go' e acc
-    go' _            acc = acc
-
-numSharedPlain :: (Eq a, Eq b) => VProp a b -> Integer
+-- | Number of like plain terms
+numSharedPlain :: (Eq d, Eq a, Eq b) => VProp d a b -> Integer
 numSharedPlain = toInteger . length . filter (flip (>=) 2 . length) . group . filter isPlain . toList
 
--- -- | Depth of the Term tree
--- depth :: (VProp a) -> Integer
--- depth prop = go prop 0
---   where
---     go :: (VProp a) -> Integer -> Integer
---     go (Not a) acc     = go a (succ acc)
---     go (Op2 _ l r) acc = max (go l (succ acc)) (go r (succ acc))
---     go (Opn _ ps)  acc = maximum $ flip go acc <$> ps
---     go (Chc _ l r) acc = max (go l acc) (go r acc)
---     go _ acc           = acc
-
 -- | Given a prop return the maximum number of times a given dimension was shared
-maxShared :: (Eq a, Ord a) => VProp a a -> Int
-maxShared = safeMaximum . fmap length . group . sort . go
-  where go :: VProp a a -> [a]
-        go (ChcB d l r) = (dimName d) : go l ++ go r
-        go (OpB _ l)     = go l
-        go (Opn _ ps)  = foldMap go ps
-        go (OpBB _ l r) = go l ++ go r
-        go (OpIB _ l r) = go' l ++ go' r
-        go _           = []
-
-        go' :: VIExpr a b -> [a]
-        go' (ChcI d l r) = (dimName d) : go' l ++ go' r
-        go' (OpI _ l)    = go' l
-        go' (OpII _ l r) = go' l ++ go' r
-        go' _            = []
-
-        safeMaximum [] = 0
+maxShared :: (Eq d, Ord d) => VProp d a b -> Int
+maxShared = safeMaximum . fmap length . group . sort . trifoldMap (:[]) mempty mempty
+  where safeMaximum [] = 0
         safeMaximum xs = maximum xs
 
 -- --------------------------- Destructors -----------------------------------------
 -- | The set of features referenced in a feature expression.
-bvars :: Ord a => (VProp a a) -> Set.Set a
-bvars (LitB _)     = Set.empty
-bvars (RefB f)     = Set.singleton f
-bvars (OpB _ e)    = bvars e
-bvars (OpBB _ l r) = bvars l `Set.union` bvars r
-bvars (OpIB _ _ _) = Set.empty
-bvars (Opn _ ps)   = Set.unions . fmap bvars . F.toList $ ps
-bvars (ChcB _ l r) = bvars l `Set.union` bvars r
+bvars :: Ord a => (VProp d a b) -> Set.Set a
+bvars = trifoldMap mempty Set.singleton mempty
 
 -- | The set of dimensions in a propositional expression
-dimensions :: Ord a => (VProp a a) -> Set.Set (Dim a)
-dimensions (LitB _)     = Set.empty
-dimensions (RefB _)     = Set.empty
-dimensions (OpB _ e)    = dimensions e
-dimensions (OpBB _ l r) = dimensions l `Set.union` dimensions r
-dimensions (OpIB _ l r) = dimensions' l `Set.union` dimensions' r
-dimensions (Opn _ ps)   = Set.unions . fmap dimensions . F.toList $ ps
-dimensions (ChcB d l r) = Set.singleton d `Set.union`
-                            dimensions l `Set.union` dimensions r
-
-dimensions' :: Ord a => (VIExpr a b) -> Set.Set (Dim a)
-dimensions' (LitI _)     = Set.empty
-dimensions' (Ref _ _)     = Set.empty
-dimensions' (OpI _ e)    = dimensions' e
-dimensions' (OpII _ l r) = dimensions' l `Set.union` dimensions' r
-dimensions' (ChcI d l r) = Set.singleton d `Set.union`
-                             dimensions' l `Set.union` dimensions' r
+dimensions :: Ord d => (VProp d a b) -> Set.Set (Dim d)
+dimensions = trifoldMap (Set.singleton . Dim) mempty mempty
 
 -- | The set of integar variable references for an expression
-ivars :: (Ord a, Ord b) => VProp a b -> Set.Set b
-ivars (LitB _)     = Set.empty
-ivars (RefB _)     = Set.empty
-ivars (OpB _ e)    = ivars e
-ivars (OpBB _ l r) = ivars l `Set.union` ivars r
-ivars (OpIB _ l r) = ivars' l `Set.union` ivars' r
-ivars (Opn _ ps)   = Set.unions . fmap ivars . F.toList $ ps
-ivars (ChcB _ l r) = ivars l `Set.union` ivars r
-
-ivars' :: (Ord a, Ord b) => VIExpr a b -> Set.Set b
-ivars' (LitI _)     = Set.empty
-ivars' (OpI _ e)    = ivars' e
-ivars' (OpII _ l r) = ivars' l `Set.union` ivars' r
-ivars' (ChcI _ l r) = ivars' l `Set.union` ivars' r
-ivars' (Ref _ a)    = Set.singleton a
+ivars :: (Ord b) => VProp d a b -> Set.Set b
+ivars = trifoldMap mempty mempty Set.singleton
 
 -- | The set of integar variable references for an expression
 -- we save the leading constructors i.e. RefI or RefD so we know whether to call
 -- sInteger or sDouble in evalPropExpr
-ivarsWithType :: (Ord a, Ord b) => VProp a b -> Set.Set (RefN, b)
+ivarsWithType :: (Ord b) => VProp d a b -> Set.Set (RefN, b)
 ivarsWithType (LitB _)     = Set.empty
 ivarsWithType (RefB _)     = Set.empty
 ivarsWithType (OpB _ e)    = ivarsWithType e
@@ -318,7 +226,7 @@ ivarsWithType (OpIB _ l r) = ivarsWithType' l `Set.union` ivarsWithType' r
 ivarsWithType (Opn _ ps)   = Set.unions . fmap ivarsWithType . F.toList $  ps
 ivarsWithType (ChcB _ l r) = ivarsWithType l `Set.union` ivarsWithType r
 
-ivarsWithType' :: (Ord a, Ord b) => VIExpr a b -> Set.Set (RefN, b)
+ivarsWithType' :: (Ord b) => VIExpr d b -> Set.Set (RefN, b)
 ivarsWithType' (LitI _)     = Set.empty
 ivarsWithType' (OpI _ e)    = ivarsWithType' e
 ivarsWithType' (OpII _ l r) = ivarsWithType' l `Set.union` ivarsWithType' r
@@ -326,11 +234,11 @@ ivarsWithType' (ChcI _ l r) = ivarsWithType' l `Set.union` ivarsWithType' r
 ivarsWithType' (Ref x a)    = Set.singleton (x, a)
 
 -- | The set of boolean variable references for an expression
-vars :: Ord a => VProp a a -> Set.Set a
-vars prop = bvars prop `Set.union` ivars prop
+vars :: (Ord a) => VProp d a a -> Set.Set a
+vars = trifoldMap mempty Set.singleton Set.singleton
 
 -- | The set of all choices
-configs :: Ord a => VProp a a -> [[((Dim a), Bool)]]
+configs :: Ord d => VProp d a a -> [[(Dim d, Bool)]]
 configs prop = go (Set.toList $ dimensions prop)
   where
     go []     = [[]]
@@ -338,12 +246,12 @@ configs prop = go (Set.toList $ dimensions prop)
           where cs = go ds
 
 -- | remove redundant operators
-flatten :: (Show a, Show b) => VProp a b -> VProp a b
+flatten :: VProp d a b -> VProp d a b
 flatten p
   | redundantOps p = flatten $ flatten_ p
   | otherwise = p
 
-flatten_ :: (Show a, Show b) => VProp a b -> VProp a b
+flatten_ :: VProp d a b -> VProp d a b
 flatten_ (Opn op (Opn op' ps SE.:<| SE.Empty))
   | op == op' = Opn op $ flatten_ <$> ps
   | otherwise = Opn op $ (Opn op' $ flatten_ <$> ps) SE.:<| SE.Empty
