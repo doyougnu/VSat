@@ -5,7 +5,6 @@ import Data.SBV (isSatisfiable)
 import GHC.Generics (Generic)
 
 import VProp.Types
-import VProp.Gen
 import VProp.SBV (SAT, toPredicate)
 import qualified Data.Sequence as SE
 import Data.Foldable (foldr')
@@ -26,7 +25,7 @@ data Opts = MoveRight
 
 
 -- | Given any arbritrary prop move any choices to the right
-moveChcToRight :: (Ord a, Ord b) => VProp a b -> VProp a b
+moveChcToRight :: (Ord a, Ord b, Ord d) => VProp d a b -> VProp d a b
   -- structural instances
 moveChcToRight !(Opn op xs) = Opn op . SE.sort $ fmap moveChcToRight xs
 moveChcToRight !(OpBB XOr x@(ChcB _ _ _) r) = OpBB XOr r x
@@ -44,7 +43,7 @@ moveChcToRight !(OpB op e)    = OpB op  (moveChcToRight e)
 moveChcToRight !(OpBB op l r) = OpBB op (moveChcToRight l) (moveChcToRight r)
 moveChcToRight nonRecursive = nonRecursive
 
-moveChcToRight' :: (Ord a) => VIExpr a -> VIExpr a
+moveChcToRight' :: (Ord a) => VIExpr a b -> VIExpr a b
   -- structural instances
 moveChcToRight' !(OpII Add x@(ChcI _ _ _) r)  = OpII Add (moveChcToRight' r) (moveChcToRight' x)
 moveChcToRight' !(OpII Mult x@(ChcI _ _ _) r) = OpII Mult (moveChcToRight' r) (moveChcToRight' x)
@@ -55,7 +54,7 @@ moveChcToRight' !(ChcI d l r)  = ChcI d (moveChcToRight' l) (moveChcToRight' r)
 moveChcToRight' nonRecursive  = nonRecursive
 
 -- | Given any arbritrary prop move any choices to the left
-moveChcToLeft :: (Ord a, Ord b) => VProp a b -> VProp a b
+moveChcToLeft :: (Ord a, Ord b, Ord d) => VProp d a b -> VProp d a b
   -- structural instances
 moveChcToLeft !(Opn op xs) = Opn op . SE.reverse . SE.sort . fmap moveChcToLeft $ xs
 moveChcToLeft !(OpBB XOr    l x@(ChcB _ _ _)) = OpBB XOr (moveChcToLeft x) (moveChcToLeft l)
@@ -73,7 +72,7 @@ moveChcToLeft !(OpB op e)    = OpB op  (moveChcToLeft e)
 moveChcToLeft !(OpBB op l r) = OpBB op (moveChcToLeft l) (moveChcToLeft r)
 moveChcToLeft nonRecursive = nonRecursive
 
-moveChcToLeft' :: (Ord a) => VIExpr a -> VIExpr a
+moveChcToLeft' :: (Ord a) => VIExpr a b -> VIExpr a b
   -- structural instances
 moveChcToLeft' !(OpII Add l x@(ChcI _ _ _))  = OpII Add (moveChcToLeft' x) (moveChcToLeft' l)
 moveChcToLeft' !(OpII Mult l x@(ChcI _ _ _)) = OpII Mult (moveChcToLeft' x) (moveChcToLeft' l)
@@ -84,7 +83,8 @@ moveChcToLeft' !(ChcI d l r)  = ChcI d (moveChcToLeft' l) (moveChcToLeft' r)
 moveChcToLeft' nonRecursive  = nonRecursive
 
 -- | Given a VProp try to eliminate some terms based on simple rules
-shrinkProp :: (Show a, Ord a) => VProp a a -> VProp a a
+shrinkProp :: (Show a, Show d, Show b,  Ord a, Ord b, Ord d) =>
+  VProp d a b -> VProp d a b
 shrinkProp !(OpB Not (OpB Not x)) = shrinkProp x
 shrinkProp !(Opn And xs) = Opn And $ SE.filter (not . tautology) xs
 shrinkProp !(Opn Or xs) = Opn Or $ SE.filter (not . unsatisfiable) xs
@@ -114,7 +114,7 @@ equivalent a b = tautology (a <=> b)
 
 -- | atomization is the process of reshuffling choices in a variational
 -- expression such that they are the last node before the leaves in the tree
-atomize :: VProp a b -> VProp a b
+atomize :: VProp d a b -> VProp d a b
   -- structural instances
 atomize !x@(ChcB d (OpBB op l r) (OpBB op' l' r'))
   | op == op' = OpBB op
@@ -135,7 +135,7 @@ atomize !(OpBB op l r) = OpBB op (atomize l) (atomize r)
 atomize !(ChcB d l r)  = ChcB d (atomize l) (atomize r)
 atomize x = x
 
-atomize' :: VIExpr a -> VIExpr a
+atomize' :: VIExpr d b -> VIExpr d b
   -- structural instances
 atomize' !x@(ChcI d (OpII op l r) (OpII op' l' r'))
   | op == op' = OpII op
@@ -151,7 +151,7 @@ atomize' (OpII op l r) = OpII op (atomize' l) (atomize' r)
 atomize' (ChcI d l r)  = ChcI d (atomize' l) (atomize' r)
 atomize' x = x
 
-isNormalForm :: VProp a b -> Bool
+isNormalForm :: VProp d a b -> Bool
 isNormalForm !(LitB _) = True
 isNormalForm !(RefB _) = True
 isNormalForm !(ChcB _ (LitB _) (LitB _ )) = True
@@ -166,7 +166,7 @@ isNormalForm !(OpIB _ l r) = isNormalForm' l && isNormalForm' r
 isNormalForm !(Opn _ os)   = foldr (\x acc -> acc && isNormalForm x) True os
 isNormalForm _            = False
 
-isNormalForm' :: VIExpr a -> Bool
+isNormalForm' :: VIExpr d b -> Bool
 isNormalForm' !(LitI _)  = True
 isNormalForm' !(Ref _ _) = True
 isNormalForm' !(ChcI _ (LitI _) (LitI _))   = True
@@ -179,40 +179,40 @@ isNormalForm' _ = False
 
 
 -- | Given a config and variational expression remove redundant choices
-prune :: Ord a => VProp a a -> VProp a a
-prune = prune_ Map.empty
+prune :: Ord d => VProp d a b -> VProp d a b
+prune = prune' Map.empty
 
-prune_ :: Ord a => Config a -> VProp a a -> VProp a a
-prune_ tb !(ChcB t y n) = case Map.lookup t tb of
+prune' :: Ord d => Config d -> VProp d a b -> VProp d a b
+prune' tb !(ChcB t y n) = case Map.lookup t tb of
                              Nothing -> ChcB t
-                                        (prune_ (Map.insert t True tb) y)
-                                        (prune_ (Map.insert t False tb) n)
-                             Just True -> prune_ tb y
-                             Just False -> prune_ tb n
-prune_ tb !(OpB op x)  = OpB op $ prune_ tb x
-prune_ tb !(OpBB a l r) = OpBB a (prune_ tb l) (prune_ tb r)
-prune_ tb !(Opn a ps)  = Opn a (prune_ tb <$> ps)
-prune_ tb !(OpIB op l r)  = OpIB op (prune_' tb l) (prune_' tb r)
-prune_ _ nonRecursive = nonRecursive
+                                        (prune' (Map.insert t True tb) y)
+                                        (prune' (Map.insert t False tb) n)
+                             Just True -> prune' tb y
+                             Just False -> prune' tb n
+prune' tb !(OpB op x)  = OpB op $ prune' tb x
+prune' tb !(OpBB a l r) = OpBB a (prune' tb l) (prune' tb r)
+prune' tb !(Opn a ps)  = Opn a (prune' tb <$> ps)
+prune' tb !(OpIB op l r)  = OpIB op (prune'' tb l) (prune'' tb r)
+prune' _ nonRecursive = nonRecursive
 
-prune_' :: Ord a => Config a -> VIExpr a -> VIExpr a
-prune_' tb !(ChcI t y n) = case Map.lookup t tb of
+prune'' :: Ord a => Config a -> VIExpr a b -> VIExpr a b
+prune'' tb !(ChcI t y n) = case Map.lookup t tb of
                              Nothing -> ChcI t
-                                        (prune_' (Map.insert t True tb) y)
-                                        (prune_' (Map.insert t False tb) n)
-                             Just True -> prune_' tb y
-                             Just False -> prune_' tb n
-prune_' tb !(OpI op e) = OpI op $ prune_' tb e
-prune_' tb !(OpII op l r) = OpII op (prune_' tb l) (prune_' tb r)
-prune_' _ nonRecursive = nonRecursive
+                                        (prune'' (Map.insert t True tb) y)
+                                        (prune'' (Map.insert t False tb) n)
+                             Just True -> prune'' tb y
+                             Just False -> prune'' tb n
+prune'' tb !(OpI op e) = OpI op $ prune'' tb e
+prune'' tb !(OpII op l r) = OpII op (prune'' tb l) (prune'' tb r)
+prune'' _ nonRecursive = nonRecursive
 
 
 -- -----------------------------        CNF          ------------------------------
-toCNF :: VProp a b -> VProp a b
+toCNF :: VProp d a b -> VProp d a b
 toCNF = associate . distributeAndOverOr . moveNot . elimImplXor
 
 -- | eliminate all implications and equivalences
-elimImplXor :: VProp a b -> VProp a b
+elimImplXor :: VProp d a b -> VProp d a b
 -- elimImplXor !(OpBB BiImpl l r) = Opn And [ Opn Or [bnot l', r']
 --                                          , Opn Or [bnot r', l']
 --                                          ]
@@ -221,7 +221,7 @@ elimImplXor !(OpBB BiImpl l r) = Opn And $
                                  Opn Or lthenr SE.<| SE.singleton (Opn Or rthenl)
   where l' = elimImplXor l
         r' = elimImplXor r
-  -- this is the lthenr, rthenl pattern in lists:
+  -- this is the l-then-r, r-then-l pattern in lists:
   -- -- Opn And [ Opn Or [bnot l', r']
             --  , Opn Or [bnot r', l']
             --  ]
@@ -245,7 +245,7 @@ elimImplXor !(ChcB d l r)    = ChcB d (elimImplXor l) (elimImplXor r)
 elimImplXor nonRecursive    = nonRecursive
 
 -- | apply demorgans repeatedly to move nots inward
-moveNot :: VProp a b -> VProp a b
+moveNot :: VProp d a b -> VProp d a b
 moveNot !(OpB Not (Opn And os)) = Opn Or  $ fmap (moveNot . OpB Not) os
 moveNot !(OpB Not (Opn Or  os)) = Opn And $ fmap (moveNot . OpB Not) os
 moveNot !(OpB Not (OpB Not e))  = e
@@ -257,7 +257,7 @@ moveNot !(ChcB d l r)  = ChcB d (moveNot l) (moveNot r)
 moveNot nonRecursive   = nonRecursive
 
 -- | distribute ands over ors
-distributeAndOverOr :: VProp a b -> VProp a b
+distributeAndOverOr :: VProp d a b -> VProp d a b
 distributeAndOverOr (Opn Or es) = foldr1 helper $ fmap distributeAndOverOr es
   where
     helper (Opn And as) x = Opn And $
@@ -285,7 +285,7 @@ distributeAndOverOr nonRecursive = nonRecursive
 
 
 -- | flatten all nested lists
-associate :: VProp a b -> VProp a b
+associate :: VProp d a b -> VProp d a b
 associate (Opn And es) = Opn And $ foldr' f SE.empty (fmap associate es)
   where f (Opn And as) bs = as <> bs
         f e bs            = e SE.<| bs
