@@ -70,21 +70,21 @@ type Config  a = Map (Dim a) Bool
 -- | Boolean expressions with choices
 data VProp a b
    = LitB Bool
-   | RefB a
+   | RefB b
    | OpB  B_B  !(VProp a b)
    | OpBB BB_B !(VProp a b) !(VProp a b)
-   | OpIB NN_B !(VIExpr b)  !(VIExpr b)
+   | OpIB NN_B !(VIExpr a b)  !(VIExpr a b)
    | Opn  Opn  !(SE.Seq (VProp a b))
    | ChcB (Dim a)  !(VProp a b) !(VProp a b)
   deriving (Eq,Generic,Typeable,Functor,Traversable,Foldable,Ord)
 
 -- | Integer Expressions with Choices
-data VIExpr a
+data VIExpr a b
   = LitI NPrim
-  | Ref RefN a
-  | OpI  N_N  !(VIExpr a)
-  | OpII NN_N !(VIExpr a) !(VIExpr a)
-  | ChcI (Dim a)  !(VIExpr a) !(VIExpr a)
+  | Ref RefN b
+  | OpI  N_N  !(VIExpr a b)
+  | OpII NN_N !(VIExpr a b) !(VIExpr a b)
+  | ChcI (Dim a)  !(VIExpr a b) !(VIExpr a b)
   deriving (Eq,Generic,Typeable,Functor,Traversable,Foldable,Ord)
 
 -- | Mirroring NPrim with Symbolic types for the solver
@@ -130,25 +130,25 @@ infixl 7 ./, .%
 
 -- | some not so smart constructors, pinning a to string because we will be
 -- using String the most
-iRef :: String -> VIExpr String
+iRef :: a -> VIExpr d a
 iRef = Ref RefI
 
-iLit :: Integer -> VIExpr a
+iLit :: Integer -> VIExpr a b
 iLit = LitI . I
 
-dLit :: Double -> VIExpr a
+dLit :: Double -> VIExpr a b
 dLit = LitI . D
 
-dRef :: String -> VIExpr String
+dRef :: a -> VIExpr d a
 dRef = Ref RefD
 
-bRef :: String -> VProp String b
+bRef :: b -> VProp d b
 bRef = RefB
 
-bChc :: a -> VProp a b -> VProp a b -> VProp a b
+bChc :: d -> VProp d b -> VProp d b -> VProp d b
 bChc x = ChcB (Dim x)
 
-iChc :: a -> VIExpr a -> VIExpr a -> VIExpr a
+iChc :: d -> VIExpr d a -> VIExpr d a -> VIExpr d a
 iChc x = ChcI (Dim x)
 
 -- | Begin primitive instances
@@ -391,7 +391,7 @@ instance Num (NPrim) where
   (*) = (*)
 
 -- | We can treat Variational integer expressions like nums
-instance Num (VIExpr a) where
+instance Num (VIExpr a b) where
   fromInteger = LitI . fromInteger
   abs    = OpI Abs
   negate = OpI Neg
@@ -401,11 +401,11 @@ instance Num (VIExpr a) where
   (*)    = OpII Mult
 
 -- | the other num instances
-instance PrimN (VIExpr a) where
+instance PrimN (VIExpr a b) where
   (./) = OpII Div
   (.%) = OpII Mod
 
-instance Prim (VProp a b) (VIExpr b) where
+instance Prim (VProp a b) (VIExpr a b) where
   (.<)  = OpIB LT
   (.<=) = OpIB LTE
   (.==) = OpIB EQ
@@ -415,30 +415,57 @@ instance Prim (VProp a b) (VIExpr b) where
 
 
 -- * structural instances
+instance Bifunctor VIExpr where
+  bimap _ g (Ref t b) = Ref t $ g b
+  bimap f g (OpI op e) = OpI op (bimap f g e)
+  bimap f g (OpII op l r) = OpII op (bimap f g l) (bimap f g r)
+  bimap f g (ChcI d l r) = ChcI (f <$> d) (bimap f g l) (bimap f g r)
+  bimap _ _ (LitI i) = LitI i
+
+
 instance Bifunctor VProp where
-  bimap f _ (RefB v)      = RefB $ f v
+  bimap _ g (RefB v)      = RefB $ g v
   bimap f g (OpB op e)    = OpB op (bimap f g e)
   bimap f g (OpBB op l r) = OpBB op (bimap f g l) (bimap f g r)
-  bimap _ g (OpIB op l r) = OpIB op (g <$> l) (g <$> r)
-  bimap f g (ChcB d l r)  = ChcB (f <$> d)(bimap f g l) (bimap f g r)
+  bimap f g (OpIB op l r) = OpIB op (bimap f g l) (bimap f g r)
+  bimap f g (ChcB d l r)  = ChcB (f <$> d) (bimap f g l) (bimap f g r)
   bimap f g (Opn op l)    = Opn op $ fmap (bimap f g) l
   bimap _ _ (LitB b)      = LitB b
 
+
+instance Bifoldable VIExpr where
+  bifoldMap _ g (Ref _ a)     = g a
+  bifoldMap f g (OpI _ e)     = bifoldMap f g e
+  bifoldMap f g (OpII _ l r)  = bifoldMap f g l <> bifoldMap f g r
+  bifoldMap f g (ChcI d l r)  = (f $ dimName d) <> bifoldMap f g l <> bifoldMap f g r
+  bifoldMap _ _ (LitI _)      = mempty
+
+
 instance Bifoldable VProp where
-  bifoldMap f _ (RefB a)     = f a
+  bifoldMap _ g (RefB a)     = g a
   bifoldMap f g (OpB _ e)    = bifoldMap f g e
   bifoldMap f g (OpBB _ l r) = bifoldMap f g l <> bifoldMap f g r
-  bifoldMap _ g (OpIB _ l r) = foldMap g l <> foldMap g r
-  bifoldMap f g (ChcB _ l r) = bifoldMap f g l <> bifoldMap f g r
+  bifoldMap f g (OpIB _ l r) = bifoldMap f g l <> bifoldMap f g r
+  bifoldMap f g (ChcB d l r) = (f $ dimName d) <>
+                               bifoldMap f g l <> bifoldMap f g r
   bifoldMap f g (Opn _ l)    = foldMap (bifoldMap f g) l
   bifoldMap _ _ (LitB _)     = mempty
 
 
+instance Bitraversable VIExpr where
+  bitraverse _ g (Ref op v)    = Ref op <$> g v
+  bitraverse f g (OpI op e)    = OpI op <$> bitraverse f g e
+  bitraverse f g (OpII op l r) = OpII op <$> bitraverse f g l <*> bitraverse f g r
+  bitraverse f g (ChcI d l r)  = ChcI <$> traverse f d <*>
+                                 bitraverse f g l <*> bitraverse f g r
+  bitraverse _ _ (LitI x)      = pure $ LitI x
+
+
 instance Bitraversable VProp where
-  bitraverse f _ (RefB v)      = RefB    <$> f v
+  bitraverse _ g (RefB v)      = RefB    <$> g v
   bitraverse f g (OpB op e)    = OpB  op <$> bitraverse f g e
   bitraverse f g (OpBB op l r) = OpBB op <$> bitraverse f g l <*> bitraverse f g r
-  bitraverse _ g (OpIB op l r) = OpIB op <$> traverse g l     <*> traverse g r
+  bitraverse f g (OpIB op l r) = OpIB op <$> bitraverse f g l <*> bitraverse f g r
   bitraverse f g (Opn op ls)   = Opn  op <$> traverse (bitraverse f g) ls
   bitraverse f g (ChcB d l r)  = ChcB <$>
                                  traverse f d <*>
