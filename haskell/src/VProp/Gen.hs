@@ -158,12 +158,12 @@ arbVPropIntOnly_ gd gv fs@(bfreqs, ifreqs) n
         l' = arbVIExprIntOnly gd gv ifreqs (n `div` 2)
 
 
-arbVIExpr :: Arbitrary a =>
+arbVIExpr :: (Arbitrary a, Arbitrary b) =>
              Gen (Dim a) ->
-             Gen a ->
+             Gen b ->
              [Int] ->
              Int ->
-             Gen (VIExpr a)
+             Gen (VIExpr a b)
 arbVIExpr _ gv _ 0 = liftM2 Ref genRefN gv
 arbVIExpr gd gv ifreqs n = frequency $ zip ifreqs [ LitI <$> genPrim
                                                   , liftM2 OpI genN_N l
@@ -176,7 +176,7 @@ arbVIExprStrOnly :: Gen (Dim Var) ->
              Gen Var ->
              [Int] ->
              Int ->
-             Gen (VIExpr Var)
+             Gen (VIExpr Var Var)
 arbVIExprStrOnly _ gv _ 0 = liftM2 Ref genRefN gv
 arbVIExprStrOnly gd gv ifreqs n = frequency $ zip ifreqs [ LitI <$> genPrim
                                                   , liftM2 OpI genN_N l
@@ -186,8 +186,8 @@ arbVIExprStrOnly gd gv ifreqs n = frequency $ zip ifreqs [ LitI <$> genPrim
   where l = arbVIExpr gd gv ifreqs (n `div` 2)
 
 
-arbVIExprIntOnly :: Arbitrary a =>
-  Gen (Dim a) -> Gen a -> [Int] -> Int -> Gen (VIExpr a)
+arbVIExprIntOnly :: (Arbitrary a, Arbitrary b) =>
+  Gen (Dim a) -> Gen b -> [Int] -> Int -> Gen (VIExpr a b)
 arbVIExprIntOnly _ gv _ 0 = liftM2 Ref genRefN gv
 arbVIExprIntOnly gd gv ifreqs n = frequency $ zip ifreqs [ LitI <$> genInt
                                                   , liftM2 OpI genN_N l

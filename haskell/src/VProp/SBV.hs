@@ -7,15 +7,12 @@ module VProp.SBV ( andDecomp
 import qualified Data.SBV as S
 import           Prelude    hiding   (lookup,LT,EQ,GT)
 import           Data.Maybe          (fromMaybe)
-import           Data.Map            (fromList, lookup, size)
+import           Data.Map            (fromList, lookup)
 import qualified Data.Set as Set     (toList)
 
 import VProp.Types
 import VProp.Core
 import SAT
-
-import Debug.Trace (trace)
-
 
 instance (Show a, Ord a) => SAT (VProp a a) where
   toPredicate = symbolicPropExpr
@@ -23,9 +20,9 @@ instance (Show a, Ord a) => SAT (VProp a a) where
 -- TODO fix this repetition
 -- | Evaluate a feature expression against a configuration.
 evalPropExpr :: DimBool a
-             -> VConfig a SNum
-             -> VConfig a S.SBool
-             -> VProp a a
+             -> VConfig b SNum
+             -> VConfig b S.SBool
+             -> VProp a b
              -> S.SBool
 evalPropExpr _ _ _ (LitB b)    = S.literal b
 evalPropExpr _ _ !c (RefB f)   = c f
@@ -49,7 +46,7 @@ evalPropExpr d !i !c !(ChcB dim l r)
 
 -- | Eval the numeric expressions, VIExpr, assume everything is an integer until
 -- absolutely necessary to coerce
-evalPropExpr' :: DimBool a -> VConfig a SNum -> VIExpr a -> SNum
+evalPropExpr' :: DimBool a -> VConfig b SNum -> VIExpr a b -> SNum
 evalPropExpr' _  _ !(LitI (I i)) = SI . S.literal . fromIntegral $ i
 evalPropExpr' _  _ !(LitI (D d)) = SD $ S.literal d
 evalPropExpr' _ !i !(Ref _ f)    = i f
@@ -87,7 +84,7 @@ symbolicPropExpr e = do
         erri = error "symbolicPropExpr: Internal error, no int symbol found."
 
 -- | Perform andDecomposition, removing all choices from a proposition
-andDecomp :: Show a => VProp a a -> (Dim a -> a) -> (VProp a a)
+andDecomp :: VProp a b -> (Dim a -> b) -> (VProp a b)
 andDecomp !(ChcB d l r) f = (dimToVar f d &&& andDecomp l f) |||
                             (S.bnot (dimToVar f d) &&& andDecomp r f)
 andDecomp !(OpB op x)    f = OpB  op (andDecomp x f)
