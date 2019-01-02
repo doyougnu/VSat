@@ -149,18 +149,20 @@ sat_error4 = H.testCase
 
 andDecomp_duplicate = H.testCase
   "And decomposition can solve props with repeat variables" $
-  do a <- runAD defConf prop
+  do a <- ad id prop
      H.assertBool "should never be empty" (not $ null a)
   where
-    prop :: VProp String String
-    prop = iRef "x" ./= iRef "x"
+    prop :: VProp Var Var Var
+    prop = x ./= x
+    x :: VIExpr Var Var
+    x = iRef "x"
 
 andDecomp_duplicateChc = H.testCase
   "And decomposition can solve props with repeat dimensions" $
-  do a <- runAD defConf prop
+  do a <- ad id prop
      H.assertBool "should never be empty" (not $ null a)
   where
-    prop :: VProp String String
+    prop :: VProp Var Var Var
     prop = ChcB "D" (bRef "c" &&& bRef "d") (bRef "a") &&& ChcB "D" (bRef "a") (bRef "c")
 
 andDecomp_terminatesSh_ = QCM.monadicIO $
@@ -170,17 +172,17 @@ andDecomp_terminatesSh_ = QCM.monadicIO $
     liftIO $ print "----\n"
     liftIO $ print prop
     liftIO $ print "----\n"
-    a <- QCM.run $ runAD defConf (bimap show show prop)
+    a <- QCM.run $ ad id prop
     QCM.assert (not $ null a)
 
 sat_terminates x =  onlyInts x QC.==> QCM.monadicIO
   $ do -- liftIO $ print $ "prop: " ++ show (x :: VProp Var Var) ++ " \n"
-       a <- QCM.run . sat . bimap show show $ (x :: VProp Var Var)
+       a <- QCM.run . sat $ (x :: VProp Var Var Var)
        QCM.assert (not $ null a)
 
 vsat_matches_BF' x =  onlyInts x QC.==> QCM.monadicIO
-  $ do a <- QCM.run . (toThmResult $ bfWith' emptyConf) . bimap show show $ (x :: VProp Var Var)
-       b <- QCM.run . (toThmResult $ adWith' emptyConf) . bimap show show $ x
+  $ do a <- QCM.run . (toThmResult $ bfWith' emptyConf) $ (x :: VProp Var Var Var)
+       b <- QCM.run . (toThmResult $ adWith' emptyConf id) $ x
        liftIO $ putStrLn $ show b
        liftIO $ putStrLn $ show a
        QCM.assert (a == b)
@@ -188,11 +190,11 @@ vsat_matches_BF' x =  onlyInts x QC.==> QCM.monadicIO
 ad_terminates x = onlyInts x QC.==> QCM.monadicIO
   $ do -- liftIO $ print $ "prop: " ++ show (x :: VProp Var Var)
        -- liftIO $ print $ "prop Dup?: " ++ show (noDupRefs x)
-       a <- QCM.run . runAD defConf . bimap show show $ (x :: VProp Var Var)
+       a <- QCM.run . ad id $ (x :: VProp Var Var Var)
        QCM.assert (not $ null a)
 
 dim_homomorphism x = onlyInts x QC.==> QCM.monadicIO
-  $ do a <- QCM.run . satWith emptyConf . bimap show show $ (x :: VProp Var Var)
+  $ do a <- QCM.run . satWith emptyConf $ (x :: VProp Var Var Var)
        -- liftIO $ print $ "prop: " ++ show (x :: VProp Var Var)
        -- liftIO $ print $ "dims: " ++ show (dimensions x)
        -- liftIO $ print $ "num dims: " ++ show (length $ dimensions x)
@@ -204,7 +206,7 @@ dim_homo_unit = do a <- sat prop
                        numDimsBefore = length $ dimensions prop
 
                    H.assertBool "" (numDimsBefore == numDimsAfter)
-  where prop :: VProp String String
+  where prop :: VProp Var Var Var
         prop = (ChcB "AA" (bRef "x") (bRef "y")) ==> (ChcB "DD" true false)
 
 
@@ -217,16 +219,16 @@ dupDimensions' = do a <- satWith emptyConf prop
                     print prop
                     print a
                     H.assertBool "" (numDimsBefore >= numDimsAfter)
-  where prop :: VProp String String
+  where prop :: VProp Var Var Var
         prop = (ChcB "AA" (bRef "x") (bRef "y")) &&& ((bRef "z") ==> (ChcB "AA" true false))
         -- prop = (ChcB "AA" (bRef "x") (bRef "y")) &&& (ChcB "AA" true false)
 
 sat_error_unit = do a <- sat prop
                     H.assertBool "" (not $ null a)
   where
-    prop :: VProp String String
+    prop :: VProp Var Var Var
     prop = (signum 7 - (LitI . D $ 10.905)) ./=
-           ((signum (signum (dRef "x"))) + signum 6)
+           ((signum (signum (dRef "x" :: VIExpr Var Var))) + signum 6)
     -- prop = (signum 7 - (LitI . D $ 10.905)) .== (0 :: VIExpr String)
     -- prop = (signum 7 - (LitI . D $ 10.905)) .== (0 :: VIExpr String)
     -- prop = ((dRef "x" - iRef "q") .== 0) &&& (bRef "w" &&& bRef "rhy")
@@ -234,22 +236,23 @@ sat_error_unit = do a <- sat prop
 sat_error_unit2 = do a <- sat prop
                      H.assertBool "" (not $ null a)
   where
-    prop :: VProp String String
-    prop = ((dRef "x") .<= (LitI . D $ 15.309)) &&& true
+    prop :: VProp Var Var Var
+    prop = ((dRef "x" :: VIExpr Var Var) .<= (LitI . D $ 15.309)) &&& true
     -- prop = (dRef "x") .== (LitI . I $ 15) -- this passes
 
 sat_error_unit3 = do a <- sat prop
                      H.assertBool "Modulus with Doubles passes as long as there is one integer" . not . null $ a
   where
-    prop :: VProp String String
-    prop = (dRef "x") .% (dRef "y") .> (LitI . I $ 1)
+    prop :: VProp Var Var Var
+    prop = (dRef "x" :: VIExpr Var Var) .%
+           (dRef "y" :: VIExpr Var Var) .> (LitI . I $ 1)
 
 sat_error_unit4 = do a <- sat prop
                      H.assertBool "Division with a Double and Int coearces correctly" . not . null $ a
   where
-    prop :: VProp String String
+    prop :: VProp Var Var Var
   -- this will still fail with a bitvec error
-    prop =  (dRef "x") .% (-6) ./= (-(LitI . D $ 74.257))
+    prop =  (dRef "x" :: VIExpr Var Var) .% (-6) ./= (-(LitI . D $ 74.257))
     -- prop =  (abs (iRef "x")) .% (-6) ./= (-(LitI . D $ 74.257)) -- this is the original error, a define_fun
     -- prop = ((abs (dRef "x")) .% (-6) ./= (-(LitI . D $ 74.257))) <+> (bnot (bRef "y")) -- this throws a bitvec error
     -- (|ogzpzgeb| .% -6 ≠ -74.25731844390708) ⊻ ¬opvp

@@ -16,5 +16,5 @@ jsonProperties = testGroup "Json Serializing and Printing Properties" $
                    jsonRoundTrip
                  ]
 
-jsonRoundTrip :: VProp String String -> Bool
+jsonRoundTrip :: VProp Var Var Var -> Bool
 jsonRoundTrip x = maybe False (==x) . decode . encode $ x
