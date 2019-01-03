@@ -158,7 +158,9 @@ type IncState d a = (V d (Maybe a), UsedDims (Dim d))
 -- typeclass. I do not expect these to change much
 type IncVSMTSolve d a = St.StateT (IncState d S.SMTResult) SC.Query a
 
--- | Solve a VSMT proposition
+-- | Top level wrapper around engine and monad stack, this sets options for the
+-- underlying solver, inspects the results to see if they were variational or
+-- not, if not then it gets the model and wraps it in a V datatype
 vSMTSolve :: Ord d => S.Symbolic (VProp d S.SBool SNum)
           -> S.Symbolic (V d (Maybe S.SMTResult))
 vSMTSolve prop = do prop' <- prop
@@ -194,6 +196,22 @@ propToSBool' !(OpII o l r) = OpII o <$> propToSBool' l <*> propToSBool' r
 propToSBool' !(ChcI d l r) = ChcI d <$> propToSBool' l <*> propToSBool' r
 propToSBool' !(LitI x)     = return $ LitI x
 
+-- | a builder function that abstracts out the packing algorithm for numbers. It
+-- takes a function to convert a string to a symbolic variable like S.sInt64, or
+-- S.sDouble, a constructor that add the symbolic type to the sum type SNum and
+-- produces a function k -> t m SNum, which reifies to k -> IncPack k SNum.
+mkSmt :: (Ord k, MonadTrans t, Monad m, Show k,
+           MonadState (d, UsedVars k SNum) (t m)) =>
+         (String -> m a) -> (a -> SNum) -> k -> t m SNum
+mkSmt f g str = do (_,st) <- get
+                   case str `M.lookup` st of
+                     Nothing -> do b <- lift . f $ show str
+                                   let b' = g b
+                                   St.modify (second $ M.insert str b')
+                                   return b'
+                     Just x  -> return x
+
+
 -- | convert every reference to a boolean, keeping track of what you've seen
 -- before
 smtBool :: (Show a, Ord a) => a -> IncPack a S.SBool
@@ -207,24 +225,12 @@ smtBool str = do (st,_) <- get
 -- | convert every reference to a Integer, keeping track of what you've seen
 -- before
 smtInt :: (Show a, Ord a) => a -> IncPack a SNum
-smtInt str = do (_,st) <- get
-                case str `M.lookup` st of
-                  Nothing -> do b <- lift . S.sInt64 $ show str
-                                let b' = SI b
-                                St.modify (second $ M.insert str b')
-                                return b'
-                  Just x  -> return x
+smtInt = mkSmt S.sInt64 SI
 
 -- | convert every reference to a Integer, keeping track of what you've seen
 -- before
 smtDouble :: (Show a, Ord a) =>  a -> IncPack a SNum
-smtDouble str = do (_,st) <- get
-                   case str `M.lookup` st of
-                     Nothing -> do b <- lift . S.sDouble $ show str
-                                   let b' = SD b
-                                   St.modify (second $ M.insert str b')
-                                   return b'
-                     Just x  -> return x
+smtDouble = mkSmt S.sDouble SD
 
 getVSMTModel :: SC.Query (Maybe S.SMTResult)
 getVSMTModel = do cs <- SC.checkSat
@@ -241,16 +247,6 @@ instance (Monad m, I.SolverContext m) =>
   constrain = lift . S.constrain
   namedConstraint = (lift .) . S.namedConstraint
   setOption = lift . S.setOption
-
-
--- notice that we are doing a left fold here
--- vSMTSolveHelper :: S.SBool -> [VProp S.SBool SNum] ->
---   (S.SBool -> S.SBool -> S.SBool) -> IncVSMTSolve S.SBool
--- vSMTSolveHelper !acc ![]     _ = return acc
--- vSMTSolveHelper !acc !(x:xs) f = do b <- vSMTSolve_ x
---                                     let res = b `f` acc
---                                     S.constrain res
---                                     vSMTSolveHelper res xs f
 
 -- | smartly grab a result from the state checking to make sure that if the
 -- result is variational than that is preferred over a redundant model. Or in
