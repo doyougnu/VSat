@@ -96,13 +96,14 @@ runProperties = testGroup "Run Properties" [
 
 unitTests :: TestTree
 unitTests = testGroup "Unit Tests" [
-  -- sat_error
-  -- , sat_error2
-  -- , sat_error4
-  -- , andDecomp_duplicate
-  -- , andDecomp_duplicateChc
-  -- , dim_homo'
-  dupDimensions
+  sat_error
+  , sat_error2
+  , sat_error4
+  , andDecomp_duplicate
+  , andDecomp_duplicateChc
+  , dim_homo'
+  , dupDimensions
+  , not_is_handled
   ]
 
 specTests :: TestTree
@@ -154,6 +155,10 @@ sat_error4 = H.testCase
            "The solver doesn't run out of memory"
            sat_error_unit4
 
+not_is_handled = H.testCase
+                 "Negation doesn't immediately cause unsat for vsat routine"
+                 not_unit
+
 andDecomp_duplicate = H.testCase
   "And decomposition can solve props with repeat variables" $
   do a <- ad id prop
@@ -187,9 +192,9 @@ sat_terminates x =  onlyInts x QC.==> QCM.monadicIO
        a <- QCM.run . sat $ (x :: VProp Var Var Var)
        QCM.assert (not $ null a)
 
-vsat_matches_BF' x =  onlyInts x QC.==> QCM.monadicIO
-  $ do a <- QCM.run . (bfWith' emptyConf) $ (x :: VProp Var Var Var)
-       b <- QCM.run . (satWith' emptyConf) $ x
+vsat_matches_BF' x =  onlyBools x QC.==> QCM.monadicIO
+  $ do a <- QCM.run . (bfWith emptyConf) $ (x :: VProp Var Var Var)
+       b <- QCM.run . (satWith emptyConf) $ x
        liftIO . putStrLn $ "[BF]:   \n" ++ show a
        liftIO . putStrLn $ "[VSAT]: \n" ++ show b
        QCM.assert (a == b)
@@ -263,3 +268,9 @@ sat_error_unit4 = do a <- sat prop
     -- prop =  (abs (iRef "x")) .% (-6) ./= (-(LitI . D $ 74.257)) -- this is the original error, a define_fun
     -- prop = ((abs (dRef "x")) .% (-6) ./= (-(LitI . D $ 74.257))) <+> (bnot (bRef "y")) -- this throws a bitvec error
     -- (|ogzpzgeb| .% -6 ≠ -74.25731844390708) ⊻ ¬opvp
+
+not_unit = do a <- satWith emptyConf prop
+              b <- bfWith emptyConf prop
+              H.assertBool "Brute Force matches VSAT for simple negations" (a == b)
+  where prop :: VProp Var Var Var
+        prop = bnot . bRef $ "x"

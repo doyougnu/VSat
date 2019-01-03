@@ -17,9 +17,13 @@ import Data.Aeson
 import VProp.Types (PrimN(..))
 
 -- | a choice data type, without the object language
-data V d a = Plain a | VChc d (V d a) (V d a) deriving (Show,Generic,Eq)
+data V d a = Plain a | VChc d (V d a) (V d a) deriving (Generic,Eq)
 
 type VConfig d = Map.Map d Bool
+
+instance (Show d, Show a) => Show (V d a) where
+  show (Plain a) = show a
+  show (VChc d l r) = mconcat [show d, "≺" , show l ,", ", show r, "≻"]
 
 instance (FromJSON a, FromJSON d) => FromJSON (V a d)
 
