@@ -88,7 +88,8 @@ runProperties = testGroup "Run Properties" [
   -- dim_homo
   -- , sat_error2
   -- , sat_error3
-  vsat_matches_BF
+  -- vsat_matches_BF_plain
+  -- vsat_matches_BF
                                            -- ad_term2
                                            -- ad_term
                                            -- , qcProps
@@ -96,14 +97,19 @@ runProperties = testGroup "Run Properties" [
 
 unitTests :: TestTree
 unitTests = testGroup "Unit Tests" [
-  sat_error
-  , sat_error2
-  , sat_error4
-  , andDecomp_duplicate
-  , andDecomp_duplicateChc
-  , dim_homo'
-  , dupDimensions
-  , not_is_handled
+  -- sat_error
+  -- , sat_error2
+  -- , sat_error4
+  -- , andDecomp_duplicate
+  -- , andDecomp_duplicateChc
+  -- , dim_homo'
+  -- , dupDimensions
+  -- , not_is_handled
+  -- , singleton_is_sat
+  -- , not_mult_is_handled
+  -- chc_singleton_is_sat
+  -- chc_not_singleton_is_sat
+  chc_unbalanced_is_sat
   ]
 
 specTests :: TestTree
@@ -125,6 +131,10 @@ dim_homo = QC.testProperty
 vsat_matches_BF = QC.testProperty
                   "VSat with an empty configuration always matches Brute Force results"
                   vsat_matches_BF'
+
+vsat_matches_BF_plain = QC.testProperty
+  "VSat with an empty configuration always matches Brute Force results for only plain props"
+  vsat_matches_BF_plain'
 
 
 dim_homo' = H.testCase
@@ -158,6 +168,26 @@ sat_error4 = H.testCase
 not_is_handled = H.testCase
                  "Negation doesn't immediately cause unsat for vsat routine"
                  not_unit
+
+not_mult_is_handled = H.testCase
+                 "Negation doesn't immediately cause unsat for vsat routine"
+                 not_mult_unit
+
+singleton_is_sat = H.testCase
+                 "a single reference variable is always satisfiable"
+                 singleton_unit
+
+chc_singleton_is_sat = H.testCase
+                       "a single choice of singletons is sat"
+                       chc_singleton_unit
+
+chc_not_singleton_is_sat = H.testCase
+                       "a negated single choice of singletons is sat"
+                       chc_singleton_not_unit
+
+chc_unbalanced_is_sat = H.testCase
+                       "if a choice is unbalanced the return model is also unbalanced"
+                       chc_unbalanced_unit
 
 andDecomp_duplicate = H.testCase
   "And decomposition can solve props with repeat variables" $
@@ -193,6 +223,14 @@ sat_terminates x =  onlyInts x QC.==> QCM.monadicIO
        QCM.assert (not $ null a)
 
 vsat_matches_BF' x =  onlyBools x QC.==> QCM.monadicIO
+  $ do a <- QCM.run . (bfWith emptyConf) $ (x :: VProp Var Var Var)
+       b <- QCM.run . (satWith emptyConf) $ x
+       liftIO . putStrLn $ "[BF]:   \n" ++ show a
+       liftIO . putStrLn $ "[VSAT]: \n" ++ show b
+       QCM.assert (a == b)
+
+vsat_matches_BF_plain' x =
+  (onlyBools x && isPlain x) QC.==> QCM.monadicIO
   $ do a <- QCM.run . (bfWith emptyConf) $ (x :: VProp Var Var Var)
        b <- QCM.run . (satWith emptyConf) $ x
        liftIO . putStrLn $ "[BF]:   \n" ++ show a
@@ -269,8 +307,47 @@ sat_error_unit4 = do a <- sat prop
     -- prop = ((abs (dRef "x")) .% (-6) ./= (-(LitI . D $ 74.257))) <+> (bnot (bRef "y")) -- this throws a bitvec error
     -- (|ogzpzgeb| .% -6 ≠ -74.25731844390708) ⊻ ¬opvp
 
+unitGen prop str = do a <- satWith emptyConf prop
+                      b <- bfWith emptyConf prop
+                      putStrLn "\n\n--------------"
+                      putStrLn $ show prop
+                      putStrLn $ show b
+                      putStrLn $ show a
+                      putStrLn "--------------\n\n"
+                      H.assertBool str (a == b)
+
 not_unit = do a <- satWith emptyConf prop
               b <- bfWith emptyConf prop
+              putStrLn $ show prop
               H.assertBool "Brute Force matches VSAT for simple negations" (a == b)
   where prop :: VProp Var Var Var
         prop = bnot . bRef $ "x"
+
+not_mult_unit = do a <- satWith emptyConf prop
+                   b <- bfWith emptyConf prop
+                   putStrLn $ show prop
+                   putStrLn $ show a
+                   putStrLn $ show b
+                   H.assertBool "Brute Force matches VSAT for multiple negations" (a == b)
+  where prop :: VProp Var Var Var
+        prop = bnot . bnot . bnot . bRef $ "x"
+
+singleton_unit = do a <- satWith emptyConf prop
+                    b <- bfWith emptyConf prop
+                    putStrLn $ show prop
+                    H.assertBool "Brute Force matches VSAT for simple negations" (a == b)
+  where prop :: VProp Var Var Var
+        prop = bRef $ "x"
+
+chc_singleton_unit = unitGen prop "BF matches VSAT for a singleton choice of singletons"
+  where prop = bChc "AA" (bRef "x") (bRef "y")
+
+chc_singleton_not_unit = unitGen prop "BF matches VSAT for a negated singleton choice of singletons"
+  where
+    prop :: ReadableProp
+    prop = bnot $ bChc "AA" false false
+
+chc_unbalanced_unit = unitGen prop "BF matches VSAT for a unbalanced choices of singletons"
+  where
+    prop :: ReadableProp
+    prop = bnot $ bChc "AA" (bChc "DD" (bRef "x") (bRef "y")) (bRef "z")
