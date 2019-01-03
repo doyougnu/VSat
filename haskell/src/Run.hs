@@ -21,6 +21,8 @@ import Control.Arrow                 (first, second)
 
 import Data.Maybe                    (fromJust, catMaybes)
 
+import Debug.Trace (trace)
+
 import VProp.Types
 import VProp.SBV
 import VProp.Core
@@ -79,7 +81,8 @@ runBF :: (Show a, Show d, Ord a, Ord d) =>
 runBF os p = fst' <$> runEnv runBruteForce os p
 
 -- | Run the VSMT solver given a list of optimizations and a prop
-runVSMT :: (Show a, Ord a, Ord d) =>
+runVSMT :: (Show d,
+            Show a, Ord a, Ord d) =>
            SMTConf d a a
         -> VProp d a a
         -> IO (Result d, SatDict d, Log)
@@ -126,7 +129,8 @@ runAndDecomp prop f = do
   lift . return . Result $ Plain res
 
 runVSMTSolve ::
-  (Show a, Ord a, Ord d, MonadTrans t, MonadReader (SMTConf d a a) (t IO)) =>
+  (Show d,
+   Show a, Ord a, Ord d, MonadTrans t, MonadReader (SMTConf d a a) (t IO)) =>
   VProp d a a -> t IO (Result d)
 runVSMTSolve prop =
   do cnf <- ask
@@ -161,7 +165,7 @@ type IncVSMTSolve d a = St.StateT (IncState d S.SMTResult) SC.Query a
 -- | Top level wrapper around engine and monad stack, this sets options for the
 -- underlying solver, inspects the results to see if they were variational or
 -- not, if not then it gets the model and wraps it in a V datatype
-vSMTSolve :: Ord d => S.Symbolic (VProp d S.SBool SNum)
+vSMTSolve :: (Ord d, Show d) => S.Symbolic (VProp d S.SBool SNum)
           -> S.Symbolic (V d (Maybe S.SMTResult))
 vSMTSolve prop = do prop' <- prop
                     S.setOption $ SC.ProduceAssertions True
@@ -272,43 +276,43 @@ store = St.modify . first . const
 -- then we'll get back a variational model, if we get back a variational model
 -- then we reconstruct the choice expression representing the model and store it
 -- in the state
-handleChc :: Ord d => Ctx d S.SBool SNum -> IncVSMTSolve d S.SBool
-handleChc (InOpN op (ctx, ChcB d l r)) =
+handleCtx :: Ord d => Ctx d S.SBool SNum -> IncVSMTSolve d S.SBool
+handleCtx (InOpN op (ctx, ChcB d l r)) =
   do (_, used) <- get
      case M.lookup d used of
-       Just True  -> handleChc goLeft
-       Just False -> handleChc goRight
+       Just True  -> handleCtx goLeft
+       Just False -> handleCtx goRight
        Nothing    -> do
-                        clearSt
+                        -- clearSt
                         St.modify . second $ M.insert d True
                         lift $! SC.push 1
-                        handleChc goLeft >>= S.constrain
+                        handleCtx goLeft >>= S.constrain
                         lRes <- getResult
                         lift $! SC.pop 1
 
-                        clearSt
+                        -- clearSt
                         St.modify . second $ M.adjust (const False) d
                         lift $! SC.push 1
-                        handleChc goRight >>= S.constrain
+                        handleCtx goRight >>= S.constrain
                         rRes <- getResult
                         lift $! SC.pop 1
 
                         store $ VChc (dimName d) lRes rRes
                         St.modify . second $ M.delete d
      -- this return statement should never matter because we've reset the
-     -- assertion stack. So I just return r' here to fulfill the type
+     -- assertion stack. So I just return true here to fulfill the type
                         return true
 
   where goLeft  = InOpN op (ctx, l)
         goRight = InOpN op (ctx, r)
 
-handleChc (InOpN _  (SE.Empty, fcs)) = vSMTSolve_ fcs
-handleChc (InOpN op (ctx, fcs)) = do
+handleCtx (InOpN _  (SE.Empty, fcs)) = vSMTSolve_ fcs
+handleCtx (InOpN op (ctx, fcs)) = do
   fcs' <- vSMTSolve_ fcs
   let (newCtx SE.:> newFocus) = SE.viewr ctx
       op' = handler op
-  b <- (handleChc $ InOpN op (newCtx, newFocus)) >>= return . op' fcs'
-  S.constrain b
+  b <- (handleCtx $ InOpN op (newCtx, newFocus)) >>= return . op' fcs'
+  -- S.constrain b
   return b
   where handler CAnd = (S.&&&)
         handler COr  = (S.|||)
@@ -319,13 +323,15 @@ vSMTSolve_ :: Ord d => VProp d S.SBool SNum -> IncVSMTSolve d S.SBool
 vSMTSolve_ !(RefB b) = return b
 vSMTSolve_ !(LitB b) = return $ S.literal b
 vSMTSolve_ !(OpB Not bs)= do b <- vSMTSolve_ bs
-                             S.constrain $ S.bnot b
-                             return b
+                             let b' = S.bnot b
+                             -- S.constrain b'
+                             return b'
 vSMTSolve_ !(OpBB op l r) = do bl <- vSMTSolve_ l
                                br <- vSMTSolve_ r
                                let op' = handler op
-                               S.constrain $ bl `op'` br
-                               return $ bl `op'` br
+                                   b'  = bl `op'` br
+                               -- S.constrain b'
+                               return b'
   where handler Impl   = (==>)
         handler BiImpl = (<=>)
         handler XOr    = (<+>)
@@ -342,11 +348,12 @@ vSMTSolve_ !(OpIB op l r) = do l' <- vSMTSolve'_ l
         handler EQ  = (.==)
         handler NEQ = (./=)
 
-vSMTSolve_ !(Opn And ps) = handleChc  . InOpN CAnd $ (ctx, fcs)
+vSMTSolve_ !(Opn And ps) = handleCtx  . InOpN CAnd $ (ctx, fcs)
   where (ctx SE.:> fcs) = SE.viewr ps
-vSMTSolve_ !(Opn Or ps) = handleChc  . InOpN COr $ (ctx, fcs)
+vSMTSolve_ !(Opn Or ps) = handleCtx  . InOpN COr $ (ctx, fcs)
   where (ctx SE.:> fcs) = SE.viewr ps
-vSMTSolve_ x = handleChc (InOpN CAnd (SE.empty, x))
+vSMTSolve_ x = handleCtx (InOpN CAnd (SE.empty, x))
+
 
 handleSBoolChc :: Ord d => V (Dim d) S.SBool -> IncVSMTSolve d S.SBool
 handleSBoolChc !(Plain a) = do S.constrain a
