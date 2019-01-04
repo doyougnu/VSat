@@ -132,8 +132,9 @@ recompile [] = Nothing
 recompile xs = Just $ vSum $ foldr replaceNaively res' ys
   where
     shell = fromList $ Map.keys (fst (head xs'))
-    (xs', ys) = partition (\(x,_) -> Map.size x > 1) $ reverse $ sortOn (Map.size . fst) xs
-    res' = foldr replace shell xs
+    (xs'', ys) = partition (\(x,_) -> Map.size x > 1) $ reverse $ sortOn (Map.size . fst) xs
+    xs' = reverse $ sortOn (Map.size . fst) xs
+    res' = foldr replace shell xs''
 
 isEmpty :: V d (Maybe a) -> Bool
 isEmpty = foldr (\x acc -> check x && acc) True
