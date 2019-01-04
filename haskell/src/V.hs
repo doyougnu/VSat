@@ -137,8 +137,8 @@ recompile xs = Just $ vSum $ foldr replaceNaively res' ys
 
 isEmpty :: V d (Maybe a) -> Bool
 isEmpty = foldr (\x acc -> check x && acc) True
-  where check = \case Nothing -> True
-                      _       -> False
+  where check Nothing = True
+        check _       = False
 
 vSum :: V d (Maybe a) -> V d a
 vSum (Plain (Just a)) = Plain a
