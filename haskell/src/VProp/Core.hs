@@ -13,6 +13,7 @@ import           Prelude       hiding (EQ, GT, LT)
 
 
 import           VProp.Types
+import Debug.Trace (trace)
 
 instance Show Var where show = unpack . varName
 instance (Show a, Show b, Show c) => Show (VProp a b c) where
@@ -211,6 +212,27 @@ bvars = trifoldMap mempty Set.singleton mempty
 dimensions :: Ord d => (VProp d a b) -> Set.Set (Dim d)
 dimensions = trifoldMap (Set.singleton . Dim) mempty mempty
 
+-- | wrapper around choices engine, called choices_ with [] results in [] always
+-- being returned. Works properly with [[]]
+choices :: VProp d a b -> [[(Dim d, Bool)]]
+choices = flip choices_ [[]]
+
+-- | generate a list of dimension selection pairs directly from a prop. This is
+-- some weird fold
+choices_ ::  VProp d a b -> [[(Dim d, Bool)]] -> [[(Dim d, Bool)]]
+choices_ (OpB _ e)    acc = choices_ e acc
+choices_ (OpBB _ l r) acc = choices_ l acc <> choices_ r acc
+choices_ (Opn _ ps)   acc = foldr choices_ acc ps
+choices_ (ChcB d l r) acc = left <> right
+  where
+    left  = choices_ l $ fmap ((:) (d, True)) acc
+    right = choices_ r $ fmap ((:) (d, False)) acc
+choices_ _            acc = acc
+
+-- | TODO implement choices' for IBs
+choices' :: (Ord b) => VIExpr d b -> Set.Set (RefN, b)
+choices' = undefined
+
 -- | The set of integar variable references for an expression
 ivars :: (Ord b) => VProp d a b -> Set.Set b
 ivars = trifoldMap mempty mempty Set.singleton
@@ -237,14 +259,6 @@ ivarsWithType' (Ref x a)    = Set.singleton (x, a)
 -- | The set of boolean variable references for an expression
 vars :: (Ord a) => VProp d a a -> Set.Set a
 vars = trifoldMap mempty Set.singleton Set.singleton
-
--- | The set of all choices
-configs :: Ord d => VProp d a a -> [[(Dim d, Bool)]]
-configs prop = go (Set.toList $ dimensions prop)
-  where
-    go []     = [[]]
-    go (d:ds) = fmap ((d, True) :) cs ++ fmap ((d, False) :) cs
-          where cs = go ds
 
 -- | remove redundant operators
 flatten :: VProp d a b -> VProp d a b
