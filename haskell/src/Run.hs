@@ -47,9 +47,9 @@ type Env d a r = RWST (SMTConf d a a) Log (SatDict d) IO r -- ^ the monad stack
 -- manipulate the assertion stack and then continue evaluating.
 data Op = CAnd | COr
 
-data Ctx d a b = InOpN Op !(SE.Seq (VProp d a b), VProp d a b)
-             | InNot !(VProp d a b)
-             | InOpIB Op !(Ctx d a b, VProp d a b)
+data Ctx d a b = InOpN Op !(SE.Seq (VProp d a b), S.SBool)
+               | InNot !(VProp d a b)
+               | InOpIB Op !(Ctx d a b, VProp d a b)
 
 -- | An empty reader monad environment, in the future read these from config file
 _emptySt :: SatDict d
@@ -275,9 +275,17 @@ store = St.modify . first . const
 -- recursive answer is plain then we'll get back a model from the solver, if not
 -- then we'll get back a variational model, if we get back a variational model
 -- then we reconstruct the choice expression representing the model and store it
--- in the state
+-- in the state. This works by having a zipper (focus, context) that tracks the
+-- recurses through the proposition. When the prop is plain it will simple
+-- convert everything to SBools via vSMTSolve and store that is the ctx which is
+-- the constrained in runVSMTsolve. If there is a choice then we employ the
+-- context to solve recursively by selecting a variant as our new focus and
+-- recurring.
 handleCtx :: Ord d => Ctx d S.SBool SNum -> IncVSMTSolve d S.SBool
-handleCtx (InOpN op (ctx, ChcB d l r)) =
+handleCtx (InOpN op (((ChcB d l r) SE.:<| rest), ctx)) =
+  -- when we see a choice as our focus we check if it is selected. If so then
+  -- recur. If not then we select a variant and pass that on with the current
+  -- context.
   do (_, used) <- get
      case M.lookup d used of
        Just True  -> handleCtx goLeft
@@ -303,19 +311,24 @@ handleCtx (InOpN op (ctx, ChcB d l r)) =
      -- assertion stack. So I just return true here to fulfill the type
                         return true
 
-  where goLeft  = InOpN op (ctx, l)
-        goRight = InOpN op (ctx, r)
+  where goLeft  = InOpN op (l SE.:<| rest, ctx)
+        goRight = InOpN op (r SE.:<| rest, ctx)
 
-handleCtx (InOpN _  (SE.Empty, fcs)) = vSMTSolve_ fcs
-handleCtx (InOpN op (ctx, fcs)) = do
+handleCtx (InOpN _  (SE.Empty, fcs)) = return fcs
+  -- when we have reached the end of the sequence we simple return the
+  -- accumulated SBool. Yes this is some funky fold
+handleCtx (InOpN op (fcs SE.:<| rest, ctx)) =
+  -- when we do not see a choice we peel off the focus and convert it to a SBool
+  -- with vSMTsolve and then accumulate it appropriately with the operator
+  -- this is the engine of the algorithm, its the point that makes progress
+  do
   fcs' <- vSMTSolve_ fcs
-  let (newCtx SE.:> newFocus) = SE.viewr ctx
-      op' = handler op
-  b <- (handleCtx $ InOpN op (newCtx, newFocus)) >>= return . op' fcs'
-  return b
+  handleCtx $ InOpN op (rest, (handler op) fcs' ctx)
   where handler CAnd = (S.&&&)
         handler COr  = (S.|||)
+
 handleCtx (InNot (ChcB d l r)) =
+
   do (_, used) <- get
      case M.lookup d used of
        Just True  -> vSMTSolve_ l
@@ -340,10 +353,9 @@ handleCtx (InNot (ChcB d l r)) =
      -- this return statement should never matter because we've reset the
      -- assertion stack. So I just return true here to fulfill the type
                         return true
-  where goLeft = InNot l
+  where goLeft  = InNot l
         goRight = InNot r
-handleCtx (InNot notChc) = do b <- vSMTSolve_ notChc
-                              return $ S.bnot b
+handleCtx (InNot notChc) = vSMTSolve_ notChc >>= return . S.bnot
 
 -- | The main solver algorithm. You can think of this as the sem function for
 -- the dsl
@@ -371,11 +383,9 @@ vSMTSolve_ !(OpIB op l r) = do l' <- vSMTSolve'_ l
         handler EQ  = (.==)
         handler NEQ = (./=)
 
-vSMTSolve_ !(Opn And ps) = handleCtx  . InOpN CAnd $ (ctx, fcs)
-  where (ctx SE.:> fcs) = SE.viewr ps
-vSMTSolve_ !(Opn Or ps) = handleCtx  . InOpN COr $ (ctx, fcs)
-  where (ctx SE.:> fcs) = SE.viewr ps
-vSMTSolve_ x = handleCtx (InOpN CAnd (SE.empty, x))
+vSMTSolve_ !(Opn And ps) = handleCtx . InOpN CAnd $ (ps, true)
+vSMTSolve_ !(Opn Or ps)  = handleCtx . InOpN COr $ (ps, false)
+vSMTSolve_ x = handleCtx (InOpN CAnd (SE.singleton x, true))
 
 
 handleSBoolChc :: Ord d => V (Dim d) S.SBool -> IncVSMTSolve d S.SBool
