@@ -348,7 +348,10 @@ handleCtx (InOpN op (fcs SE.:<| rest, ctx)) =
   where handler CAnd = (S.&&&)
         handler COr  = (S.|||)
 
-handleCtx (InNot c@(ChcB _ l r)) = handleChcCtx goLeft goRight c
+handleCtx (InNot c@(ChcB _ l r)) =
+  handleChc
+  (handleCtx goLeft >>= return . S.bnot) (handleCtx goRight >>= return . S.bnot)
+  (handleCtx goLeft) (handleCtx goRight) c
   where goLeft  = InNot l
         goRight = InNot r
 handleCtx (InNot notChc) = vSMTSolve_ notChc >>= return . S.bnot
