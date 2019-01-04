@@ -269,6 +269,52 @@ clearSt = St.modify . first $ const (Plain Nothing)
 store :: V d (Maybe S.SMTResult) -> IncVSMTSolve d ()
 store = St.modify . first . const
 
+handleChc goLeft goRight defL defR (ChcB d l r) =
+  do (_, used) <- get
+     case M.lookup d used of
+       Just True  -> defL
+       Just False -> defR
+       Nothing    -> do
+                        clearSt
+                        St.modify . second $ M.insert d True
+                        lift $! SC.push 1
+                        goLeft >>= S.constrain
+                        lRes <- getResult
+                        lift $! SC.pop 1
+
+                        clearSt
+                        St.modify . second $ M.adjust (const False) d
+                        lift $! SC.push 1
+                        goRight >>= S.constrain
+                        rRes <- getResult
+                        lift $! SC.pop 1
+
+                        store $ VChc (dimName d) lRes rRes
+                        St.modify . second $ M.delete d
+     -- this return statement should never matter because we've reset the
+     -- assertion stack. So I just return true here to fulfill the type
+                        return true
+
+-- | Abstracts out the choice handling for use in handling contexts.
+handleChcCtx :: (Show d, Ord d) =>
+  Ctx d S.SBool SNum ->
+  Ctx d S.SBool SNum ->
+  VProp d b c -> IncVSMTSolve d S.SBool
+handleChcCtx goLeft goRight c = handleChc
+  (handleCtx goLeft) (handleCtx goRight)
+  (handleCtx goLeft) (handleCtx goRight) c
+
+-- | abstracts out the choice handling for use in the vSMTsolve function.
+-- Purposefully a partial function
+handleChcVSMT :: (Show d, Ord d) =>
+  VProp d S.SBool SNum ->
+  VProp d S.SBool SNum ->
+  VProp d S.SBool SNum -> IncVSMTSolve d S.SBool
+handleChcVSMT goLeft goRight c@(ChcB _ l r) =
+  handleChc
+  (vSMTSolve_ goLeft) (vSMTSolve_ goRight)
+  (vSMTSolve_ l) (vSMTSolve_ r) c
+
 -- | Handle a choice in the IncVSMTSolve monad, we check to make sure that if a
 -- choice is already selected then the selection is maintained. If not then we
 -- solve both branches by first clearing the state, recursively solving, if the
@@ -282,35 +328,10 @@ store = St.modify . first . const
 -- context to solve recursively by selecting a variant as our new focus and
 -- recurring.
 handleCtx :: (Ord d, Show d) => Ctx d S.SBool SNum -> IncVSMTSolve d S.SBool
-handleCtx (InOpN op (((ChcB d l r) SE.:<| rest), ctx)) =
+handleCtx (InOpN op ((c@(ChcB _ l r) SE.:<| rest), ctx)) = handleChcCtx goLeft goRight c
   -- when we see a choice as our focus we check if it is selected. If so then
   -- recur. If not then we select a variant and pass that on with the current
   -- context.
-  do (_, used) <- get
-     case M.lookup d used of
-       Just True  -> handleCtx goLeft
-       Just False -> handleCtx goRight
-       Nothing    -> do
-                        clearSt
-                        St.modify . second $ M.insert d True
-                        lift $! SC.push 1
-                        handleCtx goLeft >>= S.constrain
-                        lRes <- getResult
-                        lift $! SC.pop 1
-
-                        clearSt
-                        St.modify . second $ M.adjust (const False) d
-                        lift $! SC.push 1
-                        handleCtx goRight >>= S.constrain
-                        rRes <- getResult
-                        lift $! SC.pop 1
-
-                        store $ VChc (dimName d) lRes rRes
-                        St.modify . second $ M.delete d
-     -- this return statement should never matter because we've reset the
-     -- assertion stack. So I just return true here to fulfill the type
-                        return true
-
   where goLeft  = InOpN op (l SE.:<| rest, ctx)
         goRight = InOpN op (r SE.:<| rest, ctx)
 
@@ -327,31 +348,7 @@ handleCtx (InOpN op (fcs SE.:<| rest, ctx)) =
   where handler CAnd = (S.&&&)
         handler COr  = (S.|||)
 
-handleCtx (InNot (ChcB d l r)) =
-  do (_, used) <- get
-     case M.lookup d used of
-       Just True  -> vSMTSolve_ l
-       Just False -> vSMTSolve_ r
-       Nothing    -> do
-                        clearSt
-                        St.modify . second $ M.insert d True
-                        lift $! SC.push 1
-                        handleCtx goLeft >>= S.constrain
-                        lRes <- getResult
-                        lift $! SC.pop 1
-
-                        clearSt
-                        St.modify . second $ M.adjust (const False) d
-                        lift $! SC.push 1
-                        handleCtx goRight >>= S.constrain
-                        rRes <- getResult
-                        lift $! SC.pop 1
-
-                        store $ VChc (dimName d) lRes rRes
-                        St.modify . second $ M.delete d
-     -- this return statement should never matter because we've reset the
-     -- assertion stack. So I just return true here to fulfill the type
-                        return true
+handleCtx (InNot c@(ChcB _ l r)) = handleChcCtx goLeft goRight c
   where goLeft  = InNot l
         goRight = InNot r
 handleCtx (InNot notChc) = vSMTSolve_ notChc >>= return . S.bnot
@@ -362,59 +359,11 @@ vSMTSolve_ :: (Ord d, Show d) => VProp d S.SBool SNum -> IncVSMTSolve d S.SBool
 vSMTSolve_ !(RefB b) = return b
 vSMTSolve_ !(LitB b) = return $ S.literal b
 vSMTSolve_ !(OpB Not bs) = handleCtx (InNot bs)
-vSMTSolve_ !(OpBB op (ChcB d cl cr) r) =
-  do (_, used) <- get
-     case M.lookup d used of
-       Just True  -> vSMTSolve_ cl
-       Just False -> vSMTSolve_ cr
-       Nothing    -> do
-                        clearSt
-                        St.modify . second $ M.insert d True
-                        lift $! SC.push 1
-                        vSMTSolve_ goLeft >>= S.constrain
-                        lRes <- getResult
-                        lift $! SC.pop 1
-
-                        clearSt
-                        St.modify . second $ M.adjust (const False) d
-                        lift $! SC.push 1
-                        vSMTSolve_ goRight >>= S.constrain
-                        rRes <- getResult
-                        lift $! SC.pop 1
-
-                        store $ VChc (dimName d) lRes rRes
-                        St.modify . second $ M.delete d
-     -- this return statement should never matter because we've reset the
-     -- assertion stack. So I just return true here to fulfill the type
-                        return true
+vSMTSolve_ !(OpBB op c@(ChcB _ cl cr) r) = handleChcVSMT goLeft goRight c
   where goLeft  = OpBB op cl r
         goRight = OpBB op cr r
 
-vSMTSolve_ !(OpBB op l (ChcB d cl cr)) =
-  do (_, used) <- get
-     case M.lookup d used of
-       Just True  -> vSMTSolve_ cl
-       Just False -> vSMTSolve_ cr
-       Nothing    -> do
-                        clearSt
-                        St.modify . second $ M.insert d True
-                        lift $! SC.push 1
-                        vSMTSolve_ goLeft >>= S.constrain
-                        lRes <- getResult
-                        lift $! SC.pop 1
-
-                        clearSt
-                        St.modify . second $ M.adjust (const False) d
-                        lift $! SC.push 1
-                        vSMTSolve_ goRight >>= S.constrain
-                        rRes <- getResult
-                        lift $! SC.pop 1
-
-                        store $ VChc (dimName d) lRes rRes
-                        St.modify . second $ M.delete d
-     -- this return statement should never matter because we've reset the
-     -- assertion stack. So I just return true here to fulfill the type
-                        return true
+vSMTSolve_ !(OpBB op l c@(ChcB _ cl cr)) = handleChcVSMT goLeft goRight c
   where goLeft  = OpBB op l cl
         goRight = OpBB op l cr
 
