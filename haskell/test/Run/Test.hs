@@ -110,6 +110,7 @@ unitTests = testGroup "Unit Tests" [
   -- chc_singleton_is_sat
   -- chc_not_singleton_is_sat
   chc_unbalanced_is_sat
+  , chc_balanced_is_sat
   ]
 
 specTests :: TestTree
@@ -188,6 +189,10 @@ chc_not_singleton_is_sat = H.testCase
 chc_unbalanced_is_sat = H.testCase
                        "if a choice is unbalanced the return model is also unbalanced"
                        chc_unbalanced_unit
+
+chc_balanced_is_sat = H.testCase
+                      "un-nested choices return a model that is a balanced tree"
+                      chc_balanced_unit
 
 andDecomp_duplicate = H.testCase
   "And decomposition can solve props with repeat variables" $
@@ -351,3 +356,7 @@ chc_unbalanced_unit = unitGen prop "BF matches VSAT for a unbalanced choices of 
   where
     prop :: ReadableProp
     prop = bnot $ bChc "AA" (bChc "DD" (bRef "x") (bRef "y")) (bRef "z")
+
+chc_balanced_unit = unitGen prop "BF matches VSAT for balanced choices"
+  where prop :: ReadableProp
+        prop = bChc "AA" (bRef "x") (bRef "y") &&& bChc "DD" (bRef "a") (bRef "b")

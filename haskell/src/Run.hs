@@ -17,11 +17,11 @@ import           Prelude hiding (LT, GT, EQ)
 import Data.Foldable (foldr')
 import qualified Data.Sequence as SE
 
+import Debug.Trace (trace)
+
 import Control.Arrow                 (first, second)
 
 import Data.Maybe                    (fromJust, catMaybes)
-
-import Debug.Trace (trace)
 
 import VProp.Types
 import VProp.SBV
@@ -91,7 +91,7 @@ runVSMT = runEnv runVSMTSolve
 -- | Given a VProp a term generate the satisfiability map
 initSt :: Ord d => VProp d a a -> SatDict d
 initSt prop = sats
-  where sats = M.fromList . fmap (\x -> (x, False)) $ M.fromList <$> configs prop
+  where sats = M.fromList . fmap (\x -> (x, False)) $ M.fromList <$> choices prop
 
 -- | Some logging functions
 _logBaseline :: (Show a, MonadWriter [Char] m) => a -> m ()
@@ -283,14 +283,14 @@ handleCtx (InOpN op (ctx, ChcB d l r)) =
        Just True  -> handleCtx goLeft
        Just False -> handleCtx goRight
        Nothing    -> do
-                        -- clearSt
+                        clearSt
                         St.modify . second $ M.insert d True
                         lift $! SC.push 1
                         handleCtx goLeft >>= S.constrain
                         lRes <- getResult
                         lift $! SC.pop 1
 
-                        -- clearSt
+                        clearSt
                         St.modify . second $ M.adjust (const False) d
                         lift $! SC.push 1
                         handleCtx goRight >>= S.constrain
@@ -306,7 +306,7 @@ handleCtx (InOpN op (ctx, ChcB d l r)) =
   where goLeft  = InOpN op (ctx, l)
         goRight = InOpN op (ctx, r)
 
-handleCtx (InOpN _  (SE.Empty, fcs)) = trace "empty context" $ vSMTSolve_ fcs
+handleCtx (InOpN _  (SE.Empty, fcs)) = vSMTSolve_ fcs
 handleCtx (InOpN op (ctx, fcs)) = do
   fcs' <- vSMTSolve_ fcs
   let (newCtx SE.:> newFocus) = SE.viewr ctx
@@ -349,10 +349,7 @@ handleCtx (InNot notChc) = do b <- vSMTSolve_ notChc
 -- the dsl
 vSMTSolve_ :: Ord d => VProp d S.SBool SNum -> IncVSMTSolve d S.SBool
 vSMTSolve_ !(RefB b) = return b
-vSMTSolve_ !(LitB b) = trace "got a lit!!!!" $ return $ S.literal b
--- vSMTSolve_ !(OpB Not bs)= trace "got a not" $
---                           do b <- vSMTSolve_ bs
---                              return $ S.bnot b
+vSMTSolve_ !(LitB b) = return $ S.literal b
 vSMTSolve_ !(OpB Not bs) = handleCtx (InNot bs)
 vSMTSolve_ !(OpBB op l r) = do bl <- vSMTSolve_ l
                                br <- vSMTSolve_ r
@@ -378,7 +375,7 @@ vSMTSolve_ !(Opn And ps) = handleCtx  . InOpN CAnd $ (ctx, fcs)
   where (ctx SE.:> fcs) = SE.viewr ps
 vSMTSolve_ !(Opn Or ps) = handleCtx  . InOpN COr $ (ctx, fcs)
   where (ctx SE.:> fcs) = SE.viewr ps
-vSMTSolve_ x = trace "found a choice" $ handleCtx (InOpN CAnd (SE.empty, x))
+vSMTSolve_ x = handleCtx (InOpN CAnd (SE.empty, x))
 
 
 handleSBoolChc :: Ord d => V (Dim d) S.SBool -> IncVSMTSolve d S.SBool
