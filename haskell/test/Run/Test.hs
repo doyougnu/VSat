@@ -33,6 +33,8 @@ import qualified V as V
 --   (ProofError _ x)  == (ProofError _ y)  = x == y
 --   _                 == _                 = False
 instance Eq SMTResult where
+  -- this is purposefully a permission EQ instance because models may vary by
+  -- variable assignment
   (Unsatisfiable x) == (Unsatisfiable y) = True
   (Satisfiable _ x) == (Satisfiable _ y) = True
   (SatExtField _ x) == (SatExtField _ y) = True
@@ -107,10 +109,10 @@ unitTests = testGroup "Unit Tests" [
   -- , not_is_handled
   -- , singleton_is_sat
   -- , not_mult_is_handled
-  -- chc_singleton_is_sat
-  -- chc_not_singleton_is_sat
+  -- , chc_singleton_is_sat
+  -- , chc_not_singleton_is_sat
   chc_unbalanced_is_sat
-  , chc_balanced_is_sat
+  -- , chc_balanced_is_sat
   ]
 
 specTests :: TestTree
@@ -256,9 +258,11 @@ dim_homomorphism x = onlyInts x QC.==> QCM.monadicIO
 
        QCM.assert (length (dimensions x) == length (V.dimensions a))
 
-dim_homo_unit = do a <- sat prop
+dim_homo_unit = do a <- satWith emptyConf prop
                    let numDimsAfter = length $ V.dimensions a
                        numDimsBefore = length $ dimensions prop
+                   print prop
+                   print a
 
                    H.assertBool "" (numDimsBefore == numDimsAfter)
   where prop :: VProp Var Var Var
@@ -355,7 +359,7 @@ chc_singleton_not_unit = unitGen prop "BF matches VSAT for a negated singleton c
 chc_unbalanced_unit = unitGen prop "BF matches VSAT for a unbalanced choices of singletons"
   where
     prop :: ReadableProp
-    prop = bnot $ bChc "AA" (bChc "DD" (bRef "x") (bRef "y")) (bRef "z")
+    prop = bnot $ bnot $ bChc "AA" (bChc "DD" (bRef "x") (bRef "y")) (bRef "z")
 
 chc_balanced_unit = unitGen prop "BF matches VSAT for balanced choices"
   where prop :: ReadableProp

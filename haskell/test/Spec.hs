@@ -13,10 +13,7 @@ main = do
   defaultMain tests
   where tests = testGroup "All" [ -- jsonProperties
                                  R.unitTests
-                                , R.specTests
-                                , CAP.unitTests
+                                -- , R.specTests
+                                -- , CAP.unitTests
                                 , R.runProperties
-                                -- coreProperties
-                                -- ,
-                                -- , runProperties
                                 ]

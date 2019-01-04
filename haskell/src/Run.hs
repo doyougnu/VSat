@@ -269,7 +269,7 @@ clearSt = St.modify . first $ const (Plain Nothing)
 store :: V d (Maybe S.SMTResult) -> IncVSMTSolve d ()
 store = St.modify . first . const
 
-handleChc goLeft goRight defL defR (ChcB d l r) =
+handleChc goLeft goRight defL defR (ChcB d _ _) =
   do (_, used) <- get
      case M.lookup d used of
        Just True  -> defL
