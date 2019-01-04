@@ -46,10 +46,10 @@ type Env d a r = RWST (SMTConf d a a) Log (SatDict d) IO r -- ^ the monad stack
 -- If we do not have access then there is no way to perform a selection,
 -- manipulate the assertion stack and then continue evaluating.
 data Op = CAnd | COr
+-- data BBOp = Impl | Bimpl | Xor | Lt | Lte | Gt | Gte | Eqv
 
 data Ctx d a b = InOpN Op !(SE.Seq (VProp d a b), S.SBool)
                | InNot !(VProp d a b)
-               | InOpIB Op !(Ctx d a b, VProp d a b)
 
 -- | An empty reader monad environment, in the future read these from config file
 _emptySt :: SatDict d
@@ -281,7 +281,7 @@ store = St.modify . first . const
 -- the constrained in runVSMTsolve. If there is a choice then we employ the
 -- context to solve recursively by selecting a variant as our new focus and
 -- recurring.
-handleCtx :: Ord d => Ctx d S.SBool SNum -> IncVSMTSolve d S.SBool
+handleCtx :: (Ord d, Show d) => Ctx d S.SBool SNum -> IncVSMTSolve d S.SBool
 handleCtx (InOpN op (((ChcB d l r) SE.:<| rest), ctx)) =
   -- when we see a choice as our focus we check if it is selected. If so then
   -- recur. If not then we select a variant and pass that on with the current
@@ -328,7 +328,6 @@ handleCtx (InOpN op (fcs SE.:<| rest, ctx)) =
         handler COr  = (S.|||)
 
 handleCtx (InNot (ChcB d l r)) =
-
   do (_, used) <- get
      case M.lookup d used of
        Just True  -> vSMTSolve_ l
@@ -359,10 +358,66 @@ handleCtx (InNot notChc) = vSMTSolve_ notChc >>= return . S.bnot
 
 -- | The main solver algorithm. You can think of this as the sem function for
 -- the dsl
-vSMTSolve_ :: Ord d => VProp d S.SBool SNum -> IncVSMTSolve d S.SBool
+vSMTSolve_ :: (Ord d, Show d) => VProp d S.SBool SNum -> IncVSMTSolve d S.SBool
 vSMTSolve_ !(RefB b) = return b
 vSMTSolve_ !(LitB b) = return $ S.literal b
 vSMTSolve_ !(OpB Not bs) = handleCtx (InNot bs)
+vSMTSolve_ !(OpBB op (ChcB d cl cr) r) =
+  do (_, used) <- get
+     case M.lookup d used of
+       Just True  -> vSMTSolve_ cl
+       Just False -> vSMTSolve_ cr
+       Nothing    -> do
+                        clearSt
+                        St.modify . second $ M.insert d True
+                        lift $! SC.push 1
+                        vSMTSolve_ goLeft >>= S.constrain
+                        lRes <- getResult
+                        lift $! SC.pop 1
+
+                        clearSt
+                        St.modify . second $ M.adjust (const False) d
+                        lift $! SC.push 1
+                        vSMTSolve_ goRight >>= S.constrain
+                        rRes <- getResult
+                        lift $! SC.pop 1
+
+                        store $ VChc (dimName d) lRes rRes
+                        St.modify . second $ M.delete d
+     -- this return statement should never matter because we've reset the
+     -- assertion stack. So I just return true here to fulfill the type
+                        return true
+  where goLeft  = OpBB op cl r
+        goRight = OpBB op cr r
+
+vSMTSolve_ !(OpBB op l (ChcB d cl cr)) =
+  do (_, used) <- get
+     case M.lookup d used of
+       Just True  -> vSMTSolve_ cl
+       Just False -> vSMTSolve_ cr
+       Nothing    -> do
+                        clearSt
+                        St.modify . second $ M.insert d True
+                        lift $! SC.push 1
+                        vSMTSolve_ goLeft >>= S.constrain
+                        lRes <- getResult
+                        lift $! SC.pop 1
+
+                        clearSt
+                        St.modify . second $ M.adjust (const False) d
+                        lift $! SC.push 1
+                        vSMTSolve_ goRight >>= S.constrain
+                        rRes <- getResult
+                        lift $! SC.pop 1
+
+                        store $ VChc (dimName d) lRes rRes
+                        St.modify . second $ M.delete d
+     -- this return statement should never matter because we've reset the
+     -- assertion stack. So I just return true here to fulfill the type
+                        return true
+  where goLeft  = OpBB op l cl
+        goRight = OpBB op l cr
+
 vSMTSolve_ !(OpBB op l r) = do bl <- vSMTSolve_ l
                                br <- vSMTSolve_ r
                                let op' = handler op
