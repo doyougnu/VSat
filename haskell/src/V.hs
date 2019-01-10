@@ -93,6 +93,33 @@ instance (Num a) => Num (V d a) where
   signum = bimap id signum
   fromInteger = Plain . fromInteger
 
+-- | In case a custom equality is used
+eqWith :: (d -> d -> Bool) -> (a -> a -> Bool) -> V d a -> V d a -> Bool
+eqWith f g (VChc d l r) (VChc d' l' r') = f d d'
+                                          && eqWith f g l l'
+                                          && eqWith f g r r'
+eqWith _ g (Plain a) (Plain b) = g a b
+eqWith _ _ _         _         = False
+
+-- | Prune all the dead choices in a choice tree
+prune :: (Eq a, Eq d) => V d a -> V d a
+prune x@(VChc _ l r) | l == r    = r
+                     | otherwise = x
+prune x                          = x
+
+-- | merge two choice trees with two functions one for dimensions and one for
+-- leaves
+mergeWith :: (d -> d -> d) -> (a -> a -> b) -> V d a -> V d a -> V d b
+mergeWith _ g (Plain a) (Plain b) = Plain $ g a b
+mergeWith _ g (Plain a) (VChc d l r) = VChc d (g a <$> l) (g a <$> r)
+mergeWith _ g (VChc d l r) (Plain a) = VChc d
+                                       ((flip g a) <$> l)
+                                       ((flip g a) <$> r)
+mergeWith f g (VChc d l r) (VChc d' l' r') = VChc (f d d')
+                                             (mergeWith f g l l')
+                                             (mergeWith f g r r')
+
+
 -- | given a list of dimensions construct an empty tag tree
 fromList :: [d] -> V d (Maybe a)
 fromList []     = Plain Nothing
@@ -127,7 +154,7 @@ replaceNaively (conf, v) (VChc d l r) =
 
 -- | Given a list of configs with associated values, remake the tag tree by
 -- folding over the config list
-recompile :: Ord d => [(VConfig d, a)] -> Maybe (V d a)
+recompile :: (Ord d, Eq a) => [(VConfig d, a)] -> Maybe (V d a)
 recompile [] = Nothing
 recompile xs = Just $ vSum $ foldr replaceNaively res' ys
   where
@@ -141,11 +168,16 @@ isEmpty = foldr (\x acc -> check x && acc) True
   where check Nothing = True
         check _       = False
 
-vSum :: V d (Maybe a) -> V d a
+vSum :: (Eq a, Eq d) => V d (Maybe a) -> V d a
 vSum (Plain (Just a)) = Plain a
 vSum (VChc _ (Plain Nothing) r) = vSum r
 vSum (VChc _ l (Plain Nothing)) = vSum l
-vSum x@(VChc d l r) = VChc d (vSum l) (vSum r)
+vSum (VChc d l r)
+  -- if the choices doesn't matter then we dissolve it
+  |  l == r = vSum r
+  -- otherwise we recur
+  | otherwise = VChc d (vSum l) (vSum r)
+vSum (Plain Nothing) = error "Send the missiles I got to a nothing leaf node"
 
 -- Get the dimensions in a choice tree
 numDimensions :: V d a -> Integer

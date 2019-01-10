@@ -45,11 +45,11 @@ type Env d a r = RWST (SMTConf d a a) Log (SatDict d) IO r -- ^ the monad stack
 -- choice we have access to the rest of the proposition that we are evaluation.
 -- If we do not have access then there is no way to perform a selection,
 -- manipulate the assertion stack and then continue evaluating.
-data Op = CAnd | COr
+data Op = CAnd | COr deriving Show
 -- data BBOp = Impl | Bimpl | Xor | Lt | Lte | Gt | Gte | Eqv
 
 data Ctx d a b = InOpN Op !(SE.Seq (VProp d a b), S.SBool)
-               | InNot !(VProp d a b)
+               deriving Show
 
 -- | An empty reader monad environment, in the future read these from config file
 _emptySt :: SatDict d
@@ -161,6 +161,22 @@ type IncState d a = (V d (Maybe a), UsedDims (Dim d))
 -- we can pull out sbv models Hardcoding so that I don't have to write the mtl
 -- typeclass. I do not expect these to change much
 type IncVSMTSolve d a = St.StateT (IncState d S.SMTResult) SC.Query a
+
+-- | we need to define an Eq on SMTResult for recompiling. If we don't have this
+-- then during recompile in the BF routine we cannot erase dead choices
+instance Eq S.SMTResult where
+  x == y
+    | S.modelExists x && S.modelExists y = S.getModelDictionary x == S.getModelDictionary y
+    | otherwise = matchResults x y
+    where matchResults (S.Unsatisfiable _) (S.Unsatisfiable _) = True
+          matchResults (S.Satisfiable _ _) (S.Satisfiable _ _) = True
+          matchResults (S.SatExtField _ _) (S.SatExtField _ _) = True
+          matchResults (S.Unknown _ _)     (S.Unknown _ _)     = True
+          matchResults (S.ProofError _ _)  (S.ProofError _ _)  = True
+          matchResults _                   _                   = False
+
+instance Eq S.SatResult where (S.SatResult x) == (S.SatResult y) = x == y
+instance Eq S.ThmResult where (S.ThmResult x) == (S.ThmResult y) = x == y
 
 -- | Top level wrapper around engine and monad stack, this sets options for the
 -- underlying solver, inspects the results to see if they were variational or
@@ -280,6 +296,7 @@ handleChc goLeft goRight defL defR (ChcB d _ _) =
                         lift $! SC.push 1
                         goLeft >>= S.constrain
                         lRes <- getResult
+                        trace ("DDDDDDDDDDDd" ++ show ((fmap S.SatResult) <$> lRes)) $ return ()
                         lift $! SC.pop 1
 
                         clearSt
@@ -328,7 +345,8 @@ handleChcVSMT goLeft goRight c@(ChcB _ l r) =
 -- context to solve recursively by selecting a variant as our new focus and
 -- recurring.
 handleCtx :: (Ord d, Show d) => Ctx d S.SBool SNum -> IncVSMTSolve d S.SBool
-handleCtx (InOpN op ((c@(ChcB _ l r) SE.:<| rest), ctx)) = handleChcCtx goLeft goRight c
+handleCtx (InOpN op ((c@(ChcB _ l r) SE.:<| rest), ctx)) =
+  handleChcCtx goLeft goRight c
   -- when we see a choice as our focus we check if it is selected. If so then
   -- recur. If not then we select a variant and pass that on with the current
   -- context.
@@ -348,20 +366,16 @@ handleCtx (InOpN op (fcs SE.:<| rest, ctx)) =
   where handler CAnd = (S.&&&)
         handler COr  = (S.|||)
 
-handleCtx (InNot c@(ChcB _ l r)) =
-  handleChc
-  (handleCtx goLeft >>= return . S.bnot) (handleCtx goRight >>= return . S.bnot)
-  (handleCtx goLeft) (handleCtx goRight) c
-  where goLeft  = InNot l
-        goRight = InNot r
-handleCtx (InNot notChc) = vSMTSolve_ notChc >>= return . S.bnot
-
 -- | The main solver algorithm. You can think of this as the sem function for
 -- the dsl
 vSMTSolve_ :: (Ord d, Show d) => VProp d S.SBool SNum -> IncVSMTSolve d S.SBool
 vSMTSolve_ !(RefB b) = return b
 vSMTSolve_ !(LitB b) = return $ S.literal b
-vSMTSolve_ !(OpB Not bs) = handleCtx (InNot bs)
+vSMTSolve_ !(OpB Not c@(ChcB _ l r)) = handleChcVSMT goLeft goRight c
+  where goLeft = OpB Not l
+        goRight = OpB Not r
+vSMTSolve_ (OpB Not (OpB Not notchc)) = vSMTSolve_ notchc
+vSMTSolve_ (OpB Not notchc) = S.bnot <$> vSMTSolve_ notchc
 vSMTSolve_ !(OpBB op c@(ChcB _ cl cr) r) = handleChcVSMT goLeft goRight c
   where goLeft  = OpBB op cl r
         goRight = OpBB op cr r
