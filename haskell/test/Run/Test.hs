@@ -10,11 +10,14 @@ import Data.SBV ( SatResult(..)
                 , ThmResult(..)
                 , SMTConfig(..)
                 , SMTSolver(..)
-                , Solver(..))
+                , Solver(..)
+                , Modelable(..))
 import Data.SBV.Internals (showModel, SMTModel(..))
 import Control.Monad.Trans (liftIO)
 import Data.Monoid (Sum)
 import System.IO.Unsafe (unsafePerformIO)
+import Control.Monad (liftM2, liftM)
+import Data.Maybe (maybe, isJust)
 
 import VProp.Types
 import VProp.Core
@@ -25,62 +28,38 @@ import Run
 import Api
 import qualified V as V
 
--- instance Eq SMTResult where
---   (Unsatisfiable x) == (Unsatisfiable y) = x == y
---   (Satisfiable _ x) == (Satisfiable _ y) = x == y
---   (SatExtField _ x) == (SatExtField _ y) = x == y
---   (Unknown _ x)     == (Unknown _ y)     = x == y
---   (ProofError _ x)  == (ProofError _ y)  = x == y
---   _                 == _                 = False
-instance Eq SMTResult where
-  -- this is purposefully a permission EQ instance because models may vary by
-  -- variable assignment
-  (Unsatisfiable x) == (Unsatisfiable y) = True
-  (Satisfiable _ x) == (Satisfiable _ y) = True
-  (SatExtField _ x) == (SatExtField _ y) = True
-  -- (Unknown _ x)     == (Unknown _ y)     = x == y
-  -- (ProofError _ x)  == (ProofError _ y)  = x == y
-  _                 == _                 = False
+import Debug.Trace (trace)
 
-instance Eq Solver where
-  Z3        == Z3        = True
-  Yices     == Yices     = True
-  Boolector == Boolector = True
-  CVC4      == CVC4      = True
-  MathSAT   == MathSAT   = True
-  ABC       == ABC       = True
-  _         == _         = False
+class TestEq a where
+  (|==|) :: a -> a -> Bool
 
-instance Eq SMTModel where
-  m == n = (modelAssocs m) == (modelAssocs n)
+instance Show SMTResult where show x = show $ SatResult x
 
-instance Eq SMTConfig where
-  (SMTConfig
-   {verbose             = a
-   ,timing              = _
-   ,printBase           = c
-   ,printRealPrec       = d
-   ,satCmd              = e
-   ,allSatMaxModelCount = f
-   ,isNonModelVar       = _
-   ,transcript          = h
-   ,smtLibVersion       = _
-   ,solver              = j
-   ,roundingMode        = _
-   ,solverSetOptions    = _
-   ,ignoreExitCode      = _
-   ,redirectVerbose     = n
-   }) == (SMTConfig{..}) = a == verbose &&
-                           c == printBase &&
-                           d == printRealPrec &&
-                           e == satCmd &&
-                           (==) f allSatMaxModelCount &&
-                           (==) h transcript &&
-                           (name j) == (name solver) &&
-                           (==) n redirectVerbose
+instance Eq d => TestEq (V.V d (Maybe SMTResult)) where
+  (|==|) = V.eqWith (==) (\x y -> maybe False id $ fb x y)
+    where
+      fb :: Maybe SMTResult -> Maybe SMTResult -> Maybe Bool
+      fb = liftM2 (||==||)
 
-instance Eq SatResult where (SatResult x) == (SatResult y) = x == y
-instance Eq ThmResult where (ThmResult x) == (ThmResult y) = x == y
+instance TestEq (V.V Var (Maybe SatResult)) where
+  (|==|) l r = ((fmap unSat) <$> l) |==| ((fmap unSat) <$> r)
+    where unSat (SatResult a) = a
+
+instance TestEq (V.V Var (Maybe ThmResult)) where
+  (|==|) l r = ((fmap unSat) <$> l) |==| ((fmap unSat) <$> r)
+    where unSat (ThmResult a) = a
+
+
+-- | custom equality operator for SMTResults, for testing we just care that the
+-- overall result e.g. sat, unsat matches, NOT that the actual model is the same
+-- because there may be several valid models
+(||==||) :: SMTResult -> SMTResult -> Bool
+(||==||) (Unsatisfiable _) (Unsatisfiable _) = True
+(||==||) (Satisfiable _ _) (Satisfiable _ _) = True
+(||==||) (SatExtField _ _) (SatExtField _ _) = True
+(||==||) (Unknown _ _)     (Unknown _ _)     = True
+(||==||) (ProofError _ _)  (ProofError _ _)  = True
+(||==||) _                 _                 = False
 
 runProperties :: TestTree
 runProperties = testGroup "Run Properties" [
@@ -98,8 +77,9 @@ runProperties = testGroup "Run Properties" [
                                            ]
 
 unitTests :: TestTree
-unitTests = testGroup "Unit Tests" [
-  -- sat_error
+unitTests = testGroup "Unit Tests"
+  [
+  --   sat_error
   -- , sat_error2
   -- , sat_error4
   -- , andDecomp_duplicate
@@ -111,8 +91,11 @@ unitTests = testGroup "Unit Tests" [
   -- , not_mult_is_handled
   -- , chc_singleton_is_sat
   -- , chc_not_singleton_is_sat
-  chc_unbalanced_is_sat
+  -- , chc_unbalanced_is_sat
   -- , chc_balanced_is_sat
+  -- chc_2_nested_is_sat
+    bimpl_w_false_is_sat
+    , bimpl_w_false_chc_is_sat
   ]
 
 specTests :: TestTree
@@ -196,6 +179,19 @@ chc_balanced_is_sat = H.testCase
                       "un-nested choices return a model that is a balanced tree"
                       chc_balanced_unit
 
+chc_2_nested_is_sat = H.testCase
+                      "nested choices return a model that is a balanced tree"
+                      chc_2_nested_unit
+
+
+bimpl_w_false_is_sat = H.testCase
+                          "A bimplication with a False is always unsat"
+                          bimpl_w_false_is_sat_unit
+
+bimpl_w_false_chc_is_sat = H.testCase
+                           "A bimplication with a False and a choice is always unsat"
+                           bimpl_w_false_chc_is_sat_unit
+
 andDecomp_duplicate = H.testCase
   "And decomposition can solve props with repeat variables" $
   do a <- ad id prop
@@ -234,7 +230,7 @@ vsat_matches_BF' x =  onlyBools x QC.==> QCM.monadicIO
        b <- QCM.run . (satWith emptyConf) $ x
        liftIO . putStrLn $ "[BF]:   \n" ++ show a
        liftIO . putStrLn $ "[VSAT]: \n" ++ show b
-       QCM.assert (a == b)
+       QCM.assert (a |==| b)
 
 vsat_matches_BF_plain' x =
   (onlyBools x && isPlain x) QC.==> QCM.monadicIO
@@ -242,7 +238,7 @@ vsat_matches_BF_plain' x =
        b <- QCM.run . (satWith emptyConf) $ x
        liftIO . putStrLn $ "[BF]:   \n" ++ show a
        liftIO . putStrLn $ "[VSAT]: \n" ++ show b
-       QCM.assert (a == b)
+       QCM.assert (a |==| b)
 
 ad_terminates x = onlyInts x QC.==> QCM.monadicIO
   $ do -- liftIO $ print $ "prop: " ++ show (x :: VProp Var Var)
@@ -320,10 +316,10 @@ unitGen prop str = do a <- satWith emptyConf prop
                       b <- bfWith emptyConf prop
                       putStrLn "\n\n--------------"
                       putStrLn $ show prop
-                      putStrLn $ show b
-                      putStrLn $ show a
+                      putStrLn $ show (V.prune b)
+                      putStrLn $ show (V.prune a)
                       putStrLn "--------------\n\n"
-                      H.assertBool str (a == b)
+                      H.assertBool str ((V.prune a) |==| (V.prune b))
 
 not_unit = do a <- satWith emptyConf prop
               b <- bfWith emptyConf prop
@@ -337,24 +333,26 @@ not_mult_unit = do a <- satWith emptyConf prop
                    putStrLn $ show prop
                    putStrLn $ show a
                    putStrLn $ show b
-                   H.assertBool "Brute Force matches VSAT for multiple negations" (a == b)
+                   H.assertBool "Brute Force matches VSAT for multiple negations" (a |==| b)
   where prop :: VProp Var Var Var
         prop = bnot . bnot . bnot . bRef $ "x"
 
 singleton_unit = do a <- satWith emptyConf prop
                     b <- bfWith emptyConf prop
                     putStrLn $ show prop
-                    H.assertBool "Brute Force matches VSAT for simple negations" (a == b)
+                    H.assertBool "Brute Force matches VSAT for simple negations" (a |==| b)
   where prop :: VProp Var Var Var
         prop = bRef $ "x"
 
 chc_singleton_unit = unitGen prop "BF matches VSAT for a singleton choice of singletons"
-  where prop = bChc "AA" (bRef "x") (bRef "y")
+  where
+    prop :: ReadableProp
+    prop = bChc "AA" (bRef "x") (bRef "y")
 
 chc_singleton_not_unit = unitGen prop "BF matches VSAT for a negated singleton choice of singletons"
   where
     prop :: ReadableProp
-    prop = bnot $ bChc "AA" false false
+    prop =  bnot $ bChc "AA" false true
 
 chc_unbalanced_unit = unitGen prop "BF matches VSAT for a unbalanced choices of singletons"
   where
@@ -364,3 +362,19 @@ chc_unbalanced_unit = unitGen prop "BF matches VSAT for a unbalanced choices of 
 chc_balanced_unit = unitGen prop "BF matches VSAT for balanced choices"
   where prop :: ReadableProp
         prop = bChc "AA" (bRef "x") (bRef "y") &&& bChc "DD" (bRef "a") (bRef "b")
+
+chc_2_nested_unit = unitGen prop "BF matches VSAT for 2 nested choices"
+  where prop :: ReadableProp
+        prop = bChc "AA"
+          (bChc "BB" (bRef "x") (bRef "z"))
+          (bChc "DD" false true)
+
+bimpl_w_false_is_sat_unit = unitGen prop "BF matches VSAT for equivalency that is always unsat"
+  where prop :: ReadableProp
+        prop = (true ||| (bChc "AA" (bRef "a") (bRef "b"))) <=>  false
+
+-- | notice this fails because SBV adds extra unused variables into the model where BF doesn't
+-- | TODO fix it by migrating away from SBV
+bimpl_w_false_chc_is_sat_unit = unitGen prop "BF matches VSAT for equivalency that is always unsat with a choice"
+  where prop :: ReadableProp
+        prop = false <=> (bChc "AA" (bRef "a") (bRef "b"))
