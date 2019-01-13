@@ -15,6 +15,7 @@ import qualified Data.SBV            as S
 import qualified Data.SBV.Control    as SC
 import           Prelude hiding (LT, GT, EQ)
 import Data.Foldable (foldr')
+import Data.Text (Text)
 import qualified Data.Sequence as SE
 
 import Debug.Trace (trace)
@@ -36,7 +37,7 @@ import Config
 type SatDict a = M.Map (Config a) Bool
 
 -- | Type convenience for Log
-type Log = String
+type Log = Text
 
 -- | Takes a dimension d, a type for values a, and a result r
 type Env d a r = RWST (SMTConf d a a) Log (SatDict d) IO r -- ^ the monad stack
@@ -45,11 +46,34 @@ type Env d a r = RWST (SMTConf d a a) Log (SatDict d) IO r -- ^ the monad stack
 -- choice we have access to the rest of the proposition that we are evaluation.
 -- If we do not have access then there is no way to perform a selection,
 -- manipulate the assertion stack and then continue evaluating.
-data Op = CAnd | COr deriving Show
--- data BBOp = Impl | Bimpl | Xor | Lt | Lte | Gt | Gte | Eqv
+-- data Op = CAnd | COr deriving Show
 
-data Ctx d a b = InOpN Op !(SE.Seq (VProp d a b), S.SBool)
+-- type OpNCtx d a b = Opn (SE.Seq (VProp d a b), S.SBool)
+
+-- data BBCtx d a b =
+--   -- ^ in a left branch of a tree we have a focus, a context that
+--   -- represents the parent of the focus and a right branch of a
+--   -- tree
+
+--   -- ^ in a right branch of a tree we have a focus, a left branch
+--   -- and a context for the parent
+--   deriving Show
+
+-- | A Ctx is a zipper over the VProp data type. This is used in the vsmtsolve
+-- routine to maintain a context when a choice is observed. This way we always
+-- have a reference to the rest of the formula we are solving during a
+-- variational solve. Its a sum type over the zipper for n-ary operators like
+-- And and Or, or its a zipper over binary operators like ==> <=>. For binary
+-- operators we keep a prop that is the focus and a context which represents the
+-- parent and adjacent child
+data Ctx d a b = N Opn S.SBool (SE.Seq (VProp d a b)) (Ctx d a b)
+               | InBBL BB_B (Ctx d a b) (VProp d a b)
+               | InBBR BB_B (VProp d a b) (Ctx d a b)
+               | Empty
                deriving Show
+
+
+type Loc d a b = (VProp d a b, Ctx d a b)
 
 -- | An empty reader monad environment, in the future read these from config file
 _emptySt :: SatDict d
@@ -113,8 +137,8 @@ runBruteForce prop = lift $ flip evalStateT (initSt prop) $
   do
   _confs <- get
   let confs = M.keys _confs
-      plainProps = (\y -> sequence $! (y, selectVariant y prop)) <$> confs
-  plainMs <- lift $ mapM (bitraverse pure (fmap unsat . S.sat . symbolicPropExpr)) $! catMaybes plainProps
+      plainProps = (\y -> sequence $ (y, selectVariant y prop)) <$> confs
+  plainMs <- lift $ mapM (bitraverse pure (fmap unsat . S.sat . symbolicPropExpr)) $ catMaybes plainProps
   return . Result . bimap dimName Just .  fromJust $ recompile plainMs
   where unsat (S.SatResult smtModel) = smtModel
 
@@ -233,7 +257,7 @@ mkSmt f g str = do (_,st) <- get
 
 
 -- | convert every reference to a boolean, keeping track of what you've seen
--- before
+-- before, can't use mkStatement here because its a special case
 smtBool :: (Show a, Ord a) => a -> IncPack a S.SBool
 smtBool str = do (st,_) <- get
                  case str `M.lookup` st of
@@ -296,7 +320,6 @@ handleChc goLeft goRight defL defR (ChcB d _ _) =
                         lift $! SC.push 1
                         goLeft >>= S.constrain
                         lRes <- getResult
-                        trace ("DDDDDDDDDDDd" ++ show ((fmap S.SatResult) <$> lRes)) $ return ()
                         lift $! SC.pop 1
 
                         clearSt
@@ -314,8 +337,8 @@ handleChc goLeft goRight defL defR (ChcB d _ _) =
 
 -- | Abstracts out the choice handling for use in handling contexts.
 handleChcCtx :: (Show d, Ord d) =>
-  Ctx d S.SBool SNum ->
-  Ctx d S.SBool SNum ->
+  Loc d S.SBool SNum ->
+  Loc d S.SBool SNum ->
   VProp d b c -> IncVSMTSolve d S.SBool
 handleChcCtx goLeft goRight c = handleChc
   (handleCtx goLeft) (handleCtx goRight)
@@ -344,27 +367,76 @@ handleChcVSMT goLeft goRight c@(ChcB _ l r) =
 -- the constrained in runVSMTsolve. If there is a choice then we employ the
 -- context to solve recursively by selecting a variant as our new focus and
 -- recurring.
-handleCtx :: (Ord d, Show d) => Ctx d S.SBool SNum -> IncVSMTSolve d S.SBool
-handleCtx (InOpN op ((c@(ChcB _ l r) SE.:<| rest), ctx)) =
+handleCtx :: (Ord d, Show d) => Loc d S.SBool SNum -> IncVSMTSolve d S.SBool
+handleCtx (p, Empty) = vSMTSolve_ p
+handleCtx (c@(ChcB _ l r), N op acc rest ctx) =
   handleChcCtx goLeft goRight c
   -- when we see a choice as our focus we check if it is selected. If so then
   -- recur. If not then we select a variant and pass that on with the current
   -- context.
-  where goLeft  = InOpN op (l SE.:<| rest, ctx)
-        goRight = InOpN op (r SE.:<| rest, ctx)
+  where goLeft  = (l, N op acc rest ctx)
+        goRight = (r, N op acc rest ctx)
 
-handleCtx (InOpN _  (SE.Empty, fcs)) = return fcs
+handleCtx (fcs, N op acc SE.Empty Empty) =
+  vSMTSolve_ fcs >>= return . (handler op) acc
+  where handler And = (S.&&&)
+        handler Or  = (S.|||)
+
+handleCtx (fcs, N op acc SE.Empty ctx) =
+  handleCtx (fcs, ctx)
+  where handler And = (S.&&&)
+        handler Or  = (S.|||)
   -- when we have reached the end of the sequence we simple return the
   -- accumulated SBool. Yes this is some funky fold
-handleCtx (InOpN op (fcs SE.:<| rest, ctx)) =
+handleCtx (fcs, N op acc (nfcs SE.:<| rest) ctx) =
   -- when we do not see a choice we peel off the focus and convert it to a SBool
   -- with vSMTsolve and then accumulate it appropriately with the operator
   -- this is the engine of the algorithm, its the point that makes progress
   do
   fcs' <- vSMTSolve_ fcs
-  handleCtx $ InOpN op (rest, (handler op) fcs' ctx)
-  where handler CAnd = (S.&&&)
-        handler COr  = (S.|||)
+  let newAcc = (handler op) fcs' acc
+  handleCtx (nfcs, N op newAcc rest ctx)
+  -- handleCtx (nfcs, (N op newAcc rest ctx)) >>= return . ((handler op) fcs')
+  where handler And = (S.&&&)
+        handler Or  = (S.|||)
+
+handleCtx (c@(ChcB d l r), (InBBL op ctx rbranch))=
+  handleChcCtx goLeft goRight c
+
+  where goLeft  = (l, InBBL op ctx rbranch)
+        goRight = (r, InBBL op ctx rbranch)
+handleCtx (Opn And (p SE.:<| ps), InBBL op Empty rbranch) =
+  do
+    ls <- handleCtx (p, N And true ps Empty)
+    rbranch' <- vSMTSolve_ rbranch
+    return $ (handler op) ls rbranch'
+  where handler Impl   = (==>)
+        handler BiImpl = (<=>)
+        handler XOr    = (<+>)
+
+handleCtx (Opn Or (p SE.:<| ps), InBBL op Empty rbranch) =
+  do
+    handleCtx (p, N Or false ps (InBBL op Empty rbranch))
+  where handler Impl   = (==>)
+        handler BiImpl = (<=>)
+        handler XOr    = (<+>)
+handleCtx (fcs, InBBL op Empty rchild) =
+  do
+    fcs' <- vSMTSolve_ fcs
+    rchild' <- vSMTSolve_ rchild
+    return $ (handler op) rchild' fcs'
+  where handler Impl   = (==>)
+        handler BiImpl = (<=>)
+        handler XOr    = (<+>)
+-- handleCtx (B InBBL op c@(ChcB d l r) ctx rbranch) = handleChcCtx goLeft goRight c
+--   where handler Impl   = (==>)
+--         handler BiImpl = (<=>)
+--         handler XOr    = (<+>)
+
+--         goLeft = InBBL op l ctx rbranch
+--         goRight = InBBL op r ctx rbranch
+-- handleCtx (InBBL op Empty rbranch) = vSMTSolve_ $ OpBB op rbranch
+-- handleCtx (InBBL op ctx rbranch) = vSMTSolve_ $ OpBB op fcs rbranch
 
 -- | The main solver algorithm. You can think of this as the sem function for
 -- the dsl
@@ -376,21 +448,20 @@ vSMTSolve_ !(OpB Not c@(ChcB _ l r)) = handleChcVSMT goLeft goRight c
         goRight = OpB Not r
 vSMTSolve_ (OpB Not (OpB Not notchc)) = vSMTSolve_ notchc
 vSMTSolve_ (OpB Not notchc) = S.bnot <$> vSMTSolve_ notchc
-vSMTSolve_ !(OpBB op c@(ChcB _ cl cr) r) = handleChcVSMT goLeft goRight c
-  where goLeft  = OpBB op cl r
-        goRight = OpBB op cr r
-
-vSMTSolve_ !(OpBB op l c@(ChcB _ cl cr)) = handleChcVSMT goLeft goRight c
-  where goLeft  = OpBB op l cl
-        goRight = OpBB op l cr
-
-vSMTSolve_ !(OpBB op l r) = do bl <- vSMTSolve_ l
-                               br <- vSMTSolve_ r
-                               let op' = handler op
-                               return $ bl `op'` br
-  where handler Impl   = (==>)
-        handler BiImpl = (<=>)
-        handler XOr    = (<+>)
+-- vSMTSolve_ !(OpBB op c@(ChcB _ cl cr) r) = handleChcVSMT goLeft goRight c
+--   where goLeft = OpBB op cl r
+--         goRight = OpBB op cr r
+-- vSMTSolve_ !(OpBB op l c@(ChcB _ cl cr)) = handleChcVSMT goLeft goRight c
+--   where goLeft = OpBB op l cl
+--         goRight = OpBB op l cr
+vSMTSolve_ (OpBB op l r) = handleCtx $ (l, InBBL op Empty r)
+-- vSMTSolve_ a@(OpBB op l r) = do bl <- vSMTSolve_ l
+--                                 br <- vSMTSolve_ r
+--                                 let op' = handler op
+--                                 return $ bl `op'` br
+--   where handler Impl   = (==>)
+--         handler BiImpl = (<=>)
+--         handler XOr    = (<+>)
 vSMTSolve_ !(OpIB op l r) = do l' <- vSMTSolve'_ l
                                r' <- vSMTSolve'_ r
                                _ <- reifyArithChcs l' r' (handler op)
@@ -404,9 +475,9 @@ vSMTSolve_ !(OpIB op l r) = do l' <- vSMTSolve'_ l
         handler EQ  = (.==)
         handler NEQ = (./=)
 
-vSMTSolve_ !(Opn And ps) = handleCtx . InOpN CAnd $ (ps, true)
-vSMTSolve_ !(Opn Or ps)  = handleCtx . InOpN COr $ (ps, false)
-vSMTSolve_ x = handleCtx (InOpN CAnd (SE.singleton x, true))
+vSMTSolve_ !(Opn And (p SE.:<| ps)) = handleCtx $ (p, N And true ps Empty)
+vSMTSolve_ !(Opn Or (p SE.:<| ps))  = handleCtx $ (p, N Or false  ps Empty)
+vSMTSolve_ x = handleCtx (x, N And true SE.Empty Empty)
 
 
 handleSBoolChc :: Ord d => V (Dim d) S.SBool -> IncVSMTSolve d S.SBool

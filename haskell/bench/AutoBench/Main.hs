@@ -4,7 +4,7 @@ import           Data.Bifunctor          (bimap)
 import qualified Data.ByteString         as BS (readFile)
 import           Data.Either             (lefts, rights)
 import           Data.Map.Internal.Debug (showTree)
-import           Data.Text               (unpack)
+import           Data.Text               (unpack, pack)
 import           System.IO
 import           Text.Megaparsec         (parse)
 
@@ -43,22 +43,24 @@ main = do
       ps' = parse langParser "" <$> cs
       ps = rights ps'
       bs = lefts ps'
-      prop = (bimap unpack unpack . naiveEncode . nestChoices . flatten . autoToVSat) <$> ps
+      prop = (naiveEncode . nestChoices . flatten . autoToVSat) <$> ps
   -- print $ take 1 cs
   putStrLn "\n\n ----------------- \n\n"
 
   -- print (conjoin' prop)
   -- print $ take 5 $ autoToVSat <$> ps
 
-  (bfTime, res) <- time $ runBF emptyConf $ conjoin' prop
-  (satTime, res') <- time $ satWith emptyConf $ conjoin' prop
-  (adTime, res'') <- time $ runAD emptyConf $ conjoin' prop
-  print $ (show bfTime) ++ " : " ++ (show satTime) ++ " : " ++ (show adTime)
+  (bfTime, res) <- time $ bfWith emptyConf $ conjoin' $ take 24 $ prop
+  -- (satTime, res') <- time $ satWith emptyConf $ conjoin' prop
+  -- (adTime, res'') <- time $ adWith emptyConf id $ conjoin' prop
+  putStrLn ("Brute Force Time [s]: " ++ show bfTime ++ "\n")
+  -- putStrLn ("VSAT Time        [s]: " ++ show satTime ++ "\n")
+  -- putStrLn ("And Decomp Time  [s]: " ++ show adTime ++ "\n")
   -- writeFile "rights" (show $ prop)
   -- writeFile "lefts" (foldMap show bs)
   writeFile "testoutputBF" (show res)
-  writeFile "testoutputSAT" (show res')
-  writeFile "testoutputAD" (show res'')
+  -- writeFile "testoutputSAT" (show res')
+  -- writeFile "testoutputAD" (show res'')
   -- print $ VProp.Core.dimensions $ flatten prop
   -- print res
   -- return res
