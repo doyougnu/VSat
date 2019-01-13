@@ -91,11 +91,11 @@ unitTests = testGroup "Unit Tests"
   -- , not_mult_is_handled
   -- , chc_singleton_is_sat
   -- , chc_not_singleton_is_sat
-  -- , chc_unbalanced_is_sat
+  -- chc_unbalanced_is_sat
   -- , chc_balanced_is_sat
   -- chc_2_nested_is_sat
-    bimpl_w_false_is_sat
-    , bimpl_w_false_chc_is_sat
+   bimpl_w_false_is_sat
+    -- , bimpl_w_false_chc_is_sat
   ]
 
 specTests :: TestTree
@@ -316,8 +316,8 @@ unitGen prop str = do a <- satWith emptyConf prop
                       b <- bfWith emptyConf prop
                       putStrLn "\n\n--------------"
                       putStrLn $ show prop
-                      putStrLn $ show (V.prune b)
-                      putStrLn $ show (V.prune a)
+                      putStrLn $ show ( b)
+                      putStrLn $ show ( a)
                       putStrLn "--------------\n\n"
                       H.assertBool str ((V.prune a) |==| (V.prune b))
 
@@ -371,7 +371,9 @@ chc_2_nested_unit = unitGen prop "BF matches VSAT for 2 nested choices"
 
 bimpl_w_false_is_sat_unit = unitGen prop "BF matches VSAT for equivalency that is always unsat"
   where prop :: ReadableProp
-        prop = (true ||| (bChc "AA" (bRef "a") (bRef "b"))) <=>  false
+        prop = ((bChc "AA" (bRef "a") (bRef "b")) ||| true) <=> false
+        -- prop = (true ||| (bChc "AA" (bRef "a") (bRef "b"))) <=> false
+        -- prop = (true <=> (bRef "a"))
 
 -- | notice this fails because SBV adds extra unused variables into the model where BF doesn't
 -- | TODO fix it by migrating away from SBV
