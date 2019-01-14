@@ -22,7 +22,7 @@ import Debug.Trace (trace)
 
 import Control.Arrow                 (first, second)
 
-import Data.Maybe                    (fromJust, catMaybes)
+import Data.Maybe                    (fromJust, catMaybes, isNothing)
 
 import VProp.Types
 import VProp.SBV
@@ -67,11 +67,10 @@ type Env d a r = RWST (SMTConf d a a) Log (SatDict d) IO r -- ^ the monad stack
 -- operators we keep a prop that is the focus and a context which represents the
 -- parent and adjacent child
 data Ctx d a b = N Opn S.SBool (SE.Seq (VProp d a b)) (Ctx d a b)
-               | InBBL BB_B (Ctx d a b) (VProp d a b)
-               | InBBR BB_B (VProp d a b) (Ctx d a b)
+               | InBBL BB_B (Maybe S.SBool) (Ctx d a b) (Maybe (VProp d a b))
+               | InBBR BB_B (Maybe S.SBool) (Maybe (VProp d a b)) (Ctx d a b)
                | Empty
                deriving Show
-
 
 type Loc d a b = (VProp d a b, Ctx d a b)
 
@@ -369,6 +368,20 @@ handleChcVSMT goLeft goRight c@(ChcB _ l r) =
 -- recurring.
 handleCtx :: (Ord d, Show d) => Loc d S.SBool SNum -> IncVSMTSolve d S.SBool
 handleCtx (p, Empty) = vSMTSolve_ p
+
+
+handleCtx (fcs, InBBL op (Just acc) Empty Nothing) =
+    flip (handler op) acc <$> vSMTSolve_ fcs
+  where handler Impl   = (==>)
+        handler BiImpl = (<=>)
+        handler XOr    = (<+>)
+handleCtx (fcs, InBBR op (Just acc) Nothing Empty) =
+  (handler op) acc <$> vSMTSolve_ fcs
+  where handler Impl   = (==>)
+        handler BiImpl = (<=>)
+        handler XOr    = (<+>)
+
+
 handleCtx (c@(ChcB _ l r), N op acc rest ctx) =
   handleChcCtx goLeft goRight c
   -- when we see a choice as our focus we check if it is selected. If so then
@@ -382,10 +395,35 @@ handleCtx (fcs, N op acc SE.Empty Empty) =
   where handler And = (S.&&&)
         handler Or  = (S.|||)
 
-handleCtx (fcs, N op acc SE.Empty ctx) =
-  handleCtx (fcs, ctx)
+handleCtx (fcs, N op acc SE.Empty (InBBL op' acc' ctx (Just rbranch))) =
+  do
+    fcs' <- vSMTSolve_ fcs
+    let newAcc = if isNothing acc'
+                 then Just $ (handler op) fcs' acc
+                 else (handler' op') ((handler op) fcs' acc) <$> acc'
+    trace (show  newAcc ++ "\n") $ return ()
+    handleCtx (rbranch, InBBR op' newAcc Nothing ctx)
   where handler And = (S.&&&)
         handler Or  = (S.|||)
+
+        handler' Impl   = (==>)
+        handler' BiImpl = (<=>)
+        handler' XOr    = (<+>)
+
+handleCtx (fcs, N op acc SE.Empty (InBBR op' acc' (Just lbranch) ctx)) =
+  do
+    fcs' <- vSMTSolve_ fcs
+    let newAcc = if isNothing acc'
+                 then Just $ (handler op) fcs' acc
+                 else (handler' op') ((handler op) fcs' acc) <$> acc'
+    handleCtx (lbranch, InBBL op' newAcc ctx Nothing)
+  where handler And = (S.&&&)
+        handler Or  = (S.|||)
+
+        handler' Impl   = (==>)
+        handler' BiImpl = (<=>)
+        handler' XOr    = (<+>)
+
   -- when we have reached the end of the sequence we simple return the
   -- accumulated SBool. Yes this is some funky fold
 handleCtx (fcs, N op acc (nfcs SE.:<| rest) ctx) =
@@ -394,49 +432,63 @@ handleCtx (fcs, N op acc (nfcs SE.:<| rest) ctx) =
   -- this is the engine of the algorithm, its the point that makes progress
   do
   fcs' <- vSMTSolve_ fcs
+  trace (show "YES\n") $ return ()
   let newAcc = (handler op) fcs' acc
   handleCtx (nfcs, N op newAcc rest ctx)
   -- handleCtx (nfcs, (N op newAcc rest ctx)) >>= return . ((handler op) fcs')
   where handler And = (S.&&&)
         handler Or  = (S.|||)
 
-handleCtx (c@(ChcB d l r), (InBBL op ctx rbranch))=
+handleCtx (c@(ChcB d l r), (InBBL op acc ctx rbranch))=
   handleChcCtx goLeft goRight c
+  where goLeft  = (l, InBBL op acc ctx rbranch)
+        goRight = (r, InBBL op acc ctx rbranch)
+handleCtx (c@(ChcB d l r), (InBBR op acc lbranch ctx))=
+  handleChcCtx goLeft goRight c
+  where goLeft  = (l, InBBR op acc lbranch ctx)
+        goRight = (r, InBBR op acc lbranch ctx)
 
-  where goLeft  = (l, InBBL op ctx rbranch)
-        goRight = (r, InBBL op ctx rbranch)
-handleCtx (Opn And (p SE.:<| ps), InBBL op Empty rbranch) =
-  do
-    ls <- handleCtx (p, N And true ps Empty)
-    rbranch' <- vSMTSolve_ rbranch
-    return $ (handler op) ls rbranch'
-  where handler Impl   = (==>)
-        handler BiImpl = (<=>)
-        handler XOr    = (<+>)
+handleCtx (Opn And (p SE.:<| ps), InBBL op acc ctx rbranch) =
+    handleCtx (p, N And true ps (InBBL op acc ctx rbranch))
+handleCtx (Opn And (p SE.:<| ps), InBBR op acc lbranch Empty) =
+    handleCtx (p, N And true ps (InBBR op acc lbranch Empty))
 
-handleCtx (Opn Or (p SE.:<| ps), InBBL op Empty rbranch) =
-  do
-    handleCtx (p, N Or false ps (InBBL op Empty rbranch))
-  where handler Impl   = (==>)
-        handler BiImpl = (<=>)
-        handler XOr    = (<+>)
-handleCtx (fcs, InBBL op Empty rchild) =
+handleCtx (Opn Or (p SE.:<| ps), InBBL op acc ctx rbranch) =
+    handleCtx (p, N Or false ps (InBBL op acc ctx rbranch))
+handleCtx (Opn Or (p SE.:<| ps), InBBR op acc lbranch ctx) =
+    handleCtx (p, N Or false ps (InBBR op acc lbranch ctx))
+
+
+handleCtx (fcs, InBBL op Nothing ctx (Just rbranch)) =
   do
     fcs' <- vSMTSolve_ fcs
-    rchild' <- vSMTSolve_ rchild
-    return $ (handler op) rchild' fcs'
+    handleCtx (rbranch, InBBR op (Just fcs') Nothing ctx)
   where handler Impl   = (==>)
         handler BiImpl = (<=>)
         handler XOr    = (<+>)
--- handleCtx (B InBBL op c@(ChcB d l r) ctx rbranch) = handleChcCtx goLeft goRight c
---   where handler Impl   = (==>)
---         handler BiImpl = (<=>)
---         handler XOr    = (<+>)
+handleCtx (fcs, InBBR op Nothing (Just lbranch) ctx) =
+  do
+    fcs' <- vSMTSolve_ fcs
+    handleCtx (lbranch, InBBL op (Just fcs') ctx Nothing)
+  where handler Impl   = (==>)
+        handler BiImpl = (<=>)
+        handler XOr    = (<+>)
+handleCtx (fcs, InBBL op acc ctx (Just rchild)) =
+  do
+    fcs' <- vSMTSolve_ fcs
+    let newAcc = (handler op) fcs' <$> acc
+    handleCtx (rchild, InBBR op newAcc Nothing ctx)
+  where handler Impl   = (==>)
+        handler BiImpl = (<=>)
+        handler XOr    = (<+>)
+handleCtx (fcs, InBBR op acc (Just lchild) ctx) =
+  do fcs' <- vSMTSolve_ fcs
+     let newAcc = flip (handler op) fcs' <$> acc
+     handleCtx (lchild, InBBL op newAcc ctx Nothing)
+  where handler Impl   = (==>)
+        handler BiImpl = (<=>)
+        handler XOr    = (<+>)
 
---         goLeft = InBBL op l ctx rbranch
---         goRight = InBBL op r ctx rbranch
--- handleCtx (InBBL op Empty rbranch) = vSMTSolve_ $ OpBB op rbranch
--- handleCtx (InBBL op ctx rbranch) = vSMTSolve_ $ OpBB op fcs rbranch
 
 -- | The main solver algorithm. You can think of this as the sem function for
 -- the dsl
@@ -454,7 +506,7 @@ vSMTSolve_ (OpB Not notchc) = S.bnot <$> vSMTSolve_ notchc
 -- vSMTSolve_ !(OpBB op l c@(ChcB _ cl cr)) = handleChcVSMT goLeft goRight c
 --   where goLeft = OpBB op l cl
 --         goRight = OpBB op l cr
-vSMTSolve_ (OpBB op l r) = handleCtx $ (l, InBBL op Empty r)
+vSMTSolve_ (OpBB op l r) = handleCtx $ (l, InBBL op Nothing Empty (Just r))
 -- vSMTSolve_ a@(OpBB op l r) = do bl <- vSMTSolve_ l
 --                                 br <- vSMTSolve_ r
 --                                 let op' = handler op

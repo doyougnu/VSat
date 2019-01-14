@@ -70,7 +70,7 @@ runProperties = testGroup "Run Properties" [
   -- , sat_error2
   -- , sat_error3
   -- vsat_matches_BF_plain
-  -- vsat_matches_BF
+  vsat_matches_BF
                                            -- ad_term2
                                            -- ad_term
                                            -- , qcProps
@@ -91,11 +91,12 @@ unitTests = testGroup "Unit Tests"
   -- , not_mult_is_handled
   -- , chc_singleton_is_sat
   -- , chc_not_singleton_is_sat
-  -- chc_unbalanced_is_sat
+  -- , chc_unbalanced_is_sat
   -- , chc_balanced_is_sat
-  -- chc_2_nested_is_sat
-   bimpl_w_false_is_sat
-    -- , bimpl_w_false_chc_is_sat
+   -- chc_2_nested_is_sat
+  -- bimpl_w_false_is_sat
+  -- , bimpl_w_false_chc_is_sat
+    -- mixed_and_impl_is_sat
   ]
 
 specTests :: TestTree
@@ -191,6 +192,11 @@ bimpl_w_false_is_sat = H.testCase
 bimpl_w_false_chc_is_sat = H.testCase
                            "A bimplication with a False and a choice is always unsat"
                            bimpl_w_false_chc_is_sat_unit
+
+mixed_and_impl_is_sat = H.testCase
+                           "A bimplication with a False and a choice is always unsat"
+                           mixed_and_impl_is_sat_unit
+
 
 andDecomp_duplicate = H.testCase
   "And decomposition can solve props with repeat variables" $
@@ -316,8 +322,8 @@ unitGen prop str = do a <- satWith emptyConf prop
                       b <- bfWith emptyConf prop
                       putStrLn "\n\n--------------"
                       putStrLn $ show prop
-                      putStrLn $ show ( b)
-                      putStrLn $ show ( a)
+                      putStrLn $ show (V.prune b)
+                      putStrLn $ show (V.prune a)
                       putStrLn "--------------\n\n"
                       H.assertBool str ((V.prune a) |==| (V.prune b))
 
@@ -371,12 +377,17 @@ chc_2_nested_unit = unitGen prop "BF matches VSAT for 2 nested choices"
 
 bimpl_w_false_is_sat_unit = unitGen prop "BF matches VSAT for equivalency that is always unsat"
   where prop :: ReadableProp
-        prop = ((bChc "AA" (bRef "a") (bRef "b")) ||| true) <=> false
-        -- prop = (true ||| (bChc "AA" (bRef "a") (bRef "b"))) <=> false
+        -- prop = ((bChc "AA" (bRef "a") (bRef "b")) ||| false) <=> false
+        prop = (true ||| (bChc "AA" (bRef "a") (bRef "b"))) <=> false
         -- prop = (true <=> (bRef "a"))
 
 -- | notice this fails because SBV adds extra unused variables into the model where BF doesn't
 -- | TODO fix it by migrating away from SBV
 bimpl_w_false_chc_is_sat_unit = unitGen prop "BF matches VSAT for equivalency that is always unsat with a choice"
   where prop :: ReadableProp
-        prop = false <=> (bChc "AA" (bRef "a") (bRef "b"))
+        prop = true <=> (bChc "AA" (bRef "a") (bRef "b"))
+
+mixed_and_impl_is_sat_unit =
+  unitGen prop "BF matches VSAT for equivalency that is always unsat"
+  where prop :: ReadableProp
+        prop = ((bRef "a") &&& (bRef "b")) ==> (bRef "c")
