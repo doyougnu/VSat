@@ -66,9 +66,9 @@ type Env d a r = RWST (SMTConf d a a) Log (SatDict d) IO r -- ^ the monad stack
 -- And and Or, or its a zipper over binary operators like ==> <=>. For binary
 -- operators we keep a prop that is the focus and a context which represents the
 -- parent and adjacent child
-data Ctx d a b = N Opn S.SBool (SE.Seq (VProp d a b)) (Ctx d a b)
-               | InBBL BB_B (Maybe S.SBool) (Ctx d a b) (Maybe (VProp d a b))
-               | InBBR BB_B (Maybe S.SBool) (Maybe (VProp d a b)) (Ctx d a b)
+data Ctx d a b = N Opn !(S.SBool) (SE.Seq (VProp d a b)) (Ctx d a b)
+               | InBBL BB_B !(Maybe S.SBool) (Ctx d a b) (Maybe (VProp d a b))
+               | InBBR BB_B !(Maybe S.SBool) (Maybe (VProp d a b)) (Ctx d a b)
                | Empty
                deriving Show
 
@@ -401,7 +401,6 @@ handleCtx (fcs, N op acc SE.Empty (InBBL op' acc' ctx (Just rbranch))) =
     let newAcc = if isNothing acc'
                  then Just $ (handler op) fcs' acc
                  else (handler' op') ((handler op) fcs' acc) <$> acc'
-    trace (show  newAcc ++ "\n") $ return ()
     handleCtx (rbranch, InBBR op' newAcc Nothing ctx)
   where handler And = (S.&&&)
         handler Or  = (S.|||)
@@ -432,7 +431,6 @@ handleCtx (fcs, N op acc (nfcs SE.:<| rest) ctx) =
   -- this is the engine of the algorithm, its the point that makes progress
   do
   fcs' <- vSMTSolve_ fcs
-  trace (show "YES\n") $ return ()
   let newAcc = (handler op) fcs' acc
   handleCtx (nfcs, N op newAcc rest ctx)
   -- handleCtx (nfcs, (N op newAcc rest ctx)) >>= return . ((handler op) fcs')
