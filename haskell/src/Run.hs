@@ -354,6 +354,12 @@ handleChcVSMT goLeft goRight c@(ChcB _ l r) =
   (vSMTSolve_ goLeft) (vSMTSolve_ goRight)
   (vSMTSolve_ l) (vSMTSolve_ r) c
 
+binDispatch :: S.Boolean b => BB_B -> (b -> b -> b)
+-- binDispatch :: BB_B -> (S.SBool -> S.SBool -> S.SBool)
+binDispatch Impl   = (==>)
+binDispatch BiImpl = (<=>)
+binDispatch XOr    = (<+>)
+
 -- | Handle a choice in the IncVSMTSolve monad, we check to make sure that if a
 -- choice is already selected then the selection is maintained. If not then we
 -- solve both branches by first clearing the state, recursively solving, if the
@@ -371,15 +377,9 @@ handleCtx (p, Empty) = vSMTSolve_ p
 
 
 handleCtx (fcs, InBBL op (Just acc) Empty Nothing) =
-    flip (handler op) acc <$> vSMTSolve_ fcs
-  where handler Impl   = (==>)
-        handler BiImpl = (<=>)
-        handler XOr    = (<+>)
+    flip (binDispatch op) acc <$> vSMTSolve_ fcs
 handleCtx (fcs, InBBR op (Just acc) Nothing Empty) =
-  (handler op) acc <$> vSMTSolve_ fcs
-  where handler Impl   = (==>)
-        handler BiImpl = (<=>)
-        handler XOr    = (<+>)
+  (binDispatch op) acc <$> vSMTSolve_ fcs
 
 
 handleCtx (c@(ChcB _ l r), N op acc rest ctx) =
@@ -498,248 +498,21 @@ vSMTSolve_ !(OpB Not c@(ChcB _ l r)) = handleChcVSMT goLeft goRight c
         goRight = OpB Not r
 vSMTSolve_ (OpB Not (OpB Not notchc)) = vSMTSolve_ notchc
 vSMTSolve_ (OpB Not notchc) = S.bnot <$> vSMTSolve_ notchc
--- vSMTSolve_ !(OpBB op c@(ChcB _ cl cr) r) = handleChcVSMT goLeft goRight c
---   where goLeft = OpBB op cl r
---         goRight = OpBB op cr r
--- vSMTSolve_ !(OpBB op l c@(ChcB _ cl cr)) = handleChcVSMT goLeft goRight c
---   where goLeft = OpBB op l cl
---         goRight = OpBB op l cr
 vSMTSolve_ (OpBB op l r) = handleCtx $ (l, InBBL op Nothing Empty (Just r))
--- vSMTSolve_ a@(OpBB op l r) = do bl <- vSMTSolve_ l
---                                 br <- vSMTSolve_ r
---                                 let op' = handler op
---                                 return $ bl `op'` br
---   where handler Impl   = (==>)
---         handler BiImpl = (<=>)
---         handler XOr    = (<+>)
-vSMTSolve_ !(OpIB op l r) = do l' <- vSMTSolve'_ l
-                               r' <- vSMTSolve'_ r
-                               _ <- reifyArithChcs l' r' (handler op)
-  -- this result should, and will never matter the return values from the
-  -- handler are handled in side effects
-                               return true
-  where handler LT  = (.<)
-        handler LTE = (.<=)
-        handler GTE = (.>=)
-        handler GT  = (.>)
-        handler EQ  = (.==)
-        handler NEQ = (./=)
+vSMTSolve_ !(OpIB _ _ _) = error "Blame Jeff! This isn't implemented yet!"
+-- vSMTSolve_ !(OpIB op l r) = do l' <- vSMTSolve'_ l
+--                                r' <- vSMTSolve'_ r
+--                                _ <- reifyArithChcs l' r' (handler op)
+--   -- this result should, and will never matter the return values from the
+--   -- handler are handled in side effects
+--                                return true
+--   where handler LT  = (.<)
+--         handler LTE = (.<=)
+--         handler GTE = (.>=)
+--         handler GT  = (.>)
+--         handler EQ  = (.==)
+--         handler NEQ = (./=)
 
 vSMTSolve_ !(Opn And (p SE.:<| ps)) = handleCtx $ (p, N And true ps Empty)
 vSMTSolve_ !(Opn Or (p SE.:<| ps))  = handleCtx $ (p, N Or false  ps Empty)
 vSMTSolve_ x = handleCtx (x, N And true SE.Empty Empty)
-
-
-handleSBoolChc :: Ord d => V (Dim d) S.SBool -> IncVSMTSolve d S.SBool
-handleSBoolChc !(Plain a) = do S.constrain a
-                               return a
-handleSBoolChc !(VChc d l r) =
-  do (_, used) <- get
-     case M.lookup d used of
-       Just True  -> handleSBoolChc l
-       Just False -> handleSBoolChc r
-       Nothing    -> do clearSt
-                        St.modify . second $ M.adjust (const True) d
-                        lift $ SC.push 1
-                        l' <- handleSBoolChc l
-                        S.constrain l'
-                        lRes <- getResult
-                        lift $ SC.pop 1
-
-                        clearSt
-                        St.modify . second $ M.insert d False
-                        lift $ SC.push 1
-                        r' <- handleSBoolChc r
-                        S.constrain r'
-                        rRes <- getResult
-                        lift $ SC.pop 1
-
-                        store $ VChc (dimName d) lRes rRes
-                        St.modify . second $ M.delete d
-
-                        return r'
-
-reifyArithChcs :: Ord d => V (Dim d) SNum -> V (Dim d) SNum
-  -> (SNum -> SNum -> S.SBool)
-  -> IncVSMTSolve d (V (Dim d) S.SBool)
-reifyArithChcs !(Plain a) !(Plain b) op = return . Plain $ a `op` b
-reifyArithChcs !(Plain a) !(VChc d l r) op =
-  do (_, used) <- get
-     case M.lookup d used of
-       Just True  -> return $ l >>= return . op a
-       Just False -> return $ r >>= return . op a
-       Nothing    -> do let x = op a <$> (VChc d l r)
-                        _ <- handleSBoolChc x
-                        return x
-
-reifyArithChcs !(VChc d l r) !(Plain a) op =
-  do (_, used) <- get
-     case M.lookup d used of
-       Just True  -> return $ l >>= return . flip op a
-       Just False -> return $ r >>= return . flip op a
-       Nothing    -> do let x = flip op a <$> (VChc d l r)
-                        _ <- handleSBoolChc x
-                        return x
-
-reifyArithChcs !(VChc ad al ar) !(VChc bd bl br) op =
-  do (_, used) <- get
-     case (M.lookup ad used, M.lookup bd used) of
-       (Just True, Just True)   -> reifyArithChcs al bl op
-       (Just True, Just False)  -> reifyArithChcs al br op
-       (Just False, Just True)  -> reifyArithChcs ar bl op
-       (Just False, Just False) -> reifyArithChcs ar br op
-       (Just True, Nothing) -> do St.modify . second $ M.adjust (const True) ad
-                                  lift $ SC.push 1
-                                  clearSt
-                                  resl <- reifyArithChcs al bl op
-                                  bl' <- handleSBoolChc resl
-                                  resL <- getResult
-                                  lift $ SC.pop 1
-
-                                  St.modify . second $ M.insert bd False
-
-                                  lift $ SC.push 1
-                                  clearSt
-                                  resr <- reifyArithChcs al br op
-                                  br' <- handleSBoolChc resr
-                                  resR <- getResult
-                                  lift $ SC.pop 1
-
-
-                                  store $ VChc (dimName bd) resL resR
-
-                                  St.modify . second $ M.delete bd
-                                  return $ VChc bd (Plain bl') (Plain br')
-
-       (Just False, Nothing) -> do St.modify . second $ M.adjust (const True) ad
-                                   lift $ SC.push 1
-                                   clearSt
-                                   resl <- reifyArithChcs ar bl op
-                                   bl' <- handleSBoolChc resl
-                                   resL <- getResult
-                                   lift $ SC.pop 1
-
-                                   St.modify . second $ M.insert bd False
-                                   lift $ SC.push 1
-                                   clearSt
-                                   resr <- reifyArithChcs ar br op
-                                   br' <- handleSBoolChc resr
-                                   resR <- getResult
-                                   lift $ SC.pop 1
-
-                                   store $ VChc (dimName bd) resL resR
-
-                                   St.modify . second $ M.delete bd
-                                   return $ VChc bd (Plain bl') (Plain br')
-
-       (Nothing, Just False) -> do St.modify . second $ M.adjust (const True) ad
-                                   lift $ SC.push 1
-                                   clearSt
-                                   resl <- reifyArithChcs al br op
-                                   bl' <- handleSBoolChc resl
-                                   resL <- getResult
-                                   lift $ SC.pop 1
-
-                                   St.modify . second $ M.insert bd False
-
-                                   lift $ SC.push 1
-                                   clearSt
-                                   resr <- reifyArithChcs ar br op
-                                   br' <- handleSBoolChc resr
-                                   resR <- getResult
-                                   lift $ SC.pop 1
-
-                                   store $ VChc (dimName ad) resL resR
-
-                                   St.modify . second $ M.delete bd
-                                   return $ VChc ad (Plain bl') (Plain br')
-
-       (Nothing, Just True) -> do St.modify . second $ M.adjust (const True) ad
-                                  lift $ SC.push 1
-                                  clearSt
-                                  resl <- reifyArithChcs al bl op
-                                  bl' <- handleSBoolChc resl
-                                  lRes <- getResult
-                                  lift $ SC.pop 1
-
-                                  St.modify . second $ M.insert ad False
-
-                                  lift $ SC.push 1
-                                  clearSt
-                                  resr <- reifyArithChcs ar bl op
-                                  br' <- handleSBoolChc resr
-                                  rRes <- getResult
-                                  lift $ SC.pop 1
-
-
-                                  St.modify . second $ M.delete ad
-                                  store $ VChc (dimName ad) lRes rRes
-                                  return $ VChc ad (Plain bl') (Plain br')
-
-       (Nothing, Nothing) -> do St.modify . second $ M.insert bd False
-                                St.modify . second $ M.insert ad False
-                                St.modify . second $ M.adjust (const True) ad
-                                lift $ SC.push 1
-                                clearSt
-                                reslr <- reifyArithChcs al br op
-                                blr <- handleSBoolChc reslr
-                                lrRes <- getResult
-                                lift $ SC.pop 1
-
-                                lift $ SC.push 1
-                                clearSt
-                                resrr <- reifyArithChcs ar br op
-                                brr <- handleSBoolChc resrr
-                                rrRes <- getResult
-                                lift $ SC.pop 1
-
-                                St.modify . second $ M.adjust (const True) bd
-                                St.modify . second $ M.adjust (const False) ad
-
-                                St.modify . second $ M.adjust (const True) ad
-                                lift $ SC.push 1
-                                clearSt
-                                resll <- reifyArithChcs al bl op
-                                bll <- handleSBoolChc resll
-                                llRes <- getResult
-                                lift $ SC.pop 1
-
-                                lift $ SC.push 1
-                                clearSt
-                                resrl <- reifyArithChcs ar bl op
-                                brl <- handleSBoolChc resrl
-                                rlRes <- getResult
-                                lift $ SC.pop 1
-
-                                St.modify . second $ M.delete ad
-                                St.modify . second $ M.delete bd
-
-                                store $ VChc (dimName bd)
-                                  (VChc (dimName ad) llRes lrRes)
-                                  (VChc (dimName ad) rlRes rrRes)
-
-                                return $ VChc bd
-                                  (VChc ad (Plain bll) (Plain blr))
-                                  (VChc ad (Plain brl) (Plain brr))
-
-vSMTSolve'_ :: VIExpr a SNum -> IncVSMTSolve d (V (Dim a) SNum)
-vSMTSolve'_ !(Ref RefI i) = return . Plain $ i
-vSMTSolve'_ !(Ref RefD d) = return . Plain $ d
-vSMTSolve'_ !(LitI (I i)) = return . Plain . SI . S.literal . fromIntegral $ i
-vSMTSolve'_ !(LitI (D d)) = return . Plain . SD . S.literal $ d
-vSMTSolve'_ !(OpI op e) = do e' <- vSMTSolve'_ e
-                             return $ (handler op) e'
-  where handler Neg  = negate
-        handler Abs  = abs
-        handler Sign = signum
-vSMTSolve'_ !(OpII op l r) = do l' <- vSMTSolve'_ l
-                                r' <- vSMTSolve'_ r
-                                return $ handler op l' r'
-  where handler Add  = (+)
-        handler Sub  = (-)
-        handler Mult = (*)
-        handler Div  = (./)
-        handler Mod  = (.%)
-vSMTSolve'_ (ChcI d l r) = do r' <- vSMTSolve'_ r
-                              l' <- vSMTSolve'_ l
-                              return $ VChc d l' r'
