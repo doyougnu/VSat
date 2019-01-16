@@ -5,7 +5,6 @@ import           Data.Aeson
 import           Data.Bifunctor             (bimap)
 import qualified Data.Map                   as M
 import           Data.Monoid                ((<>))
-import qualified Data.Sequence              as SE
 import           Data.String                (IsString)
 import           Data.Text
 
@@ -67,7 +66,6 @@ isHole = (==) hole
 
 has :: (IsString a, Show a, Show b, Eq a, Eq b, Ord a) =>
   (V.VProp d a b -> Bool) -> V.VProp d a b -> Bool
-has p a@(V.Opn  _ es)  = p a || Prelude.foldr (\x acc -> p x || acc) False es
 has p a@(V.OpB  _ e)   = p a || has p e
 has p a@(V.OpBB _ l r) = p a || has p l || has p r
 has p a@(V.ChcB _ l r) = p a || has p l || has p r
@@ -110,10 +108,6 @@ autoToVSat_ (RBinary op (ACtx _) rhs) =
      return $ V.ChcB dim hole V.true
 autoToVSat_ (AutoRef a) = return $ V.RefB a
 autoToVSat_ (AutoNot a) = V.OpB V.Not <$> autoToVSat_ a
-autoToVSat_ (BBinary And l r) = V.Opn V.And <$>
-                                traverse autoToVSat_ (l SE.<| (SE.singleton r))
-autoToVSat_ (BBinary Or l r) = V.Opn V.Or <$>
-                               traverse autoToVSat_ (l SE.<| (SE.singleton r))
 autoToVSat_ (BBinary op l r) = V.OpBB (dispatch op) <$>
                                (autoToVSat_ l) <*> (autoToVSat_ r)
 autoToVSat_ (RBinary op l r) = return $ V.OpIB
@@ -132,8 +126,8 @@ autoToVSat' (ACtx _) = error "[ERR] in AutoToVSat': ACtx found in pattern match 
 -- undefined because they will never be called. This is required to convert
 -- between the binary tree And/Or in AutoLang to the n-ary And/Or in VProp Lang
 dispatch :: BOp -> V.BB_B
-dispatch And  =  undefined
-dispatch Or   =  undefined
+dispatch And  = V.And
+dispatch Or   = V.Or
 dispatch Impl = V.Impl
 dispatch Eqv  = V.BiImpl
 dispatch Xor  = V.XOr
@@ -159,37 +153,33 @@ conjoin :: [AutoLang a] -> AutoLang a
 conjoin = Prelude.foldr1 (BBinary And)
 
 conjoin' :: [V.VProp d a b] -> V.VProp d a b
-conjoin' = V.Opn V.And . SE.fromList
+conjoin' = Prelude.foldr1 (V.OpBB V.And)
 
 disjoin :: [AutoLang a] -> AutoLang a
 disjoin = Prelude.foldr1 (BBinary Or)
 
 disjoin' :: [V.VProp d a b] -> V.VProp d a b
-disjoin' = V.Opn V.Or . SE.fromList
+disjoin' = Prelude.foldr1 (V.OpBB V.Or)
 
 -- | Take a VProp term that has choices with holes and reify them to the simple
 -- encoding
-nestChoices :: (IsString a, Show a, Eq a, Ord a, Eq d) =>
-  V.VProp d a a -> V.VProp d a a
-  -- base case to prevent an Opn op empty list at end of recursion
-nestChoices (V.Opn V.And ((V.ChcB d l _) SE.:<| SE.Empty)) = V.ChcB d l V.true
-nestChoices (V.Opn V.Or  ((V.ChcB d l _) SE.:<| SE.Empty)) = V.ChcB d l V.true
+-- nestChoices :: (IsString a, Show a, Eq a, Ord a, Eq d) =>
+--   V.VProp d a a -> V.VProp d a a
+--   -- base case to prevent an Opn op empty list at end of recursion
+--   -- any choice that maintains a hole is transformed into a nested choice
+-- nestChoices a@(V.ChcB dim l r)
+--   | l == hole && r == V.true = V.ChcB dim (nestChoices (V.Opn V.And xs)) (V.true)
+--   | otherwise = V.Opn V.And $ a SE.:<| (nestChoices <$> xs)
 
-  -- any choice that maintains a hole is transformed into a nested choice
-nestChoices (V.Opn V.And (a@(V.ChcB dim l r) SE.:<| xs))
-  | l == hole && r == V.true = V.ChcB dim (nestChoices (V.Opn V.And xs)) (V.true)
-  | otherwise = V.Opn V.And $ a SE.:<| (nestChoices <$> xs)
+-- nestChoices (V.Opn V.Or (a@(V.ChcB dim l r) SE.:<| xs))
+--   | l == hole && r == V.true = V.ChcB dim hole (nestChoices (V.Opn V.Or xs))
+--   | otherwise = V.Opn V.And $ a SE.:<| (nestChoices <$> xs)
 
-nestChoices (V.Opn V.Or (a@(V.ChcB dim l r) SE.:<| xs))
-  | l == hole && r == V.true = V.ChcB dim hole (nestChoices (V.Opn V.Or xs))
-  | otherwise = V.Opn V.And $ a SE.:<| (nestChoices <$> xs)
-
-  -- recursive cases
-nestChoices (V.OpB o os) = V.OpB o $ nestChoices os
-nestChoices (V.OpBB o l r) = V.OpBB o (nestChoices l) (nestChoices r)
-nestChoices (V.Opn o ps) = V.Opn o $ nestChoices <$> ps
-nestChoices (V.ChcB d l r) = V.ChcB d (nestChoices l) (nestChoices r)
-nestChoices x = x
+--   -- recursive cases
+-- nestChoices (V.OpB o os) = V.OpB o $ nestChoices os
+-- nestChoices (V.OpBB o l r) = V.OpBB o (nestChoices l) (nestChoices r)
+-- nestChoices (V.ChcB d l r) = V.ChcB d (nestChoices l) (nestChoices r)
+-- nestChoices x = x
 
 -- | Fill holes given a predicate, an old vprop, and a replacement vprop
 fillBy :: (Show a, Show b) => (V.VProp d a b -> Bool) -> V.VProp d a b -> V.VProp d a b-> V.VProp d a b
@@ -199,9 +189,6 @@ fillBy p a@(V.OpB op e) new
 fillBy p a@(V.OpBB op l r)  new
   | p a = new
   | otherwise = V.OpBB op  (fillBy p l new) (fillBy p r new)
-fillBy p a@(V.Opn op ps) new
-  | p a = new
-  | otherwise = V.Opn  op  $ flip (fillBy p) new <$> ps
 fillBy p a@(V.ChcB dim l r) new
   | p a = new
   | otherwise = V.ChcB dim (fillBy p l new) (fillBy p r new)
@@ -222,6 +209,5 @@ naiveEncode (V.OpBB op a@(V.ChcB dim l r) rest)
                 (naiveEncode rest)
 naiveEncode (V.OpBB op l r) = V.OpBB op (naiveEncode l) (naiveEncode r)
 naiveEncode (V.OpB op e) = V.OpB op (naiveEncode e)
-naiveEncode (V.Opn op es) = V.Opn op $ naiveEncode <$> es
 naiveEncode (V.ChcB d l r) = V.ChcB d (naiveEncode l) (naiveEncode r)
 naiveEncode nonrecursive = nonrecursive
