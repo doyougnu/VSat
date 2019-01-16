@@ -190,3 +190,29 @@ dimensions = bifoldr' S.insert (const $ const S.empty) S.empty
 isPlain :: V d a -> Bool
 isPlain (Plain _) = True
 isPlain _         = False
+
+-- | orient a choice tree based on the ord of its dimensions
+dimSort :: Ord d => V d a -> V d a
+dimSort (VChc d (VChc d' l' r') (VChc d'' l'' r''))
+  | d < d' && d' == d'' = VChc d'
+                          (VChc d l' l'')
+                          (VChc d r' r'')
+  | otherwise = (VChc d
+                  (VChc d' (dimSort l') (dimSort r'))
+                  (VChc d'' (dimSort l'') (dimSort r'')))
+dimSort (VChc d (VChc d' l r) r')
+  | d < d' = VChc d'
+             (VChc d (dimSort l) (dimSort r'))
+             (VChc d (dimSort r) (dimSort r'))
+  | otherwise = (VChc d
+                 (VChc d' (dimSort l) (dimSort r))
+                 (dimSort r'))
+
+dimSort (VChc d l' (VChc d' l r))
+  | d < d' = VChc d'
+             (VChc d (dimSort l') (dimSort l))
+             (VChc d (dimSort l') (dimSort r))
+  | otherwise = VChc d
+                (dimSort l')
+                (VChc d' (dimSort l) (dimSort r))
+dimSort x            = x
