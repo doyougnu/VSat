@@ -16,7 +16,6 @@ data Opts = MoveRight
           | Shrink
           | Prune
           | Atomize
-          | CNF
           | None
           deriving (Generic,Show)
 
