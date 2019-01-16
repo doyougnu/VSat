@@ -9,7 +9,6 @@ module VProp.Types ( Var(..)
                    , N_N(..), NN_N(..)
                    , NN_B(..)
                    , NPrim(..)
-                   , Opn(..)
                    , SNum(..)
                    , RefN(..)
                    , PrimN(..)
@@ -48,7 +47,6 @@ import           Data.Fixed            (mod')
 import           Data.Map              (Map)
 import           Data.Monoid           ((<>))
 import qualified Data.SBV              as S
-import qualified Data.Sequence         as SE
 import           Data.String           (IsString)
 import           GHC.Generics          (Generic)
 import           Prelude               hiding (EQ, GT, LT, lookup)
@@ -79,7 +77,6 @@ data VProp a b c
    | OpB  B_B  !(VProp a b c)
    | OpBB BB_B !(VProp a b c) !(VProp a b c)
    | OpIB NN_B !(VIExpr a c)  !(VIExpr a c)
-   | Opn  Opn  !(SE.Seq (VProp a b c))
    | ChcB (Dim a)  !(VProp a b c) !(VProp a b c)
   deriving (Eq,Generic,Typeable,Functor,Traversable,Foldable,Ord)
 
@@ -114,13 +111,10 @@ data B_B = Not deriving (Eq,Generic,Data,Typeable,Ord)
 data NN_N = Add | Sub | Mult | Div | Mod deriving (Eq,Generic,Data,Typeable,Ord)
 
 -- | Binary Boolean operators
-data BB_B = Impl | BiImpl | XOr deriving (Eq,Generic,Data,Typeable,Ord)
+data BB_B = And | Or | Impl | BiImpl | XOr deriving (Eq,Generic,Data,Typeable,Ord)
 
 -- | Binary Numeric predicate operators
 data NN_B = LT | LTE | GT | GTE | EQ | NEQ deriving (Eq,Generic,Data,Typeable,Ord)
-
--- | N-ary logical operators
-data Opn = And | Or deriving (Eq,Generic,Data,Typeable,Show,Ord)
 
 -- | add div and mod to num
 class Num n => PrimN n where
@@ -380,8 +374,8 @@ instance S.Boolean (VProp a b c) where
   true  = LitB True
   false = LitB False
   bnot  = OpB Not
-  l &&& r = Opn And $ l SE.<| (SE.singleton r)
-  l ||| r = Opn Or  $ l SE.<| (SE.singleton r)
+  (&&&) = OpBB And
+  (|||) = OpBB Or
   (<+>) = OpBB XOr
   (==>) = OpBB Impl
   (<=>) = OpBB BiImpl
