@@ -72,13 +72,10 @@ genNN_N :: Gen NN_N
 genNN_N = elements [Add, Sub, Mult, Div]
 
 genBB_B :: Gen BB_B
-genBB_B = elements [Impl, BiImpl, XOr]
+genBB_B = elements [Impl, BiImpl, XOr, And, Or]
 
 genNN_B :: Gen NN_B
 genNN_B = elements [LT, LTE, GT, GTE, EQ, NEQ]
-
-genOpn :: Gen Opn
-genOpn = elements [And, Or]
 
 -- | Generate an arbritrary prop where any variable name in the boolean language
 -- _does not_ occur in the integer language
@@ -97,8 +94,6 @@ arbVProp_ gd gv fs@(bfreqs, ifreqs) n
                            , RefB <$> gv
                            , (liftM3 ChcB gd l l)
                            , liftM2 OpB genB_B l
-                           , (liftM2 (&&&) l l)
-                           , (liftM2 (|||) l l)
                            , liftM3 OpBB genBB_B l l
                            , liftM3 OpIB genNN_B l' l'
                            ]
@@ -117,8 +112,6 @@ arbVPropStrOnly gd  gv fs@(bfreqs, ifreqs) n
                            , RefB <$> gv
                            , (liftM3 ChcB gd l l)
                            , liftM2 OpB genB_B l
-                           , (liftM2 (&&&) l l)
-                           , (liftM2 (|||) l l)
                            , liftM3 OpBB genBB_B l l
                            , liftM3 OpIB genNN_B l' l'
                            ]
@@ -136,8 +129,6 @@ arbVPropIntOnly_ gd gv fs@(bfreqs, ifreqs) n
                            , RefB <$> gv
                            , (liftM3 ChcB gd l l)
                            , liftM2 OpB genB_B l
-                           , (liftM2 (&&&) l l)
-                           , (liftM2 (|||) l l)
                            , liftM3 OpBB genBB_B l l
                            , liftM3 OpIB genNN_B l' l'
                            ]

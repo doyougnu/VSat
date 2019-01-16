@@ -1,6 +1,10 @@
 module VProp.SBV ( andDecomp
                  , evalPropExpr
                  , symbolicPropExpr
+                 , bDispatch
+                 , nbDispatch
+                 , nnDispatch
+                 , nDispatch
                  , SAT(..)) where
 
 import qualified Data.SBV as S
@@ -16,7 +20,36 @@ import SAT
 instance (Show a, Show b, Show d, Ord a, Ord b, Ord d) =>
   SAT (VProp d a b) where toPredicate = symbolicPropExpr
 
--- TODO fix this repetition
+-- | convert data constructors to SBV operators, note that the type is
+-- purposefully constrained to return SBools and not Boolean b => (b -> b -> b)
+-- because we want to ensure that we are translating to the SBV domain
+bDispatch :: BB_B -> S.SBool -> S.SBool -> S.SBool
+bDispatch And    = (S.&&&)
+bDispatch Or     = (S.|||)
+bDispatch Impl   = (S.==>)
+bDispatch BiImpl = (S.<=>)
+bDispatch XOr    = (S.<+>)
+
+nbDispatch :: Prim b n => NN_B -> n -> n -> b
+nbDispatch LT  = (.<)
+nbDispatch LTE = (.<=)
+nbDispatch GT  = (.>)
+nbDispatch GTE = (.>=)
+nbDispatch EQ  = (.==)
+nbDispatch NEQ = (./=)
+
+nnDispatch :: PrimN a => NN_N -> a -> a -> a
+nnDispatch Add  = (+)
+nnDispatch Sub  = (-)
+nnDispatch Mult = (*)
+nnDispatch Div  = (./)
+nnDispatch Mod  = (.%)
+
+nDispatch :: PrimN a => N_N -> a -> a
+nDispatch Neg  = negate
+nDispatch Sign = signum
+nDispatch Abs  = abs
+
 -- | Evaluate a feature expression against a configuration.
 evalPropExpr :: DimBool d
              -> VConfig b SNum
@@ -26,20 +59,12 @@ evalPropExpr :: DimBool d
 evalPropExpr _ _ _ (LitB b)         = S.literal b
 evalPropExpr _ _  !c (RefB f)       = c f
 evalPropExpr d !i !c !(OpB Not e)   = S.bnot (evalPropExpr d i c e)
-evalPropExpr d !i !c !(Opn And ps)  = foldr1 (&&&) $ evalPropExpr d i c <$> ps
-evalPropExpr d !i !c !(Opn Or ps)   = foldr1 (|||) $ evalPropExpr d i c <$> ps
-evalPropExpr d !i !c !(OpBB Impl l r)   = evalPropExpr d i c l ==> evalPropExpr d i c r
-evalPropExpr d !i !c !(OpBB BiImpl l r) = evalPropExpr d i c l <=> evalPropExpr d i c r
-evalPropExpr d !i !c !(OpBB XOr l r) = evalPropExpr d i c l <+> evalPropExpr d i c r
-evalPropExpr d !i _  !(OpIB op l r)  = (handler op)
-                                       (evalPropExpr' d i l)
-                                       (evalPropExpr' d i r)
-  where handler LT  = (.<)
-        handler LTE = (.<=)
-        handler GT  = (.>)
-        handler GTE = (.>=)
-        handler EQ  = (.==)
-        handler NEQ = (./=)
+evalPropExpr d !i !c !(OpBB op l r) = (bDispatch op)
+                                      (evalPropExpr d i c l)
+                                      (evalPropExpr d i c r)
+evalPropExpr d !i _  !(OpIB op l r) = (nbDispatch op)
+                                      (evalPropExpr' d i l)
+                                      (evalPropExpr' d i r)
 evalPropExpr d !i !c !(ChcB dim l r)
   = S.ite (d dim) (evalPropExpr d i c l) (evalPropExpr d i c r)
 
@@ -49,14 +74,10 @@ evalPropExpr' :: DimBool a -> VConfig b SNum -> VIExpr a b -> SNum
 evalPropExpr' _  _ !(LitI (I i)) = SI . S.literal . fromIntegral $ i
 evalPropExpr' _  _ !(LitI (D d)) = SD $ S.literal d
 evalPropExpr' _ !i !(Ref _ f)    = i f
-evalPropExpr' d !i !(OpI Neg e) = negate $ evalPropExpr' d i e
-evalPropExpr' d !i !(OpI Abs e) = abs $ evalPropExpr' d i e
-evalPropExpr' d !i !(OpI Sign e) = signum $ evalPropExpr' d i e
-evalPropExpr' d !i !(OpII Add l r)  = evalPropExpr' d i l +  evalPropExpr' d i r
-evalPropExpr' d !i !(OpII Sub l r)  = evalPropExpr' d i l -  evalPropExpr' d i r
-evalPropExpr' d !i !(OpII Mult l r) = evalPropExpr' d i l *  evalPropExpr' d i r
-evalPropExpr' d !i !(OpII Div l r)  = evalPropExpr' d i l ./ evalPropExpr' d i r
-evalPropExpr' d !i !(OpII Mod l r)  = evalPropExpr' d i l .% evalPropExpr' d i r
+evalPropExpr' d !i !(OpI op e) = nDispatch op $ evalPropExpr' d i e
+evalPropExpr' d !i !(OpII op l r)  = (nnDispatch op)
+                                     (evalPropExpr' d i l)
+                                     (evalPropExpr' d i r)
 evalPropExpr' d !i !(ChcI dim l r)
   = S.ite (d dim) (evalPropExpr' d i l) (evalPropExpr' d i r)
 
@@ -90,7 +111,6 @@ andDecomp !(ChcB d l r) f  = (newDim &&& andDecomp l f) |||
   where newDim = dimToVar f d
 andDecomp !(OpB op x)    f = OpB  op (andDecomp x f)
 andDecomp !(OpBB op l r) f = OpBB op (andDecomp l f) (andDecomp r f)
-andDecomp !(Opn op ps)   f = Opn  op $ (\x -> andDecomp x f) <$> ps
   -- it is unclear how to unwind choices in arithmetic expressions
 -- andDecomp !(OpIB op l r) f g = OpIB op (andDecomp' g l) (andDecomp' g r)
 andDecomp !x             _ = x
