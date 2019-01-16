@@ -50,17 +50,17 @@ main = do
   -- print (conjoin' prop)
   -- print $ take 5 $ autoToVSat <$> ps
 
-  (bfTime, res) <- time $ bfWith emptyConf $ conjoin' $ take 24 $ prop
-  -- (satTime, res') <- time $ satWith emptyConf $ conjoin' prop
-  -- (adTime, res'') <- time $ adWith emptyConf id $ conjoin' prop
-  putStrLn ("Brute Force Time [s]: " ++ show bfTime ++ "\n")
-  -- putStrLn ("VSAT Time        [s]: " ++ show satTime ++ "\n")
-  -- putStrLn ("And Decomp Time  [s]: " ++ show adTime ++ "\n")
+  -- (bfTime, res) <- time $ bfWith emptyConf $ conjoin' $ take 24 $ prop
+  (satTime, res') <- time $ satWith emptyConf $ conjoin' prop
+  (adTime, res'') <- time $ adWith emptyConf id $ conjoin' prop
+  -- putStrLn ("Brute Force Time [s]: " ++ show bfTime ++ "\n")
+  putStrLn ("VSAT Time        [s]: " ++ show satTime ++ "\n")
+  putStrLn ("And Decomp Time  [s]: " ++ show adTime ++ "\n")
   -- writeFile "rights" (show $ prop)
   -- writeFile "lefts" (foldMap show bs)
-  writeFile "testoutputBF" (show res)
-  -- writeFile "testoutputSAT" (show res')
-  -- writeFile "testoutputAD" (show res'')
+  -- writeFile "testoutputBF" (show res)
+  writeFile "testoutputSAT" (show res')
+  writeFile "testoutputAD" (show res'')
   -- print $ VProp.Core.dimensions $ flatten prop
   -- print res
   -- return res
