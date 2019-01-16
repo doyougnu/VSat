@@ -70,7 +70,7 @@ runProperties = testGroup "Run Properties" [
   -- , sat_error2
   -- , sat_error3
   -- vsat_matches_BF_plain
-  vsat_matches_BF
+  -- vsat_matches_BF
                                            -- ad_term2
                                            -- ad_term
                                            -- , qcProps
@@ -96,7 +96,7 @@ unitTests = testGroup "Unit Tests"
    -- chc_2_nested_is_sat
   -- bimpl_w_false_is_sat
   -- , bimpl_w_false_chc_is_sat
-    -- mixed_and_impl_is_sat
+  mixed_and_impl_is_sat
   ]
 
 specTests :: TestTree
@@ -234,17 +234,19 @@ sat_terminates x =  onlyInts x QC.==> QCM.monadicIO
 vsat_matches_BF' x =  onlyBools x QC.==> QCM.monadicIO
   $ do a <- QCM.run . (bfWith emptyConf) $ (x :: VProp Var Var Var)
        b <- QCM.run . (satWith emptyConf) $ x
-       liftIO . putStrLn $ "[BF]:   \n" ++ show a
-       liftIO . putStrLn $ "[VSAT]: \n" ++ show b
-       QCM.assert (a |==| b)
+       let a' = V.dimSort $ a
+           b' = V.dimSort $ b
+       liftIO . putStrLn $ "[BF]:   \n" ++ show a'
+       liftIO . putStrLn $ "[VSAT]: \n" ++ show b'
+       QCM.assert (a' |==| b')
 
 vsat_matches_BF_plain' x =
   (onlyBools x && isPlain x) QC.==> QCM.monadicIO
   $ do a <- QCM.run . (bfWith emptyConf) $ (x :: VProp Var Var Var)
        b <- QCM.run . (satWith emptyConf) $ x
-       liftIO . putStrLn $ "[BF]:   \n" ++ show a
-       liftIO . putStrLn $ "[VSAT]: \n" ++ show b
-       QCM.assert (a |==| b)
+       liftIO . putStrLn $ "[BF]:   \n" ++ show (V.dimSort a)
+       liftIO . putStrLn $ "[VSAT]: \n" ++ show (V.dimSort b)
+       QCM.assert ((V.dimSort a) |==| (V.dimSort b))
 
 ad_terminates x = onlyInts x QC.==> QCM.monadicIO
   $ do -- liftIO $ print $ "prop: " ++ show (x :: VProp Var Var)
@@ -322,10 +324,10 @@ unitGen prop str = do a <- satWith emptyConf prop
                       b <- bfWith emptyConf prop
                       putStrLn "\n\n--------------"
                       putStrLn $ show prop
-                      putStrLn $ show (V.prune b)
-                      putStrLn $ show (V.prune a)
+                      putStrLn $ show (V.dimSort $ V.prune b)
+                      putStrLn $ show (V.dimSort $ V.prune a)
                       putStrLn "--------------\n\n"
-                      H.assertBool str ((V.prune a) |==| (V.prune b))
+                      H.assertBool str ((V.dimSort $ V.prune a) |==| (V.dimSort $ V.prune b))
 
 not_unit = do a <- satWith emptyConf prop
               b <- bfWith emptyConf prop
@@ -390,4 +392,4 @@ bimpl_w_false_chc_is_sat_unit = unitGen prop "BF matches VSAT for equivalency th
 mixed_and_impl_is_sat_unit =
   unitGen prop "BF matches VSAT for equivalency that is always unsat"
   where prop :: ReadableProp
-        prop = ((bRef "a") &&& (bRef "b")) ==> (bRef "c")
+        prop = false &&& ((bChc "AA" (bRef "a") (bRef "b")) ==> (bRef "c"))
