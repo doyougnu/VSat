@@ -1,19 +1,16 @@
 module VProp.Core where
 
-import           Control.Monad (liftM, liftM2)
-import qualified Data.Foldable as F (toList)
-import           Data.List     (group, intercalate, sort)
+import           Control.Monad (liftM2)
+import           Data.List     (group, sort)
 import qualified Data.Map      as Map
 import           Data.Monoid   ((<>))
 import           Data.SBV      (literal)
-import qualified Data.Sequence as SE
 import qualified Data.Set      as Set
 import           Data.Text     (unpack)
 import           Prelude       hiding (EQ, GT, LT)
 
-
 import           VProp.Types
-import Debug.Trace (trace)
+
 
 instance Show Var where show = unpack . varName
 instance (Show a, Show b, Show c) => Show (VProp a b c) where
@@ -39,6 +36,8 @@ instance Show NN_B where show LT  = "<"
 instance Show BB_B where show Impl   = "→"
                          show BiImpl = "↔"
                          show XOr    = "⊻"
+                         show And    = "∧"
+                         show Or     = "∨"
 
 instance (Show a, Show b) => Show (VIExpr a b) where
   show (LitI a) = show a
@@ -55,8 +54,6 @@ prettyPropExpr :: (Show a, Show b, Show c) => VProp a b c -> String
 prettyPropExpr = top
   where
     top :: (Show a, Show b, Show c) => VProp a b c -> String
-    top (Opn Or ps)     = intercalate " ∨ " $ sub <$> (F.toList ps)
-    top (Opn And ps)    = intercalate " ∧ " $ sub <$> (F.toList ps)
     top (OpBB b l r)    = mconcat [sub l, " ", show b, " ", sub r]
     top (OpIB nb l r)    = mconcat [show l, " ", show nb, " ", show r]
     top (ChcB d ls rs) = show (dimName d) ++ "≺" ++ top ls ++ ", " ++ top rs++ "≻"
@@ -88,7 +85,6 @@ isChc = not . isPlain
 onlyBools :: VProp d a b -> Bool
 onlyBools (OpIB _ _ _ ) = False
 onlyBools (ChcB _ l r)  = onlyBools l && onlyBools r
-onlyBools (Opn _ xs)    = foldr (\x acc -> acc && onlyBools x) True xs
 onlyBools (OpBB _ l r)  = onlyBools l && onlyBools r
 onlyBools (OpB  _ e)    = onlyBools e
 onlyBools _             = True
@@ -98,7 +94,6 @@ onlyBools _             = True
 onlyInts :: VProp d a b -> Bool
 onlyInts (OpIB _ l r) = onlyInts' l && onlyInts' r
 onlyInts (ChcB _ l r) = onlyInts l && onlyInts r
-onlyInts (Opn _ xs)   = foldr (\x acc -> acc && onlyInts x) True xs
 onlyInts (OpBB _ l r) = onlyInts l && onlyInts r
 onlyInts (OpB _ e)    = onlyInts e
 onlyInts _            = True
@@ -122,17 +117,6 @@ onlyLits p = (null $ trifoldMap mempty (:[]) mempty p) &&
 noDupRefs :: Ord a => VProp d a a -> Bool
 noDupRefs prop = Set.null $ (bvars prop) `Set.intersection` (ivars prop)
 
--- | returns true if there are terms in the ast like (Opn And [Opn And ...]...)
-redundantOps :: VProp d a b -> Bool
-redundantOps (Opn op ((Opn op' hs) SE.:<| ts)) =
-  op == op' || foldr (\x acc -> redundantOps x || acc) False (hs <> ts)
-redundantOps (Opn _ ps)   = foldr (\x acc -> redundantOps x || acc) False ps
-redundantOps (ChcB _ l r) = redundantOps l || redundantOps r
-redundantOps (OpBB _ l r) = redundantOps l || redundantOps r
-redundantOps (OpB _ l)    = redundantOps l
-redundantOps _            = False
-
-
 -- ----------------------------- Choice Manipulation ------------------------------
 -- | Given a config and a Variational VProp term select the element out that the
 -- config points to
@@ -142,7 +126,6 @@ selectVariant tbs x@(ChcB t y n) = case Map.lookup t tbs of
                                      Just True  -> selectVariant tbs y
                                      Just False -> selectVariant tbs n
 selectVariant tb (OpB op x)    = OpB op <$> selectVariant tb x
-selectVariant tb (Opn a ps)    = liftM (Opn a) (sequence $ selectVariant tb <$> ps)
 selectVariant tb (OpBB a l r)  = liftM2 (OpBB a)
                                 (selectVariant tb l)
                                 (selectVariant tb r)
@@ -173,7 +156,6 @@ toList prop = go prop []
   where
     go :: VProp d a b -> [VProp d a b] -> [VProp d a b]
     go x@(OpB _ a) acc    = go a $ x:acc
-    go x@(Opn _ ps) acc   = foldr go (x:acc) ps
     go x@(ChcB _ l r) acc = go r . go l $ x:acc
     go x@(OpBB _ l r) acc = go r . go l $ x:acc
     go a acc              = a:acc
@@ -222,7 +204,6 @@ choices = flip choices_ [[]]
 choices_ ::  VProp d a b -> [[(Dim d, Bool)]] -> [[(Dim d, Bool)]]
 choices_ (OpB _ e)    acc = choices_ e acc
 choices_ (OpBB _ l r) acc = choices_ l acc <> choices_ r acc
-choices_ (Opn _ ps)   acc = foldr choices_ acc ps
 choices_ (ChcB d l r) acc = left <> right
   where
     left  = choices_ l $ fmap ((:) (d, True)) acc
@@ -246,7 +227,6 @@ ivarsWithType (RefB _)     = Set.empty
 ivarsWithType (OpB _ e)    = ivarsWithType e
 ivarsWithType (OpBB _ l r) = ivarsWithType l `Set.union` ivarsWithType r
 ivarsWithType (OpIB _ l r) = ivarsWithType' l `Set.union` ivarsWithType' r
-ivarsWithType (Opn _ ps)   = Set.unions . fmap ivarsWithType . F.toList $  ps
 ivarsWithType (ChcB _ l r) = ivarsWithType l `Set.union` ivarsWithType r
 
 ivarsWithType' :: (Ord b) => VIExpr d b -> Set.Set (RefN, b)
@@ -259,22 +239,3 @@ ivarsWithType' (Ref x a)    = Set.singleton (x, a)
 -- | The set of boolean variable references for an expression
 vars :: (Ord a) => VProp d a a -> Set.Set a
 vars = trifoldMap mempty Set.singleton Set.singleton
-
--- | remove redundant operators
-flatten :: VProp d a b -> VProp d a b
-flatten p
-  | redundantOps p = flatten $ flatten_ p
-  | otherwise = p
-
-flatten_ :: VProp d a b -> VProp d a b
-flatten_ (Opn op (Opn op' ps SE.:<| SE.Empty))
-  | op == op' = Opn op $ flatten_ <$> ps
-  | otherwise = Opn op $ (Opn op' $ flatten_ <$> ps) SE.:<| SE.Empty
-flatten_ (Opn op ((Opn op' ps) SE.:<| rest))
-  | op == op' = Opn op $ flatten_ <$> (ps <> rest)
-  | otherwise = Opn op ((Opn op' (flatten_ <$> ps)) SE.:<| (flatten_ <$> rest))
-flatten_ (Opn op ps)   = Opn op $ flatten_ <$> ps
-flatten_ (OpB op e)    = OpB op $ flatten_ e
-flatten_ (OpBB op l r) = OpBB op (flatten_ l) (flatten_ r)
-flatten_ (ChcB d l r)  = ChcB d (flatten_ l) (flatten_ r)
-flatten_ e = e

@@ -82,7 +82,7 @@ unitTests = testGroup "Unit Tests"
   --   sat_error
   -- , sat_error2
   -- , sat_error4
-  -- , andDecomp_duplicate
+  --   andDecomp_duplicate
   -- , andDecomp_duplicateChc
   -- , dim_homo'
   -- , dupDimensions
@@ -92,11 +92,11 @@ unitTests = testGroup "Unit Tests"
   -- , chc_singleton_is_sat
   -- , chc_not_singleton_is_sat
   -- , chc_unbalanced_is_sat
-  -- , chc_balanced_is_sat
-   -- chc_2_nested_is_sat
-  -- bimpl_w_false_is_sat
-  -- , bimpl_w_false_chc_is_sat
-  mixed_and_impl_is_sat
+  -- chc_balanced_is_sat
+  -- chc_2_nested_is_sat
+  -- , bimpl_w_false_is_sat
+  bimpl_w_false_chc_is_sat
+  -- , mixed_and_impl_is_sat
   ]
 
 specTests :: TestTree

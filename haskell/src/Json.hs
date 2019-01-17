@@ -52,7 +52,6 @@ instance FromJSON NN_N
 instance FromJSON BB_B
 instance FromJSON NN_B
 instance FromJSON RefN
-instance FromJSON Opn
 instance FromJSON Var
 instance (FromJSON a) => FromJSON (Dim a)
 instance (FromJSON d, FromJSON a) => FromJSON (VIExpr d a)
@@ -65,7 +64,6 @@ instance ToJSON NPrim
 instance ToJSON BB_B
 instance ToJSON NN_B
 instance ToJSON RefN
-instance ToJSON Opn
 instance (ToJSON a) => ToJSON (Dim a)
 instance ToJSON Var
 
@@ -79,15 +77,3 @@ instance FromJSON Solver
 instance ToJSON Solver
 instance FromJSON Settings
 instance ToJSON Settings
-
--- parseOpt :: Parser (Maybe Opt)
--- parseOpt = do
---   when
-
--- parseOpts :: Value -> Parser [Opts]
--- parseOpts = withArray "optimizations" $ \arr ->  mapM mvRght (toList arr)
-
--- instance FromJSON Opts where
---   parseJSON = withObject "optimizations" $ \o ->
---     asum [
---          ]

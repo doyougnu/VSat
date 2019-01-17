@@ -33,21 +33,21 @@ toConf Settings{..} = foldr' ($!) emptyConf ss
 -- | A default configuration uses z3 and tries to shrink propositions
 defSettings :: Settings
 defSettings = Settings{solver=Z3, optimizations=defs, seed=Nothing}
-  where defs = [MoveRight, Atomize, CNF, Prune]
+  where defs = [MoveLeft, Atomize, Prune]
 
 -- moveRight required for proper results
 minSettings :: Settings
 minSettings = Settings{solver=Z3, optimizations=defs, seed=Nothing}
-  where defs = [MoveRight, CNF]
+  where defs = [MoveLeft]
 
 allOptsSettings :: Settings
 allOptsSettings = Settings{ solver=Z3
-                          , optimizations=[MoveRight,Atomize,CNF,Prune,Shrink]
+                          , optimizations=[MoveRight,Atomize,Prune,Shrink]
                           , seed=Nothing}
 
 debugSettings :: Settings
 debugSettings = Settings{ solver=Z3
-                        , optimizations=[MoveRight,Atomize,CNF]
+                        , optimizations=[MoveRight,Atomize]
                         , seed=Nothing}
 
 defConf :: (Show a,Show d,Show b,Ord a,Ord b,Ord d) => SMTConf d a b
@@ -96,6 +96,6 @@ convertOpts MoveRight = moveChcToRight
 convertOpts MoveLeft  = moveChcToLeft
 convertOpts Shrink    = shrinkProp
 convertOpts Prune     = prune
-convertOpts CNF       = toCNF
+-- convertOpts CNF       = toCNF
 convertOpts Atomize   = atomize
 convertOpts _         = id
