@@ -41,23 +41,6 @@ type Log = Text
 -- | Takes a dimension d, a type for values a, and a result r
 type Env d a r = RWST (SMTConf d a a) Log (SatDict d) IO r -- ^ the monad stack
 
--- | A zipper for evaluation. This is required so that everytime we have a
--- choice we have access to the rest of the proposition that we are evaluation.
--- If we do not have access then there is no way to perform a selection,
--- manipulate the assertion stack and then continue evaluating.
--- data Op = CAnd | COr deriving Show
-
--- type OpNCtx d a b = Opn (SE.Seq (VProp d a b), S.SBool)
-
--- data BBCtx d a b =
---   -- ^ in a left branch of a tree we have a focus, a context that
---   -- represents the parent of the focus and a right branch of a
---   -- tree
-
---   -- ^ in a right branch of a tree we have a focus, a left branch
---   -- and a context for the parent
---   deriving Show
-
 -- | A Ctx is a zipper over the VProp data type. This is used in the vsmtsolve
 -- routine to maintain a context when a choice is observed. This way we always
 -- have a reference to the rest of the formula we are solving during a
@@ -65,33 +48,13 @@ type Env d a r = RWST (SMTConf d a a) Log (SatDict d) IO r -- ^ the monad stack
 -- And and Or, or its a zipper over binary operators like ==> <=>. For binary
 -- operators we keep a prop that is the focus and a context which represents the
 -- parent and adjacent child
-data Ctx d a b = InBBL BB_B (Maybe S.SBool) (Ctx d a b) (Maybe (VProp d a b))
-               | InBBR BB_B (Maybe S.SBool) (Maybe (VProp d a b)) (Ctx d a b)
+data Ctx d a b = InBBL BB_B  (Ctx d a b) (VProp d a b)
+               | InBBR BB_B !S.SBool  (Ctx d a b)
+               | InB B_B (Ctx d a b)
                | Empty
                deriving Show
 
 type Loc d a b = (VProp d a b, Ctx d a b)
-
-left :: Loc d a b -> Loc d a b
-left (OpBB op l r, c) = (l,InBBL op Nothing c (Just r))
-left x                = x
-
-right :: Loc d a b -> Loc d a b
-right (OpBB op l r, c) = (r, InBBR op Nothing (Just l) c)
-right x                = x
-
-up :: Loc d a b -> Loc d a b
-up (t, InBBL op _ c (Just r)) = (OpBB op t r, c)
-up (t, InBBR op _ (Just l) c) = (OpBB op l t, c)
-up (t, InBBL op _ c Nothing) = (t, c)
-up (t, InBBR op _ Nothing c) = (t, c)
-
-upmost :: Loc d a b -> Loc d a b
-upmost l@(t, Empty) = l
-upmost l = upmost (up l)
-
-modify :: Loc d a b -> (VProp d a b -> VProp d a b) -> Loc d a b
-modify (t, c) f = (f t, c)
 
 -- | An empty reader monad environment, in the future read these from config file
 _emptySt :: SatDict d
@@ -374,11 +337,6 @@ handleChcVSMT goLeft goRight c@(ChcB _ l r) =
   (vSMTSolve_ goLeft) (vSMTSolve_ goRight)
   (vSMTSolve_ l) (vSMTSolve_ r) c
 
-combine :: (a -> a -> a) -> Maybe a -> Maybe a -> Maybe a
-combine _ Nothing Nothing = Nothing
-combine _ Nothing (Just a) = Just a
-combine _ (Just a) Nothing = Just a
-combine f (Just a) (Just b) = Just $ f a b
 -- | Handle a choice in the IncVSMTSolve monad, we check to make sure that if a
 -- choice is already selected then the selection is maintained. If not then we
 -- solve both branches by first clearing the state, recursively solving, if the
@@ -393,66 +351,54 @@ combine f (Just a) (Just b) = Just $ f a b
 -- recurring.
 handleCtx :: (Ord d, Show d) => Loc d S.SBool SNum -> IncVSMTSolve d S.SBool
   -- when we have no ctx we just solve the unit clause
+handleCtx (OpIB _ _ _, _) = error "what?!?! How did you even get here! Get Jeff on the phone this isn't implemented yet!"
 handleCtx (RefB b, Empty) = return b
 handleCtx (LitB b, Empty) = return $ S.literal b
+  -- when we have a context that holds only an accumulator we combine the atomic
+  -- with the accum and return the result
+handleCtx (RefB b, InBBR op acc Empty) =
+  return $ (bDispatch op) acc b
+handleCtx (LitB b, InBBR op acc Empty) =
+  return $ (bDispatch op) acc (S.literal b)
 
-handleCtx (RefB b, InBBR op acc (Just lbranch) ctx) =
-  handleCtx (lbranch, InBBL op newAcc ctx Nothing)
-  where newAcc = combine (flip $ bDispatch op) acc (Just b)
-handleCtx (RefB b, InBBL op acc ctx (Just rbranch)) =
-  handleCtx (rbranch, InBBR op newAcc Nothing ctx)
-  where newAcc = combine (bDispatch op) acc (Just b)
-handleCtx (LitB b, InBBR op acc (Just lbranch) ctx) =
-  handleCtx (lbranch, InBBL op newAcc ctx Nothing)
-  where newAcc = combine (flip $ bDispatch op) acc (Just $ S.literal b)
-handleCtx (LitB b, InBBL op acc ctx (Just rbranch)) =
-  handleCtx (rbranch, InBBR op newAcc Nothing ctx)
-  where newAcc = combine (bDispatch op) acc (Just $ S.literal b)
+  -- When we see an atomic in a left context we add that atomic to the
+  -- accumulator and recur to the rhs of the operator
+handleCtx (RefB b, InBBL op ctx rbranch) =
+  handleCtx (rbranch, InBBR op b ctx)
+handleCtx (LitB b, InBBL op ctx rbranch) =
+  handleCtx (rbranch, InBBR op (S.literal b) ctx)
+handleCtx (LitB b, InB _ ctx) = handleCtx (LitB $ S.bnot b, ctx)
+handleCtx (RefB b, InB _ ctx) = handleCtx (RefB $ S.bnot b, ctx)
 
+  -- when we are in the left side of a context and the right side of a subtree
+  -- we add the atomics to the accumulator and swap to the right side of the
+  -- parent context with the new accumulator being the result of computing the
+  -- left side
+handleCtx (RefB b, InBBR op acc (InBBL op' ctx r)) =
+  handleCtx (r , InBBR op' newAcc ctx)
+  where newAcc = (bDispatch op) acc b
+  -- if we have two rhs contexts then we abuse the focus to
+handleCtx (RefB b, InBBR op acc ctx) =
+  handleCtx (RefB newAcc, ctx)
+  where newAcc = (bDispatch op) acc b
+handleCtx (LitB b, InBBR op acc ctx) =
+  handleCtx (RefB newAcc, ctx)
+  where newAcc = (bDispatch op) acc (S.literal b)
+handleCtx (fcs, InB _ (InB _ ctx)) = handleCtx (fcs, ctx)
+
+  -- when we see a choice we describe the computations for each variant and
+  -- offload it to a handler function that manipulates the sbv assertion stack
 handleCtx (c@(ChcB _ l r), ctx) =
-  trace ("[DEBUG]: " ++ "got a choice: " ++ show goLeft ++ "\n") $
   handleChcCtx goLeft goRight c
   where goLeft  = (l, ctx)
         goRight = (r, ctx)
-handleCtx (fcs, InBBL _ Nothing Empty Nothing) = handleCtx (fcs, Empty)
-handleCtx (fcs, InBBR _ Nothing Nothing Empty) = handleCtx (fcs, Empty)
-handleCtx (fcs, InBBL op (Just acc) Empty Nothing) =
-  (flip $ bDispatch op) acc <$> (handleCtx (fcs, Empty))
-handleCtx (fcs, InBBR op (Just acc) Nothing Empty) =
-  (bDispatch op) acc <$> (handleCtx (fcs, Empty))
 
-handleCtx (fcs, InBBL op Nothing Empty (Just r)) =
-  do fcs' <- handleCtx (fcs, Empty)
-     -- trace ("[DEBUG]: going left at top level sending " ++ show fcs') $ return ()
-     handleCtx (r, InBBR op (Just fcs') Nothing Empty)
-handleCtx (fcs, InBBR op Nothing (Just l) Empty) =
-  do fcs' <- handleCtx (fcs, Empty)
-     handleCtx (l, InBBL op (Just fcs') Empty Nothing)
+handleCtx (OpB Not e, InB _ ctx) = handleCtx (e, ctx)
+handleCtx (OpB op e, ctx) = handleCtx (e, InB op ctx)
 
-handleCtx (OpBB op l r, ctx) =
-  -- trace ("[DEBUG]: going left " ++ "fcs: " ++ show l ++ " ctx: " ++ show ctx ++ "\n") $
-  handleCtx (l, InBBL op Nothing ctx (Just r))
-
-handleCtx (fcs, InBBL op' innerAcc (InBBL op acc ctx (Just r)) Nothing) =
-  do fcs' <- handleCtx (fcs, InBBL op' innerAcc Empty Nothing)
-     let newAcc = combine (bDispatch op) (Just fcs') acc
-     handleCtx (r, InBBR op newAcc Nothing ctx)
-
-handleCtx (fcs, InBBL op' innerAcc (InBBR op acc (Just l) ctx) Nothing) =
-  do fcs' <- handleCtx(fcs, InBBL op' innerAcc Empty Nothing)
-     let newAcc = combine (flip $ bDispatch op) (Just fcs') acc
-     handleCtx (l, InBBL op newAcc ctx Nothing)
-
-handleCtx (fcs, InBBR op' innerAcc Nothing (InBBL op acc ctx (Just r))) =
-  do fcs' <- handleCtx(fcs, InBBR op' innerAcc Nothing Empty)
-     let newAcc = combine (bDispatch op) (Just fcs') acc
-     handleCtx (r, InBBR op newAcc Nothing ctx)
-
-handleCtx (fcs, InBBR op' innerAcc Nothing (InBBR op acc (Just l) ctx)) =
-  do fcs' <- handleCtx(fcs, InBBR op' innerAcc Nothing Empty)
-     let newAcc = combine (flip $ bDispatch op) (Just fcs') acc
-     handleCtx (l, InBBR op newAcc Nothing ctx)
-
+  -- when we have a subtree as our focus we recur as far left as possible until
+  -- we hit a choice or an atomic term
+handleCtx (OpBB op l r, ctx) = handleCtx (l, InBBL op ctx r)
 
 
 -- | The main solver algorithm. You can think of this as the sem function for
@@ -465,9 +411,8 @@ vSMTSolve_ (OpB Not c@(ChcB _ l r)) = handleChcVSMT goLeft goRight c
         goRight = OpB Not r
 vSMTSolve_ (OpB Not (OpB Not notchc)) = vSMTSolve_ notchc
 vSMTSolve_ (OpB Not notchc) = S.bnot <$> vSMTSolve_ notchc
-vSMTSolve_ (OpBB op l r) = handleCtx $ trace ("\n making ctx :" ++ show go ++ "\n") $ go
-  where go = (l, InBBL op Nothing Empty (Just r))
--- vSMTSolve_ (OpIB _ _ _) = error "Blame Jeff! This isn't implemented yet!"
+vSMTSolve_ (OpBB op l r) = handleCtx (l, InBBL op Empty r)
+vSMTSolve_ (OpIB _ _ _) = error "Blame Jeff! This isn't implemented yet!"
 -- vSMTSolve_ !(OpIB op l r) = do l' <- vSMTSolve'_ l
 --                                r' <- vSMTSolve'_ r
 --                                _ <- reifyArithChcs l' r' (handler op)
