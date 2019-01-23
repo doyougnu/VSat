@@ -1,13 +1,13 @@
 module CaseStudy.Auto.Parser where
 
-import Data.Void
-import qualified Data.Text as T
-import Text.Megaparsec
-import Text.Megaparsec.Char
+import qualified Data.Text                  as T
+import           Data.Void
+import           Text.Megaparsec
+import           Text.Megaparsec.Char
 import qualified Text.Megaparsec.Char.Lexer as L
-import Text.Megaparsec.Expr
+import           Text.Megaparsec.Expr
 
-import CaseStudy.Auto.Lang
+import           CaseStudy.Auto.Lang
 
 type Parser = Parsec Void T.Text
 
@@ -52,8 +52,10 @@ bTerm =  (parens bExpr)
          <|> (try contextRef)
          <|> boolRef
          <|> rExpr
+         <|> aXor
          <|> (AutoLit True <$ reserved "true")
          <|> (AutoLit False <$ reserved "false")
+
 
 aTerm :: Parser (ALang T.Text)
 aTerm = (parens aExpr)
@@ -95,16 +97,14 @@ arithRef = do reserved "feature"
               return $ AVar uuid
 
 aVariable :: Parser T.Text
-aVariable = do a <- T.pack <$> many alphaNumChar
-               f <- dash
-               b <- T.pack <$> many alphaNumChar
-               g <- dash
-               c <- T.pack <$> many alphaNumChar
-               h <- dash
-               d <- T.pack <$> many alphaNumChar
-               i <- dash
-               e <- T.pack <$> many alphaNumChar
-               return . mconcat $ [a,f,b,g,c,h,d,i,e]
+aVariable = mconcat <$> sepBy1 (T.pack <$> many alphaNumChar) dash
+
+aXor :: Parser (AutoLang T.Text)
+aXor = do reserved "oneonly"
+          features <- brackets (sepBy1 boolRef comma)
+          let xorDList = xAOrJoin features
+          return xorDList
+
 
 bOperators :: [[Operator Parser (AutoLang a)]]
 bOperators =
@@ -114,7 +114,7 @@ bOperators =
     , InfixL (BBinary Or <$ reserved "or")
     , InfixR (BBinary Impl <$ reserved "impl")
     , InfixN (BBinary Eqv <$ reserved "iff")
-    , InfixN (BBinary Xor <$ reserved "oneonly") -- not sure what Xor is for this lang
+    -- , InfixN (BBinary Xor <$ reserved "oneonly") -- not sure what Xor is for this lang
     ]
   ]
 

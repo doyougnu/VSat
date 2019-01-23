@@ -12,6 +12,8 @@ import           CaseStudy.Auto.Lang
 import           VProp.Core                 ()
 import qualified VProp.Types                as V
 
+import Debug.Trace (trace)
+
 -- | A context represents an evolution context which are temporal bounds
 -- represented as integers
 type Context = (Integer, Integer)
@@ -58,20 +60,20 @@ runAutoToVSat__ = flip S.runState (M.empty, 0) . autoToVSat_
 
 -- | A hole that is used as a placeholder for reifying nested choices in
 -- autoToVsat
-hole :: (IsString a, Show a, Eq a, Ord a) => V.VProp d a b
+hole :: (IsString a, Eq a, Ord a) => V.VProp d a b
 hole = V.RefB "_"
 
-isHole :: (IsString a, Show a, Eq a, Eq b, Eq d, Ord a) => V.VProp d a b -> Bool
+isHole :: (IsString a, Eq a, Eq b, Eq d, Ord a) => V.VProp d a b -> Bool
 isHole = (==) hole
 
-has :: (IsString a, Show a, Show b, Eq a, Eq b, Ord a) =>
+has :: (IsString a, Eq a, Eq b, Ord a) =>
   (V.VProp d a b -> Bool) -> V.VProp d a b -> Bool
 has p a@(V.OpB  _ e)   = p a || has p e
 has p a@(V.OpBB _ l r) = p a || has p l || has p r
 has p a@(V.ChcB _ l r) = p a || has p l || has p r
 has p x                = p x
 
-hasHole :: (IsString a, Show a, Show b, Eq a, Eq b, Ord a, Eq d) =>
+hasHole :: (IsString a, Eq a, Eq b, Ord a, Eq d) =>
   V.VProp d a b -> Bool
 hasHole = has isHole
 
@@ -147,42 +149,34 @@ dispatch'' Multiply = V.Mult
 dispatch'' Divide   = V.Div
 dispatch'' Modulus  = V.Mod
 
--- | take a list of autolangs queries and conjoin them as a single query. The
--- conjunction is domain specific and appropriate in this context
-conjoin :: [AutoLang a] -> AutoLang a
-conjoin = Prelude.foldr1 (BBinary And)
-
-conjoin' :: [V.VProp d a b] -> V.VProp d a b
-conjoin' = Prelude.foldr1 (V.OpBB V.And)
-
-disjoin :: [AutoLang a] -> AutoLang a
-disjoin = Prelude.foldr1 (BBinary Or)
-
-disjoin' :: [V.VProp d a b] -> V.VProp d a b
-disjoin' = Prelude.foldr1 (V.OpBB V.Or)
-
 -- | Take a VProp term that has choices with holes and reify them to the simple
 -- encoding
--- nestChoices :: (IsString a, Show a, Eq a, Ord a, Eq d) =>
---   V.VProp d a a -> V.VProp d a a
---   -- base case to prevent an Opn op empty list at end of recursion
---   -- any choice that maintains a hole is transformed into a nested choice
--- nestChoices a@(V.ChcB dim l r)
---   | l == hole && r == V.true = V.ChcB dim (nestChoices (V.Opn V.And xs)) (V.true)
---   | otherwise = V.Opn V.And $ a SE.:<| (nestChoices <$> xs)
+nestChoices :: (IsString a, Eq a, Ord a, Eq d) =>
+  V.VProp d a a -> V.VProp d a a
+  -- base case to prevent an Opn op empty list at end of recursion
+  -- any choice that maintains a hole is transformed into a nested choice
+nestChoices (V.OpBB o (V.ChcB dim l r) r')
+  | l == hole && r == V.true = V.ChcB dim (nestChoices r') (V.true)
+  | otherwise = V.OpBB o (V.ChcB dim (nestChoices l) (nestChoices r))
+                          (nestChoices r')
 
--- nestChoices (V.Opn V.Or (a@(V.ChcB dim l r) SE.:<| xs))
---   | l == hole && r == V.true = V.ChcB dim hole (nestChoices (V.Opn V.Or xs))
---   | otherwise = V.Opn V.And $ a SE.:<| (nestChoices <$> xs)
+nestChoices (V.OpBB o l' (V.ChcB dim l r))
+  | l == hole && r == V.true = V.ChcB dim (nestChoices l') (V.true)
+  | otherwise = V.OpBB o (nestChoices l')
+                (V.ChcB dim (nestChoices l) (nestChoices r))
 
---   -- recursive cases
--- nestChoices (V.OpB o os) = V.OpB o $ nestChoices os
--- nestChoices (V.OpBB o l r) = V.OpBB o (nestChoices l) (nestChoices r)
--- nestChoices (V.ChcB d l r) = V.ChcB d (nestChoices l) (nestChoices r)
--- nestChoices x = x
+  -- recursive cases
+nestChoices (V.OpB o os) = V.OpB o $ nestChoices os
+nestChoices (V.OpBB o l r) = V.OpBB o (nestChoices l) (nestChoices r)
+nestChoices (V.ChcB d l r) = V.ChcB d (nestChoices l) (nestChoices r)
+nestChoices x = x
 
 -- | Fill holes given a predicate, an old vprop, and a replacement vprop
-fillBy :: (Show a, Show b) => (V.VProp d a b -> Bool) -> V.VProp d a b -> V.VProp d a b-> V.VProp d a b
+fillBy ::
+  (V.VProp d a b -> Bool) ->
+  V.VProp d a b           ->
+  V.VProp d a b           ->
+  V.VProp d a b
 fillBy p a@(V.OpB op e) new
   | p a = new
   | otherwise = V.OpB  op  (fillBy p e new)
@@ -197,16 +191,24 @@ fillBy p x new
   | otherwise = x
 
 -- | fill holes by identifying them with isHole predicate function
-fill :: (IsString a, Eq a, Eq b, Eq d, Ord a, Show a, Show b) =>
+fill :: (IsString a, Eq a, Eq b, Eq d, Ord a) =>
   V.VProp d a b -> V.VProp d a b -> V.VProp d a b
 fill = fillBy isHole
 
-naiveEncode :: (IsString a, Show a, Eq a, Ord a, Eq d) => V.VProp d a a -> V.VProp d a a
-naiveEncode (V.OpBB op a@(V.ChcB dim l r) rest)
-  | hasHole a = fill a rest
-  | otherwise = V.OpBB op
+naiveEncode :: (IsString a, Eq a, Ord a, Eq d) => V.VProp d a a -> V.VProp d a a
+naiveEncode (V.OpBB V.Impl a@(V.ChcB dim l r) r')
+  | hasHole a = fill a r'
+  | otherwise = V.OpBB V.Impl
                 (V.ChcB dim (naiveEncode l) (naiveEncode r))
-                (naiveEncode rest)
+                (naiveEncode r')
+
+naiveEncode (V.OpBB V.Impl l' a@(V.ChcB dim l r))
+  | hasHole a = fill a l'
+  | otherwise = V.OpBB V.Impl
+                (naiveEncode l')
+                (V.ChcB dim
+                 (naiveEncode l) (naiveEncode r))
+
 naiveEncode (V.OpBB op l r) = V.OpBB op (naiveEncode l) (naiveEncode r)
 naiveEncode (V.OpB op e) = V.OpB op (naiveEncode e)
 naiveEncode (V.ChcB d l r) = V.ChcB d (naiveEncode l) (naiveEncode r)
