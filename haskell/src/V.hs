@@ -186,6 +186,15 @@ numDimensions = getSum . bifoldMap (const 1) (const mempty)
 dimensions :: Ord d => V d a -> S.Set d
 dimensions = bifoldr' S.insert (const $ const S.empty) S.empty
 
+values :: Ord a => V d a -> S.Set a
+values = bifoldr' (const $ const S.empty) S.insert S.empty
+
+dimensions' :: V d a -> [d]
+dimensions' = bifoldr' (:) (const $ const []) []
+
+values' :: V d a -> [a]
+values' = bifoldr' (const $ const []) (:) []
+
 -- Predicates
 isPlain :: V d a -> Bool
 isPlain (Plain _) = True

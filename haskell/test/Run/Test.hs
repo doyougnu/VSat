@@ -12,12 +12,17 @@ import Data.SBV ( SatResult(..)
                 , SMTSolver(..)
                 , Solver(..)
                 , Modelable(..))
-import Data.SBV.Internals (showModel, SMTModel(..))
+import Data.SBV.Internals (showModel, SMTModel(..), CW)
+import Data.SBV           (getModelDictionary)
+import Data.List          (all)
 import Control.Monad.Trans (liftIO)
 import Data.Monoid (Sum)
 import System.IO.Unsafe (unsafePerformIO)
 import Control.Monad (liftM2, liftM)
-import Data.Maybe (maybe, isJust)
+import Data.Maybe (maybe, isJust, catMaybes)
+import Data.Map   (keys, Map)
+import Data.Char  (isLower)
+import Data.Set   (Set)
 
 import VProp.Types
 import VProp.Core
@@ -71,6 +76,9 @@ runProperties = testGroup "Run Properties" [
   -- , sat_error3
   -- vsat_matches_BF_plain
   -- vsat_matches_BF
+  no_dims_in_model
+
+
                                            -- ad_term2
                                            -- ad_term
                                            -- , qcProps
@@ -82,7 +90,7 @@ unitTests = testGroup "Unit Tests"
   --   sat_error
   -- , sat_error2
   -- , sat_error4
-  --   andDecomp_duplicate
+  -- andDecomp_duplicate
   -- , andDecomp_duplicateChc
   -- , dim_homo'
   -- , dupDimensions
@@ -92,11 +100,12 @@ unitTests = testGroup "Unit Tests"
   -- , chc_singleton_is_sat
   -- , chc_not_singleton_is_sat
   -- , chc_unbalanced_is_sat
-  -- chc_balanced_is_sat
-  -- chc_2_nested_is_sat
+  -- , chc_balanced_is_sat
+  -- , chc_2_nested_is_sat
   -- , bimpl_w_false_is_sat
-  bimpl_w_false_chc_is_sat
+  -- , bimpl_w_false_chc_is_sat
   -- , mixed_and_impl_is_sat
+    -- chces_not_in_model
   ]
 
 specTests :: TestTree
@@ -114,6 +123,10 @@ sat_term = QC.testProperty
 dim_homo = QC.testProperty
            "Dimensions are homomorphic over solving i.e. dimensions are preserved, always"
            dim_homomorphism
+
+no_dims_in_model = QC.testProperty
+                  "Running brute force never convolves object level variables with dimensions"
+                  no_dims_in_model_prop
 
 vsat_matches_BF = QC.testProperty
                   "VSat with an empty configuration always matches Brute Force results"
@@ -197,6 +210,9 @@ mixed_and_impl_is_sat = H.testCase
                            "A bimplication with a False and a choice is always unsat"
                            mixed_and_impl_is_sat_unit
 
+chces_not_in_model = H.testCase
+                     "For brute for we never see choices in a returned model"
+                     chces_not_in_model_unit
 
 andDecomp_duplicate = H.testCase
   "And decomposition can solve props with repeat variables" $
@@ -240,11 +256,28 @@ vsat_matches_BF' x =  onlyBools x QC.==> QCM.monadicIO
        liftIO . putStrLn $ "[VSAT]: \n" ++ show b'
        QCM.assert (a' |==| b')
 
+noDimsInModel :: V.V d (Maybe SatResult) -> Bool
+noDimsInModel res = all (strIsLower) resultVars
+  where
+    resultModels = V.values' $ (fmap (keys . getModelDictionary)) <$> res
+
+    resultVars :: [String]
+    resultVars = mconcat $ catMaybes resultModels
+
+    strIsLower :: String -> Bool
+    strIsLower = all isLower
+
+no_dims_in_model_prop x =  onlyBools x QC.==> QCM.monadicIO
+  $ do a <- QCM.run . (bfWith emptyConf) $ (x :: ReadableProp)
+       let a' = V.dimSort $ a
+       liftIO . putStrLn $ "[BF]:   \n" ++ show a'
+       QCM.assert (noDimsInModel a')
+
 vsat_matches_BF_plain' x =
   (onlyBools x && isPlain x) QC.==> QCM.monadicIO
   $ do a <- QCM.run . (bfWith emptyConf) $ (x :: VProp Var Var Var)
        b <- QCM.run . (satWith emptyConf) $ x
-       liftIO . putStrLn $ "[BF]:   \n" ++ show (V.dimSort a)
+       liftIO . putStrLn $ "\n[BF]:   \n" ++ show (V.dimSort a)
        liftIO . putStrLn $ "[VSAT]: \n" ++ show (V.dimSort b)
        QCM.assert ((V.dimSort a) |==| (V.dimSort b))
 
@@ -393,3 +426,7 @@ mixed_and_impl_is_sat_unit =
   unitGen prop "BF matches VSAT for equivalency that is always unsat"
   where prop :: ReadableProp
         prop = false &&& ((bChc "AA" (bRef "a") (bRef "b")) ==> (bRef "c"))
+
+chces_not_in_model_unit = unitGen prop "BF never returns a model that contains a choice as a variable"
+  where prop :: ReadableProp
+        prop = (bChc "BB" (false) (bChc "CC" (bRef "a") (bRef "b"))) &&& true

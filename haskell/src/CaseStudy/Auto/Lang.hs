@@ -1,5 +1,7 @@
 module CaseStudy.Auto.Lang where
 
+import           Utils (fromList)
+
 data AutoLang a = AutoLit Bool
                 | AutoRef a
                 | Ctx RBOp (ALang a) (AutoLang a)
@@ -42,10 +44,10 @@ prettyAuto' (Neg a)  = mconcat ["−", prettyAuto' a]
 prettyAuto' (ABinary o l r) = mconcat [prettyAuto' l, " ", show o, " ", prettyAuto' r]
 
 
-instance Show AOp where show Add  = "+"
+instance Show AOp where show Add      = "+"
                         show Subtract = "-"
                         show Multiply = "*"
-                        show Divide = "/"
+                        show Divide   = "/"
                         show Modulus  = "%"
 
 instance Show RBOp where show LST  = "<"
@@ -55,8 +57,11 @@ instance Show RBOp where show LST  = "<"
                          show EQL  = "=="
                          show NEQL = "≠"
 
-instance Show BOp where show Impl   = "→"
-                        show Eqv    = "↔"
-                        show Xor    = "⊻"
-                        show And    = "∧"
-                        show Or     = "∨"
+instance Show BOp where show Impl = "→"
+                        show Eqv  = "↔"
+                        show Xor  = "⊻"
+                        show And  = "∧"
+                        show Or   = "∨"
+
+xAOrJoin :: [AutoLang a] -> AutoLang a
+xAOrJoin = fromList $ BBinary Xor
