@@ -10,7 +10,7 @@ module VProp.SBV ( andDecomp
 import qualified Data.SBV as S
 import           Prelude    hiding   (lookup,LT,EQ,GT)
 import           Data.Maybe          (fromMaybe)
-import           Data.Map            (fromList, lookup)
+import qualified Data.Map as M       (fromList, lookup)
 import qualified Data.Set as Set     (toList)
 
 import VProp.Types
@@ -93,12 +93,12 @@ symbolicPropExpr e = do
         helper (RefD, d) = sequence $ (d, SD <$> S.sDouble (show d))
         helper (RefI, i) = sequence $ (i, SI <$> S.sInt64 (show i))
 
-    syms  <- fmap (fromList . zip vs) (S.sBools (show <$> vs))
-    dims  <- fmap (fromList . zip ds) (S.sBools (map (show . dimName) ds))
-    isyms <- fromList <$> traverse helper isType
-    let look f  = fromMaybe err  (lookup f syms)
-        lookd d = fromMaybe errd (lookup d dims)
-        looki i = fromMaybe erri (lookup i isyms)
+    syms  <- fmap (M.fromList . zip vs) (S.sBools (show <$> vs))
+    dims  <- fmap (M.fromList . zip ds) (S.sBools (map (show . dimName) ds))
+    isyms <- M.fromList <$> traverse helper isType
+    let look f  = fromMaybe err  (M.lookup f syms)
+        lookd d = fromMaybe errd (M.lookup d dims)
+        looki i = fromMaybe erri (M.lookup i isyms)
     return (evalPropExpr lookd looki look e)
   where err = error "symbolicPropExpr: Internal error, no symbol found."
         errd = error "symbolicPropExpr: Internal error, no dimension found."

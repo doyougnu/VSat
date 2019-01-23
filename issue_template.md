@@ -6,10 +6,6 @@ This repository's issues are reserved for feature requests and bug reports.
   - [ ] support request
 
 
-* **Do you want to request a *feature* or report a *bug*?**
-
-
-
 * **What is the current behavior?**
 
 
@@ -28,7 +24,7 @@ https://plnkr.co or similar (you can use this template as a starting point: http
 
 
 * **Please tell us about your environment:**
-  
+
   - Version: 2.0.0-beta.X
   - OS: [MacOSX | Windows 10 | Windows 7 | Linux (specify distro)]
   - GHC Version:
