@@ -9,8 +9,8 @@ import qualified Data.Set      as Set
 import           Data.Text     (unpack)
 import           Prelude       hiding (EQ, GT, LT)
 
+import           Utils
 import           VProp.Types
-
 
 instance Show Var where show = unpack . varName
 instance (Show a, Show b, Show c) => Show (VProp a b c) where
@@ -185,7 +185,7 @@ maxShared = safeMaximum . fmap length . group . sort . trifoldMap (:[]) mempty m
   where safeMaximum [] = 0
         safeMaximum xs = maximum xs
 
--- --------------------------- Destructors -----------------------------------------
+--------------------------- Destructors -----------------------------------------
 -- | The set of features referenced in a feature expression.
 bvars :: Ord a => (VProp d a b) -> Set.Set a
 bvars = trifoldMap mempty Set.singleton mempty
@@ -239,3 +239,14 @@ ivarsWithType' (Ref x a)    = Set.singleton (x, a)
 -- | The set of boolean variable references for an expression
 vars :: (Ord a) => VProp d a a -> Set.Set a
 vars = trifoldMap mempty Set.singleton Set.singleton
+
+
+--------------------------- Constructors -----------------------------------------
+conjoin :: [VProp d a b] -> VProp d a b
+conjoin = fromList $ OpBB And
+
+disjoin :: [VProp d a b] -> VProp d a b
+disjoin = fromList $ OpBB Or
+
+xOrJoin :: [VProp d a b] -> VProp d a b
+xOrJoin = fromList $ OpBB XOr
