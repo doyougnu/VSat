@@ -1,9 +1,9 @@
 module VProp.Core where
 
 import           Control.Monad (liftM2)
-import           Data.List     (group, sort)
+import           Data.List     (group, sort, nub)
 import qualified Data.Map      as Map
-import           Data.Monoid   ((<>))
+import           Data.Monoid   ((<>), Sum(..))
 import           Data.SBV      (literal)
 import qualified Data.Set      as Set
 import           Data.Text     (unpack)
@@ -12,9 +12,12 @@ import           Prelude       hiding (EQ, GT, LT)
 import           Utils
 import           VProp.Types
 
+import Debug.Trace (trace)
+
 instance Show Var where show = unpack . varName
 instance (Show a, Show b, Show c) => Show (VProp a b c) where
   show = prettyPropExpr
+
 
 -- | Pretty print a feature expression.
 instance Show NPrim where show (I i) = show i
@@ -78,8 +81,8 @@ isPlain :: VProp a b c -> Bool
 isPlain = null . trifoldMap (:[]) mempty mempty
 
 -- | Does the prop contain choices
-isChc :: VProp a b c -> Bool
-isChc = not . isPlain
+isVariational :: VProp a b c -> Bool
+isVariational = not . isPlain
 
 -- | Does the prop only contain boolean values? No ints or floats
 onlyBools :: VProp d a b -> Bool
@@ -175,6 +178,9 @@ numPlain = toInteger . length . filter isPlain . toList
 numSharedDims :: (Eq d) => VProp d a b -> Integer
 numSharedDims = toInteger . length . filter (flip (>=) 2 . length) . group . trifoldMap (:[]) mempty mempty
 
+numDims :: VProp d a b -> Integer
+numDims = getSum . trifoldMap (const 1) mempty mempty
+
 -- | Number of like plain terms
 numSharedPlain :: (Eq d, Eq a, Eq b) => VProp d a b -> Integer
 numSharedPlain = toInteger . length . filter (flip (>=) 2 . length) . group . filter isPlain . toList
@@ -194,21 +200,13 @@ bvars = trifoldMap mempty Set.singleton mempty
 dimensions :: Ord d => (VProp d a b) -> Set.Set (Dim d)
 dimensions = trifoldMap (Set.singleton . Dim) mempty mempty
 
+dimensions' :: Eq d => VProp d a b -> [Dim d]
+dimensions' = nub . trifoldMap ((:[]) . Dim) mempty mempty
+
 -- | wrapper around choices engine, called choices_ with [] results in [] always
 -- being returned. Works properly with [[]]
-choices :: VProp d a b -> [[(Dim d, Bool)]]
-choices = flip choices_ [[]]
-
--- | generate a list of dimension selection pairs directly from a prop. This is
--- some weird fold
-choices_ ::  VProp d a b -> [[(Dim d, Bool)]] -> [[(Dim d, Bool)]]
-choices_ (OpB _ e)    acc = choices_ e acc
-choices_ (OpBB _ l r) acc = choices_ l acc <> choices_ r acc
-choices_ (ChcB d l r) acc = left <> right
-  where
-    left  = choices_ l $ fmap ((:) (d, True)) acc
-    right = choices_ r $ fmap ((:) (d, False)) acc
-choices_ _            acc = acc
+choices :: Eq d => VProp d a b -> [[(Dim d, Bool)]]
+choices = booleanCombinations . dimensions'
 
 -- | TODO implement choices' for IBs
 choices' :: (Ord b) => VIExpr d b -> Set.Set (RefN, b)

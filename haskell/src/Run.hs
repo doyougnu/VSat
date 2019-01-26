@@ -96,7 +96,8 @@ runVSMT = runEnv runVSMTSolve
 -- | Given a VProp a term generate the satisfiability map
 initSt :: Ord d => VProp d a a -> SatDict d
 initSt prop = sats
-  where sats = M.fromList . fmap (\x -> (x, False)) $ M.fromList <$> choices prop
+  where sats = M.fromList . fmap (\x -> (x, False)) $
+               M.fromList <$> choices prop
 
 -- | Some logging functions
 _logBaseline :: (Show a, MonadWriter [Char] m) => a -> m ()
@@ -118,7 +119,9 @@ runBruteForce prop = lift $ flip evalStateT (initSt prop) $
   do
   _confs <- get
   let confs = M.keys _confs
-      plainProps = (\y -> sequence $ (y, selectVariant y prop)) <$> confs
+      plainProps = if null confs
+        then [Just (M.empty, prop)]
+        else (\y -> sequence $ (y, selectVariant y prop)) <$> confs
   plainMs <- lift $ mapM (bitraverse pure (fmap unsat . S.sat . symbolicPropExpr)) $ catMaybes plainProps
   return . Result . bimap dimName Just .  fromJust $ recompile plainMs
   where unsat (S.SatResult smtModel) = smtModel
