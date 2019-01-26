@@ -12,6 +12,8 @@ import           VProp.Gen
 import           VProp.SBV
 import           VProp.Types
 
+import Debug.Trace (trace)
+
 coreProperties :: TestTree
 coreProperties = testGroup "Core Properties" [qcProps]
 
@@ -52,4 +54,20 @@ qcProps = testGroup "QuickChecked Properties"
 
   , QC.testProperty "And Decomposition does not affect plain props" $
     \x -> isPlain x QC.==> andDecomp x dimName == (x :: VProp Var Var Var)
+  , QC.testProperty "Config generation only generates complete configs" selectionToPlain
   ]
+
+
+
+selectionToPlain :: ReadableProp -> Property
+selectionToPlain x = isVariational x QC.==>
+  do
+    let dims = dimensions' x
+        confs = choices x
+        check y = (length dims) == (length y)
+    -- trace ("\n--------------\ndims") $
+    --   trace (show dims) $
+    --   trace ("\n--------------\nconfs") $
+    --   trace (show confs) $
+    --   trace ("\n--------------\n") $
+    all (check) confs

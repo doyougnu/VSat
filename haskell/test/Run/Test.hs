@@ -75,8 +75,8 @@ runProperties = testGroup "Run Properties" [
   -- , sat_error2
   -- , sat_error3
   -- vsat_matches_BF_plain
-  -- vsat_matches_BF
-  no_dims_in_model
+  vsat_matches_BF
+  -- no_dims_in_model
 
 
                                            -- ad_term2
@@ -270,7 +270,7 @@ noDimsInModel res = all (strIsLower) resultVars
 no_dims_in_model_prop x =  onlyBools x QC.==> QCM.monadicIO
   $ do a <- QCM.run . (bfWith emptyConf) $ (x :: ReadableProp)
        let a' = V.dimSort $ a
-       liftIO . putStrLn $ "[BF]:   \n" ++ show a'
+       -- liftIO . putStrLn $ "[BF]:   \n" ++ show a'
        QCM.assert (noDimsInModel a')
 
 vsat_matches_BF_plain' x =
