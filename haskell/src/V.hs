@@ -225,3 +225,17 @@ dimSort (VChc d l' (VChc d' l r))
                 (dimSort l')
                 (VChc d' (dimSort l) (dimSort r))
 dimSort x            = x
+
+-- | copied draw function from Data.Tree
+drawTree :: (Show d, Show a) => V d a -> String
+drawTree = unlines . draw
+
+draw :: (Show d, Show a) => V d a -> [String]
+draw (Plain a) =  "|" : shift ("`- ") ("   ") (pure $ show a)
+  where
+    shift first other = zipWith (++) (first : repeat other)
+draw (VChc d l r) = (show d) : drawSubTrees [l,r]
+  where drawSubTrees [] = []
+        drawSubTrees (t:ts) = "|" : shift "+- " "|  " (draw t) ++ drawSubTrees ts
+
+        shift first other = zipWith (++) (first : repeat other)
