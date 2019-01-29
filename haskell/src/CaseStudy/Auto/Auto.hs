@@ -4,15 +4,12 @@ import qualified Control.Monad.State.Strict as S
 import           Data.Aeson
 import           Data.Bifunctor             (bimap)
 import qualified Data.Map                   as M
-import           Data.Monoid                ((<>))
 import           Data.String                (IsString)
 import           Data.Text
 
 import           CaseStudy.Auto.Lang
 import           VProp.Core                 ()
 import qualified VProp.Types                as V
-
-import Debug.Trace (trace)
 
 -- | A context represents an evolution context which are temporal bounds
 -- represented as integers
@@ -86,7 +83,8 @@ autoToVSat_ :: (Show c, IsString c, S.MonadState (AnnotSt c) m, Ord c) =>
 autoToVSat_ (AutoLit a) = return $ V.LitB a
 autoToVSat_ (Ctx op aexpr boolexpr) =
   do (evos, i) <- S.get
-     let newDim = V.Dim $ "D_" <> (pack $ show i)
+     let newDim = V.Dim $ mconcat ["D_", pack $ show i]
+           -- mconcat ["D_", "(", pack $ show op, "_", pack $ show aexpr, ")", "_", pack $ show i]
          evoRng = (op, aexpr)
      dim <- case (evoRng `M.lookup` evos) of
               -- this is a not yet observed evoRng
@@ -99,7 +97,8 @@ autoToVSat_ (Ctx op aexpr boolexpr) =
   -- choice with holes. Then call reify to generate the nested choices
 autoToVSat_ (RBinary op (ACtx _) rhs) =
   do (evos, i) <- S.get
-     let newDim = V.Dim $ "D_" <> (pack $ show i)
+     let newDim = V.Dim $ mconcat ["D_", pack $ show i]
+           -- mconcat ["D_", "(", pack $ show op, "_", pack $ show rhs, ")", "_", pack $ show i]
          evoRng = (op, rhs)
      dim <- case (evoRng `M.lookup` evos) of
               -- this is a not yet observed evoRng
@@ -213,3 +212,9 @@ naiveEncode (V.OpBB op l r) = V.OpBB op (naiveEncode l) (naiveEncode r)
 naiveEncode (V.OpB op e) = V.OpB op (naiveEncode e)
 naiveEncode (V.ChcB d l r) = V.ChcB d (naiveEncode l) (naiveEncode r)
 naiveEncode nonrecursive = nonrecursive
+
+idEncode :: IsString a => AutoLang a -> AutoLang a
+idEncode (Ctx op expr rest) = (BBinary And
+                               (RBinary op (AVar "e_ctx") expr)
+                                rest)
+idEncode x                  = x

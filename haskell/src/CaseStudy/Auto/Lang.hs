@@ -1,6 +1,9 @@
 module CaseStudy.Auto.Lang where
 
 import           Utils (fromList)
+import           Data.SBV (Boolean(..))
+
+import           VProp.Types (Prim(..), PrimN(..))
 
 data AutoLang a = AutoLit Bool
                 | AutoRef a
@@ -8,7 +11,7 @@ data AutoLang a = AutoLit Bool
                 | AutoNot (AutoLang a)
                 | BBinary BOp (AutoLang a) (AutoLang a)
                 | RBinary RBOp (ALang a) (ALang a)
-                deriving (Show, Eq, Ord)
+                deriving (Eq, Ord)
 
 data BOp = And | Or | Impl | Eqv | Xor deriving (Eq, Ord)
 data RBOp = GRT | GRTE | EQL | LST | LSTE  | NEQL deriving (Eq, Ord)
@@ -18,7 +21,7 @@ data ALang a = ALit Integer
              | ACtx (ALang a)
              | Neg (ALang a)
              | ABinary AOp (ALang a) (ALang a)
-             deriving (Show, Eq, Ord)
+             deriving (Eq, Ord)
 
 data AOp = Add | Subtract | Multiply | Divide | Modulus deriving (Eq, Ord)
 
@@ -53,7 +56,8 @@ instance Show AOp where show Add      = "+"
 instance Show RBOp where show LST  = "<"
                          show LSTE = "≤"
                          show GRT  = ">"
-                         show GRTE = "≥"
+                         -- show GRTE = "≥"
+                         show GRTE = ">="
                          show EQL  = "=="
                          show NEQL = "≠"
 
@@ -63,5 +67,39 @@ instance Show BOp where show Impl = "→"
                         show And  = "∧"
                         show Or   = "∨"
 
+instance Show a => Show (AutoLang a) where show = prettyAuto
+instance Show a => Show (ALang a) where show = prettyAuto'
+
 xAOrJoin :: [AutoLang a] -> AutoLang a
 xAOrJoin = fromList $ BBinary Xor
+
+instance Boolean (AutoLang a) where
+  true  = AutoLit True
+  false = AutoLit False
+  bnot  = AutoNot
+  (&&&) = BBinary And
+  (|||) = BBinary Or
+  (<+>) = BBinary Xor
+  (==>) = BBinary Impl
+  (<=>) = BBinary Eqv
+
+instance Prim (AutoLang a) (ALang a) where
+  (.<)  = RBinary LST
+  (.<=) = RBinary LSTE
+  (.==) = RBinary EQL
+  (./=) = RBinary NEQL
+  (.>=) = RBinary GRTE
+  (.>)  = RBinary GRT
+
+instance PrimN (ALang a) where
+  (./) = ABinary Divide
+  (.%) = ABinary Modulus
+
+instance Num (ALang a) where
+  fromInteger = ALit
+  (+) = ABinary Add
+  (*) = ABinary Multiply
+  (-) = ABinary Subtract
+  negate = Neg
+  signum = error "signum not supported in AutoLang"
+  abs    = error "absolute value not supported in AutoLang"

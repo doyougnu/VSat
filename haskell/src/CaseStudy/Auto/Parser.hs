@@ -114,7 +114,6 @@ bOperators =
     , InfixL (BBinary Or <$ reserved "or")
     , InfixR (BBinary Impl <$ reserved "impl")
     , InfixN (BBinary Eqv <$ reserved "iff")
-    -- , InfixN (BBinary Xor <$ reserved "oneonly") -- not sure what Xor is for this lang
     ]
   ]
 
