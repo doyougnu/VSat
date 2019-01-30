@@ -5,6 +5,9 @@ module Run ( Result (..)
            , runBF
            , runVSMT
            , fst'
+           , IncPack
+           , smtBool
+           , getResult
            ) where
 
 import qualified Data.Map.Strict as M
@@ -16,8 +19,6 @@ import qualified Data.SBV.Control    as SC
 import           Prelude hiding (LT, GT, EQ)
 import Data.Foldable (foldr')
 import Data.Text (Text)
-
-import Debug.Trace (trace)
 
 import Control.Arrow                 (first, second)
 

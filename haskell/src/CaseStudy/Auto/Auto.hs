@@ -213,8 +213,17 @@ naiveEncode (V.OpB op e) = V.OpB op (naiveEncode e)
 naiveEncode (V.ChcB d l r) = V.ChcB d (naiveEncode l) (naiveEncode r)
 naiveEncode nonrecursive = nonrecursive
 
+-- | An identical encoding just removes contexts and treats the language as
+-- plain
 idEncode :: IsString a => AutoLang a -> AutoLang a
 idEncode (Ctx op expr rest) = (BBinary And
-                               (RBinary op (AVar "e_ctx") expr)
-                                rest)
+                               (RBinary op (AVar "evo_ctx") expr)
+                                (idEncode rest))
+idEncode (RBinary op l r)   = RBinary op (idEncode' l) (idEncode' r)
+idEncode (BBinary op l r)   = BBinary op (idEncode l) (idEncode r)
+idEncode (AutoNot e)        = AutoNot $ idEncode e
 idEncode x                  = x
+
+idEncode' :: ALang a -> ALang a
+idEncode' (ACtx expr) = expr
+idEncode' x           = x

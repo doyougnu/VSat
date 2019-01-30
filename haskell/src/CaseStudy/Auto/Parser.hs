@@ -68,7 +68,7 @@ aContextRef = do reserved "context"
                  _ <- brackets $ do
                    _ <- symbol "_"
                    reserved "evolution-context"
-                 return . ACtx $ AVar "replaceMe!"
+                 return . ACtx $ AVar "evo_ctx"
 
 contextRef_ :: Parser (AutoLang a -> AutoLang a)
 contextRef_ = do _ <- aContextRef
