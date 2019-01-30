@@ -11,7 +11,7 @@ import           CaseStudy.Auto.Lang
 
 type Parser = Parsec Void T.Text
 
-langParser :: Parser (AutoLang T.Text)
+langParser :: Parser (AutoLang T.Text T.Text)
 langParser = between sc eof bExpr
 
 sc :: Parser ()
@@ -44,10 +44,10 @@ dash = symbol "-"
 reserved :: T.Text -> Parser ()
 reserved str = lexeme $ string str >> notFollowedBy alphaNumChar
 
-bExpr :: Parser (AutoLang T.Text)
+bExpr :: Parser (AutoLang T.Text T.Text)
 bExpr = makeExprParser bTerm bOperators
 
-bTerm :: Parser (AutoLang T.Text)
+bTerm :: Parser (AutoLang T.Text T.Text)
 bTerm =  (parens bExpr)
          <|> (try contextRef)
          <|> boolRef
@@ -70,19 +70,19 @@ aContextRef = do reserved "context"
                    reserved "evolution-context"
                  return . ACtx $ AVar "evo_ctx"
 
-contextRef_ :: Parser (AutoLang a -> AutoLang a)
+contextRef_ :: Parser (AutoLang a a -> AutoLang a a)
 contextRef_ = do _ <- aContextRef
                  op <- relation
                  rhs <- integer
                  return $ Ctx op (ALit rhs)
 
-contextRef :: Parser (AutoLang T.Text)
+contextRef :: Parser (AutoLang T.Text T.Text)
 contextRef = do f <- parens contextRef_
                 reserved "impl"
                 rest <- bTerm
                 return $ f rest
 
-boolRef :: Parser (AutoLang T.Text)
+boolRef :: Parser (AutoLang T.Text T.Text)
 boolRef = do reserved "feature"
              uuid <- brackets $ do
                _ <- anyChar
@@ -99,14 +99,14 @@ arithRef = do reserved "feature"
 aVariable :: Parser T.Text
 aVariable = mconcat <$> sepBy1 (T.pack <$> many alphaNumChar) dash
 
-aXor :: Parser (AutoLang T.Text)
+aXor :: Parser (AutoLang T.Text T.Text)
 aXor = do reserved "oneonly"
           features <- brackets (sepBy1 boolRef comma)
           let xorDList = xAOrJoin features
           return xorDList
 
 
-bOperators :: [[Operator Parser (AutoLang a)]]
+bOperators :: [[Operator Parser (AutoLang a a)]]
 bOperators =
   [ [ Prefix (AutoNot <$ reserved "not") ]
   ,
@@ -137,7 +137,7 @@ relation = pure EQL <* symbol "="
            <|> pure NEQL <* symbol "!="
 
 
-rExpr :: Parser (AutoLang T.Text)
+rExpr :: Parser (AutoLang T.Text T.Text)
 rExpr = do
   a <- aTerm
   op <- relation
