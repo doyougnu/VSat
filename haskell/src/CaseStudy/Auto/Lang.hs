@@ -2,15 +2,19 @@ module CaseStudy.Auto.Lang where
 
 import           Utils (fromList)
 import           Data.SBV (Boolean(..))
+import           Data.Bifunctor
+import           Data.Bifoldable
+import           Data.Bitraversable
+import           Data.Monoid ((<>))
 
 import           VProp.Types (Prim(..), PrimN(..))
 
-data AutoLang a = AutoLit Bool
-                | AutoRef a
-                | Ctx RBOp (ALang a) (AutoLang a)
-                | AutoNot (AutoLang a)
-                | BBinary BOp (AutoLang a) (AutoLang a)
-                | RBinary RBOp (ALang a) (ALang a)
+data AutoLang a b = AutoLit Bool
+                  | AutoRef a
+                  | Ctx RBOp (ALang b) (AutoLang a b)
+                  | AutoNot (AutoLang a b)
+                  | BBinary BOp (AutoLang a b) (AutoLang a b)
+                  | RBinary RBOp (ALang b) (ALang b)
                 deriving (Eq, Ord, Functor, Foldable, Traversable)
 
 data BOp = And | Or | Impl | Eqv | Xor deriving (Eq, Ord)
@@ -25,17 +29,17 @@ data ALang a = ALit Integer
 
 data AOp = Add | Subtract | Multiply | Divide | Modulus deriving (Eq, Ord)
 
-prettyAuto :: (Show a) => AutoLang a -> String
+prettyAuto :: (Show a, Show b) => AutoLang a b -> String
 prettyAuto = top
   where
-    top :: (Show a) => AutoLang a -> String
+    top :: (Show a, Show b) => AutoLang a  b-> String
     top (BBinary b l r)  = mconcat [sub l, " ", show b, " ", sub r]
     top (RBinary nb l r) = mconcat [prettyAuto' l, " ", show nb, " ", prettyAuto' r]
     top (AutoNot r)      = mconcat ["¬", prettyAuto r]
     top (Ctx rb al rs)   = mconcat ["Ctx", show rb," ", prettyAuto' al," ", prettyAuto rs]
     top e                = sub e
 
-    sub :: (Show a) => AutoLang a -> String
+    sub :: (Show a, Show b) => AutoLang a b -> String
     sub (AutoLit b) = if b then "#T" else "#F"
     sub (AutoRef a) = show a
     sub e           = "(" ++ top e ++ ")"
@@ -68,13 +72,13 @@ instance Show BOp where show Impl = "→"
                         show And  = "∧"
                         show Or   = "∨"
 
-instance Show a => Show (AutoLang a) where show = prettyAuto
+instance (Show a, Show b) => Show (AutoLang a b) where show = prettyAuto
 instance Show a => Show (ALang a) where show = prettyAuto'
 
-xAOrJoin :: [AutoLang a] -> AutoLang a
+xAOrJoin :: [AutoLang a b] -> AutoLang a b
 xAOrJoin = fromList $ BBinary Xor
 
-instance Boolean (AutoLang a) where
+instance Boolean (AutoLang a b) where
   true  = AutoLit True
   false = AutoLit False
   bnot  = AutoNot
@@ -84,7 +88,7 @@ instance Boolean (AutoLang a) where
   (==>) = BBinary Impl
   (<=>) = BBinary Eqv
 
-instance Prim (AutoLang a) (ALang a) where
+instance Prim (AutoLang a b) (ALang b) where
   (.<)  = RBinary LST
   (.<=) = RBinary LSTE
   (.==) = RBinary EQL
@@ -104,3 +108,29 @@ instance Num (ALang a) where
   negate = Neg
   signum = error "signum not supported in AutoLang"
   abs    = error "absolute value not supported in AutoLang"
+
+instance Bifunctor AutoLang where
+  bimap _ _ (AutoLit b) = AutoLit b
+  bimap f _ (AutoRef a) = AutoRef $ f a
+  bimap f g (AutoNot e) = AutoNot $ bimap f g e
+  bimap f g (BBinary op l r) = BBinary op (bimap f g l) (bimap f g r)
+  bimap _ g (RBinary op l r) = RBinary op (g <$> l) (g <$> r)
+  bimap f g (Ctx op aexpr rest) = Ctx op (g <$> aexpr) $ bimap f g rest
+
+instance Bifoldable AutoLang where
+  bifoldMap _ _ (AutoLit _) = mempty
+  bifoldMap f _ (AutoRef a) = f a
+  bifoldMap f g (AutoNot e) = bifoldMap f g e
+  bifoldMap f g (BBinary _ l r) = (bifoldMap f g l) <> (bifoldMap f g r)
+  bifoldMap _ g (RBinary _ l r) = (foldMap g l) <> (foldMap g r)
+  bifoldMap f g (Ctx _ aexpr rest) = (foldMap g aexpr) <> bifoldMap f g rest
+
+instance Bitraversable AutoLang where
+  bitraverse _ _ (AutoLit e) = pure $ AutoLit e
+  bitraverse f _ (AutoRef a) = AutoRef <$> f a
+  bitraverse f g (AutoNot e) = AutoNot <$> bitraverse f g e
+  bitraverse f g (BBinary op l r) =
+    BBinary op <$> bitraverse f g l <*> bitraverse f g r
+  bitraverse _ g (RBinary op l r) = RBinary op <$> traverse g l <*> traverse g r
+  bitraverse f g (Ctx op aexpr rest) =
+    Ctx op <$> traverse g aexpr <*> bitraverse f g rest
