@@ -48,11 +48,11 @@ instance FromJSON Auto where
 
 -- | run the state monad and get a vprop expression back
 autoToVSat :: (IsString a, Show a, Eq a, Ord a, Monoid a) =>
-  AutoLang a -> V.VProp Text a a
+  AutoLang a a -> V.VProp Text a a
 autoToVSat = fst . runAutoToVSat__
 
 runAutoToVSat__ :: (IsString a, Show a, Eq a, Ord a, Monoid a) =>
-  AutoLang a -> (V.VProp Text a a, (DimMap a Text, Integer))
+  AutoLang a a -> (V.VProp Text a a, (DimMap a Text, Integer))
 runAutoToVSat__ = flip S.runState (M.empty, 0) . autoToVSat_
 
 -- | A hole that is used as a placeholder for reifying nested choices in
@@ -79,7 +79,7 @@ hasHole = has isHole
 -- dimensions are assigned to those evo contexts
 -- singleton contexts can be converted to naive encoding directly
 autoToVSat_ :: (Show c, IsString c, S.MonadState (AnnotSt c) m, Ord c) =>
-               AutoLang c -> m (V.VProp Text c c)
+               AutoLang c c -> m (V.VProp Text c c)
 autoToVSat_ (AutoLit a) = return $ V.LitB a
 autoToVSat_ (Ctx op aexpr boolexpr) =
   do (evos, i) <- S.get
@@ -215,7 +215,7 @@ naiveEncode nonrecursive = nonrecursive
 
 -- | An identical encoding just removes contexts and treats the language as
 -- plain
-idEncode :: IsString a => AutoLang a -> AutoLang a
+idEncode :: (IsString a, IsString b) => AutoLang a b -> AutoLang a b
 idEncode (Ctx op expr rest) = (BBinary And
                                (RBinary op (AVar "evo_ctx") expr)
                                 (idEncode rest))

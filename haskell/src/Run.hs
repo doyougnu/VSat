@@ -7,6 +7,7 @@ module Run ( Result (..)
            , fst'
            , IncPack
            , smtBool
+           , smtInt
            , getResult
            ) where
 
