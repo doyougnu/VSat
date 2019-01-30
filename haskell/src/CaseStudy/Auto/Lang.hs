@@ -11,7 +11,7 @@ data AutoLang a = AutoLit Bool
                 | AutoNot (AutoLang a)
                 | BBinary BOp (AutoLang a) (AutoLang a)
                 | RBinary RBOp (ALang a) (ALang a)
-                deriving (Eq, Ord)
+                deriving (Eq, Ord, Functor, Foldable, Traversable)
 
 data BOp = And | Or | Impl | Eqv | Xor deriving (Eq, Ord)
 data RBOp = GRT | GRTE | EQL | LST | LSTE  | NEQL deriving (Eq, Ord)
@@ -21,7 +21,7 @@ data ALang a = ALit Integer
              | ACtx (ALang a)
              | Neg (ALang a)
              | ABinary AOp (ALang a) (ALang a)
-             deriving (Eq, Ord)
+             deriving (Eq, Ord, Functor, Foldable, Traversable)
 
 data AOp = Add | Subtract | Multiply | Divide | Modulus deriving (Eq, Ord)
 
@@ -42,6 +42,7 @@ prettyAuto = top
 
 prettyAuto' :: Show a => ALang a -> String
 prettyAuto' (ALit i) = show i
+prettyAuto' (ACtx expr) = mconcat ["ACtx: ", show expr]
 prettyAuto' (AVar a) = show a
 prettyAuto' (Neg a)  = mconcat ["−", prettyAuto' a]
 prettyAuto' (ABinary o l r) = mconcat [prettyAuto' l, " ", show o, " ", prettyAuto' r]
