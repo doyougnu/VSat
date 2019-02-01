@@ -1,7 +1,8 @@
+{-# LANGUAGE DeriveAnyClass #-}
 module CaseStudy.Auto.Lang where
 
 import           Utils (fromList)
-import           Data.SBV (Boolean(..))
+import           Data.SBV (Boolean(..), EqSymbolic)
 import           Data.Bifunctor
 import           Data.Bifoldable
 import           Data.Bitraversable
@@ -15,7 +16,7 @@ data AutoLang a b = AutoLit Bool
                   | AutoNot (AutoLang a b)
                   | BBinary BOp (AutoLang a b) (AutoLang a b)
                   | RBinary RBOp (ALang b) (ALang b)
-                deriving (Eq, Ord, Functor, Foldable, Traversable)
+                deriving (Eq, Ord, Functor, Foldable, Traversable, EqSymbolic)
 
 data BOp = And | Or | Impl | Eqv | Xor deriving (Eq, Ord)
 data RBOp = GRT | GRTE | EQL | LST | LSTE  | NEQL deriving (Eq, Ord)
@@ -25,7 +26,7 @@ data ALang a = ALit Integer
              | ACtx (ALang a)
              | Neg (ALang a)
              | ABinary AOp (ALang a) (ALang a)
-             deriving (Eq, Ord, Functor, Foldable, Traversable)
+             deriving (Eq, Ord, Functor, Foldable, Traversable, EqSymbolic)
 
 data AOp = Add | Subtract | Multiply | Divide | Modulus deriving (Eq, Ord)
 

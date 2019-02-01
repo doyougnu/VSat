@@ -11,6 +11,7 @@ import           Text.Megaparsec         (parse)
 
 import           Api
 import           CaseStudy.Auto.Auto
+import           CaseStudy.Auto.Run
 import           CaseStudy.Auto.Parser   (langParser)
 import           Config                  (defConf, emptyConf)
 import           Opts
@@ -21,8 +22,8 @@ import           VProp.Core
 import           VProp.Types
 
 -- | a large dataset of queries
-autoFile :: FilePath
-autoFile = "bench/AutoBench/Automotive02_merged_evolution_history_integer.json"
+-- autoFile :: FilePath
+-- autoFile = "bench/AutoBench/Automotive02_merged_evolution_history_integer.json"
 
 autoFileBool :: FilePath
 autoFileBool = "bench/AutoBench/Automotive02_merged_evolution_history_boolean.json"
@@ -47,22 +48,25 @@ main = do
       prop = (naiveEncode . nestChoices . autoToVSat) $ autoAndJoin ps
   -- print $ take 1 cs
   putStrLn "\n\n ----------------- \n\n"
-  print $ bs
+  -- print $ ps
   putStrLn "\n\n ----------------- \n\n"
   -- mapM_ print (sort prop)
 
   -- print (conjoin' prop)
   -- print $ take 5 $ autoToVSat <$> ps
 
-  (bfTime, res) <- time $ bfWith emptyConf $ prop
+  (incTime, incRes) <- time $ runIncrementalSolve (fmap idEncode ps)
+  -- (bfTime, res) <- time $ bfWith emptyConf $ prop
   -- (satTime, res') <- time $! satWith emptyConf $ prop
   -- (adTime, res'') <- time $! adWith emptyConf id $ prop
-  putStrLn ("Brute Force Time [s]: " ++ show bfTime ++ "\n")
+  putStrLn ("Incremental Solve [s]: " ++ show incTime ++ "\n")
+  -- putStrLn ("Brute Force Time [s]: " ++ show bfTime ++ "\n")
   -- putStrLn ("VSAT Time        [s]: " ++ show satTime ++ "\n")
   -- putStrLn ("And Decomp Time  [s]: " ++ show adTime ++ "\n")
   -- writeFile "rights" (show $ prop)
   -- writeFile "lefts" (foldMap show bs)
-  writeFile "testoutputBF" (show res)
+  writeFile "testoutputInc" (show incRes)
+  -- writeFile "testoutputBF" (show res)
   -- writeFile "testoutputSAT" (show res')
   -- writeFile "testoutputAD" (show res'')
   -- print $ VProp.Core.dimensions $ flatten prop
