@@ -17,6 +17,19 @@ autoToSBool = bitraverse smtBool smtInt
 data Queue a = Queue [a] [a]
 type IncSolve a b = St.StateT (Queue (a, b)) Query
 
+isEmpty :: Queue a -> Bool
+isEmpty (Queue [] []) = True
+isEmpty _             = False
+
+emptyQ :: Queue a -> Queue a
+emptyQ q
+  | isEmpty q = q
+  | otherwise = emptyQ . snd . deq $ q
+
+-- emptyAndPop :: (MonadTrans t, St.MonadState (Queue a) m) => t m ()
+-- emptyAndPop = do St.modify emptyQ
+--                  resetAssertions
+
 enq :: a -> Queue a -> Queue a
 enq x (Queue xs ys) = Queue xs (x:ys)
 
@@ -33,8 +46,12 @@ peekM a = do queue <- St.get
              let (a', _) = peek queue
              return $ a == a'
 
-getQueueBool :: (St.MonadState (Queue (a, b)) m) => m b
-getQueueBool = St.get >>= return . snd . fst . deq
+getBoolandDeq :: (St.MonadState (Queue (a, b)) m) => m b
+getBoolandDeq = do st <- St.get
+                   let ((_, b), newQ) = deq st
+                   St.put newQ
+                   return b
+  -- St.get >>= return . snd . fst . deq
 
 instance (SolverContext (IncSolve a b)) where
   constrain = St.lift . constrain
@@ -48,8 +65,10 @@ autoSolve (AutoRef r) = return r
 autoSolve (AutoNot e) = bnot <$> autoSolve e
 autoSolve a@(BBinary op l r) = do onQ <- peekM a
                                   if onQ
-                                    then getQueueBool
-                                    else do l' <- autoSolve l
+                                    then getBoolandDeq
+                                    else do St.modify emptyQ
+                                            St.lift resetAssertions
+                                            l' <- autoSolve l
                                             r' <- autoSolve r
                                             let op' = bDispatch op
                                                 b = l' `op'` r'
@@ -59,8 +78,10 @@ autoSolve a@(BBinary op l r) = do onQ <- peekM a
                                             return b
 autoSolve a@(RBinary op l r) = do onQ <- peekM a
                                   if onQ
-                                    then getQueueBool
-                                    else do l' <- autoSolve' l
+                                    then getBoolandDeq
+                                    else do St.modify emptyQ
+                                            St.lift resetAssertions
+                                            l' <- autoSolve' l
                                             r' <- autoSolve' r
                                             let op' = nDispatch op
                                                 b   = l' `op'` r'

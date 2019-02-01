@@ -8,6 +8,7 @@ import           Data.String                (IsString)
 import           Data.Text
 
 import           CaseStudy.Auto.Lang
+import           Utils                      (fromList)
 import           VProp.Core                 ()
 import qualified VProp.Types                as V
 
@@ -227,3 +228,6 @@ idEncode x                  = x
 idEncode' :: ALang a -> ALang a
 idEncode' (ACtx expr) = expr
 idEncode' x           = x
+
+autoAndJoin :: [AutoLang a b] -> AutoLang a b
+autoAndJoin = fromList $ BBinary And
