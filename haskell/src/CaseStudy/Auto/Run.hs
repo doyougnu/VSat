@@ -6,12 +6,11 @@ import           Data.SBV.Internals (SolverContext)
 import           Data.Bitraversable (bitraverse)
 import qualified Control.Monad.State.Lazy as L
 import qualified Control.Monad.State.Strict as St
+import           Control.Monad (when)
 
 import           CaseStudy.Auto.Lang
 import           Run (IncPack, smtBool, smtInt)
 import           VProp.Types (Prim, SNum(..), PrimN(..))
-
-import Debug.Trace (trace)
 
 autoToSBool :: (Show a, Ord a) => AutoLang a a -> IncPack a (AutoLang SBool SNum)
 autoToSBool = bitraverse smtBool smtInt
@@ -79,29 +78,61 @@ autoSolve (AutoLit b) = return $ literal b
 autoSolve (AutoRef r) = return r
 autoSolve (AutoNot e) = bnot <$> autoSolve e
 autoSolve a@(BBinary op l r) = do onQ <- peekM a
-                                  L.liftM3 ite (return onQ) getBoolandDeq $
-                                    do L.modify drainQ
-                                       L.lift resetAssertions
-                                       l' <- autoSolve l
-                                       r' <- autoSolve r
-                                       let op' = bDispatch op
-                                           b = l' `op'` r'
-                                       L.lift $ push 1
-                                       constrain b
-                                       L.modify $ enq (a,b)
-                                       return b
+                                  i <- L.lift getAssertionStackDepth
+                                  if (i == 0)
+                                    then  do L.modify drainQ
+                                             l' <- autoSolve l
+                                             r' <- autoSolve r
+                                             let op' = bDispatch op
+                                                 b = l' `op'` r'
+                                             L.lift $ push 1
+                                             constrain b
+                                             L.modify $ enq (a,b)
+                                             return b
+                                    else do
+                                    -- L.lift $ io $ putStrLn "\n-----\n"
+                                    -- L.lift $ io $ putStrLn $ "term: " ++ show a
+                                    -- L.lift $ io $ putStrLn $ "AsStack Depth: " ++ show i
+                                    -- L.lift $ io $ putStrLn "-----\n"
+                                    L.liftM3 ite (return onQ) getBoolandDeq $
+                                      do L.modify drainQ
+                                         L.lift $ pop 1
+                                         -- L.lift resetAssertions
+                                         l' <- autoSolve l
+                                         r' <- autoSolve r
+                                         let op' = bDispatch op
+                                             b = l' `op'` r'
+                                         L.lift $ push 1
+                                         constrain b
+                                         L.modify $ enq (a,b)
+                                         return b
 autoSolve a@(RBinary op l r) = do onQ <- peekM a
-                                  L.liftM3 ite (return onQ) getBoolandDeq $
-                                    do L.modify drainQ
-                                       L.lift resetAssertions
-                                       l' <- autoSolve' l
-                                       r' <- autoSolve' r
-                                       let op' = nDispatch op
-                                           b   = l' `op'` r'
-                                       L.lift $ push 1
-                                       constrain b
-                                       L.modify $ enq (a,b)
-                                       return b
+                                  i <- L.lift getAssertionStackDepth
+                                  if (i == 0)
+                                    then  do L.modify drainQ
+                                             l' <- autoSolve' l
+                                             r' <- autoSolve' r
+                                             let op' = nDispatch op
+                                                 b = l' `op'` r'
+                                             L.lift $ push 1
+                                             constrain b
+                                             L.modify $ enq (a,b)
+                                             return b
+                                    else do
+                                    -- L.lift $ io $ putStrLn $ "term: " ++ show a
+                                    -- L.lift $ io $ putStrLn $ "AsStack Depth: " ++ show i
+                                    L.liftM3 ite (return onQ) getBoolandDeq $
+                                      do L.modify drainQ
+                                         -- L.lift resetAssertions
+                                         L.lift $ pop 1
+                                         l' <- autoSolve' l
+                                         r' <- autoSolve' r
+                                         let op' = nDispatch op
+                                             b   = l' `op'` r'
+                                         L.lift $ push 1
+                                         constrain b
+                                         L.modify $ enq (a,b)
+                                         return b
 autoSolve (Ctx _ _ _)       = error "You probably need to call `idEncode` to convert these ctxes. A Ctx is _only_ used for translating an AutoLang to a VProp "
 
 autoSolve' :: ALang SNum -> IncSolve (AutoLang SBool SNum) SBool SNum
