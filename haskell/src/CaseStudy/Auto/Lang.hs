@@ -1,14 +1,13 @@
-{-# LANGUAGE DeriveAnyClass #-}
 module CaseStudy.Auto.Lang where
 
 import           Utils (fromList)
-import           Data.SBV (Boolean(..), EqSymbolic)
+import           Data.SBV (Boolean(..), EqSymbolic(..), literal)
 import           Data.Bifunctor
 import           Data.Bifoldable
 import           Data.Bitraversable
 import           Data.Monoid ((<>))
 
-import           VProp.Types (Prim(..), PrimN(..))
+import qualified VProp.Types as V
 
 data AutoLang a b = AutoLit Bool
                   | AutoRef a
@@ -16,7 +15,7 @@ data AutoLang a b = AutoLit Bool
                   | AutoNot (AutoLang a b)
                   | BBinary BOp (AutoLang a b) (AutoLang a b)
                   | RBinary RBOp (ALang b) (ALang b)
-                deriving (Eq, Ord, Functor, Foldable, Traversable, EqSymbolic)
+                deriving (Eq, Ord, Functor, Foldable, Traversable)
 
 data BOp = And | Or | Impl | Eqv | Xor deriving (Eq, Ord)
 data RBOp = GRT | GRTE | EQL | LST | LSTE  | NEQL deriving (Eq, Ord)
@@ -26,7 +25,7 @@ data ALang a = ALit Integer
              | ACtx (ALang a)
              | Neg (ALang a)
              | ABinary AOp (ALang a) (ALang a)
-             deriving (Eq, Ord, Functor, Foldable, Traversable, EqSymbolic)
+             deriving (Eq, Ord, Functor, Foldable, Traversable)
 
 data AOp = Add | Subtract | Multiply | Divide | Modulus deriving (Eq, Ord)
 
@@ -89,7 +88,7 @@ instance Boolean (AutoLang a b) where
   (==>) = BBinary Impl
   (<=>) = BBinary Eqv
 
-instance Prim (AutoLang a b) (ALang b) where
+instance V.Prim (AutoLang a b) (ALang b) where
   (.<)  = RBinary LST
   (.<=) = RBinary LSTE
   (.==) = RBinary EQL
@@ -97,7 +96,7 @@ instance Prim (AutoLang a b) (ALang b) where
   (.>=) = RBinary GRTE
   (.>)  = RBinary GRT
 
-instance PrimN (ALang a) where
+instance V.PrimN (ALang a) where
   (./) = ABinary Divide
   (.%) = ABinary Modulus
 
@@ -109,6 +108,48 @@ instance Num (ALang a) where
   negate = Neg
   signum = error "signum not supported in AutoLang"
   abs    = error "absolute value not supported in AutoLang"
+
+instance (EqSymbolic a, EqSymbolic b) => EqSymbolic (AutoLang a b) where
+  (AutoLit b)      .== (AutoLit b')        = b .== b'
+  (AutoRef r)      .== (AutoRef r')        = r .== r'
+  (Ctx op a p)     .== (Ctx op' a' p')     = op .== op' &&& a .== a' &&& p .== p'
+  (AutoNot e)      .== (AutoNot e')        = e .== e'
+  (BBinary op l r) .== (BBinary op' l' r') = op .== op' &&& l .== l' &&& r .== r'
+  (RBinary op l r) .== (RBinary op' l' r') = op .== op' &&& l .== l' &&& r .== r'
+  _                .== _                   = false
+
+instance EqSymbolic a => EqSymbolic (ALang a) where
+  (ALit i) .== (ALit i') = (literal i) .== (literal i')
+  (AVar a) .== (AVar b)  = a .== b
+  (ACtx a) .== (ACtx b)  = a .== b
+  (Neg a)  .== (Neg b)   = a .== b
+  (ABinary op l r) .== (ABinary op' l' r') = op .== op' &&& l .== l' &&& r .== r'
+  _                .==  _ = false
+
+instance EqSymbolic AOp where
+  Add .== Add           = true
+  Subtract .== Subtract = true
+  Multiply .== Multiply = true
+  Divide .== Divide     = true
+  Modulus .== Modulus   = true
+  _       .== _         = false
+
+instance EqSymbolic RBOp where
+  GRT .== GRT   = true
+  GRTE .== GRTE = true
+  EQL .== EQL   = true
+  LST .== LST   = true
+  LSTE .== LSTE = true
+  NEQL .== NEQL = true
+  _    .== _    = false
+
+instance EqSymbolic BOp where
+  And .== And   = true
+  Or  .== Or    = true
+  Impl .== Impl = true
+  Eqv .== Eqv   = true
+  Xor .== Xor   = true
+  _   .== _     = false
 
 instance Bifunctor AutoLang where
   bimap _ _ (AutoLit b) = AutoLit b

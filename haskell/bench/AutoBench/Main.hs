@@ -5,6 +5,7 @@ import qualified Data.ByteString         as BS (readFile)
 import           Data.Either             (lefts, rights)
 import           Data.Map.Internal.Debug (showTree)
 import           Data.Text               (unpack, pack)
+import qualified Data.SBV                as S (sat)
 import           System.IO
 import           Data.List               (sort)
 import           Text.Megaparsec         (parse)
@@ -20,6 +21,7 @@ import           Utils
 import           V
 import           VProp.Core
 import           VProp.Types
+import           VProp.SBV               (toPredicate)
 
 -- | a large dataset of queries
 -- autoFile :: FilePath
@@ -48,14 +50,15 @@ main = do
       prop = (naiveEncode . nestChoices . autoToVSat) $ autoAndJoin ps
   -- print $ take 1 cs
   putStrLn "\n\n ----------------- \n\n"
-  -- print $ ps
+  -- mapM_ print ps
   putStrLn "\n\n ----------------- \n\n"
   -- mapM_ print (sort prop)
 
   -- print (conjoin' prop)
   -- print $ take 5 $ autoToVSat <$> ps
 
-  (incTime, incRes) <- time $ runIncrementalSolve (fmap idEncode ps)
+  -- (incTime, incRes) <- time $ runIncrementalSolve (fmap idEncode (take 30 ps))
+  (incTime, incRes) <- time $ mapM_ (runIncrementalSolve_ . idEncode) ps
   -- (bfTime, res) <- time $ bfWith emptyConf $ prop
   -- (satTime, res') <- time $! satWith emptyConf $ prop
   -- (adTime, res'') <- time $! adWith emptyConf id $ prop
