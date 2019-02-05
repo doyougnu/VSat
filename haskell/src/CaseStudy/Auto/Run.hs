@@ -4,9 +4,9 @@ import           Data.SBV
 import           Data.SBV.Control
 import           Data.SBV.Internals (SolverContext)
 import           Data.Bitraversable (bitraverse)
+import qualified Data.Sequence  as Seq
 import qualified Control.Monad.State.Lazy as L
 import qualified Control.Monad.State.Strict as St
-import           Control.Monad (when)
 
 import           CaseStudy.Auto.Lang
 import           Run (IncPack, smtBool, smtInt)
@@ -15,15 +15,15 @@ import           VProp.Types (Prim, SNum(..), PrimN(..))
 autoToSBool :: (Show a, Ord a) => AutoLang a a -> IncPack a (AutoLang SBool SNum)
 autoToSBool = bitraverse smtBool smtInt
 
-data Queue a = Queue [a] [a] deriving Show
+newtype Queue a = Queue {getQueue :: Seq.Seq a }
+  deriving (Show, Functor, Applicative, Monad)
 type IncSolve a b = L.StateT (Queue (a, b)) Query
 
 isEmpty :: Queue a -> Bool
-isEmpty (Queue [] []) = True
-isEmpty _             = False
+isEmpty = Seq.null . getQueue
 
 emptyQ :: Queue a
-emptyQ = Queue mempty mempty
+emptyQ = Queue mempty
 
 drainQ :: Queue a -> Queue a
 drainQ = const emptyQ
@@ -33,12 +33,11 @@ drainQ = const emptyQ
 --                  resetAssertions
 
 enq :: a -> Queue a -> Queue a
-enq x (Queue xs ys) = Queue xs (x:ys)
+enq x = Queue . ((Seq.:<|) x) . getQueue
 
 deq :: Queue a -> (a, Queue a)
-deq (Queue [] [])     = error "deq'ing from an empty queue!"
-deq (Queue [] ys)     = deq $ Queue (reverse ys) []
-deq (Queue (x:xs) ys) = (x, Queue xs ys)
+deq queue = (el, Queue q)
+  where (q Seq.:> el) = Seq.viewr $ getQueue queue
 
 peek :: Queue a -> a
 peek = fst . deq
@@ -96,8 +95,8 @@ autoSolve a@(BBinary op l r) = do onQ <- peekM a
                                     -- L.lift $ io $ putStrLn "-----\n"
                                     L.liftM3 ite (return onQ) getBoolandDeq $
                                       do L.modify drainQ
-                                         L.lift $ pop 1
-                                         -- L.lift resetAssertions
+                                         -- L.lift $ pop 1
+                                         L.lift resetAssertions
                                          l' <- autoSolve l
                                          r' <- autoSolve r
                                          let op' = bDispatch op
