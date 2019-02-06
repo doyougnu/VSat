@@ -1,7 +1,8 @@
 flags: {}
 packages:
 # system-ghc: false
-extra-deps: [genifunctors-0.4]
+extra-deps:
+  - genifunctors-0.4
 
 ## uncomment the following lines to tell stack you are in a nix environment
 nix:
@@ -9,7 +10,8 @@ nix:
   pure: false
   packages: [ z3, pkgconfig, zlib ]
 
-resolver: lts-11.22
+# resolver: lts-11.22
+resolver: lts-12.25
 build:
   library-profiling: false
   executable-profiling: false

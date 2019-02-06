@@ -2,7 +2,8 @@ module Json where
 
 import Data.SBV ( SatResult(..)
                 , SMTResult(..)
-                , ThmResult(..))
+                , ThmResult(..)
+                , SMTReasonUnknown(..))
 import Data.SBV.Internals (showModel)
 import Data.Text
 import Data.Aeson hiding (json)
@@ -13,7 +14,7 @@ import Opts
 import Config
 
 instance ToJSON SMTResult where
-  toJSON (Unsatisfiable _) = object [("isSat" :: Text) .= ("Unsatisfiable" :: Text)]
+  toJSON (Unsatisfiable _ _) = object [("isSat" :: Text) .= ("Unsatisfiable" :: Text)]
   toJSON (Satisfiable conf model) =
     object [("model" :: Text) .= showModel conf model]
   toJSON (SatExtField conf model) =
@@ -21,7 +22,7 @@ instance ToJSON SMTResult where
   toJSON (Unknown _ msg) = object [("Unknown Error" :: Text) .= msg]
   toJSON (ProofError _ msg) = object [("Prover Error" :: Text) .= msg]
 
-
+instance ToJSON SMTReasonUnknown
 instance ToJSON SatResult where toJSON (SatResult x) = toJSON x
 instance ToJSON ThmResult where toJSON (ThmResult x) = toJSON x
 
