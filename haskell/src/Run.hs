@@ -178,7 +178,7 @@ instance Eq S.SMTResult where
   x == y
     | S.modelExists x && S.modelExists y = S.getModelDictionary x == S.getModelDictionary y
     | otherwise = matchResults x y
-    where matchResults (S.Unsatisfiable _) (S.Unsatisfiable _) = True
+    where matchResults (S.Unsatisfiable _ _) (S.Unsatisfiable _ _) = True
           matchResults (S.Satisfiable _ _) (S.Satisfiable _ _) = True
           matchResults (S.SatExtField _ _) (S.SatExtField _ _) = True
           matchResults (S.Unknown _ _)     (S.Unknown _ _)     = True
@@ -267,7 +267,8 @@ getVSMTModel = do cs <- SC.checkSat
                     SC.Unk   -> error "Unknown Error from solver!"
   -- if unsat the return unsat, just passing default config to get the unsat
   -- constructor TODO return correct conf
-                    SC.Unsat -> return . Just $ S.Unsatisfiable S.defaultSMTCfg
+                    SC.Unsat -> return .
+                                Just $ S.Unsatisfiable S.defaultSMTCfg Nothing
                     SC.Sat   -> SC.getSMTResult >>= return . pure
 
 -- | type class needed to avoid lifting for constraints in the IncSolve monad
