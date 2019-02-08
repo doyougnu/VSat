@@ -1,5 +1,4 @@
-module Run ( Result (..)
-           , SatDict
+module Run ( SatDict
            , Log
            , runAD
            , runBF
@@ -8,16 +7,10 @@ module Run ( Result (..)
            , IncPack
            , smtBool
            , smtInt
-           , UniformProp (..)
-           , Resultable
            ) where
 
 import qualified Data.Map.Strict as M
-import qualified Data.HashMap.Lazy as HM
-import Data.Hashable (Hashable)
-import GHC.Generics (Generic)
 import Control.Monad (when)
-import Control.Arrow ((***))
 import Control.Monad.RWS.Strict
 import Control.Monad.State.Strict    as St
 import qualified Data.SBV.Internals  as I
@@ -26,8 +19,6 @@ import qualified Data.SBV.Control    as SC
 import           Prelude hiding (LT, GT, EQ)
 import Data.Foldable (foldr')
 import Data.Text (Text)
-import Data.String (IsString,fromString)
-
 import Control.Arrow                 (first, second)
 
 import Data.Maybe                    (catMaybes)
@@ -37,6 +28,7 @@ import VProp.SBV
 import VProp.Core
 import Utils
 import Config
+import Result
 
 -- | The satisfiable dictionary, this is actually the "state" keys are configs
 -- (an mapping from dimensions to booleans denoting selection) and values are
@@ -168,45 +160,6 @@ runVSMTSolve prop =
        St.evalStateT (propToSBool prop) (M.empty, M.empty)
      lift . return $ res
 
--- | A custom type whose only purpose is to define a monoid instance over VProp
--- with logical or as the concat operation and false as unit. We constrain all
--- variable references to be the same just for the Result type
-newtype UniformProp d = UniformProp {getProp :: VProp d d d}
-  deriving (Show, Eq, Generic)
-
-instance Semigroup (UniformProp d) where
-  (<>) x y = UniformProp $ (getProp x) ||| (getProp y)
-
-instance Monoid (UniformProp d) where
-  mempty  = UniformProp false
-  mappend = (<>)
-
-instance Hashable Var
-instance Resultable Var
-instance Resultable String
-instance Resultable Text
-
--- | a type class synonym for constraints required to produce a result
-class (IsString a, Eq a, Hashable a) => Resultable a
-
--- | a result is a map of propositions where SAT is a boolean formula on
--- dimensions, the rest of the keys are variables of the prop to boolean
--- formulas on dimensions that dictate the values of those variables be they
--- true or false
-newtype Result d = Result {getRes :: HM.HashMap d (UniformProp d)}
-  deriving (Show, Generic)
-
-instance (Eq d, Hashable d) => Semigroup (Result d) where
-  x <> y = Result $ HM.unionWith (<>) (getRes x) (getRes y)
-
--- | we define a special key "__Sat" to represent when all dimensions are
--- satisfiable. TODO use type families to properly abstract the key out
-instance (Eq d, Hashable d, IsString d) => Monoid (Result d) where
-  mempty  = Result $ HM.singleton "__Sat" mempty
-  mappend = (<>)
-
--- newtype Result d a b = Result {unRes :: HM.HashMap (VProp d a b)}
-
 -- | wrapper around map to keep track of the variable references we've seen, a,
 -- and their symbolic type, b, which is eta reduced here
 type UsedVars a = M.Map a
@@ -227,25 +180,6 @@ type IncState d = (Result d, UsedDims (Dim d))
 -- we can pull out sbv models Hardcoding so that I don't have to write the mtl
 -- typeclass. I do not expect these to change much
 type IncVSMTSolve d = St.StateT (IncState d) SC.Query
-
--- | a type synonym that represents SBVs return type for getAssocs
-type AssocList = [(String, Bool)]
-
--- | we need to define an Eq on SMTResult for recompiling. If we don't have this
--- then during recompile in the BF routine we cannot erase dead choices
-instance Eq S.SMTResult where
-  x == y
-    | S.modelExists x && S.modelExists y = S.getModelDictionary x == S.getModelDictionary y
-    | otherwise = matchResults x y
-    where matchResults (S.Unsatisfiable _ _) (S.Unsatisfiable _ _) = True
-          matchResults (S.Satisfiable _ _)   (S.Satisfiable _ _)   = True
-          matchResults (S.SatExtField _ _)   (S.SatExtField _ _)   = True
-          matchResults (S.Unknown _ _)       (S.Unknown _ _)       = True
-          matchResults (S.ProofError _ _)    (S.ProofError _ _)    = True
-          matchResults _                     _                     = False
-
-instance Eq S.SatResult where (S.SatResult x) == (S.SatResult y) = x == y
-instance Eq S.ThmResult where (S.ThmResult x) == (S.ThmResult y) = x == y
 
 -- | Top level wrapper around engine and monad stack, this sets options for the
 -- underlying solver, inspects the results to see if they were variational or
@@ -338,26 +272,6 @@ instance (Monad m, I.SolverContext m) =>
 
 store :: (Eq d, Hashable d) => Result d -> IncVSMTSolve d ()
 store = St.modify . first . (<>)
-
-configToUniProp :: Config d -> UniformProp d
-configToUniProp = UniformProp . configToProp
-
-addToResult :: (Eq d, Hashable d) => d -> UniformProp d -> Result d -> Result d
-addToResult k v = Result . HM.insertWith (<>) k v . getRes
-
-lookupRes :: (Eq d, Hashable d) => d -> Result d -> Maybe (UniformProp d)
-lookupRes k res = HM.lookup k (getRes res)
-
-isDMNull :: (IsString d, Hashable d, Eq d) => Result d -> Bool
-isDMNull = maybe False ((==) mempty) . lookupRes "__Sat"
-
-modifySat :: (IsString d, Eq d, Hashable d) =>
-  UniformProp d -> Result d -> Result d
-modifySat = addToResult "__Sat"
-
-assocToResult :: (IsString d, Eq d, Hashable d) =>
-  (Bool -> UniformProp d) -> AssocList -> Result d
-assocToResult f xs = Result . HM.fromList $ fmap (fromString *** f) xs
 
 handleChc :: (Ord d, S.Boolean b, IsString d,
                Hashable d) =>
