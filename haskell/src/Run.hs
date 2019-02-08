@@ -8,11 +8,14 @@ module Run ( Result (..)
            , IncPack
            , smtBool
            , smtInt
+           , UniformProp (..)
+           , Resultable
            ) where
 
 import qualified Data.Map.Strict as M
 import qualified Data.HashMap.Lazy as HM
 import Data.Hashable (Hashable)
+import GHC.Generics (Generic)
 import Control.Monad (when)
 import Control.Arrow ((***))
 import Control.Monad.RWS.Strict
@@ -76,7 +79,7 @@ runEnv :: Show a => (VProp d a a -> Env d a (Result d))
 runEnv f conf x = _runEnv (f x') conf _emptySt
   where x' = foldr' ($) x (opts conf)
 
-runAD :: (Show a, Show d, Ord d, Ord a, IsString d, Hashable d, Semigroup d) =>
+runAD :: (Show a, Show d, Ord d, Ord a, IsString d, Hashable d) =>
          SMTConf d a a
       -> VProp d a a
       -> (d -> a)
@@ -84,14 +87,14 @@ runAD :: (Show a, Show d, Ord d, Ord a, IsString d, Hashable d, Semigroup d) =>
 runAD os p f = fst' <$> runEnv (flip runAndDecomp f) os p
 
 runBF :: (Show a, Show d, Ord a, Ord d, Hashable d
-         , IsString d, Eq d, Semigroup d) =>
+         , IsString d, Eq d) =>
          SMTConf d a a
       -> VProp d a a
       -> IO (Result d)
 runBF os p = fst' <$> runEnv runBruteForce os p
 
 -- | Run the VSMT solver given a list of optimizations and a prop
-runVSMT :: (Show d, Show a, Ord a, Ord d, IsString d, Hashable d, Semigroup d) =>
+runVSMT :: (Show d, Show a, Ord a, Ord d, IsString d, Hashable d) =>
            SMTConf d a a              ->
            VProp d a a                ->
            IO (Result d, SatDict d, Log)
@@ -126,7 +129,7 @@ runForAssocs x = S.runSMT $
 -- | Run the brute force baseline case, that is select every plain variant and
 -- run them to the sat solver
 runBruteForce ::
-  (MonadTrans t, Show a,Show d, Ord a, Ord d, Hashable d, IsString d, Semigroup d
+  (MonadTrans t, Show a,Show d, Ord a, Ord d, Hashable d, IsString d
   , MonadState (SatDict d) (t IO)) =>
   VProp d a a -> t IO (Result d)
 runBruteForce prop = lift $ flip evalStateT (initSt prop) $
@@ -149,7 +152,7 @@ runBruteForce prop = lift $ flip evalStateT (initSt prop) $
 -- | Run the and decomposition baseline case, that is deconstruct every choice
 -- and then run the sat solver
 runAndDecomp :: (Show a, Show d, Ord d, Ord a, IsString d, Hashable d,
-                MonadTrans t, Monad (t IO), Semigroup d) =>
+                MonadTrans t, Monad (t IO)) =>
   VProp d a a -> (d -> a) -> t IO (Result d)
 runAndDecomp prop f = do
   res <- lift $ runForAssocs $ symbolicPropExpr $ andDecomp prop (f . dimName)
@@ -157,7 +160,7 @@ runAndDecomp prop f = do
 
 runVSMTSolve ::
   (Show d, Show a, Ord a, Ord d, MonadTrans t, IsString d
-  , MonadReader (SMTConf d a a) (t IO), Hashable d, Semigroup d) =>
+  , MonadReader (SMTConf d a a) (t IO), Hashable d) =>
   VProp d a a -> t IO (Result d)
 runVSMTSolve prop =
   do cnf <- ask
@@ -169,7 +172,7 @@ runVSMTSolve prop =
 -- with logical or as the concat operation and false as unit. We constrain all
 -- variable references to be the same just for the Result type
 newtype UniformProp d = UniformProp {getProp :: VProp d d d}
-  deriving (Show, Eq)
+  deriving (Show, Eq, Generic)
 
 instance Semigroup (UniformProp d) where
   (<>) x y = UniformProp $ (getProp x) ||| (getProp y)
@@ -178,18 +181,27 @@ instance Monoid (UniformProp d) where
   mempty  = UniformProp false
   mappend = (<>)
 
+instance Hashable Var
+instance Resultable Var
+instance Resultable String
+instance Resultable Text
+
+-- | a type class synonym for constraints required to produce a result
+class (IsString a, Eq a, Hashable a) => Resultable a
+
 -- | a result is a map of propositions where SAT is a boolean formula on
 -- dimensions, the rest of the keys are variables of the prop to boolean
 -- formulas on dimensions that dictate the values of those variables be they
 -- true or false
-newtype Result d = Result {getRes :: HM.HashMap d (UniformProp d)} deriving Show
+newtype Result d = Result {getRes :: HM.HashMap d (UniformProp d)}
+  deriving (Show, Generic)
 
-instance (Eq d, Hashable d, Semigroup d) => Semigroup (Result d) where
+instance (Eq d, Hashable d) => Semigroup (Result d) where
   x <> y = Result $ HM.unionWith (<>) (getRes x) (getRes y)
 
 -- | we define a special key "__Sat" to represent when all dimensions are
 -- satisfiable. TODO use type families to properly abstract the key out
-instance (Eq d, Hashable d, IsString d, Semigroup d) => Monoid (Result d) where
+instance (Eq d, Hashable d, IsString d) => Monoid (Result d) where
   mempty  = Result $ HM.singleton "__Sat" mempty
   mappend = (<>)
 
@@ -238,7 +250,7 @@ instance Eq S.ThmResult where (S.ThmResult x) == (S.ThmResult y) = x == y
 -- | Top level wrapper around engine and monad stack, this sets options for the
 -- underlying solver, inspects the results to see if they were variational or
 -- not, if not then it gets the model and wraps it in a V datatype
-vSMTSolve :: (Ord d, Show d, Hashable d, IsString d, Semigroup d) =>
+vSMTSolve :: (Ord d, Show d, Hashable d, IsString d) =>
   S.Symbolic (VProp d S.SBool SNum) -> S.Symbolic (Result d)
 vSMTSolve prop = do prop' <- prop
                     S.setOption $ SC.ProduceAssertions True
@@ -324,7 +336,7 @@ instance (Monad m, I.SolverContext m) =>
   namedConstraint = (lift .) . S.namedConstraint
   setOption = lift . S.setOption
 
-store :: (Eq d, Hashable d, Semigroup d) => Result d -> IncVSMTSolve d ()
+store :: (Eq d, Hashable d) => Result d -> IncVSMTSolve d ()
 store = St.modify . first . (<>)
 
 configToUniProp :: Config d -> UniformProp d
@@ -347,7 +359,7 @@ assocToResult :: (IsString d, Eq d, Hashable d) =>
   (Bool -> UniformProp d) -> AssocList -> Result d
 assocToResult f xs = Result . HM.fromList $ fmap (fromString *** f) xs
 
-handleChc :: (Ord d, Semigroup d, S.Boolean b, IsString d,
+handleChc :: (Ord d, S.Boolean b, IsString d,
                Hashable d) =>
   StateT (IncState d) SC.Query S.SBool ->
   StateT (IncState d) SC.Query S.SBool ->
@@ -404,7 +416,7 @@ handleChc _ _ _ _ _ =
   error "[ERR] This function should only ever be called on a choice constructor"
 
 -- | Abstracts out the choice handling for use in handling contexts.
-handleChcCtx :: (Show d, Ord d, Semigroup d, IsString d, Hashable d) =>
+handleChcCtx :: (Show d, Ord d, IsString d, Hashable d) =>
   Loc d S.SBool SNum ->
   Loc d S.SBool SNum ->
   VProp d b c        ->
@@ -415,7 +427,7 @@ handleChcCtx goLeft goRight c = handleChc
 
 -- | abstracts out the choice handling for use in the vSMTsolve function.
 -- Purposefully a partial function
-handleChcVSMT :: (Show d, Ord d, Semigroup d, IsString d, Hashable d) =>
+handleChcVSMT :: (Show d, Ord d, IsString d, Hashable d) =>
   VProp d S.SBool SNum ->
   VProp d S.SBool SNum ->
   VProp d S.SBool SNum ->
@@ -439,7 +451,7 @@ handleChcVSMT _      _       _  =
 -- the constrained in runVSMTsolve. If there is a choice then we employ the
 -- context to solve recursively by selecting a variant as our new focus and
 -- recurring.
-handleCtx :: (Ord d, Show d, Semigroup d, IsString d, Hashable d) =>
+handleCtx :: (Ord d, Show d, IsString d, Hashable d) =>
   Loc d S.SBool SNum -> IncVSMTSolve d S.SBool
   -- when we have no ctx we just solve the unit clause
 handleCtx (OpIB _ _ _, _) = error "what?!?! How did you even get here! Get Jeff on the phone this isn't implemented yet!"
@@ -494,7 +506,7 @@ handleCtx (OpBB op l r, ctx) = handleCtx (l, InBBL op ctx r)
 
 -- | The main solver algorithm. You can think of this as the sem function for
 -- the dsl
-vSMTSolve_ :: (Ord d, Show d, Semigroup d, IsString d, Hashable d) =>
+vSMTSolve_ :: (Ord d, Show d, IsString d, Hashable d) =>
   VProp d S.SBool SNum -> IncVSMTSolve d S.SBool
 vSMTSolve_ (RefB b) = return b
 vSMTSolve_ (LitB b) = return $ S.literal b

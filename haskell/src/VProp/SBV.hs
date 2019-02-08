@@ -108,7 +108,7 @@ symbolicPropExpr e = do
 andDecomp :: VProp d a b -> (Dim d -> a) -> VProp d a b
 andDecomp !(ChcB d l r) f  = (newDim &&& andDecomp l f) |||
                             (S.bnot newDim &&& andDecomp r f)
-  where newDim = dimToVar f d
+  where newDim = dimToVarBy f d
 andDecomp !(OpB op x)    f = OpB  op (andDecomp x f)
 andDecomp !(OpBB op l r) f = OpBB op (andDecomp l f) (andDecomp r f)
   -- it is unclear how to unwind choices in arithmetic expressions

@@ -19,8 +19,8 @@ import System.Timeout
 import Data.Time.Clock
 
 import Api
-import Json()
-import V()
+import Run (Result())
+import Json
 import Opts
 import Config
 import VProp.Types
@@ -42,14 +42,13 @@ instance (FromJSON a, FromJSONKey a) => FromJSONKey (Dim a)
 instance (FromJSON d, FromJSON a, FromJSON b) => FromJSON (Request d a b)
 instance (ToJSON d, ToJSON a, ToJSON b) => ToJSON (Request d a b)
 
-
 app :: Api ()
 app = do
   middleware logStdout
   post "satWith" satWithHandler
-  post "proveWith" proveWithHandler
+  -- post "proveWith" proveWithHandler
   post "sat" satHandler
-  post "prove" proveHandler
+  -- post "prove" proveHandler
 
 logfile :: FilePath
 logfile = "timing_desc_data.csv"
@@ -65,15 +64,15 @@ satWithHandler = do
   _ <- liftIO . forkIO $ logData prop sets runtime logfile
   json res
 
-proveWithHandler :: ActionCtxT () (WebStateM () () ()) b
-proveWithHandler = do
-  req <- jsonBody' :: ApiAction (Request Var Var Var)
-  let prop = proposition req
-      sets = maybe defSettings id (settings req)
-      conf = toConf sets
-  (runtime, res) <- liftIO . timeProc . proveWith conf $ prop
-  _ <- liftIO . forkIO $ logData prop sets runtime logfile
-  json res
+-- proveWithHandler :: ActionCtxT () (WebStateM () () ()) b
+-- proveWithHandler = do
+--   req <- jsonBody' :: ApiAction (Request Var Var Var)
+--   let prop = proposition req
+--       sets = maybe defSettings id (settings req)
+--       conf = toConf sets
+--   (runtime, res) <- liftIO . timeProc . proveWith conf $ prop
+--   _ <- liftIO . forkIO $ logData prop sets runtime logfile
+--   json res
 
 satHandler :: ActionCtxT () (WebStateM () () ()) b
 satHandler = do
@@ -83,13 +82,13 @@ satHandler = do
   _ <- liftIO . forkIO $ logData prop defSettings runtime logfile
   json res
 
-proveHandler :: ActionCtxT () (WebStateM () () ()) b
-proveHandler = do
-  req <- jsonBody' :: ApiAction (Request Var Var Var)
-  let prop = proposition req
-  (runtime, res) <- liftIO . timeProc . prove $ prop
-  _ <- liftIO . forkIO $ logData prop defSettings runtime logfile
-  json res
+-- proveHandler :: ActionCtxT () (WebStateM () () ()) b
+-- proveHandler = do
+--   req <- jsonBody' :: ApiAction (Request Var Var Var)
+--   let prop = proposition req
+--   (runtime, res) <- liftIO . timeProc . prove $ prop
+--   _ <- liftIO . forkIO $ logData prop defSettings runtime logfile
+--   json res
 
 -- * Time logging functions
 

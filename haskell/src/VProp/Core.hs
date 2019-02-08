@@ -149,7 +149,7 @@ selectVariant' _  x             = Just x
 dimToVarBy :: (Dim d -> a) -> Dim d -> (VProp d a b)
 dimToVarBy f = RefB . f
 
-dimToVar :: Dim d -> (VProp d d d)
+dimToVar :: Dim d -> (VProp d d b)
 dimToVar = RefB . dimName
 
 -- --------------------------- Descriptors ----------------------------------------
