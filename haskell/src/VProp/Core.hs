@@ -146,8 +146,11 @@ selectVariant' _  x             = Just x
 
 
 -- | Convert a dimension to a variable
-dimToVar :: (Dim d -> a) -> Dim d -> (VProp d a b)
-dimToVar f = RefB . f
+dimToVarBy :: (Dim d -> a) -> Dim d -> (VProp d a b)
+dimToVarBy f = RefB . f
+
+dimToVar :: Dim d -> (VProp d d d)
+dimToVar = RefB . dimName
 
 -- --------------------------- Descriptors ----------------------------------------
 -- | TODO fix all this redundancy by abstracting the dimensions and instancing Bifoldable
@@ -189,8 +192,8 @@ maxShared = safeMaximum . fmap length . group . sort . trifoldMap (:[]) mempty m
   where safeMaximum [] = 0
         safeMaximum xs = maximum xs
 
-confToProp :: Config a -> VProp a a a
-confToProp = Map.foldrWithKey' step false
+configToProp :: Config a -> VProp a a a
+configToProp = Map.foldrWithKey' step false
   where step :: Dim a -> Bool -> VProp a a a -> VProp a a a
         step d True  acc = OpBB Or (RefB $ dimName d) acc
         step d False acc = OpBB Or (bnot . RefB $ dimName d) acc

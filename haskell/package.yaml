@@ -18,6 +18,8 @@ description:         Please see the README on Github at https://github.com/doyou
 dependencies:
 - base >= 4.7 && < 5
 - containers >= 0.5
+- unordered-containers
+- hashable
 - mtl
 # - bifunctors
 - deepseq
