@@ -30,6 +30,8 @@ import Utils
 import Config
 import Result
 
+import Debug.Trace (trace)
+
 -- | The satisfiable dictionary, this is actually the "state" keys are configs
 -- (an mapping from dimensions to booleans denoting selection) and values are
 -- whether that config is satisfiable or not (a bool)
@@ -71,22 +73,21 @@ runEnv :: Show a => (VProp d a a -> Env d a (Result d))
 runEnv f conf x = _runEnv (f x') conf _emptySt
   where x' = foldr' ($) x (opts conf)
 
-runAD :: (Show a, Show d, Ord d, Ord a, IsString d, Hashable d) =>
+runAD :: (Show a, Show d, Ord d, Ord a, Resultable d) =>
          SMTConf d a a
       -> VProp d a a
       -> (d -> a)
       -> IO (Result d)
 runAD os p f = fst' <$> runEnv (flip runAndDecomp f) os p
 
-runBF :: (Show a, Show d, Ord a, Ord d, Hashable d
-         , IsString d, Eq d) =>
+runBF :: (Show a, Show d, Ord a, Ord d, Resultable d) =>
          SMTConf d a a
       -> VProp d a a
       -> IO (Result d)
 runBF os p = fst' <$> runEnv runBruteForce os p
 
 -- | Run the VSMT solver given a list of optimizations and a prop
-runVSMT :: (Show d, Show a, Ord a, Ord d, IsString d, Hashable d) =>
+runVSMT :: (Show d, Show a, Ord a, Ord d, Resultable d) =>
            SMTConf d a a              ->
            VProp d a a                ->
            IO (Result d, SatDict d, Log)
@@ -113,6 +114,7 @@ _logResult x = tell $ "Got result: " ++ show x
 runForAssocs :: S.Predicate -> IO AssocList
 runForAssocs x = S.runSMT $
   do x' <- x
+     S.setOption $ SC.ProduceAssignments True
      SC.query $
        do S.constrain x'
           b <- isSat
@@ -121,7 +123,7 @@ runForAssocs x = S.runSMT $
 -- | Run the brute force baseline case, that is select every plain variant and
 -- run them to the sat solver
 runBruteForce ::
-  (MonadTrans t, Show a,Show d, Ord a, Ord d, Hashable d, IsString d
+  (MonadTrans t, Show a,Show d, Ord a, Ord d, Resultable d
   , MonadState (SatDict d) (t IO)) =>
   VProp d a a -> t IO (Result d)
 runBruteForce prop = lift $ flip evalStateT (initSt prop) $
@@ -131,7 +133,8 @@ runBruteForce prop = lift $ flip evalStateT (initSt prop) $
       plainProps = if null confs
         then [Just (M.empty, prop)]
         else (\y -> sequence $ (y, selectVariant y prop)) <$> confs
-  plainMs <- lift $ mapM (bitraverse pure (runForAssocs . symbolicPropExpr)) $ catMaybes plainProps
+  plainMs <- lift $ mapM (bitraverse pure (runForAssocs . symbolicPropExpr)) $
+             catMaybes plainProps
   return $ foldMap (uncurry helper) plainMs
   where
         helper _ [] = mempty
@@ -143,7 +146,7 @@ runBruteForce prop = lift $ flip evalStateT (initSt prop) $
 
 -- | Run the and decomposition baseline case, that is deconstruct every choice
 -- and then run the sat solver
-runAndDecomp :: (Show a, Show d, Ord d, Ord a, IsString d, Hashable d,
+runAndDecomp :: (Show a, Show d, Ord d, Ord a, Resultable d,
                 MonadTrans t, Monad (t IO)) =>
   VProp d a a -> (d -> a) -> t IO (Result d)
 runAndDecomp prop f = do
@@ -151,8 +154,8 @@ runAndDecomp prop f = do
   lift . return $ assocToResult (UniformProp . LitB) res
 
 runVSMTSolve ::
-  (Show d, Show a, Ord a, Ord d, MonadTrans t, IsString d
-  , MonadReader (SMTConf d a a) (t IO), Hashable d) =>
+  (Show d, Show a, Ord a, Ord d, MonadTrans t, Resultable d
+  , MonadReader (SMTConf d a a) (t IO)) =>
   VProp d a a -> t IO (Result d)
 runVSMTSolve prop =
   do cnf <- ask
@@ -184,19 +187,21 @@ type IncVSMTSolve d = St.StateT (IncState d) SC.Query
 -- | Top level wrapper around engine and monad stack, this sets options for the
 -- underlying solver, inspects the results to see if they were variational or
 -- not, if not then it gets the model and wraps it in a V datatype
-vSMTSolve :: (Ord d, Show d, Hashable d, IsString d) =>
+vSMTSolve :: (Ord d, Show d, Resultable d) =>
   S.Symbolic (VProp d S.SBool SNum) -> S.Symbolic (Result d)
 vSMTSolve prop = do prop' <- prop
-                    S.setOption $ SC.ProduceAssertions True
+                    S.setOption $ SC.ProduceAssignments True
                     SC.query $
                       do
                       (b, (res',_)) <- St.runStateT (vSMTSolve_ prop')
                               (mempty, M.empty)
                       res <- if isDMNull res'
-                             then
-                               do S.constrain b
-                                  as <- SC.getAssignment
-                                  return $ assocToResult (UniformProp . LitB) as
+                             then do S.constrain b
+                                     b' <- isSat
+                                     if b'
+                                       then assocToResult (UniformProp . LitB)
+                                            <$> SC.getAssignment
+                                       else return mempty
                              else return res'
                       return res
 
@@ -273,8 +278,7 @@ instance (Monad m, I.SolverContext m) =>
 store :: (Eq d, Hashable d) => Result d -> IncVSMTSolve d ()
 store = St.modify . first . (<>)
 
-handleChc :: (Ord d, S.Boolean b, IsString d,
-               Hashable d) =>
+handleChc :: (Ord d, S.Boolean b, Resultable d) =>
   StateT (IncState d) SC.Query S.SBool ->
   StateT (IncState d) SC.Query S.SBool ->
   StateT (IncState d) SC.Query b      ->
@@ -305,20 +309,18 @@ handleChc goLeft goRight defL defR (ChcB d _ _) =
                         St.modify . second $ M.insert d True
                         lift $ SC.push 1
                         goLeft >>= S.constrain
-                        las <- lift $ SC.getAssignment
                         bt <- lift isSat
                         when bt $ St.modify (first $ modifySat trueProp)
-                        let resMapT = assocToResult (dispatchProp trueProp) las
+                        resMapT <- lift $ getResult (dispatchProp trueProp)
                         lift $ SC.pop 1
 
                         -- false variant
                         St.modify . second $ M.adjust (const False) d
                         lift $ SC.push 1
                         goRight >>= S.constrain
-                        ras <- lift $ SC.getAssignment
                         bf <- lift isSat
                         when bf $ St.modify (first $ modifySat falseProp)
-                        let resMapF = assocToResult (dispatchProp falseProp) ras
+                        resMapF <- lift $ getResult (dispatchProp falseProp)
                         lift $ SC.pop 1
 
                         store $ resMapT <> resMapF
@@ -330,7 +332,7 @@ handleChc _ _ _ _ _ =
   error "[ERR] This function should only ever be called on a choice constructor"
 
 -- | Abstracts out the choice handling for use in handling contexts.
-handleChcCtx :: (Show d, Ord d, IsString d, Hashable d) =>
+handleChcCtx :: (Show d, Ord d, Resultable d) =>
   Loc d S.SBool SNum ->
   Loc d S.SBool SNum ->
   VProp d b c        ->
@@ -341,7 +343,7 @@ handleChcCtx goLeft goRight c = handleChc
 
 -- | abstracts out the choice handling for use in the vSMTsolve function.
 -- Purposefully a partial function
-handleChcVSMT :: (Show d, Ord d, IsString d, Hashable d) =>
+handleChcVSMT :: (Show d, Ord d, Resultable d) =>
   VProp d S.SBool SNum ->
   VProp d S.SBool SNum ->
   VProp d S.SBool SNum ->
@@ -365,7 +367,7 @@ handleChcVSMT _      _       _  =
 -- the constrained in runVSMTsolve. If there is a choice then we employ the
 -- context to solve recursively by selecting a variant as our new focus and
 -- recurring.
-handleCtx :: (Ord d, Show d, IsString d, Hashable d) =>
+handleCtx :: (Ord d, Show d, Resultable d) =>
   Loc d S.SBool SNum -> IncVSMTSolve d S.SBool
   -- when we have no ctx we just solve the unit clause
 handleCtx (OpIB _ _ _, _) = error "what?!?! How did you even get here! Get Jeff on the phone this isn't implemented yet!"
@@ -420,7 +422,7 @@ handleCtx (OpBB op l r, ctx) = handleCtx (l, InBBL op ctx r)
 
 -- | The main solver algorithm. You can think of this as the sem function for
 -- the dsl
-vSMTSolve_ :: (Ord d, Show d, IsString d, Hashable d) =>
+vSMTSolve_ :: (Ord d, Show d, Resultable d) =>
   VProp d S.SBool SNum -> IncVSMTSolve d S.SBool
 vSMTSolve_ (RefB b) = return b
 vSMTSolve_ (LitB b) = return $ S.literal b

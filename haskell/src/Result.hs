@@ -5,23 +5,32 @@ module Result ( Result (..)
               , addToResult
               , lookupRes
               , lookupRes_
+              , getResSat
               , isDMNull
               , modifySat
               , assocToResult
               , configToUniProp
               , IsString
               , Hashable
+              , getResult
               ) where
 
-import           Control.Arrow     ((***))
-import           Data.Hashable     (Hashable)
-import qualified Data.HashMap.Lazy as HM
-import           Data.String       (IsString, fromString)
-import           Data.Text         (Text)
-import           GHC.Generics      (Generic)
+import           Control.Arrow      (second, (***))
+import           Data.Hashable      (Hashable)
+import qualified Data.HashMap.Lazy  as HM
+import           Data.Map           (toList)
+import           Data.Maybe         (maybe)
+import           Data.SBV           (SMTResult (..), defaultSMTCfg,
+                                     getModelDictionary)
+import           Data.SBV.Control   (CheckSatResult (..), Query, checkSat,
+                                     getSMTResult)
+import           Data.SBV.Internals (cwToBool)
+import           Data.String        (IsString, fromString)
+import           Data.Text          (Text)
+import           GHC.Generics       (Generic)
 
-import           VProp.Core        (configToProp)
-import           VProp.Types       (Config, VProp, Var, false, (|||))
+import           VProp.Core         (configToProp)
+import           VProp.Types        (Config, VProp, Var, false, (|||))
 
 -- | a type synonym that represents SBVs return type for getAssocs
 type AssocList = [(String, Bool)]
@@ -59,7 +68,7 @@ instance (Eq d, Hashable d) => Semigroup (Result d) where
 
 -- | we define a special key "__Sat" to represent when all dimensions are
 -- satisfiable. TODO use type families to properly abstract the key out
-instance (Eq d, Hashable d, IsString d) => Monoid (Result d) where
+instance (Resultable d) => Monoid (Result d) where
   mempty  = Result $ HM.singleton "__Sat" mempty
   mappend = (<>)
 
@@ -76,13 +85,28 @@ lookupRes k res = HM.lookup k (getRes res)
 lookupRes_ :: (Eq d, Hashable d) => d -> Result d -> UniformProp d
 lookupRes_ k res = (HM.!) (getRes res) k
 
-isDMNull :: (IsString d, Hashable d, Eq d) => Result d -> Bool
+getResSat :: Resultable d => Result d -> UniformProp d
+getResSat = lookupRes_ "__Sat"
+
+isDMNull :: Resultable d => Result d -> Bool
 isDMNull = maybe False ((==) mempty) . lookupRes "__Sat"
 
-modifySat :: (IsString d, Eq d, Hashable d) =>
-  UniformProp d -> Result d -> Result d
+modifySat :: Resultable d => UniformProp d -> Result d -> Result d
 modifySat = addToResult "__Sat"
 
-assocToResult :: (IsString d, Eq d, Hashable d) =>
-  (Bool -> UniformProp d) -> AssocList -> Result d
+assocToResult :: Resultable d => (Bool -> UniformProp d) -> AssocList -> Result d
 assocToResult f xs = Result . HM.fromList $ fmap (fromString *** f) xs
+
+getVSMTModel :: Query (Maybe SMTResult)
+getVSMTModel = do cs <- checkSat
+                  case cs of
+                    Unk   -> error "Unknown Error from solver!"
+  -- if unsat the return unsat, just passing default config to get the unsat
+  -- constructor TODO return correct conf
+                    Unsat -> return .
+                                Just $ Unsatisfiable defaultSMTCfg Nothing
+                    Sat   -> getSMTResult >>= return . pure
+
+getResult :: Resultable d => (Bool -> UniformProp d) -> Query (Result d)
+getResult f = do as <- (maybe mempty id . fmap getModelDictionary) <$> getVSMTModel
+                 return $ assocToResult f (second cwToBool <$> toList as)

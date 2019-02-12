@@ -12,9 +12,9 @@ main = do
   setEnv "TASTY_QUICKCHECK_TESTS" "3000"
   defaultMain tests
   where tests = testGroup "All" [ -- jsonProperties
-                                 -- R.unitTests
+                                 R.unitTests
                                 -- , R.specTests
                                 -- , CAP.unitTests
-                                R.runProperties
+                                -- R.runProperties
           -- VC.qcProps
                                 ]
