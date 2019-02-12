@@ -10,7 +10,7 @@ import Data.Aeson hiding (json)
 
 import V (V(..))
 import VProp.Types
-import Run (Result, UniformProp, Resultable)
+import qualified Result as R
 import Opts
 import Config
 
@@ -26,10 +26,10 @@ instance ToJSON SMTResult where
 instance ToJSON SMTReasonUnknown
 instance ToJSON SatResult where toJSON (SatResult x) = toJSON x
 instance ToJSON ThmResult where toJSON (ThmResult x) = toJSON x
-instance (ToJSONKey d, ToJSON d) => ToJSON (Run.Result d)
-instance (Resultable d, FromJSONKey d, FromJSON d) => FromJSON (Run.Result d)
-instance FromJSON d => FromJSON (Run.UniformProp d)
-instance ToJSON d => ToJSON (Run.UniformProp d)
+instance (ToJSONKey d, ToJSON d) => ToJSON (R.Result d)
+instance (R.Resultable d, FromJSONKey d, FromJSON d) => FromJSON (R.Result d)
+instance FromJSON d => FromJSON (R.UniformProp d)
+instance ToJSON d => ToJSON (R.UniformProp d)
 
 instance (Show d, Show a, ToJSON a, ToJSON d) => ToJSON (V a d) where
   toJSON (Plain x) = toJSON x

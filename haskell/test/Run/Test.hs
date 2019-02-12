@@ -30,41 +30,11 @@ import VProp.SBV
 import VProp.Gen
 import Config (defConf, allOptsConf, emptyConf)
 import Run
+import Result
 import Api
 import qualified V as V
 
 import Debug.Trace (trace)
-
-class TestEq a where
-  (|==|) :: a -> a -> Bool
-
-instance Show SMTResult where show x = show $ SatResult x
-
-instance Eq d => TestEq (V.V d (Maybe SMTResult)) where
-  (|==|) = V.eqWith (==) (\x y -> maybe False id $ fb x y)
-    where
-      fb :: Maybe SMTResult -> Maybe SMTResult -> Maybe Bool
-      fb = liftM2 (||==||)
-
-instance TestEq (V.V Var (Maybe SatResult)) where
-  (|==|) l r = ((fmap unSat) <$> l) |==| ((fmap unSat) <$> r)
-    where unSat (SatResult a) = a
-
-instance TestEq (V.V Var (Maybe ThmResult)) where
-  (|==|) l r = ((fmap unSat) <$> l) |==| ((fmap unSat) <$> r)
-    where unSat (ThmResult a) = a
-
-
--- | custom equality operator for SMTResults, for testing we just care that the
--- overall result e.g. sat, unsat matches, NOT that the actual model is the same
--- because there may be several valid models
-(||==||) :: SMTResult -> SMTResult -> Bool
-(||==||) (Unsatisfiable _) (Unsatisfiable _) = True
-(||==||) (Satisfiable _ _) (Satisfiable _ _) = True
-(||==||) (SatExtField _ _) (SatExtField _ _) = True
-(||==||) (Unknown _ _)     (Unknown _ _)     = True
-(||==||) (ProofError _ _)  (ProofError _ _)  = True
-(||==||) _                 _                 = False
 
 runProperties :: TestTree
 runProperties = testGroup "Run Properties" [
@@ -75,7 +45,7 @@ runProperties = testGroup "Run Properties" [
   -- , sat_error2
   -- , sat_error3
   -- vsat_matches_BF_plain
-  vsat_matches_BF
+  -- vsat_matches_BF
   -- no_dims_in_model
 
 
@@ -100,7 +70,7 @@ unitTests = testGroup "Unit Tests"
   -- , chc_singleton_is_sat
   -- , chc_not_singleton_is_sat
   -- , chc_unbalanced_is_sat
-  -- , chc_balanced_is_sat
+  chc_balanced_is_sat
   -- , chc_2_nested_is_sat
   -- , bimpl_w_false_is_sat
   -- , bimpl_w_false_chc_is_sat
@@ -217,7 +187,7 @@ chces_not_in_model = H.testCase
 andDecomp_duplicate = H.testCase
   "And decomposition can solve props with repeat variables" $
   do a <- ad id prop
-     H.assertBool "should never be empty" (not $ null a)
+     H.assertBool "should never be empty" (not $ isDMNull a)
   where
     prop :: VProp Var Var Var
     prop = x ./= x
@@ -227,9 +197,9 @@ andDecomp_duplicate = H.testCase
 andDecomp_duplicateChc = H.testCase
   "And decomposition can solve props with repeat dimensions" $
   do a <- ad id prop
-     H.assertBool "should never be empty" (not $ null a)
+     H.assertBool "should never be empty" (not $ isDMNull a)
   where
-    prop :: VProp Var Var Var
+    prop :: ReadableProp
     prop = ChcB "D" (bRef "c" &&& bRef "d") (bRef "a") &&& ChcB "D" (bRef "a") (bRef "c")
 
 andDecomp_terminatesSh_ = QCM.monadicIO $
@@ -240,21 +210,19 @@ andDecomp_terminatesSh_ = QCM.monadicIO $
     liftIO $ print prop
     liftIO $ print "----\n"
     a <- QCM.run $ ad id prop
-    QCM.assert (not $ null a)
+    QCM.assert (not $ isDMNull a)
 
 sat_terminates x =  onlyInts x QC.==> QCM.monadicIO
   $ do -- liftIO $ print $ "prop: " ++ show (x :: VProp Var Var) ++ " \n"
-       a <- QCM.run . sat $ (x :: VProp Var Var Var)
-       QCM.assert (not $ null a)
+       a <- QCM.run . sat $ (x :: ReadableProp)
+       QCM.assert (not $ isDMNull a)
 
 vsat_matches_BF' x =  onlyBools x QC.==> QCM.monadicIO
   $ do a <- QCM.run . (bfWith emptyConf) $ (x :: VProp Var Var Var)
        b <- QCM.run . (satWith emptyConf) $ x
-       let a' = V.dimSort $ a
-           b' = V.dimSort $ b
-       liftIO . putStrLn $ "[BF]:   \n" ++ show a'
-       liftIO . putStrLn $ "[VSAT]: \n" ++ show b'
-       QCM.assert (a' |==| b')
+       liftIO . putStrLn $ "[BF]:   \n" ++ show a
+       liftIO . putStrLn $ "[VSAT]: \n" ++ show b
+       QCM.assert (a == b)
 
 noDimsInModel :: V.V d (Maybe SatResult) -> Bool
 noDimsInModel res = all (strIsLower) resultVars
@@ -269,23 +237,22 @@ noDimsInModel res = all (strIsLower) resultVars
 
 no_dims_in_model_prop x =  onlyBools x QC.==> QCM.monadicIO
   $ do a <- QCM.run . (bfWith emptyConf) $ (x :: ReadableProp)
-       let a' = V.dimSort $ a
        -- liftIO . putStrLn $ "[BF]:   \n" ++ show a'
-       QCM.assert (noDimsInModel a')
+       QCM.assert (mempty == getResSat a)
 
 vsat_matches_BF_plain' x =
   (onlyBools x && isPlain x) QC.==> QCM.monadicIO
-  $ do a <- QCM.run . (bfWith emptyConf) $ (x :: VProp Var Var Var)
-       b <- QCM.run . (satWith emptyConf) $ x
-       liftIO . putStrLn $ "\n[BF]:   \n" ++ show (V.dimSort a)
-       liftIO . putStrLn $ "[VSAT]: \n" ++ show (V.dimSort b)
-       QCM.assert ((V.dimSort a) |==| (V.dimSort b))
+  $ do a <- QCM.run . (bfWith emptyConf) $ (x :: ReadableProp)
+       b <- QCM.run . (satWith emptyConf) $ (x :: ReadableProp)
+       liftIO . putStrLn $ "\n[BF]:   \n" ++ show a
+       liftIO . putStrLn $ "[VSAT]: \n" ++ show b
+       QCM.assert (a == b)
 
 ad_terminates x = onlyInts x QC.==> QCM.monadicIO
   $ do -- liftIO $ print $ "prop: " ++ show (x :: VProp Var Var)
        -- liftIO $ print $ "prop Dup?: " ++ show (noDupRefs x)
        a <- QCM.run . ad id $ (x :: VProp Var Var Var)
-       QCM.assert (not $ null a)
+       QCM.assert (not $ isDMNull a)
 
 dim_homomorphism x = onlyInts x QC.==> QCM.monadicIO
   $ do a <- QCM.run . satWith emptyConf $ (x :: VProp Var Var Var)
@@ -293,10 +260,10 @@ dim_homomorphism x = onlyInts x QC.==> QCM.monadicIO
        -- liftIO $ print $ "dims: " ++ show (dimensions x)
        -- liftIO $ print $ "num dims: " ++ show (length $ dimensions x)
 
-       QCM.assert (length (dimensions x) == length (V.dimensions a))
+       QCM.assert (length (dimensions x) == length (getProp $ getResSat a))
 
 dim_homo_unit = do a <- satWith emptyConf prop
-                   let numDimsAfter = length $ V.dimensions a
+                   let numDimsAfter = length $ dimensions (getProp $ getResSat a)
                        numDimsBefore = length $ dimensions prop
                    print prop
                    print a
@@ -307,7 +274,7 @@ dim_homo_unit = do a <- satWith emptyConf prop
 
 
 dupDimensions' = do a <- satWith emptyConf prop
-                    let numDimsAfter = length $ V.dimensions a
+                    let numDimsAfter = length $ bvars $ getProp $ lookupRes_ "__SAT" a
                         numDimsBefore = length $ dimensions prop
 
                     -- print numDimsBefore
@@ -320,7 +287,7 @@ dupDimensions' = do a <- satWith emptyConf prop
         -- prop = (ChcB "AA" (bRef "x") (bRef "y")) &&& (ChcB "AA" true false)
 
 sat_error_unit = do a <- sat prop
-                    H.assertBool "" (not $ null a)
+                    H.assertBool "" (not $ (==) mempty a)
   where
     prop :: VProp Var Var Var
     prop = (signum 7 - (LitI . D $ 10.905)) ./=
@@ -330,21 +297,21 @@ sat_error_unit = do a <- sat prop
     -- prop = ((dRef "x" - iRef "q") .== 0) &&& (bRef "w" &&& bRef "rhy")
 
 sat_error_unit2 = do a <- sat prop
-                     H.assertBool "" (not $ null a)
+                     H.assertBool "" (not $ (==) mempty a)
   where
     prop :: VProp Var Var Var
     prop = ((dRef "x" :: VIExpr Var Var) .<= (LitI . D $ 15.309)) &&& true
     -- prop = (dRef "x") .== (LitI . I $ 15) -- this passes
 
 sat_error_unit3 = do a <- sat prop
-                     H.assertBool "Modulus with Doubles passes as long as there is one integer" . not . null $ a
+                     H.assertBool "Modulus with Doubles passes as long as there is one integer" . not . (==) mempty $ a
   where
     prop :: VProp Var Var Var
     prop = (dRef "x" :: VIExpr Var Var) .%
            (dRef "y" :: VIExpr Var Var) .> (LitI . I $ 1)
 
 sat_error_unit4 = do a <- sat prop
-                     H.assertBool "Division with a Double and Int coearces correctly" . not . null $ a
+                     H.assertBool "Division with a Double and Int coearces correctly" . not . (==) mempty $ a
   where
     prop :: VProp Var Var Var
   -- this will still fail with a bitvec error
@@ -357,10 +324,10 @@ unitGen prop str = do a <- satWith emptyConf prop
                       b <- bfWith emptyConf prop
                       putStrLn "\n\n--------------"
                       putStrLn $ show prop
-                      putStrLn $ show (V.dimSort $ V.prune b)
-                      putStrLn $ show (V.dimSort $ V.prune a)
+                      putStrLn $ show b
+                      putStrLn $ show a
                       putStrLn "--------------\n\n"
-                      H.assertBool str ((V.dimSort $ V.prune a) |==| (V.dimSort $ V.prune b))
+                      H.assertBool str (a == b)
 
 not_unit = do a <- satWith emptyConf prop
               b <- bfWith emptyConf prop
@@ -374,14 +341,14 @@ not_mult_unit = do a <- satWith emptyConf prop
                    putStrLn $ show prop
                    putStrLn $ show a
                    putStrLn $ show b
-                   H.assertBool "Brute Force matches VSAT for multiple negations" (a |==| b)
+                   H.assertBool "Brute Force matches VSAT for multiple negations" (a == b)
   where prop :: VProp Var Var Var
         prop = bnot . bnot . bnot . bRef $ "x"
 
 singleton_unit = do a <- satWith emptyConf prop
                     b <- bfWith emptyConf prop
                     putStrLn $ show prop
-                    H.assertBool "Brute Force matches VSAT for simple negations" (a |==| b)
+                    H.assertBool "Brute Force matches VSAT for simple negations" (a == b)
   where prop :: VProp Var Var Var
         prop = bRef $ "x"
 

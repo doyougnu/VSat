@@ -8,6 +8,7 @@ module Api ( sat
 
 import VProp.Types
 import Config (defConf, debugConf, SMTConf(..), emptyConf)
+import Result
 import Run
 import Utils (fst')
 

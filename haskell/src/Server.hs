@@ -19,7 +19,6 @@ import System.Timeout
 import Data.Time.Clock
 
 import Api
-import Run (Result())
 import Json
 import Opts
 import Config
