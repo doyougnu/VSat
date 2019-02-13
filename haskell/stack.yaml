@@ -12,9 +12,10 @@ nix:
 
 # resolver: lts-11.22
 resolver: lts-12.25
+# resolver: lts-13.0 -- for deriving via
 build:
-  library-profiling: false
-  executable-profiling: false
+  library-profiling: true
+  executable-profiling: true
 
 # allow-newer: true
 
