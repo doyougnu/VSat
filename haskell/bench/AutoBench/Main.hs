@@ -18,7 +18,6 @@ import           Config                  (defConf, emptyConf)
 import           Opts
 import           Run                     (runAD, runBF)
 import           Utils
-import           V
 import           VProp.Core
 import           VProp.Types
 import           VProp.SBV               (toPredicate)

@@ -275,7 +275,7 @@ instance (Monad m, I.SolverContext m) =>
   namedConstraint = (lift .) . S.namedConstraint
   setOption = lift . S.setOption
 
-store :: (Eq d, Hashable d) => Result d -> IncVSMTSolve d ()
+store :: (Eq d, Ord d) => Result d -> IncVSMTSolve d ()
 store = St.modify . first . (<>)
 
 handleChc :: (Ord d, S.Boolean b, Resultable d) =>
@@ -295,12 +295,10 @@ handleChc goLeft goRight defL defR (ChcB d _ _) =
                           -- a prop that represents the current context
                           usedProp = configToUniProp used
                           -- a prop that is sat with the current dim being true
-                          trueProp = UniformProp $
-                                     OpBB And (dimToVar d) (getProp usedProp)
+                          trueProp = consResultProp (dimToVar d) usedProp
                           -- a prop that is sat with the current dim being false
-                          falseProp = UniformProp $
-                                      OpBB And (bnot $ dimToVar d) (getProp usedProp)
-                          dispatchProp :: UniformProp d -> Bool -> UniformProp d
+                          falseProp = consResultProp (bnot $ dimToVar d) usedProp
+                          dispatchProp :: ResultProp d -> Bool -> ResultProp d
                           dispatchProp p x = if x
                                             then p
                                             else UniformProp $ OpB Not (getProp p)

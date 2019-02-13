@@ -441,6 +441,7 @@ instance Bitraversable VIExpr where
                                  bitraverse f g l <*> bitraverse f g r
   bitraverse _ _ (LitI x)      = pure $ LitI x
 
+
 -- | Template haskell generics for n-arity folds
 $(return []) -- required to avoid reify error
 trimap :: (a -> a') -> (b -> b') -> (c -> c') -> VProp a b c -> VProp a' b' c'
@@ -451,3 +452,15 @@ trifoldMap = $(genFoldMap ''VProp)
 
 tritraverse :: Applicative f => (a -> f a') -> (b -> f b') -> (c -> f c') -> VProp a b c -> f (VProp a' b' c')
 tritraverse = $(genTraverse ''VProp)
+
+
+-- | conveniences
+instance (NFData a, NFData b, NFData c) => NFData (VProp a b c)
+instance (NFData a, NFData b) => NFData (VIExpr a b)
+instance NFData NPrim
+instance NFData B_B
+instance NFData N_N
+instance NFData BB_B
+instance NFData NN_B
+instance NFData NN_N
+instance NFData RefN
