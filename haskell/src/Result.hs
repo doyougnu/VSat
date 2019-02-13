@@ -1,7 +1,6 @@
 module Result ( Result (..)
               , ResultProp (..)
               , Resultable
-              , AssocList
               , insertToResult
               , insertToSat
               , lookupRes
@@ -11,10 +10,10 @@ module Result ( Result (..)
               , configToUniProp
               , getResult
               , consResultProp
+              , (<:)
               ) where
 
 import           Control.DeepSeq    (NFData)
-import           Data.Sequence
 import qualified Data.Map           as M
 import           Data.Maybe         (maybe)
 import           Data.SBV           (SMTResult (..), defaultSMTCfg,
@@ -27,27 +26,37 @@ import           Data.Text          (Text)
 import           GHC.Generics       (Generic)
 
 import           VProp.Core         (configToProp)
-import           VProp.Types        (Config, VProp(..), Var)
-
--- | a type synonym that represents SBVs return type for getAssocs
-type AssocList = [(String, Bool)]
+import           VProp.Types        (Config, VProp(..), Var, BB_B(..))
 
 -- | A custom type whose only purpose is to define a monoid instance over VProp
 -- with logical or as the concat operation and false as unit. We constrain all
 -- variable references to be the same just for the Result type
-newtype ResultProp d = ResultProp {getProp :: Seq (VProp d d d)}
-  deriving (Show, Eq, Generic)
+newtype UniformProp d = UniformProp {uniProp :: VProp d d d}
+  deriving (Show,Eq,Generic)
 
-consResultProp :: VProp d d d -> ResultProp d -> ResultProp d
-consResultProp x xs = ResultProp $ x <| (getProp xs)
+newtype ResultProp d = ResultProp {getProp :: Maybe (UniformProp d)}
+  deriving (Show, Eq, Generic, Semigroup)
 
+consResultProp :: ResultProp d -> ResultProp d -> ResultProp d
+consResultProp x xs = (<>) xs x
+
+-- | O(1) cons result prop infix form
+infixr 5 <:
+(<:) :: ResultProp d -> ResultProp d -> ResultProp d
+(<:) = consResultProp
+
+instance NFData d => NFData (UniformProp d)
 instance NFData d => NFData (ResultProp d)
 
-instance Semigroup (ResultProp d) where
-  (<>) x y = ResultProp $ (getProp x) >< (getProp y)
+-- | define semigroup for uniform props with an Or. The order here is important
+-- so that we avoid essentially cons'ing onto the end of a list. This operation
+-- and mappend will prioritize the first argument, x, over y, so if |x| > |y|
+-- you'll have an O(n) cons
+instance Semigroup (UniformProp d) where
+  (<>) x y = UniformProp $ OpBB Or (uniProp x) (uniProp y)
 
 instance Monoid (ResultProp d) where
-  mempty  = ResultProp empty
+  mempty  = ResultProp mempty
   mappend = (<>)
 
 instance Resultable Var
@@ -77,7 +86,7 @@ instance (Resultable d) => Monoid (Result d) where
 
 
 configToUniProp :: Config d -> ResultProp d
-configToUniProp = ResultProp . pure . configToProp
+configToUniProp = ResultProp . Just . UniformProp . configToProp
 
 insertToResult :: (Eq d, Ord d) => d -> ResultProp d -> Result d -> Result d
 insertToResult k v = Result . M.insertWith (<>)  k v . getRes
@@ -107,6 +116,11 @@ getVSMTModel = do cs <- checkSat
                                 Just $ Unsatisfiable defaultSMTCfg Nothing
                     Sat   -> getSMTResult >>= return . pure
 
+-- | getResult from the query monad, takes a function f that is used to dispatch
+-- result bools to resultProps i.e. if the model says variable "x" == True then
+-- when f is applied "x" == True result from f. This is used to turn
+-- dictionaries into <var> == <formula of dimensions where var is True>
+-- associations
 getResult :: Resultable d => (Bool -> ResultProp d) -> Query (Result d)
 getResult f =
   do as <- (maybe mempty id . fmap getModelDictionary) <$> getVSMTModel
