@@ -39,7 +39,7 @@ chAutoFile = "bench/AutoBench/vsat_small_chunk.json"
 
 -- main :: IO (V String (Maybe ThmResult))
 main = do
-  jsn <- BS.readFile smAutoFile
+  jsn <- BS.readFile autoFileBool
   let (Just auto) = decodeStrict jsn :: Maybe Auto
       cs = constraints auto -- looks like 4298/4299 are the culprits
       -- ps' = parse langParser "" <$> (drop 15 . take 20 $ cs)

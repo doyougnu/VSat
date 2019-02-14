@@ -278,7 +278,7 @@ instance (Monad m, I.SolverContext m) =>
 store :: (Eq d, Ord d) => Result d -> IncVSMTSolve d ()
 store = St.modify . first . (<>)
 
-handleChc :: (Ord d, S.Boolean b, Resultable d) =>
+handleChc :: (Ord d, S.Boolean b, Resultable d, Show d) =>
   StateT (IncState d) SC.Query S.SBool ->
   StateT (IncState d) SC.Query S.SBool ->
   StateT (IncState d) SC.Query b      ->
