@@ -40,6 +40,9 @@ type SatDict a = M.Map (Config a) Bool
 -- | Type convenience for Log
 type Log = Text
 
+--- | a type synonym that represents SBVs return type for getAssocs
+type AssocList = [(String, Bool)]
+
 -- | Takes a dimension d, a type for values a, and a result r
 type Env d a r = RWST (SMTConf d a a) Log (SatDict d) IO r -- ^ the monad stack
 
@@ -111,14 +114,12 @@ _logResult x = tell $ "Got result: " ++ show x
 
 -- | run the sat solver, when we get a satisafiable call get the assignments
 -- directly
-runForAssocs :: S.Predicate -> IO AssocList
-runForAssocs x = S.runSMT $
+runForDict :: Resultable d => S.Predicate -> IO (Result d)
+runForDict x = S.runSMT $
   do x' <- x
-     S.setOption $ SC.ProduceAssignments True
      SC.query $
        do S.constrain x'
-          b <- isSat
-          if b then SC.getAssignment else return []
+          getResult (toResultProp . LitB)
 
 -- | Run the brute force baseline case, that is select every plain variant and
 -- run them to the sat solver
@@ -133,25 +134,25 @@ runBruteForce prop = lift $ flip evalStateT (initSt prop) $
       plainProps = if null confs
         then [Just (M.empty, prop)]
         else (\y -> sequence $ (y, selectVariant y prop)) <$> confs
-  plainMs <- lift $ mapM (bitraverse pure (runForAssocs . symbolicPropExpr)) $
-             catMaybes plainProps
+  plainMs <- lift $
+             mapM (bitraverse
+                   (pure . configToResultProp)
+                   (runForDict . symbolicPropExpr)) $ catMaybes plainProps
   return $ foldMap (uncurry helper) plainMs
   where
-        helper _ [] = mempty
-        helper c as =  modifySat dprop $ assocToResult setRes as
-          where dprop = configToUniProp c
+        -- helper c as =  insertToSat dprop $ getResult setRes as
+        helper c as =  insertToSat c as
 
-                setRes True = dprop
-                setRes False = UniformProp $ OpB Not (getProp dprop)
+                -- setRes True = dprop
+                -- setRes False = negateResultProp dprop
 
 -- | Run the and decomposition baseline case, that is deconstruct every choice
 -- and then run the sat solver
 runAndDecomp :: (Show a, Show d, Ord d, Ord a, Resultable d,
                 MonadTrans t, Monad (t IO)) =>
   VProp d a a -> (d -> a) -> t IO (Result d)
-runAndDecomp prop f = do
-  res <- lift $ runForAssocs $ symbolicPropExpr $ andDecomp prop (f . dimName)
-  lift . return $ assocToResult (UniformProp . LitB) res
+runAndDecomp prop f =
+  lift $ runForDict $ symbolicPropExpr $ andDecomp prop (f . dimName)
 
 runVSMTSolve ::
   (Show d, Show a, Ord a, Ord d, MonadTrans t, Resultable d
@@ -199,8 +200,7 @@ vSMTSolve prop = do prop' <- prop
                              then do S.constrain b
                                      b' <- isSat
                                      if b'
-                                       then assocToResult (UniformProp . LitB)
-                                            <$> SC.getAssignment
+                                       then getResult (toResultProp . LitB)
                                        else return mempty
                              else return res'
                       return res
@@ -293,22 +293,23 @@ handleChc goLeft goRight defL defR (ChcB d _ _) =
        Nothing    -> do
                         let
                           -- a prop that represents the current context
-                          usedProp = configToUniProp used
+                          usedProp = configToResultProp used
                           -- a prop that is sat with the current dim being true
-                          trueProp = consResultProp (dimToVar d) usedProp
+                          trueProp = (dimToVar d) <:& usedProp
                           -- a prop that is sat with the current dim being false
-                          falseProp = consResultProp (bnot $ dimToVar d) usedProp
+                          falseProp = (bnot $ dimToVar d) <:& usedProp
+
                           dispatchProp :: ResultProp d -> Bool -> ResultProp d
                           dispatchProp p x = if x
                                             then p
-                                            else UniformProp $ OpB Not (getProp p)
+                                            else negateResultProp p
 
                         -- the true variant
                         St.modify . second $ M.insert d True
                         lift $ SC.push 1
                         goLeft >>= S.constrain
                         bt <- lift isSat
-                        when bt $ St.modify (first $ modifySat trueProp)
+                        when bt $ St.modify (first $ insertToSat trueProp)
                         resMapT <- lift $ getResult (dispatchProp trueProp)
                         lift $ SC.pop 1
 
@@ -317,7 +318,7 @@ handleChc goLeft goRight defL defR (ChcB d _ _) =
                         lift $ SC.push 1
                         goRight >>= S.constrain
                         bf <- lift isSat
-                        when bf $ St.modify (first $ modifySat falseProp)
+                        when bf $ St.modify (first $ insertToSat falseProp)
                         resMapF <- lift $ getResult (dispatchProp falseProp)
                         lift $ SC.pop 1
 

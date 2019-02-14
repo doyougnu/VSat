@@ -1,16 +1,22 @@
 module Result ( Result (..)
               , ResultProp (..)
               , Resultable
+              , UniformProp
               , insertToResult
               , insertToSat
               , lookupRes
               , lookupRes_
               , getResSat
               , isDMNull
-              , configToUniProp
+              , configToResultProp
               , getResult
-              , consResultProp
-              , (<:)
+              , (&:>)
+              , (<:|)
+              , (<:&)
+              , (|:>)
+              , toResultProp
+              , consWithOr
+              , negateResultProp
               ) where
 
 import           Control.DeepSeq    (NFData)
@@ -26,7 +32,7 @@ import           Data.Text          (Text)
 import           GHC.Generics       (Generic)
 
 import           VProp.Core         (configToProp)
-import           VProp.Types        (Config, VProp(..), Var, BB_B(..))
+import           VProp.Types        (Config, VProp(..), Var, BB_B(..), B_B(..))
 
 -- | A custom type whose only purpose is to define a monoid instance over VProp
 -- with logical or as the concat operation and false as unit. We constrain all
@@ -34,16 +40,55 @@ import           VProp.Types        (Config, VProp(..), Var, BB_B(..))
 newtype UniformProp d = UniformProp {uniProp :: VProp d d d}
   deriving (Show,Eq,Generic)
 
+-- | a wrapper adding Nothing to UniformProp. This is essentially building a
+-- monoid where mempty in Nothing, and mappend is logical Or. Think of this as a
+-- list
 newtype ResultProp d = ResultProp {getProp :: Maybe (UniformProp d)}
   deriving (Show, Eq, Generic, Semigroup)
 
-consResultProp :: ResultProp d -> ResultProp d -> ResultProp d
-consResultProp x xs = (<>) xs x
+-- | construct a result prop from a uniformprop, this is just used for a nice
+-- api interface
+toResultProp :: VProp d d d -> ResultProp d
+toResultProp = ResultProp . Just . UniformProp
 
--- | O(1) cons result prop infix form
-infixr 5 <:
-(<:) :: ResultProp d -> ResultProp d -> ResultProp d
-(<:) = consResultProp
+negateResultProp :: ResultProp d -> ResultProp d
+negateResultProp = ResultProp . fmap (UniformProp . OpB Not . uniProp) . getProp
+
+-- | internal only, allows for more flexibility in cons'ing onto a resultProp
+consWith :: (VProp d d d -> VProp d d d -> VProp d d d) -> VProp d d d -> ResultProp d -> ResultProp d
+consWith f x xs = ResultProp $ do xs' <- getProp xs
+                                  let res = f x (uniProp xs')
+                                  return $ UniformProp res
+
+-- | cons the first resultProp onto the second with an Or, if the first is
+-- larger than the second then this will be O(i). O(1) in the case where the
+-- first is a singleton
+consWithOr :: VProp d d d -> ResultProp d -> ResultProp d
+consWithOr = consWith (OpBB Or)
+
+consWithAnd :: VProp d d d -> ResultProp d -> ResultProp d
+consWithAnd = consWith (OpBB And)
+
+-- | O(1) cons result prop infix form with a logical And. Note that this proper
+-- use is x :&> y, where |y| << |x| and will result in [y,x]. This is purposeful
+-- and for convenience in the Run module. Essentially put the smaller argument where the angle points
+infixr 5 &:>
+(&:>) :: ResultProp d -> VProp d d d -> ResultProp d
+(&:>) = flip consWithAnd
+
+
+infixr 5 <:&
+(<:&) :: VProp d d d -> ResultProp d -> ResultProp d
+(<:&) = consWithAnd
+
+-- | O(1) cons result prop infix form with a logical Or
+infixr 5 <:|
+(<:|) :: VProp d d d -> ResultProp d -> ResultProp d
+(<:|) = consWithOr
+
+infixr 5 |:>
+(|:>) :: ResultProp d -> VProp d d d -> ResultProp d
+(|:>) = flip consWithOr
 
 instance NFData d => NFData (UniformProp d)
 instance NFData d => NFData (ResultProp d)
@@ -53,7 +98,7 @@ instance NFData d => NFData (ResultProp d)
 -- and mappend will prioritize the first argument, x, over y, so if |x| > |y|
 -- you'll have an O(n) cons
 instance Semigroup (UniformProp d) where
-  (<>) x y = UniformProp $ OpBB Or (uniProp x) (uniProp y)
+  (<>) x y = UniformProp $ OpBB And (uniProp x) (uniProp y)
 
 instance Monoid (ResultProp d) where
   mempty  = ResultProp mempty
@@ -76,36 +121,49 @@ newtype Result d = Result {getRes :: M.Map d (ResultProp d)}
 instance NFData d => NFData (Result d)
 
 instance (Eq d, Ord d) => Semigroup (Result d) where
+  -- we play y onto head of x always, this ensures O(1) but isn't
+  -- enforced in the type system
   x <> y = Result $ M.unionWith (<>) (getRes x) (getRes y)
 
 -- | we define a special key "__Sat" to represent when all dimensions are
 -- satisfiable. TODO use type families to properly abstract the key out
 instance (Resultable d) => Monoid (Result d) where
-  mempty  = Result $ M.singleton "__Sat" mempty
+  mempty  = mempty
   mappend = (<>)
 
+-- | O(n) transform a configuration to a result prop
+configToResultProp :: Config d -> ResultProp d
+configToResultProp = ResultProp . Just . UniformProp . configToProp
 
-configToUniProp :: Config d -> ResultProp d
-configToUniProp = ResultProp . Just . UniformProp . configToProp
+insertWith :: (Eq d, Ord d) =>
+  (ResultProp d -> ResultProp d -> ResultProp d) ->
+  d -> ResultProp d -> Result d -> Result d
+insertWith f k v = Result . M.insertWith f k v . getRes
 
+-- | O(log n + O(1)) insert a resultProp into a result. Uses the Monoid instance of ResultProp i.e. x <> y = x && y
 insertToResult :: (Eq d, Ord d) => d -> ResultProp d -> Result d -> Result d
-insertToResult k v = Result . M.insertWith (<>)  k v . getRes
+insertToResult = insertWith (<>)
 
+-- | O(1) insert a result prop into the result entry for special Sat variable
 insertToSat :: Resultable d => ResultProp d -> Result d -> Result d
 insertToSat = insertToResult "__Sat"
 
+-- | O(log n) given a key lookup the result prop
 lookupRes :: (Eq d, Ord d) => d -> Result d -> ResultProp d
 lookupRes k res = maybe mempty id $ M.lookup k (getRes res)
 
+-- | unsafe O(log n) lookup Res
 lookupRes_ :: (Eq d, Ord d) => d -> Result d -> ResultProp d
 lookupRes_ k res = (M.!) (getRes res) k
 
 getResSat :: Resultable d => Result d -> ResultProp d
 getResSat = lookupRes_ "__Sat"
 
+-- | O(1) is result empty
 isDMNull :: Resultable d => Result d -> Bool
 isDMNull = M.null . getRes
 
+-- | grab a vsmt model from SBV, check if it is sat or not, if so return it
 getVSMTModel :: Query (Maybe SMTResult)
 getVSMTModel = do cs <- checkSat
                   case cs of
