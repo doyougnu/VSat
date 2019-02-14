@@ -21,6 +21,7 @@ module Result ( Result (..)
 
 import           Control.DeepSeq    (NFData)
 import qualified Data.Map           as M
+import           Data.Map.Internal.Debug (showTree) -- abusing debug for show
 import           Data.Maybe         (maybe)
 import           Data.SBV           (SMTResult (..), defaultSMTCfg,
                                      getModelDictionary)
@@ -37,14 +38,20 @@ import           VProp.Types        (Config, VProp(..), Var, BB_B(..), B_B(..))
 -- | A custom type whose only purpose is to define a monoid instance over VProp
 -- with logical or as the concat operation and false as unit. We constrain all
 -- variable references to be the same just for the Result type
-newtype UniformProp d = UniformProp {uniProp :: VProp d d d}
-  deriving (Show,Eq,Generic)
+newtype UniformProp d = UniformProp {uniProp :: VProp d d d} deriving (Eq,Generic)
 
 -- | a wrapper adding Nothing to UniformProp. This is essentially building a
 -- monoid where mempty in Nothing, and mappend is logical Or. Think of this as a
 -- list
 newtype ResultProp d = ResultProp {getProp :: Maybe (UniformProp d)}
-  deriving (Show, Eq, Generic, Semigroup)
+  deriving (Eq,Generic,Semigroup,Monoid)
+
+instance Show d => Show (ResultProp d) where
+  show rp = maybe mempty show $ getProp rp
+
+instance Show d => Show (UniformProp d) where
+  show = show . uniProp
+
 
 -- | construct a result prop from a uniformprop, this is just used for a nice
 -- api interface
@@ -100,10 +107,6 @@ instance NFData d => NFData (ResultProp d)
 instance Semigroup (UniformProp d) where
   (<>) x y = UniformProp $ OpBB And (uniProp x) (uniProp y)
 
-instance Monoid (ResultProp d) where
-  mempty  = ResultProp mempty
-  mappend = (<>)
-
 instance Resultable Var
 instance Resultable String
 instance Resultable Text
@@ -116,27 +119,21 @@ class (IsString a, Eq a, Ord a) => Resultable a
 -- formulas on dimensions that dictate the values of those variables be they
 -- true or false
 newtype Result d = Result {getRes :: M.Map d (ResultProp d)}
-  deriving (Show,Eq,Generic)
+  deriving (Eq,Generic,Monoid)
+
+instance Show d => Show (Result d) where
+  show = showTree . getRes
 
 instance NFData d => NFData (Result d)
 
 instance (Eq d, Ord d) => Semigroup (Result d) where
-  -- we play y onto head of x always, this ensures O(1) but isn't
-  -- enforced in the type system
   x <> y = Result $ M.unionWith (<>) (getRes x) (getRes y)
-
--- | we define a special key "__Sat" to represent when all dimensions are
--- satisfiable. TODO use type families to properly abstract the key out
-instance (Resultable d) => Monoid (Result d) where
-  mempty  = mempty
-  mappend = (<>)
 
 -- | O(n) transform a configuration to a result prop
 configToResultProp :: Config d -> ResultProp d
 configToResultProp = ResultProp . Just . UniformProp . configToProp
 
-insertWith :: (Eq d, Ord d) =>
-  (ResultProp d -> ResultProp d -> ResultProp d) ->
+insertWith :: (Eq d, Ord d) => (ResultProp d -> ResultProp d -> ResultProp d) ->
   d -> ResultProp d -> Result d -> Result d
 insertWith f k v = Result . M.insertWith f k v . getRes
 

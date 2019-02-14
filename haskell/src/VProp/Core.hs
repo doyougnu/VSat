@@ -55,16 +55,16 @@ prettyPropExpr :: (Show a, Show b, Show c) => VProp a b c -> String
 prettyPropExpr = top
   where
     top :: (Show a, Show b, Show c) => VProp a b c -> String
-    top (OpBB b l r)    = mconcat [sub l, " ", show b, " ", sub r]
-    top (OpIB nb l r)    = mconcat [show l, " ", show nb, " ", show r]
-    top (ChcB d ls rs) = show (dimName d) ++ "≺" ++ top ls ++ ", " ++ top rs++ "≻"
-    top e           = sub e
+    top !(OpBB b l r)    = mconcat [sub l, " ", show b, " ", sub r]
+    top !(OpIB nb l r)   = mconcat [show l, " ", show nb, " ", show r]
+    top !(ChcB d ls rs)  = show (dimName d) ++ "≺" ++ top ls ++ ", " ++ top rs++ "≻"
+    top !e               = sub e
 
     sub :: (Show a, Show b, Show c) => VProp a b c -> String
-    sub (LitB b)  = if b then "#T" else "#F"
-    sub (RefB f)  = show f
-    sub (OpB b e) = show b <> sub e
-    sub e         = "(" ++ top e ++ ")"
+    sub !(LitB b)  = if b then "#T" else "#F"
+    sub !(RefB f)  = show f
+    sub !(OpB b e) = show b <> sub e
+    sub !e         = "(" ++ top e ++ ")"
 
 ----------------------------- Conversion --------------------------------------
 iToSNum :: Integer -> SNum
