@@ -287,7 +287,7 @@ handleChc goLeft goRight defL defR (ChcB d _ _) =
        Nothing    -> do
                         let
                           -- a prop that represents the current context
-                          usedProp = configToResultProp used
+                          !usedProp = configToResultProp used
                           -- a prop that is sat with the current dim being true
                           trueProp = (dimToVar d) <:& usedProp
                           -- a prop that is sat with the current dim being false
