@@ -37,7 +37,7 @@ drainQ :: Queue a -> Queue a
 drainQ = const emptyQ
 
 enq :: a -> Queue a -> Queue a
-enq x = Queue . ((Seq.:<|) x) . getQueue
+enq x = Queue . (Seq.:<|) x . getQueue
 
 deq :: Show a => Queue a -> (a, Queue a)
 deq queue = (el, Queue q)

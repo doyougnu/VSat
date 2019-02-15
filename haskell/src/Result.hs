@@ -20,9 +20,9 @@ module Result ( Result (..)
               ) where
 
 import           Control.DeepSeq    (NFData)
-import qualified Data.Map           as M
+import qualified Data.Map.Strict    as M
 import           Data.Map.Internal.Debug (showTree) -- abusing debug for show
-import           Data.Maybe         (maybe)
+import           Data.Maybe         (maybe, fromMaybe)
 import           Data.SBV           (SMTResult (..), defaultSMTCfg,
                                      getModelDictionary)
 import           Data.SBV.Control   (CheckSatResult (..), Query, checkSat,
@@ -162,14 +162,15 @@ isDMNull = M.null . getRes
 
 -- | grab a vsmt model from SBV, check if it is sat or not, if so return it
 getVSMTModel :: Query (Maybe SMTResult)
-getVSMTModel = do cs <- checkSat
-                  case cs of
-                    Unk   -> error "Unknown Error from solver!"
-  -- if unsat the return unsat, just passing default config to get the unsat
-  -- constructor TODO return correct conf
-                    Unsat -> return .
-                                Just $ Unsatisfiable defaultSMTCfg Nothing
-                    Sat   -> getSMTResult >>= return . pure
+getVSMTModel = pure <$> getSMTResult
+-- getVSMTModel = do cs <- checkSat
+--                   case cs of
+--                     Unk   -> error "Unknown Error from solver!"
+--   -- if unsat the return unsat, just passing default config to get the unsat
+--   -- constructor TODO return correct conf
+--                     Unsat -> return .
+--                                 Just $ Unsatisfiable defaultSMTCfg Nothing
+--                     Sat   -> pure <$> getSMTResult
 
 -- | getResult from the query monad, takes a function f that is used to dispatch
 -- result bools to resultProps i.e. if the model says variable "x" == True then
@@ -178,7 +179,7 @@ getVSMTModel = do cs <- checkSat
 -- associations
 getResult :: Resultable d => (Bool -> ResultProp d) -> Query (Result d)
 getResult f =
-  do as <- (maybe mempty id . fmap getModelDictionary) <$> getVSMTModel
+  do as <- fmap (maybe mempty getModelDictionary) $! getVSMTModel
      return $
        Result (M.foldMapWithKey
                (\k a -> M.singleton (fromString k) (f $ cwToBool a)) as)
