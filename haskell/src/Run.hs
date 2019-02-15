@@ -30,8 +30,6 @@ import Utils
 import Config
 import Result
 
-import Debug.Trace (trace)
-
 -- | The satisfiable dictionary, this is actually the "state" keys are configs
 -- (an mapping from dimensions to booleans denoting selection) and values are
 -- whether that config is satisfiable or not (a bool)
@@ -39,9 +37,6 @@ type SatDict a = M.Map (Config a) Bool
 
 -- | Type convenience for Log
 type Log = Text
-
---- | a type synonym that represents SBVs return type for getAssocs
-type AssocList = [(String, Bool)]
 
 -- | Takes a dimension d, a type for values a, and a result r
 type Env d a r = RWST (SMTConf d a a) Log (SatDict d) IO r -- ^ the monad stack
@@ -53,13 +48,16 @@ type Env d a r = RWST (SMTConf d a a) Log (SatDict d) IO r -- ^ the monad stack
 -- And and Or, or its a zipper over binary operators like ==> <=>. For binary
 -- operators we keep a prop that is the focus and a context which represents the
 -- parent and adjacent child
-data Ctx d a b = InBBL BB_B  (Ctx d a b) (VProp d a b)
-               | InBBR BB_B !S.SBool  (Ctx d a b)
-               | InB B_B (Ctx d a b)
+data Ctx d a b = InBBL BB_B  !(Ctx d a b) !(VProp d a b)
+               | InBBR BB_B !S.SBool  !(Ctx d a b)
+               | InB B_B !(Ctx d a b)
                | Empty
                deriving Show
 
-type Loc d a b = (VProp d a b, Ctx d a b)
+-- | a strict tuple type
+data Loc d a b = Loc !(VProp d a b) !(Ctx d a b)
+
+mkLoc (x, y) = Loc x y
 
 -- | An empty reader monad environment, in the future read these from config file
 _emptySt :: SatDict d
@@ -140,11 +138,7 @@ runBruteForce prop = lift $ flip evalStateT (initSt prop) $
                    (runForDict . symbolicPropExpr)) $ catMaybes plainProps
   return $ foldMap (uncurry helper) plainMs
   where
-        -- helper c as =  insertToSat dprop $ getResult setRes as
         helper c as =  insertToSat c as
-
-                -- setRes True = dprop
-                -- setRes False = negateResultProp dprop
 
 -- | Run the and decomposition baseline case, that is deconstruct every choice
 -- and then run the sat solver
@@ -209,20 +203,20 @@ vSMTSolve prop = do prop' <- prop
 -- starting query mode. 2nd we cannot allow any duplicates to be called on a
 -- string -> symbolic a function or missiles will launch.
 propToSBool :: (Show a,Ord a) => VProp d a a -> IncPack a (VProp d S.SBool SNum)
-propToSBool (RefB x)     = RefB   <$> smtBool x
-propToSBool (OpB o e)    = OpB  o <$> propToSBool e
-propToSBool (OpBB o l r) = OpBB o <$> propToSBool l <*> propToSBool r
-propToSBool (ChcB d l r) = ChcB d <$> propToSBool l <*> propToSBool r
-propToSBool (OpIB o l r) = OpIB o <$> propToSBool' l <*> propToSBool' r
-propToSBool (LitB b)     = return $ LitB b
+propToSBool !(RefB x)     = RefB   <$> smtBool x
+propToSBool !(OpB o e)    = OpB  o <$> propToSBool e
+propToSBool !(OpBB o l r) = OpBB o <$> propToSBool l <*> propToSBool r
+propToSBool !(ChcB d l r) = ChcB d <$> propToSBool l <*> propToSBool r
+propToSBool !(OpIB o l r) = OpIB o <$> propToSBool' l <*> propToSBool' r
+propToSBool !(LitB b)     = return $ LitB b
 
 propToSBool' :: (Ord b, Show b) => VIExpr d b -> IncPack b (VIExpr d SNum)
-propToSBool' (Ref RefI i) = Ref RefI <$> smtInt i
-propToSBool' (Ref RefD d) = Ref RefD <$> smtDouble d
-propToSBool' (OpI o e)    = OpI o    <$> propToSBool' e
-propToSBool' (OpII o l r) = OpII o <$> propToSBool' l <*> propToSBool' r
-propToSBool' (ChcI d l r) = ChcI d <$> propToSBool' l <*> propToSBool' r
-propToSBool' (LitI x)     = return $ LitI x
+propToSBool' !(Ref RefI i) = Ref RefI <$> smtInt i
+propToSBool' !(Ref RefD d) = Ref RefD <$> smtDouble d
+propToSBool' !(OpI o e)    = OpI o    <$> propToSBool' e
+propToSBool' !(OpII o l r) = OpII o <$> propToSBool' l <*> propToSBool' r
+propToSBool' !(ChcI d l r) = ChcI d <$> propToSBool' l <*> propToSBool' r
+propToSBool' !(LitI x)     = return $ LitI x
 
 -- | a builder function that abstracts out the packing algorithm for numbers. It
 -- takes a function to convert a string to a symbolic variable like S.sInt64, or
@@ -235,7 +229,7 @@ mkSmt f g str = do (_,st) <- get
                    case str `M.lookup` st of
                      Nothing -> do b <- lift . f $ show str
                                    let b' = g b
-                                   St.modify (second $ M.insert str b')
+                                   St.modify' (second $ M.insert str b')
                                    return b'
                      Just x  -> return x
 
@@ -246,7 +240,7 @@ smtBool :: (Show a, Ord a) => a -> IncPack a S.SBool
 smtBool str = do (st,_) <- get
                  case str `M.lookup` st of
                    Nothing -> do b <- lift . S.sBool $ show str
-                                 St.modify (first $ M.insert str b)
+                                 St.modify' (first $ M.insert str b)
                                  return b
                    Just x  -> return x
 
@@ -276,7 +270,7 @@ instance (Monad m, I.SolverContext m) =>
   setOption = lift . S.setOption
 
 store :: (Eq d, Ord d) => Result d -> IncVSMTSolve d ()
-store = St.modify . first . (<>)
+store = St.modify' . first . (<>)
 
 handleChc :: (Ord d, S.Boolean b, Resultable d, Show d) =>
   StateT (IncState d) SC.Query S.SBool ->
@@ -305,25 +299,25 @@ handleChc goLeft goRight defL defR (ChcB d _ _) =
                                             else negateResultProp p
 
                         -- the true variant
-                        St.modify . second $ M.insert d True
+                        St.modify' . second $ M.insert d True
                         lift $ SC.push 1
                         goLeft >>= S.constrain
                         bt <- lift isSat
-                        when bt $ St.modify (first $ insertToSat trueProp)
+                        when bt $ St.modify' (first $ insertToSat trueProp)
                         resMapT <- lift $ getResult (dispatchProp trueProp)
                         lift $ SC.pop 1
 
                         -- false variant
-                        St.modify . second $ M.adjust (const False) d
+                        St.modify' . second $ M.adjust (const False) d
                         lift $ SC.push 1
                         goRight >>= S.constrain
                         bf <- lift isSat
-                        when bf $ St.modify (first $ insertToSat falseProp)
+                        when bf $ St.modify' (first $ insertToSat falseProp)
                         resMapF <- lift $ getResult (dispatchProp falseProp)
                         lift $ SC.pop 1
 
                         store $ resMapT <> resMapF
-                        St.modify . second $ M.delete d
+                        St.modify' . second $ M.delete d
      -- this return statement should never matter because we've reset the
      -- assertion stack. So I just return true here to fulfill the type
                         return true
@@ -369,54 +363,54 @@ handleChcVSMT _      _       _  =
 handleCtx :: (Ord d, Show d, Resultable d) =>
   Loc d S.SBool SNum -> IncVSMTSolve d S.SBool
   -- when we have no ctx we just solve the unit clause
-handleCtx (OpIB _ _ _, _) = error "what?!?! How did you even get here! Get Jeff on the phone this isn't implemented yet!"
-handleCtx (RefB b, Empty) = return b
-handleCtx (LitB b, Empty) = return $ S.literal b
+handleCtx (Loc (OpIB _ _ _) _) = error "what?!?! How did you even get here! Get Jeff on the phone this isn't implemented yet!"
+handleCtx (Loc (RefB b) Empty) = return b
+handleCtx (Loc (LitB b) Empty) = return $ S.literal b
   -- when we have a context that holds only an accumulator we combine the atomic
   -- with the accum and return the result
-handleCtx (RefB b, InBBR op acc Empty) =
+handleCtx (Loc (RefB b) (InBBR op acc Empty)) =
   return $ (bDispatch op) acc b
-handleCtx (LitB b, InBBR op acc Empty) =
+handleCtx (Loc (LitB b) (InBBR op acc Empty)) =
   return $ (bDispatch op) acc (S.literal b)
 
   -- When we see an atomic in a left context we add that atomic to the
   -- accumulator and recur to the rhs of the operator
-handleCtx (RefB b, InBBL op ctx rbranch) =
-  handleCtx (rbranch, InBBR op b ctx)
-handleCtx (LitB b, InBBL op ctx rbranch) =
-  handleCtx (rbranch, InBBR op (S.literal b) ctx)
-handleCtx (LitB b, InB _ ctx) = handleCtx (LitB $ S.bnot b, ctx)
-handleCtx (RefB b, InB _ ctx) = handleCtx (RefB $ S.bnot b, ctx)
+handleCtx (Loc (RefB b) (InBBL op ctx rbranch)) =
+  handleCtx $ mkLoc (rbranch, InBBR op b ctx)
+handleCtx (Loc (LitB b) (InBBL op ctx rbranch)) =
+  handleCtx $ mkLoc (rbranch, InBBR op (S.literal b) ctx)
+handleCtx (Loc (LitB b) (InB _ ctx)) = handleCtx $ mkLoc (LitB $ S.bnot b, ctx)
+handleCtx (Loc (RefB b) (InB _ ctx)) = handleCtx $ mkLoc (RefB $ S.bnot b, ctx)
 
   -- when we are in the left side of a context and the right side of a subtree
   -- we add the atomics to the accumulator and swap to the right side of the
   -- parent context with the new accumulator being the result of computing the
   -- left side
-handleCtx (RefB b, InBBR op acc (InBBL op' ctx r)) =
-  handleCtx (r , InBBR op' newAcc ctx)
+handleCtx (Loc (RefB b) (InBBR op acc (InBBL op' ctx r))) =
+  handleCtx $ mkLoc (r , InBBR op' newAcc ctx)
   where newAcc = (bDispatch op) acc b
   -- if we have two rhs contexts then we abuse the focus to
-handleCtx (RefB b, InBBR op acc ctx) =
-  handleCtx (RefB newAcc, ctx)
+handleCtx (Loc (RefB b) (InBBR op acc ctx)) =
+  handleCtx $ mkLoc (RefB newAcc, ctx)
   where newAcc = (bDispatch op) acc b
-handleCtx (LitB b, InBBR op acc ctx) =
-  handleCtx (RefB newAcc, ctx)
+handleCtx (Loc (LitB b) (InBBR op acc ctx)) =
+  handleCtx $ mkLoc (RefB newAcc, ctx)
   where newAcc = (bDispatch op) acc (S.literal b)
-handleCtx (fcs, InB _ (InB _ ctx)) = handleCtx (fcs, ctx)
+handleCtx (Loc fcs (InB _ (InB _ ctx))) = handleCtx $ mkLoc (fcs, ctx)
 
   -- when we see a choice we describe the computations for each variant and
   -- offload it to a handler function that manipulates the sbv assertion stack
-handleCtx (c@(ChcB _ l r), ctx) =
+handleCtx (Loc c@(ChcB _ l r) ctx) =
   handleChcCtx goLeft goRight c
-  where goLeft  = (l, ctx)
-        goRight = (r, ctx)
+  where goLeft  = mkLoc (l, ctx)
+        goRight = mkLoc (r, ctx)
 
-handleCtx (OpB Not e, InB _ ctx) = handleCtx (e, ctx)
-handleCtx (OpB op e, ctx) = handleCtx (e, InB op ctx)
+handleCtx (Loc (OpB Not e) (InB _ ctx)) = handleCtx $ mkLoc (e, ctx)
+handleCtx (Loc (OpB op e) ctx) = handleCtx $ mkLoc (e, InB op ctx)
 
   -- when we have a subtree as our focus we recur as far left as possible until
   -- we hit a choice or an atomic term
-handleCtx (OpBB op l r, ctx) = handleCtx (l, InBBL op ctx r)
+handleCtx (Loc (OpBB op l r) ctx) = handleCtx $ mkLoc (l, InBBL op ctx r)
 
 
 -- | The main solver algorithm. You can think of this as the sem function for
@@ -430,7 +424,7 @@ vSMTSolve_ (OpB Not c@(ChcB _ l r)) = handleChcVSMT goLeft goRight c
         goRight = OpB Not r
 vSMTSolve_ (OpB Not (OpB Not notchc)) = vSMTSolve_ notchc
 vSMTSolve_ (OpB Not notchc) = S.bnot <$> vSMTSolve_ notchc
-vSMTSolve_ (OpBB op l r) = handleCtx (l, InBBL op Empty r)
+vSMTSolve_ (OpBB op l r) = handleCtx $ Loc l $ InBBL op Empty r
 vSMTSolve_ (OpIB _ _ _) = error "Blame Jeff! This isn't implemented yet!"
 -- vSMTSolve_ !(OpIB op l r) = do l' <- vSMTSolve'_ l
 --                                r' <- vSMTSolve'_ r
