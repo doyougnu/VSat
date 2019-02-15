@@ -19,21 +19,20 @@ module Result ( Result (..)
               , negateResultProp
               ) where
 
-import           Control.DeepSeq    (NFData)
-import qualified Data.Map.Strict    as M
-import           Data.Map.Internal.Debug (showTree) -- abusing debug for show
-import           Data.Maybe         (maybe, fromMaybe)
-import           Data.SBV           (SMTResult (..), defaultSMTCfg,
-                                     getModelDictionary)
-import           Data.SBV.Control   (CheckSatResult (..), Query, checkSat,
-                                     getSMTResult)
-import           Data.SBV.Internals (cwToBool)
-import           Data.String        (IsString, fromString)
-import           Data.Text          (Text)
-import           GHC.Generics       (Generic)
+import           Control.DeepSeq         (NFData)
+import           Data.Map.Internal.Debug (showTree)
+import qualified Data.Map.Strict         as M
+import           Data.Maybe              (maybe)
+import           Data.SBV                (SMTResult (..), getModelDictionary)
+import           Data.SBV.Control        (Query, getSMTResult)
+import           Data.SBV.Internals      (cwToBool)
+import           Data.String             (IsString, fromString)
+import           Data.Text               (Text)
+import           GHC.Generics            (Generic)
 
-import           VProp.Core         (configToProp)
-import           VProp.Types        (Config, VProp(..), Var, BB_B(..), B_B(..))
+import           VProp.Core              (configToProp)
+import           VProp.Types             (BB_B (..), B_B (..), Config,
+                                          VProp (..), Var)
 
 -- | A custom type whose only purpose is to define a monoid instance over VProp
 -- with logical or as the concat operation and false as unit. We constrain all
@@ -162,15 +161,7 @@ isDMNull = M.null . getRes
 
 -- | grab a vsmt model from SBV, check if it is sat or not, if so return it
 getVSMTModel :: Query (Maybe SMTResult)
-getVSMTModel = pure <$> getSMTResult
--- getVSMTModel = do cs <- checkSat
---                   case cs of
---                     Unk   -> error "Unknown Error from solver!"
---   -- if unsat the return unsat, just passing default config to get the unsat
---   -- constructor TODO return correct conf
---                     Unsat -> return .
---                                 Just $ Unsatisfiable defaultSMTCfg Nothing
---                     Sat   -> pure <$> getSMTResult
+getVSMTModel = {-# SCC "getVSMTModel" #-}pure <$> getSMTResult
 
 -- | getResult from the query monad, takes a function f that is used to dispatch
 -- result bools to resultProps i.e. if the model says variable "x" == True then
@@ -178,7 +169,7 @@ getVSMTModel = pure <$> getSMTResult
 -- dictionaries into <var> == <formula of dimensions where var is True>
 -- associations
 getResult :: Resultable d => (Bool -> ResultProp d) -> Query (Result d)
-getResult f =
+getResult f = {-# SCC "getResult" #-}
   do as <- fmap (maybe mempty getModelDictionary) $! getVSMTModel
      return $
        Result (M.foldMapWithKey

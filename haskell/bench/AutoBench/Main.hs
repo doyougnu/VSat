@@ -42,7 +42,7 @@ chAutoFile = "bench/AutoBench/vsat_small_chunk.json"
 
 -- main :: IO (V String (Maybe ThmResult))
 
-critConfig = defaultConfig {resamples = 5}
+critConfig = defaultConfig {resamples = 1}
 
 -- run with stack bench --profile vsat:auto --benchmark-arguments='+RTS -S -RTS --output timings.html'
 main = do
@@ -60,10 +60,13 @@ main = do
       bPs = rights bPs'
 
       !sProp = (naiveEncode . nestChoices . autoToVSat) $ autoAndJoin sPs
-      !bProp = (naiveEncode . nestChoices . autoToVSat) $ autoAndJoin (take 500 bPs)
-  defaultMainWith critConfig
-    [
-    bgroup "vsat" [ bench "small file" . nfIO $ satWith emptyConf sProp
-                  , bench "large file" . nfIO $ satWith emptyConf bProp
-                  ]
-    ]
+      !bProp = (naiveEncode . nestChoices . autoToVSat) $ autoAndJoin (take 350 bPs)
+
+  res <- satWith emptyConf $! bProp
+  print res
+  -- defaultMainWith critConfig
+  --   [
+  --   bgroup "vsat" [ -- bench "small file" . nfIO $ satWith emptyConf sProp
+  --                 bench "large file" . nfIO $! satWith emptyConf bProp
+  --                 ]
+  --   ]

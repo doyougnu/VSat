@@ -77,7 +77,7 @@ data VProp a b c
    | OpB  B_B  !(VProp a b c)
    | OpBB BB_B !(VProp a b c) !(VProp a b c)
    | OpIB NN_B !(VIExpr a c)  !(VIExpr a c)
-   | ChcB (Dim a)  !(VProp a b c) !(VProp a b c)
+   | ChcB !(Dim a)  !(VProp a b c) !(VProp a b c)
   deriving (Eq,Generic,Typeable,Functor,Traversable,Foldable,Ord)
 
 -- | Integer Expressions with Choices
@@ -86,7 +86,7 @@ data VIExpr a b
   | Ref RefN b
   | OpI  N_N  !(VIExpr a b)
   | OpII NN_N !(VIExpr a b) !(VIExpr a b)
-  | ChcI (Dim a)  !(VIExpr a b) !(VIExpr a b)
+  | ChcI !(Dim a)  !(VIExpr a b) !(VIExpr a b)
   deriving (Eq,Generic,Typeable,Functor,Traversable,Foldable,Ord)
 
 -- | Mirroring NPrim with Symbolic types for the solver

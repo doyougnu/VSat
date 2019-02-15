@@ -193,10 +193,10 @@ maxShared = safeMaximum . fmap length . group . sort . trifoldMap (:[]) mempty m
         safeMaximum xs = maximum xs
 
 configToProp :: Config a -> VProp a a a
-configToProp = Map.foldrWithKey' step false
+configToProp = Map.foldrWithKey' step true
   where step :: Dim a -> Bool -> VProp a a a -> VProp a a a
-        step d True  acc = OpBB Or (RefB $ dimName d) acc
-        step d False acc = OpBB Or (bnot . RefB $ dimName d) acc
+        step d True  acc = OpBB And (RefB $ dimName d) acc
+        step d False acc = OpBB And (bnot . RefB $ dimName d) acc
 
 --------------------------- Destructors -----------------------------------------
 -- | The set of features referenced in a feature expression.
