@@ -1,26 +1,29 @@
 import           Control.Arrow           (first, second)
+import           Criterion.Main
+import           Criterion.Main.Options
+import           Criterion.Types         (Config (..))
 import           Data.Aeson              (decodeStrict)
 import           Data.Bifunctor          (bimap)
 import qualified Data.ByteString         as BS (readFile)
 import           Data.Either             (lefts, rights)
-import           Data.Map.Internal.Debug (showTree)
-import           Data.Text               (unpack, pack)
-import qualified Data.SBV                as S (sat)
-import           System.IO
 import           Data.List               (sort)
+import           Data.Map.Internal.Debug (showTree)
+import qualified Data.SBV                as S (sat)
+import           Data.Text               (pack, unpack)
+import           System.IO
 import           Text.Megaparsec         (parse)
 
 import           Api
 import           CaseStudy.Auto.Auto
-import           CaseStudy.Auto.Run
 import           CaseStudy.Auto.Parser   (langParser)
+import           CaseStudy.Auto.Run
 import           Config                  (defConf, emptyConf)
 import           Opts
 import           Run                     (runAD, runBF)
 import           Utils
 import           VProp.Core
-import           VProp.Types
 import           VProp.SBV               (toPredicate)
+import           VProp.Types
 
 -- | a large dataset of queries
 -- autoFile :: FilePath
@@ -38,45 +41,29 @@ chAutoFile :: FilePath
 chAutoFile = "bench/AutoBench/vsat_small_chunk.json"
 
 -- main :: IO (V String (Maybe ThmResult))
+
+critConfig = defaultConfig {resamples = 5}
+
+-- run with stack bench --profile vsat:auto --benchmark-arguments='+RTS -S -RTS --output timings.html'
 main = do
-  jsn <- BS.readFile autoFileBool
-  let (Just auto) = decodeStrict jsn :: Maybe Auto
-      cs = constraints auto -- looks like 4298/4299 are the culprits
-      -- ps' = parse langParser "" <$> (drop 15 . take 20 $ cs)
-      ps' = parse langParser "" <$> cs
-      ps = rights ps'
-      bs = lefts ps'
-      prop = (naiveEncode . nestChoices . autoToVSat) $ autoAndJoin ps
-      prop' = (naiveEncode . nestChoices . autoToVSat) <$> ps
-  -- print $ take 1 cs
-  putStrLn "\n\n ----------------- \n\n"
-  -- mapM_ print (fmap idEncode (take 1 $ drop 1 ps) )
-  putStrLn "\n\n ----------------- \n\n"
-  -- mapM_ print (sort prop)
+  -- readfile is strict
+  sJsn <- BS.readFile smAutoFile
+  bJsn <- BS.readFile autoFileBool
+  let (Just sAuto) = decodeStrict sJsn :: Maybe Auto
+  let (Just bAuto) = decodeStrict bJsn :: Maybe Auto
+      !sCs = constraints sAuto -- looks like 4298/4299 are the culprits
+      !bCs = constraints  bAuto
+      sPs' = parse langParser "" <$> sCs
+      sPs = rights sPs'
 
-  -- print (conjoin' prop)
-  -- print $ take 5 $ autoToVSat <$> ps
+      bPs' = parse langParser "" <$> bCs
+      bPs = rights bPs'
 
-  -- conjoining and then naive sat call is 84 seconds
-  -- (incTime, incRes) <- time $ (S.sat . toPredicate) $ (autoAndJoin (fmap idEncode ps))
-  -- not conjoining and fmapping is 79 seconds, probably within the noise
-  -- (incTime, incRes) <- time $ mapM (S.sat . toPredicate) (fmap idEncode ps)
-  -- (bfTime, res) <- time $ bfWith emptyConf $ prop
-  (satTime, res') <- time $! satWith emptyConf $ prop
-  -- (adTime, res'') <- time $! adWith emptyConf id $ prop
-  -- putStrLn ("Incremental Solve [s]: " ++ show incTime ++ "\n")
-  -- putStrLn ("Brute Force Time [s]: " ++ show bfTime ++ "\n")
-  putStrLn ("VSAT Time        [s]: " ++ show satTime ++ "\n")
-  -- putStrLn ("And Decomp Time  [s]: " ++ show adTime ++ "\n")
-  -- writeFile "rights" (show $ prop)
-  -- writeFile "lefts" (foldMap show bs)
-  -- writeFile "testoutputInc" (show incRes)
-  -- writeFile "testoutputBF" (show res)
-  -- writeFile "testoutputSAT" (show res')
-  -- writeFile "testoutputAD" (show res'')
-  -- print $ VProp.Core.dimensions $ flatten prop
-  -- print res
-  -- return res
-  -- mapM (putStrLn . show) $ (second flatten) <$> (zip [1..] $ prop)
-  -- print $ flatten . last . take 10 . drop 1210 $ prop
-  -- putStrLn . showTree . fst . snd $ prop'
+      !sProp = (naiveEncode . nestChoices . autoToVSat) $ autoAndJoin sPs
+      !bProp = (naiveEncode . nestChoices . autoToVSat) $ autoAndJoin (take 500 bPs)
+  defaultMainWith critConfig
+    [
+    bgroup "vsat" [ bench "small file" . nfIO $ satWith emptyConf sProp
+                  , bench "large file" . nfIO $ satWith emptyConf bProp
+                  ]
+    ]
