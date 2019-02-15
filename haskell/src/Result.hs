@@ -30,14 +30,17 @@ import           Data.String             (IsString, fromString)
 import           Data.Text               (Text)
 import           GHC.Generics            (Generic)
 
-import           VProp.Core              (configToProp)
+import           VProp.Core              (configToProp, dimToVar)
 import           VProp.Types             (BB_B (..), B_B (..), Config,
-                                          VProp (..), Var)
+                                          VProp (..), Var, Dim)
 
 -- | A custom type whose only purpose is to define a monoid instance over VProp
 -- with logical or as the concat operation and false as unit. We constrain all
 -- variable references to be the same just for the Result type
 newtype UniformProp d = UniformProp {uniProp :: VProp d d d} deriving (Eq,Generic)
+
+instance Show d => Show (UniformProp d) where
+  show = show . uniProp
 
 -- | a wrapper adding Nothing to UniformProp. This is essentially building a
 -- monoid where mempty in Nothing, and mappend is logical Or. Think of this as a
@@ -47,9 +50,6 @@ newtype ResultProp d = ResultProp {getProp :: Maybe (UniformProp d)}
 
 instance Show d => Show (ResultProp d) where
   show rp = maybe mempty show $ getProp rp
-
-instance Show d => Show (UniformProp d) where
-  show = show . uniProp
 
 
 -- | construct a result prop from a uniformprop, this is just used for a nice
@@ -110,6 +110,17 @@ instance Resultable Var
 instance Resultable String
 instance Resultable Text
 
+-- | almost the same as configtoProp in VProp.Core but this is hand written for
+-- better asymptotic performance
+configToResultProp :: Config a -> ResultProp a
+configToResultProp = M.foldMapWithKey step
+  where step :: Dim a -> Bool -> ResultProp a
+        step d b
+          | b = toResultProp prop
+          | otherwise = negateResultProp . toResultProp $ prop
+          where prop = dimToVar d
+
+
 -- | a type class synonym for constraints required to produce a result
 class (IsString a, Eq a, Ord a) => Resultable a
 
@@ -127,10 +138,6 @@ instance NFData d => NFData (Result d)
 
 instance (Eq d, Ord d) => Semigroup (Result d) where
   x <> y = Result $ M.unionWith (<>) (getRes x) (getRes y)
-
--- | O(n) transform a configuration to a result prop
-configToResultProp :: Config d -> ResultProp d
-configToResultProp = ResultProp . Just . UniformProp . configToProp
 
 insertWith :: (Eq d, Ord d) => (ResultProp d -> ResultProp d -> ResultProp d) ->
   d -> ResultProp d -> Result d -> Result d
