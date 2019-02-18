@@ -7,9 +7,10 @@ import           Data.Bifunctor          (bimap)
 import qualified Data.ByteString         as BS (readFile)
 import           Data.Either             (lefts, rights)
 import           Data.List               (sort)
-import           Data.Map.Internal.Debug (showTree)
+import           Data.Map                (size)
 import qualified Data.SBV                as S (sat)
 import           Data.Text               (pack, unpack)
+import qualified Data.Text.IO            as T (writeFile)
 import           System.IO
 import           Text.Megaparsec         (parse)
 
@@ -20,6 +21,7 @@ import           CaseStudy.Auto.Run
 import           Config                  (defConf, emptyConf)
 import           Opts
 import           Run                     (runAD, runBF)
+import           Result
 import           Utils
 import           VProp.Core
 import           VProp.SBV               (toPredicate)
@@ -42,7 +44,7 @@ chAutoFile = "bench/AutoBench/vsat_small_chunk.json"
 
 -- main :: IO (V String (Maybe ThmResult))
 
-critConfig = defaultConfig {resamples = 1}
+critConfig = defaultConfig {resamples = 2}
 
 -- run with stack bench --profile vsat:auto --benchmark-arguments='+RTS -S -RTS --output timings.html'
 main = do
@@ -63,10 +65,11 @@ main = do
       !bProp = (naiveEncode . nestChoices . autoToVSat) $ autoAndJoin (take 350 bPs)
 
   res <- satWith emptyConf $! bProp
-  print res
+  T.writeFile "testoutputSAT" (pack . show $ res)
+  -- print res
   -- defaultMainWith critConfig
   --   [
   --   bgroup "vsat" [ -- bench "small file" . nfIO $ satWith emptyConf sProp
-  --                 bench "large file" . nfIO $! satWith emptyConf bProp
+  --                 bench "large file" . nfIO $ satWith emptyConf bProp
   --                 ]
   --   ]

@@ -72,30 +72,30 @@ type Config  a = Map (Dim a) Bool
 
 -- | Boolean expressions with choices
 data VProp a b c
-   = LitB Bool
-   | RefB b
-   | OpB  B_B  !(VProp a b c)
-   | OpBB BB_B !(VProp a b c) !(VProp a b c)
-   | OpIB NN_B !(VIExpr a c)  !(VIExpr a c)
-   | ChcB !(Dim a)  !(VProp a b c) !(VProp a b c)
+   = LitB !Bool
+   | RefB !b
+   | OpB  B_B  (VProp a b c)
+   | OpBB BB_B (VProp a b c) (VProp a b c)
+   | OpIB NN_B (VIExpr a c)  (VIExpr a c)
+   | ChcB !(Dim a) (VProp a b c) (VProp a b c)
   deriving (Eq,Generic,Typeable,Functor,Traversable,Foldable,Ord)
 
--- | Integer Expressions with Choices
+-- | Int Expressions with Choices
 data VIExpr a b
-  = LitI NPrim
-  | Ref RefN b
-  | OpI  N_N  !(VIExpr a b)
-  | OpII NN_N !(VIExpr a b) !(VIExpr a b)
-  | ChcI !(Dim a)  !(VIExpr a b) !(VIExpr a b)
+  = LitI !NPrim
+  | Ref !RefN !b
+  | OpI  !N_N  (VIExpr a b)
+  | OpII !NN_N (VIExpr a b) (VIExpr a b)
+  | ChcI !(Dim a)  (VIExpr a b) (VIExpr a b)
   deriving (Eq,Generic,Typeable,Functor,Traversable,Foldable,Ord)
 
 -- | Mirroring NPrim with Symbolic types for the solver
-data SNum = SI S.SInt64
-          | SD S.SDouble
+data SNum = SI !S.SInt64
+          | SD !S.SDouble
           deriving (Eq, Show)
 
 -- | data constructor for Numeric operations
-data NPrim = I Integer | D Double
+data NPrim = I {-# UNPACK #-} !Int | D {-# UNPACK #-} !Double
   deriving (Eq,Generic,Typeable,Ord)
 
 -- | Reference types
@@ -132,7 +132,7 @@ infixl 7 ./, .%
 iRef :: IsString a => a -> VIExpr d a
 iRef = Ref RefI
 
-iLit :: Integer -> VIExpr d a
+iLit :: Int -> VIExpr d a
 iLit = LitI . I
 
 dLit :: Double -> VIExpr d a
@@ -153,7 +153,7 @@ iChc = ChcI . Dim
 
 -- | Begin primitive instances
 
-instance PrimN Integer where
+instance PrimN Int where
   (./) = div
   (.%) = mod
 
@@ -161,7 +161,7 @@ instance PrimN Double where
   (./) = (/)
   (.%) = mod'
 
-instance Prim Bool Integer where
+instance Prim Bool Int where
   (.<)  = (<)
   (.<=) = (<=)
   (.==) = (==)
@@ -177,7 +177,7 @@ instance Prim Bool Double where
   (.>=) = (>=)
   (.>)  = (>)
 
-instance Prim (VProp a b c) Integer where
+instance Prim (VProp a b c) Int where
   (.<)  i j = OpIB LT  (LitI $ I i) (LitI $ I j)
   (.<=) i j = OpIB LTE (LitI $ I i) (LitI $ I j)
   (.==) i j = OpIB EQ  (LitI $ I i) (LitI $ I j)
