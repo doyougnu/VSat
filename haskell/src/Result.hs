@@ -19,7 +19,9 @@ module Result ( Result (..)
               , negateResultProp
               ) where
 
-import           Control.DeepSeq         (NFData)
+import           Control.DeepSeq         (NFData, force)
+import           Control.Monad           (liftM)
+import           Control.Exception       (evaluate)
 import           Data.Map.Internal.Debug (showTree)
 import qualified Data.Map.Strict         as M
 import           Data.Maybe              (maybe)
@@ -30,7 +32,7 @@ import           Data.String             (IsString, fromString)
 import           Data.Text               (Text)
 import           GHC.Generics            (Generic)
 
-import           VProp.Core              (configToProp, dimToVar)
+import           VProp.Core              (dimToVar)
 import           VProp.Types             (BB_B (..), B_B (..), Config,
                                           VProp (..), Var, Dim)
 
@@ -168,7 +170,7 @@ isDMNull = M.null . getRes
 
 -- | grab a vsmt model from SBV, check if it is sat or not, if so return it
 getVSMTModel :: Query (Maybe SMTResult)
-getVSMTModel = {-# SCC "getVSMTModel" #-}pure <$> getSMTResult
+getVSMTModel = pure <$> getSMTResult
 
 -- | getResult from the query monad, takes a function f that is used to dispatch
 -- result bools to resultProps i.e. if the model says variable "x" == True then
@@ -176,8 +178,8 @@ getVSMTModel = {-# SCC "getVSMTModel" #-}pure <$> getSMTResult
 -- dictionaries into <var> == <formula of dimensions where var is True>
 -- associations
 getResult :: Resultable d => (Bool -> ResultProp d) -> Query (Result d)
-getResult f = {-# SCC "getResult" #-}
+getResult !f =
   do as <- fmap (maybe mempty getModelDictionary) $! getVSMTModel
      return $
        Result (M.foldMapWithKey
-               (\k a -> M.singleton (fromString k) (f $ cwToBool a)) as)
+               (force (\k a -> M.singleton (fromString k) (f $ cwToBool a))) as)

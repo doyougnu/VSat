@@ -11,6 +11,7 @@ module Run ( SatDict
 
 import qualified Data.Map.Strict as M
 import Control.Monad (when)
+import Control.DeepSeq (force)
 import Control.Monad.RWS.Strict
 import Control.Monad.State.Strict    as St
 import qualified Data.SBV.Internals  as I
@@ -265,7 +266,7 @@ isSat = do cs <- SC.checkSat
 -- | type class needed to avoid lifting for constraints in the IncSolve monad
 instance (Monad m, I.SolverContext m) =>
   I.SolverContext (StateT (IncState d) m) where
-  constrain = lift . S.constrain
+  constrain = lift . (force S.constrain)
   namedConstraint = (lift .) . S.namedConstraint
   setOption = lift . S.setOption
 
@@ -289,34 +290,34 @@ handleChc goLeft goRight defL defR (ChcB d _ _) =
                           -- a prop that represents the current context
                           !usedProp = configToResultProp used
                           -- a prop that is sat with the current dim being true
-                          trueProp = (dimToVar d) <:& usedProp
+                          !trueProp = (dimToVar d) <:& usedProp
                           -- a prop that is sat with the current dim being false
-                          falseProp = (bnot $ dimToVar d) <:& usedProp
+                          !falseProp = (bnot $ dimToVar d) <:& usedProp
 
                           dispatchProp :: ResultProp d -> Bool -> ResultProp d
-                          dispatchProp p x = if x
-                                            then p
-                                            else negateResultProp p
+                          dispatchProp !p !x = if x
+                                               then p
+                                               else negateResultProp p
 
                         -- the true variant
                         St.modify' . second $ M.insert d True
-                        lift $ SC.push 1
-                        goLeft >>= S.constrain
+                        lift $! SC.push 1
+                        goLeft >>= (force S.constrain)
                         bt <- lift isSat
                         when bt $ St.modify' (first $ insertToSat trueProp)
                         resMapT <- lift $ getResult (dispatchProp trueProp)
-                        lift $ SC.pop 1
+                        lift $! SC.pop 1
 
                         -- false variant
                         St.modify' . second $ M.adjust (const False) d
-                        lift $ SC.push 1
-                        goRight >>= S.constrain
+                        lift $! SC.push 1
+                        goRight >>= (force S.constrain)
                         bf <- lift isSat
                         when bf $ St.modify' (first $ insertToSat falseProp)
                         resMapF <- lift $ getResult (dispatchProp falseProp)
-                        lift $ SC.pop 1
+                        lift $! SC.pop 1
 
-                        store $ resMapT <> resMapF
+                        store $! resMapT <> resMapF
                         St.modify' . second $ M.delete d
      -- this return statement should never matter because we've reset the
      -- assertion stack. So I just return true here to fulfill the type
@@ -365,52 +366,52 @@ handleCtx :: (Ord d, Show d, Resultable d) =>
   -- when we have no ctx we just solve the unit clause
 handleCtx (Loc (OpIB _ _ _) _) = error "what?!?! How did you even get here! Get Jeff on the phone this isn't implemented yet!"
 handleCtx (Loc (RefB b) Empty) = return b
-handleCtx (Loc (LitB b) Empty) = return $ S.literal b
+handleCtx (Loc (LitB b) Empty) = return $! S.literal b
   -- when we have a context that holds only an accumulator we combine the atomic
   -- with the accum and return the result
 handleCtx (Loc (RefB b) (InBBR op acc Empty)) =
-  return $ (bDispatch op) acc b
+  return $! (bDispatch op) acc b
 handleCtx (Loc (LitB b) (InBBR op acc Empty)) =
-  return $ (bDispatch op) acc (S.literal b)
+  return $! (bDispatch op) acc (S.literal b)
 
   -- When we see an atomic in a left context we add that atomic to the
   -- accumulator and recur to the rhs of the operator
 handleCtx (Loc (RefB b) (InBBL op ctx rbranch)) =
-  handleCtx $ mkLoc (rbranch, InBBR op b ctx)
+  handleCtx $! mkLoc (rbranch, InBBR op b ctx)
 handleCtx (Loc (LitB b) (InBBL op ctx rbranch)) =
-  handleCtx $ mkLoc (rbranch, InBBR op (S.literal b) ctx)
-handleCtx (Loc (LitB b) (InB _ ctx)) = handleCtx $ mkLoc (LitB $ S.bnot b, ctx)
-handleCtx (Loc (RefB b) (InB _ ctx)) = handleCtx $ mkLoc (RefB $ S.bnot b, ctx)
+  handleCtx $! mkLoc (rbranch, InBBR op (S.literal b) ctx)
+handleCtx (Loc (LitB b) (InB _ ctx)) = handleCtx $! mkLoc (LitB $ S.bnot b, ctx)
+handleCtx (Loc (RefB b) (InB _ ctx)) = handleCtx $! mkLoc (RefB $ S.bnot b, ctx)
 
   -- when we are in the left side of a context and the right side of a subtree
   -- we add the atomics to the accumulator and swap to the right side of the
   -- parent context with the new accumulator being the result of computing the
   -- left side
 handleCtx (Loc (RefB b) (InBBR op acc (InBBL op' ctx r))) =
-  handleCtx $ mkLoc (r , InBBR op' newAcc ctx)
-  where newAcc = (bDispatch op) acc b
+  handleCtx $! mkLoc (r , InBBR op' newAcc ctx)
+  where !newAcc = (bDispatch op) acc b
   -- if we have two rhs contexts then we abuse the focus to
 handleCtx (Loc (RefB b) (InBBR op acc ctx)) =
-  handleCtx $ mkLoc (RefB newAcc, ctx)
-  where newAcc = (bDispatch op) acc b
+  handleCtx $! mkLoc (RefB newAcc, ctx)
+  where !newAcc = (bDispatch op) acc b
 handleCtx (Loc (LitB b) (InBBR op acc ctx)) =
-  handleCtx $ mkLoc (RefB newAcc, ctx)
-  where newAcc = (bDispatch op) acc (S.literal b)
-handleCtx (Loc fcs (InB _ (InB _ ctx))) = handleCtx $ mkLoc (fcs, ctx)
+  handleCtx $! mkLoc (RefB newAcc, ctx)
+  where !newAcc = (bDispatch op) acc (S.literal b)
+handleCtx (Loc fcs (InB _ (InB _ ctx))) = handleCtx $! mkLoc (fcs, ctx)
 
   -- when we see a choice we describe the computations for each variant and
   -- offload it to a handler function that manipulates the sbv assertion stack
 handleCtx (Loc c@(ChcB _ l r) ctx) =
   handleChcCtx goLeft goRight c
-  where goLeft  = mkLoc (l, ctx)
-        goRight = mkLoc (r, ctx)
+  where !goLeft  = mkLoc (l, ctx)
+        !goRight = mkLoc (r, ctx)
 
-handleCtx (Loc (OpB Not e) (InB _ ctx)) = handleCtx $ mkLoc (e, ctx)
-handleCtx (Loc (OpB op e) ctx) = handleCtx $ mkLoc (e, InB op ctx)
+handleCtx (Loc (OpB Not e) (InB _ ctx)) = handleCtx $! mkLoc (e, ctx)
+handleCtx (Loc (OpB op e) ctx) = handleCtx $! mkLoc (e, InB op ctx)
 
   -- when we have a subtree as our focus we recur as far left as possible until
   -- we hit a choice or an atomic term
-handleCtx (Loc (OpBB op l r) ctx) = handleCtx $ mkLoc (l, InBBL op ctx r)
+handleCtx (Loc (OpBB op l r) ctx) = handleCtx $! mkLoc (l, InBBL op ctx r)
 
 
 -- | The main solver algorithm. You can think of this as the sem function for
@@ -418,10 +419,10 @@ handleCtx (Loc (OpBB op l r) ctx) = handleCtx $ mkLoc (l, InBBL op ctx r)
 vSMTSolve_ :: (Ord d, Show d, Resultable d) =>
   VProp d S.SBool SNum -> IncVSMTSolve d S.SBool
 vSMTSolve_ (RefB b) = return b
-vSMTSolve_ (LitB b) = return $ S.literal b
+vSMTSolve_ (LitB b) = return $! S.literal b
 vSMTSolve_ (OpB Not c@(ChcB _ l r)) = handleChcVSMT goLeft goRight c
-  where goLeft = OpB Not l
-        goRight = OpB Not r
+  where !goLeft = OpB Not l
+        !goRight = OpB Not r
 vSMTSolve_ (OpB Not (OpB Not notchc)) = vSMTSolve_ notchc
 vSMTSolve_ (OpB Not notchc) = S.bnot <$> vSMTSolve_ notchc
 vSMTSolve_ (OpBB op l r) = handleCtx $ Loc l $ InBBL op Empty r

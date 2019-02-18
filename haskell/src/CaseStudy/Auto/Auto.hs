@@ -118,7 +118,7 @@ autoToVSat_ (RBinary op l r) = return $ V.OpIB
 -- | sister function to the non-ticked version for handling the arithmetic sub
 -- lang
 autoToVSat' :: Show a => ALang a -> V.VIExpr d a
-autoToVSat' (ALit i) = V.LitI $ V.I i
+autoToVSat' (ALit i) = V.LitI $ V.I $ fromInteger i
 autoToVSat' (AVar a) = V.Ref V.RefI a
 autoToVSat' (CaseStudy.Auto.Lang.Neg a) = V.OpI V.Neg $ autoToVSat' a
 autoToVSat' (ABinary op l r) = V.OpII (dispatch'' op) (autoToVSat' l) (autoToVSat' r)
