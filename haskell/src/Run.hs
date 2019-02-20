@@ -294,6 +294,7 @@ handleChc goLeft goRight defL defR (ChcB d _ _) =
                           -- a prop that is sat with the current dim being false
                           !falseProp = (bnot $ dimToVar d) <:& usedProp
 
+                          -- TODO wrap into the Result module and hardcode
                           dispatchProp :: ResultProp d -> Bool -> ResultProp d
                           dispatchProp !p !x = if x
                                                then p

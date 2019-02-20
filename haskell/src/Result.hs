@@ -84,7 +84,6 @@ infixr 5 &:>
 (&:>) :: ResultProp d -> VProp d d d -> ResultProp d
 (&:>) = flip consWithAnd
 
-
 infixr 5 <:&
 (<:&) :: VProp d d d -> ResultProp d -> ResultProp d
 (<:&) = consWithAnd
