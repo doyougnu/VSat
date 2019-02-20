@@ -54,7 +54,7 @@ main = do
   let (Just sAuto) = decodeStrict sJsn :: Maybe Auto
   let (Just bAuto) = decodeStrict bJsn :: Maybe Auto
       !sCs = constraints sAuto -- looks like 4298/4299 are the culprits
-      !bCs = constraints  bAuto
+      !bCs = constraints bAuto
       sPs' = parse langParser "" <$> sCs
       sPs = rights sPs'
 
@@ -65,7 +65,9 @@ main = do
       !bProp = (naiveEncode . nestChoices . autoToVSat) $ autoAndJoin (take 350 bPs)
 
   res <- satWith emptyConf $! bProp
+  -- res' <- runIncrementalSolve bPs
   T.writeFile "testoutputSAT" (pack . show $ res)
+  -- T.writeFile "testoutputInc" (pack . show $ res')
   -- print res
   -- defaultMainWith critConfig
   --   [
