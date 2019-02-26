@@ -18,6 +18,9 @@ build:
   library-profiling: true
   executable-profiling: true
 
+# extra-lib-dirs:
+  # - /home/doyougnu/Research/VSat/haskell/lib
+
 # allow-newer: true
 
 # docker:

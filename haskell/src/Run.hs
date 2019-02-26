@@ -389,14 +389,15 @@ handleCtx (Loc (RefB b) (InB _ ctx)) = handleCtx $! mkLoc (RefB $ S.bnot b, ctx)
   -- parent context with the new accumulator being the result of computing the
   -- left side
 handleCtx (Loc (RefB b) (InBBR op acc (InBBL op' ctx r))) =
-  handleCtx $! mkLoc (r , InBBR op' newAcc ctx)
+  (lift $ S.constrain newAcc) >> (handleCtx $! mkLoc (r , InBBR op' newAcc ctx))
   where !newAcc = (bDispatch op) acc b
   -- if we have two rhs contexts then we abuse the focus to
 handleCtx (Loc (RefB b) (InBBR op acc ctx)) =
-  handleCtx $! mkLoc (RefB newAcc, ctx)
+  (lift $ S.constrain newAcc) >> (handleCtx $! mkLoc (RefB newAcc, ctx))
   where !newAcc = (bDispatch op) acc b
 handleCtx (Loc (LitB b) (InBBR op acc ctx)) =
-  handleCtx $! mkLoc (RefB newAcc, ctx)
+  -- we wrap in RefB just to get the types to work out
+  (lift $ S.constrain newAcc) >> (handleCtx $! mkLoc (RefB newAcc, ctx))
   where !newAcc = (bDispatch op) acc (S.literal b)
 handleCtx (Loc fcs (InB _ (InB _ ctx))) = handleCtx $! mkLoc (fcs, ctx)
 

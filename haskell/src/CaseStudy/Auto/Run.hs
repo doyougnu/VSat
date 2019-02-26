@@ -3,12 +3,20 @@ module CaseStudy.Auto.Run where
 import           Data.SBV
 import           Data.SBV.Control
 import           Control.Monad (when)
+import           Control.Arrow (first)
+import           Control.Applicative ((<|>))
+import           Data.String (IsString)
+import           Data.List (sort, groupBy)
+import           Data.Maybe (fromMaybe)
+import           Data.Map
+import           Data.Bifoldable
 import           Data.SBV.Internals (SolverContext)
 import           Data.Bitraversable (bitraverse)
 import qualified Data.Sequence  as Seq
 import qualified Control.Monad.State.Strict as St
 
 import           CaseStudy.Auto.Lang
+import           CaseStudy.Auto.Auto (autoAndJoin)
 import           Run (IncPack, smtBool, smtInt)
 import           VProp.Types (Prim, SNum(..), PrimN(..))
 import qualified VProp.SBV as SB
@@ -94,16 +102,88 @@ instance (SolverContext (IncSolve a b)) where
   namedConstraint = (St.lift .) . namedConstraint
   setOption = St.lift . setOption
 
-runIncrementalSolve :: (Show a, Ord a) => [AutoLang a a] -> IO [SatResult]
-runIncrementalSolve xs = fmap (fmap SatResult) $ runIncrementalSolve_ $ trace (show x' ++ "\n") x'
-  where x' = take 2 xs
+runIncrementalSolve :: (Show a, Ord a, IsString a) =>
+  [AutoLang a a] -> IO [(AutoLang a a, SatResult)]
+runIncrementalSolve xs = fmap toList $ mapM (fmap SatResult . runIncrementalSolve_) assocMaps
+  where assocList = groupBy isPlain $ sort $ fmap (first helper) $ splitCtx <$> xs
+        assocMaps' = unions $ (fromListWith (BBinary And) <$> assocList)
+        plains = assocMaps' ! (AutoRef "__plain__")
+        assocMaps = delete (AutoRef "__plain__") $ fmap (BBinary And plains) assocMaps'
+        helper x | hasCtx x = x
+                 | otherwise = AutoRef "__plain__"
 
-runIncrementalSolve_ :: (Show a, Ord a) => [AutoLang a a] -> IO [SMTResult]
+runIncrementalSolve_ :: (Show a, Ord a) => AutoLang a a -> IO SMTResult
 runIncrementalSolve_ props = runSMT $
-  do props' <- St.evalStateT (mapM autoToSBool props) (mempty, mempty)
+  do props' <- St.evalStateT (autoToSBool props) (mempty, mempty)
      query $
-       do bs <- St.evalStateT (mapM autoSolve props') emptyS
-          mapM (\b -> do constrain b; getSMTResult) bs
+       do bs <- St.evalStateT (autoSolve props') emptyS
+          constrain bs
+          getSMTResult
+
+splitCtx :: AutoLang a b -> (AutoLang a b, AutoLang a b)
+splitCtx a = (leftMost a, removeCtxs a)
+
+hasCtx :: AutoLang a b -> Bool
+hasCtx (Ctx _ _ _) = True
+hasCtx (AutoNot e) = hasCtx e
+hasCtx (BBinary _ l r) = hasCtx l || hasCtx r
+hasCtx (RBinary _ l r) = hasCtx' l || hasCtx' r
+hasCtx _               = False
+
+hasCtx' :: ALang a -> Bool
+hasCtx' (ACtx _) = True
+hasCtx' (Neg e)  = hasCtx' e
+hasCtx' (ABinary _ l r) = hasCtx' l && hasCtx' r
+hasCtx' _               = False
+
+isPlain :: (Eq a, Eq b) =>
+  (AutoLang a b, AutoLang a b) -> (AutoLang a b, AutoLang a b) -> Bool
+isPlain (x, _) (y, _) = x == y
+
+removeCtxs :: AutoLang a b -> AutoLang a b
+removeCtxs (Ctx _ _ rest) = rest
+removeCtxs (BBinary op l r)
+  | hasCtx l = r
+  | otherwise = (BBinary op (removeCtxs l) (removeCtxs r))
+removeCtxs a@(RBinary op l r) = a
+  -- (RBinary op (removeCtxs' l) (removeCtxs' r))
+removeCtxs (AutoNot e) = AutoNot $ removeCtxs e
+removeCtxs x = x
+
+
+leftMost :: AutoLang a b -> (AutoLang a b)
+leftMost (BBinary Impl l r)
+  | hasCtxForm l = l
+  | otherwise = leftMost l
+  where hasCtxForm (RBinary op (ACtx _) _) = True
+        hasCtxForm (BBinary _ l r)         = hasCtxForm l && hasCtxForm r
+        hasCtxForm _                       = False
+leftMost (BBinary _ l _)
+  | isLeaf l = l
+  | otherwise = leftMost l
+  where isLeaf (AutoLit _) = True
+        isLeaf (AutoRef _) = True
+        isLeaf _           = False
+leftMost (Ctx _ _ a)
+  | isLeaf a = a
+  | otherwise = leftMost a
+  where isLeaf (AutoLit _) = True
+        isLeaf (AutoRef _) = True
+        isLeaf _           = False
+leftMost (AutoNot e)       = leftMost e
+leftMost x@(RBinary _ (ACtx _) (ALit _)) = x
+leftMost x@(RBinary _ l _)   = x
+leftMost x                 = x
+
+leftMost' :: ALang a -> ALang a
+leftMost' (ABinary _ l _)
+  | isLeaf l = l
+  | otherwise = leftMost' l
+  where isLeaf (ALit _) = True
+        isLeaf (AVar _) = True
+        isLeaf _        = False
+leftMost' (Neg e)       = leftMost' e
+leftMost' x             = x
 
 isLeftMost :: AutoLang a b -> Bool
 isLeftMost (BBinary _ l _)
@@ -145,18 +225,10 @@ instance Mergeable (IncSolve a b ()) where
   symbolicMerge _ _ _ _ = return ()
   select _ _ _          = return ()
 
--- whileM_ :: Query SBool -> Query a -> Query ()
-whileM_ :: (Show a, Show b) => IncSolve a b SBool -> IncSolve a b SBool -> IncSolve a b c -> IncSolve a b ()
-whileM_ p q f = go
-  where go = do x <- p
-                y <- q
-                s <- St.get
-                m <- isEmptyM
-                trace (show s ++ "  :  " ++ (show m)) $ return ()
-                -- the problem is in peekM
-                -- iteLazy (x ||| y) (f >> go) (return ())
-                iteLazy (x) (f >> go) (return ())
-                -- iteLazy (false) (f >> go) (return ())
+whileM_ :: (Show a, Show b) =>
+  IncSolve a b SBool -> IncSolve a b c -> IncSolve a b ()
+whileM_ p f = go
+  where go = do x <- p; iteLazy x (f >> go) (return ())
 
 autoSolve :: AutoLang SBool SNum ->
              IncSolve (AutoLang SBool SNum) SBool SBool
@@ -167,18 +239,17 @@ autoSolve a@(AutoRef r) = do St.modify' (pushS (a, r))
 autoSolve (AutoNot e) = bnot <$> autoSolve e
 autoSolve a@(BBinary op l r) =
   do q <- St.get
-     trace ("INBB: stack: " ++ show q) $ return ()
-     St.lift $ io $ putStrLn "\n-----\n"
-     St.lift $ io $ putStrLn $ "term: " ++ show a
-     St.lift $ io $ putStrLn "-----\n"
+     -- trace ("INBB: stack: " ++ show q) $ return ()
+     -- St.lift $ io $ putStrLn "\n-----\n"
+     -- St.lift $ io $ putStrLn $ "term: " ++ show a
+     -- St.lift $ io $ putStrLn "-----\n"
      -- we peek at the top, if we have a match we return it
      St.liftM3 iteLazy (peekM a) getBool $
        -- if it is not on the top level then we pop until we match or until the
        -- stack is empty
-       do St.lift $ io $ putStrLn "\nIn ELSE\n"
-          let notOnStk = bnot <$> peekM a
-              stkNotEmpty = ((bnot . literal) <$> isEmptyM)
-          whileM_ notOnStk stkNotEmpty popM
+       do -- St.lift $ io $ putStrLn "\nIn ELSE\n"
+          let notOnStk = peekM a
+          whileM_ notOnStk popM
           St.liftM3 iteLazy (peekM a) getBool $
             do
               l' <- autoSolve l
@@ -189,22 +260,27 @@ autoSolve a@(BBinary op l r) =
               constrain b
               St.modify $ pushS (a,b)
               return b
-autoSolve a@(RBinary op l r) = do onQ <- peekM a
-                                  i <- St.lift getAssertionStackDepth
-                                  St.lift $ io $ putStrLn $ "\n|||||||||" ++ show onQ ++ "||||||\n"
-                                  when (i == 0) $ St.modify drainS
-                                  St.lift $ io $ putStrLn $ "term: " ++ show a
-                                  St.lift $ io $ putStrLn $ "AsStack Depth: " ++ show i
-                                  St.liftM3 iteLazy (return onQ) getBool $
-                                    do l' <- autoSolve' l
-                                       r' <- autoSolve' r
-                                       let op' = nDispatch op
-                                           b   = l' `op'` r'
-                                       St.lift $ push 1
-                                       constrain b
-                                       St.modify popS
-                                       St.modify $ pushS (a,b)
-                                       return b
+autoSolve a@(RBinary op l r) = do -- onQ <- peekM a
+                                  -- i <- St.lift getAssertionStackDepth
+                                  -- St.lift $ io $ putStrLn $ "\n|||||||||" ++ show onQ ++ "||||||\n"
+                                  -- when (i == 0) $ St.modify drainS
+                                  -- St.lift $ io $ putStrLn $ "term: " ++ show a
+                                  -- St.lift $ io $ putStrLn $ "AsStack Depth: " ++ show i
+                                  St.liftM3 iteLazy (peekM a) getBool $
+                                    do
+                                      let notOnStk = peekM a
+                                      whileM_ notOnStk popM
+                                      St.liftM3 iteLazy (peekM a) getBool $
+                                        do
+                                          l' <- autoSolve' l
+                                          r' <- autoSolve' r
+                                          let op' = nDispatch op
+                                              b   = l' `op'` r'
+                                          St.lift $ push 1
+                                          constrain b
+                                          St.modify popS
+                                          St.modify $ pushS (a,b)
+                                          return b
 autoSolve (Ctx _ _ _)       = error "You probably need to call `idEncode` to convert these ctxes. A Ctx is _only_ used for translating an AutoLang to a VProp "
 
 autoSolve' :: ALang SNum -> IncSolve (AutoLang SBool SNum) SBool SNum
