@@ -25,7 +25,8 @@ dependencies:
 - deepseq
 - genifunctors >= 0.4
 # sbv forces us to use LTS-11.22 ghc 8.2.2
-- sbv >= 7.12
+# - sbvFix # my custom version
+- sbv
 - cassava
 - bytestring
 - text

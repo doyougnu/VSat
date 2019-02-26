@@ -6,6 +6,8 @@ import           Data.Bifunctor
 import           Data.Bifoldable
 import           Data.Bitraversable
 import           Data.Monoid ((<>))
+import           GHC.Generics
+import           Control.DeepSeq (NFData)
 
 import qualified VProp.Types as V
 
@@ -15,19 +17,19 @@ data AutoLang a b = AutoLit Bool
                   | AutoNot (AutoLang a b)
                   | BBinary BOp (AutoLang a b) (AutoLang a b)
                   | RBinary RBOp (ALang b) (ALang b)
-                deriving (Eq, Ord, Functor, Foldable, Traversable)
+                deriving (Eq, Ord, Functor, Foldable, Traversable, Generic)
 
-data BOp = And | Or | Impl | Eqv | Xor deriving (Eq, Ord)
-data RBOp = GRT | GRTE | EQL | LST | LSTE  | NEQL deriving (Eq, Ord)
+data BOp = And | Or | Impl | Eqv | Xor deriving (Eq, Ord,Generic)
+data RBOp = GRT | GRTE | EQL | LST | LSTE  | NEQL deriving (Eq, Ord,Generic)
 
 data ALang a = ALit Integer
              | AVar a
              | ACtx (ALang a)
              | Neg (ALang a)
              | ABinary AOp (ALang a) (ALang a)
-             deriving (Eq, Ord, Functor, Foldable, Traversable)
+             deriving (Eq, Ord, Functor, Foldable, Traversable, Generic)
 
-data AOp = Add | Subtract | Multiply | Divide | Modulus deriving (Eq, Ord)
+data AOp = Add | Subtract | Multiply | Divide | Modulus deriving (Eq, Ord,Generic)
 
 prettyAuto :: (Show a, Show b) => AutoLang a b -> String
 prettyAuto = top
@@ -74,6 +76,13 @@ instance Show BOp where show Impl = "→"
 
 instance (Show a, Show b) => Show (AutoLang a b) where show = prettyAuto
 instance Show a => Show (ALang a) where show = prettyAuto'
+instance (NFData a, NFData b) => NFData (AutoLang a b)
+instance (NFData a) => NFData (ALang a )
+instance NFData AOp
+instance NFData RBOp
+instance NFData BOp
+
+
 
 xAOrJoin :: [AutoLang a b] -> AutoLang a b
 xAOrJoin = fromList $ BBinary Xor

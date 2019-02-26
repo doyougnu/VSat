@@ -64,14 +64,15 @@ main = do
       !sProp = (naiveEncode . nestChoices . autoToVSat) $ autoAndJoin sPs
       !bProp = (naiveEncode . nestChoices . autoToVSat) $ autoAndJoin (take 350 bPs)
 
-  res <- satWith emptyConf $! bProp
-  -- res' <- runIncrementalSolve bPs
-  T.writeFile "testoutputSAT" (pack . show $ res)
+  -- res <- satWith emptyConf $! bProp
+  res' <- runIncrementalSolve bPs
+  -- T.writeFile "testoutputSAT" (pack . show $ res)
   -- T.writeFile "testoutputInc" (pack . show $ res')
   -- print res
-  -- defaultMainWith critConfig
-  --   [
-  --   bgroup "vsat" [ -- bench "small file" . nfIO $ satWith emptyConf sProp
-  --                 bench "large file" . nfIO $ satWith emptyConf bProp
-  --                 ]
-  --   ]
+  defaultMainWith critConfig
+    [
+    bgroup "vsat" [ -- bench "small file" . nfIO $ satWith emptyConf sProp
+                  -- bench "large file" . nfIO $ satWith emptyConf bProp
+                  bench "large file" . nfIO $ runIncrementalSolve bPs
+                  ]
+    ]
