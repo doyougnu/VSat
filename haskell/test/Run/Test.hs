@@ -387,7 +387,7 @@ bimpl_w_false_is_sat_unit = unitGen prop "BF matches VSAT for equivalency that i
 -- | TODO fix it by migrating away from SBV
 bimpl_w_false_chc_is_sat_unit = unitGen prop "BF matches VSAT for equivalency that is always unsat with a choice"
   where prop :: ReadableProp
-        prop = true <=> (bChc "AA" (bRef "a") (bRef "b"))
+        prop = false <=> (bChc "AA" (bRef "a") (bRef "b"))
 
 mixed_and_impl_is_sat_unit =
   unitGen prop "BF matches VSAT for equivalency that is always unsat"

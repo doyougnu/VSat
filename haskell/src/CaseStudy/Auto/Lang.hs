@@ -1,7 +1,7 @@
 module CaseStudy.Auto.Lang where
 
 import           Utils (fromList)
-import           Data.SBV (Boolean(..), EqSymbolic(..), literal)
+import           Data.SBV (EqSymbolic(..), literal)
 import           Data.Bifunctor
 import           Data.Bifoldable
 import           Data.Bitraversable
@@ -10,6 +10,7 @@ import           GHC.Generics
 import           Control.DeepSeq (NFData)
 
 import qualified VProp.Types as V
+import SAT (Boolean(..))
 
 data AutoLang a b = AutoLit Bool
                   | AutoRef a
@@ -121,10 +122,13 @@ instance Num (ALang a) where
 instance (EqSymbolic a, EqSymbolic b) => EqSymbolic (AutoLang a b) where
   (AutoLit b)      .== (AutoLit b')        = b .== b'
   (AutoRef r)      .== (AutoRef r')        = r .== r'
-  (Ctx op a p)     .== (Ctx op' a' p')     = op .== op' &&& a .== a' &&& p .== p'
+  (Ctx op a p)     .== (Ctx op' a' p')     = (op .== op') &&& (a .== a') &&&
+                                             (p .== p')
   (AutoNot e)      .== (AutoNot e')        = e .== e'
-  (BBinary op l r) .== (BBinary op' l' r') = op .== op' &&& l .== l' &&& r .== r'
-  (RBinary op l r) .== (RBinary op' l' r') = op .== op' &&& l .== l' &&& r .== r'
+  (BBinary op l r) .== (BBinary op' l' r') = (op .== op') &&& (l .== l') &&&
+                                             (r .== r')
+  (RBinary op l r) .== (RBinary op' l' r') = (op .== op') &&&
+                                             (l .== l') &&& (r .== r')
   _                .== _                   = false
 
 instance EqSymbolic a => EqSymbolic (ALang a) where
@@ -132,7 +136,8 @@ instance EqSymbolic a => EqSymbolic (ALang a) where
   (AVar a) .== (AVar b)  = a .== b
   (ACtx a) .== (ACtx b)  = a .== b
   (Neg a)  .== (Neg b)   = a .== b
-  (ABinary op l r) .== (ABinary op' l' r') = op .== op' &&& l .== l' &&& r .== r'
+  (ABinary op l r) .== (ABinary op' l' r') = (op .== op') &&&
+                                             (l .== l') &&& (r .== r')
   _                .==  _ = false
 
 instance EqSymbolic AOp where

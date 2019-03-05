@@ -24,11 +24,11 @@ instance (Show a, Show b, Show d, Ord a, Ord b, Ord d) =>
 -- purposefully constrained to return SBools and not Boolean b => (b -> b -> b)
 -- because we want to ensure that we are translating to the SBV domain
 bDispatch :: BB_B -> S.SBool -> S.SBool -> S.SBool
-bDispatch And    = (S.&&&)
-bDispatch Or     = (S.|||)
-bDispatch Impl   = (S.==>)
-bDispatch BiImpl = (S.<=>)
-bDispatch XOr    = (S.<+>)
+bDispatch And    = (&&&)
+bDispatch Or     = (|||)
+bDispatch Impl   = (==>)
+bDispatch BiImpl = (<=>)
+bDispatch XOr    = (<+>)
 
 nbDispatch :: Prim b n => NN_B -> n -> n -> b
 nbDispatch LT  = (.<)
@@ -58,7 +58,7 @@ evalPropExpr :: DimBool d
              -> S.SBool
 evalPropExpr _ _ _ (LitB b)         = S.literal b
 evalPropExpr _ _  !c (RefB f)       = c f
-evalPropExpr d !i !c !(OpB Not e)   = S.bnot (evalPropExpr d i c e)
+evalPropExpr d !i !c !(OpB Not e)   = bnot (evalPropExpr d i c e)
 evalPropExpr d !i !c !(OpBB op l r) = (bDispatch op)
                                       (evalPropExpr d i c l)
                                       (evalPropExpr d i c r)
@@ -107,7 +107,7 @@ symbolicPropExpr e = do
 -- | Perform andDecomposition, removing all choices from a proposition
 andDecomp :: VProp d a b -> (Dim d -> a) -> VProp d a b
 andDecomp !(ChcB d l r) f  = (newDim &&& andDecomp l f) |||
-                            (S.bnot newDim &&& andDecomp r f)
+                            (bnot newDim &&& andDecomp r f)
   where newDim = dimToVarBy f d
 andDecomp !(OpB op x)    f = OpB  op (andDecomp x f)
 andDecomp !(OpBB op l r) f = OpBB op (andDecomp l f) (andDecomp r f)

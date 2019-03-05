@@ -13,14 +13,14 @@ module VProp.Types ( Var(..)
                    , RefN(..)
                    , PrimN(..)
                    , Prim(..)
-                   , S.true
-                   , S.false
-                   , S.bnot
-                   , (S.&&&)
-                   , (S.|||)
-                   , (S.<+>)
-                   , (S.==>)
-                   , (S.<=>)
+                   , true
+                   , false
+                   , bnot
+                   , (&&&)
+                   , (|||)
+                   , (<+>)
+                   , (SAT.==>)
+                   , (<=>)
                    , bifoldMap
                    , bimap
                    , bifoldr
@@ -51,6 +51,8 @@ import           Data.String           (IsString)
 import           GHC.Generics          (Generic)
 import           Prelude               hiding (EQ, GT, LT, lookup)
 import           Test.Tasty.QuickCheck
+
+import SAT
 
 
 -- | A feature is a named, boolean configuration option.
@@ -121,7 +123,7 @@ class Num n => PrimN n where
   (./), (.%) :: n -> n -> n
 
 -- | Overload the primitive operators
-class (S.Boolean b, PrimN n) => Prim b n where
+class (Boolean b, PrimN n) => Prim b n where
   (.<), (.<=), (.==), (./=), (.>=), (.>) :: n -> n -> b
 
 infix 4 .<, .<=, .==, ./=, .>=, .>
@@ -370,7 +372,7 @@ instance S.Mergeable (VProp a b c) where
   symbolicMerge _ _ _ _ = undefined -- quite -WALL
 
 -- | We can treat a variational proposition as a boolean formulae
-instance S.Boolean (VProp a b c) where
+instance Boolean (VProp a b c) where
   true  = LitB True
   false = LitB False
   bnot  = OpB Not
