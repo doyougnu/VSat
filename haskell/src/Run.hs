@@ -24,6 +24,7 @@ import Control.Arrow                 (first, second)
 
 import Data.Maybe                    (catMaybes)
 
+import SAT
 import VProp.Types
 import VProp.SBV
 import VProp.Core
@@ -155,8 +156,8 @@ runVSMTSolve ::
   VProp d a a -> t IO (Result d)
 runVSMTSolve prop =
   do cnf <- ask
-     res <- lift . S.runSMTWith (conf cnf) . vSMTSolve $
-       St.evalStateT (propToSBool prop) (M.empty, M.empty)
+     let prop' = St.evalStateT (propToSBool prop) (M.empty, M.empty)
+     res <- lift . S.runSMTWith (conf cnf) . vSMTSolve $ prop'
      lift . return $ res
 
 -- | wrapper around map to keep track of the variable references we've seen, a,
@@ -204,20 +205,20 @@ vSMTSolve prop = do prop' <- prop
 -- starting query mode. 2nd we cannot allow any duplicates to be called on a
 -- string -> symbolic a function or missiles will launch.
 propToSBool :: (Show a,Ord a) => VProp d a a -> IncPack a (VProp d S.SBool SNum)
-propToSBool !(RefB x)     = RefB   <$> smtBool x
-propToSBool !(OpB o e)    = OpB  o <$> propToSBool e
-propToSBool !(OpBB o l r) = OpBB o <$> propToSBool l <*> propToSBool r
-propToSBool !(ChcB d l r) = ChcB d <$> propToSBool l <*> propToSBool r
-propToSBool !(OpIB o l r) = OpIB o <$> propToSBool' l <*> propToSBool' r
-propToSBool !(LitB b)     = return $ LitB b
+propToSBool (RefB x)     = RefB   <$> smtBool x
+propToSBool (OpB o e)    = OpB  o <$> propToSBool e
+propToSBool (OpBB o l r) = OpBB o <$> propToSBool l <*> propToSBool r
+propToSBool (ChcB d l r) = ChcB d <$> propToSBool l <*> propToSBool r
+propToSBool (OpIB o l r) = OpIB o <$> propToSBool' l <*> propToSBool' r
+propToSBool (LitB b)     = return $ LitB b
 
 propToSBool' :: (Ord b, Show b) => VIExpr d b -> IncPack b (VIExpr d SNum)
-propToSBool' !(Ref RefI i) = Ref RefI <$> smtInt i
-propToSBool' !(Ref RefD d) = Ref RefD <$> smtDouble d
-propToSBool' !(OpI o e)    = OpI o    <$> propToSBool' e
-propToSBool' !(OpII o l r) = OpII o <$> propToSBool' l <*> propToSBool' r
-propToSBool' !(ChcI d l r) = ChcI d <$> propToSBool' l <*> propToSBool' r
-propToSBool' !(LitI x)     = return $ LitI x
+propToSBool' (Ref RefI i) = Ref RefI <$> smtInt i
+propToSBool' (Ref RefD d) = Ref RefD <$> smtDouble d
+propToSBool' (OpI o e)    = OpI o    <$> propToSBool' e
+propToSBool' (OpII o l r) = OpII o <$> propToSBool' l <*> propToSBool' r
+propToSBool' (ChcI d l r) = ChcI d <$> propToSBool' l <*> propToSBool' r
+propToSBool' (LitI x)     = return $ LitI x
 
 -- | a builder function that abstracts out the packing algorithm for numbers. It
 -- takes a function to convert a string to a symbolic variable like S.sInt64, or
@@ -273,7 +274,7 @@ instance (Monad m, I.SolverContext m) =>
 store :: (Eq d, Ord d) => Result d -> IncVSMTSolve d ()
 store = St.modify' . first . (<>)
 
-handleChc :: (Ord d, S.Boolean b, Resultable d, Show d) =>
+handleChc :: (Ord d, Boolean b, Resultable d, Show d) =>
   StateT (IncState d) SC.Query S.SBool ->
   StateT (IncState d) SC.Query S.SBool ->
   StateT (IncState d) SC.Query b      ->
@@ -371,9 +372,9 @@ handleCtx (Loc (LitB b) Empty) = return $! S.literal b
   -- when we have a context that holds only an accumulator we combine the atomic
   -- with the accum and return the result
 handleCtx (Loc (RefB b) (InBBR op acc Empty)) =
-  return $! (bDispatch op) acc b
+  return $! bDispatch op acc b
 handleCtx (Loc (LitB b) (InBBR op acc Empty)) =
-  return $! (bDispatch op) acc (S.literal b)
+  return $! bDispatch op acc (S.literal b)
 
   -- When we see an atomic in a left context we add that atomic to the
   -- accumulator and recur to the rhs of the operator
@@ -381,24 +382,24 @@ handleCtx (Loc (RefB b) (InBBL op ctx rbranch)) =
   handleCtx $! mkLoc (rbranch, InBBR op b ctx)
 handleCtx (Loc (LitB b) (InBBL op ctx rbranch)) =
   handleCtx $! mkLoc (rbranch, InBBR op (S.literal b) ctx)
-handleCtx (Loc (LitB b) (InB _ ctx)) = handleCtx $! mkLoc (LitB $ S.bnot b, ctx)
-handleCtx (Loc (RefB b) (InB _ ctx)) = handleCtx $! mkLoc (RefB $ S.bnot b, ctx)
+handleCtx (Loc (LitB b) (InB _ ctx)) = handleCtx $! mkLoc (LitB $ bnot b, ctx)
+handleCtx (Loc (RefB b) (InB _ ctx)) = handleCtx $! mkLoc (RefB $ bnot b, ctx)
 
   -- when we are in the left side of a context and the right side of a subtree
   -- we add the atomics to the accumulator and swap to the right side of the
   -- parent context with the new accumulator being the result of computing the
   -- left side
 handleCtx (Loc (RefB b) (InBBR op acc (InBBL op' ctx r))) =
-  (lift $ S.constrain newAcc) >> (handleCtx $! mkLoc (r , InBBR op' newAcc ctx))
-  where !newAcc = (bDispatch op) acc b
+  (handleCtx $! mkLoc (r , InBBR op' newAcc ctx))
+  where !newAcc = bDispatch op acc b
   -- if we have two rhs contexts then we abuse the focus to
 handleCtx (Loc (RefB b) (InBBR op acc ctx)) =
-  (lift $ S.constrain newAcc) >> (handleCtx $! mkLoc (RefB newAcc, ctx))
-  where !newAcc = (bDispatch op) acc b
+  (handleCtx $! mkLoc (RefB newAcc, ctx))
+  where !newAcc = bDispatch op acc b
 handleCtx (Loc (LitB b) (InBBR op acc ctx)) =
   -- we wrap in RefB just to get the types to work out
-  (lift $ S.constrain newAcc) >> (handleCtx $! mkLoc (RefB newAcc, ctx))
-  where !newAcc = (bDispatch op) acc (S.literal b)
+  (handleCtx $! mkLoc (RefB newAcc, ctx))
+  where !newAcc = bDispatch op acc (S.literal b)
 handleCtx (Loc fcs (InB _ (InB _ ctx))) = handleCtx $! mkLoc (fcs, ctx)
 
   -- when we see a choice we describe the computations for each variant and
@@ -426,7 +427,7 @@ vSMTSolve_ (OpB Not c@(ChcB _ l r)) = handleChcVSMT goLeft goRight c
   where !goLeft = OpB Not l
         !goRight = OpB Not r
 vSMTSolve_ (OpB Not (OpB Not notchc)) = vSMTSolve_ notchc
-vSMTSolve_ (OpB Not notchc) = S.bnot <$> vSMTSolve_ notchc
+vSMTSolve_ (OpB Not notchc) = bnot <$> vSMTSolve_ notchc
 vSMTSolve_ (OpBB op l r) = handleCtx $ Loc l $ InBBL op Empty r
 vSMTSolve_ (OpIB _ _ _) = error "Blame Jeff! This isn't implemented yet!"
 -- vSMTSolve_ !(OpIB op l r) = do l' <- vSMTSolve'_ l

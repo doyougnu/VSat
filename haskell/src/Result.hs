@@ -27,7 +27,7 @@ import qualified Data.Map.Strict         as M
 import           Data.Maybe              (maybe)
 import           Data.SBV                (SMTResult (..), getModelDictionary)
 import           Data.SBV.Control        (Query, getSMTResult)
-import           Data.SBV.Internals      (cwToBool)
+import           Data.SBV.Internals      (cvToBool)
 import           Data.String             (IsString, fromString)
 import           Data.Text               (Text)
 import           GHC.Generics            (Generic)
@@ -181,4 +181,4 @@ getResult !f =
   do as <- fmap (maybe mempty getModelDictionary) $! getVSMTModel
      return $
        Result (M.foldMapWithKey
-               (force (\k a -> M.singleton (fromString k) (f $ cwToBool a))) as)
+               (force (\k a -> M.singleton (fromString k) (f $ cvToBool a))) as)

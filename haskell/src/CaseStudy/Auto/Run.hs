@@ -2,25 +2,22 @@ module CaseStudy.Auto.Run where
 
 import           Data.SBV
 import           Data.SBV.Control
-import           Control.Monad (when)
 import           Control.Arrow (first)
-import           Control.Applicative ((<|>))
 import           Data.String (IsString)
 import           Data.List (sort, groupBy)
-import           Data.Maybe (fromMaybe)
 import           Data.Map
-import           Data.Bifoldable
 import           Data.SBV.Internals (SolverContext)
 import           Data.Bitraversable (bitraverse)
 import qualified Data.Sequence  as Seq
 import qualified Control.Monad.State.Strict as St
 
 import           CaseStudy.Auto.Lang
-import           CaseStudy.Auto.Auto (autoAndJoin)
+import           CaseStudy.Auto.Auto (autoLength)
 import           Run (IncPack, smtBool, smtInt)
 import           VProp.Types (Prim, SNum(..), PrimN(..))
 import qualified VProp.SBV as SB
 
+import SAT
 import Debug.Trace (trace)
 
 autoToSBool :: (Show a, Ord a) => AutoLang a a -> IncPack a (AutoLang SBool SNum)
@@ -104,11 +101,15 @@ instance (SolverContext (IncSolve a b)) where
 
 runIncrementalSolve :: (Show a, Ord a, IsString a) =>
   [AutoLang a a] -> IO [(AutoLang a a, SatResult)]
-runIncrementalSolve xs = fmap toList $ mapM (fmap SatResult . runIncrementalSolve_) assocMaps
+runIncrementalSolve xs =
+  fmap toList $ mapM (fmap SatResult . runIncrementalSolve_) $
+  -- trace (show $ toList $ fmap autoLength $ assocMaps)
+  assocMaps
   where assocList = groupBy isPlain $ sort $ fmap (first helper) $ splitCtx <$> xs
-        assocMaps' = unions $ (fromListWith (BBinary And) <$> assocList)
-        plains = assocMaps' ! (AutoRef "__plain__")
-        assocMaps = delete (AutoRef "__plain__") $ fmap (BBinary And plains) assocMaps'
+        assocMaps' = unions $ (fromListWith (flip $ BBinary And) <$> assocList)
+        -- plains = assocMaps' ! (AutoRef "__plain__")
+        -- assocMaps = delete (AutoRef "__plain__") $ fmap (BBinary And plains) assocMaps'
+        assocMaps = Data.Map.take 1 assocMaps'
         helper x | hasCtx x = x
                  | otherwise = AutoRef "__plain__"
 
@@ -145,19 +146,19 @@ removeCtxs (Ctx _ _ rest) = rest
 removeCtxs (BBinary op l r)
   | hasCtx l = r
   | otherwise = (BBinary op (removeCtxs l) (removeCtxs r))
-removeCtxs a@(RBinary op l r) = a
+removeCtxs a@(RBinary _ _ _) = a
   -- (RBinary op (removeCtxs' l) (removeCtxs' r))
 removeCtxs (AutoNot e) = AutoNot $ removeCtxs e
 removeCtxs x = x
 
 
 leftMost :: AutoLang a b -> (AutoLang a b)
-leftMost (BBinary Impl l r)
+leftMost (BBinary Impl l _)
   | hasCtxForm l = l
   | otherwise = leftMost l
-  where hasCtxForm (RBinary op (ACtx _) _) = True
-        hasCtxForm (BBinary _ l r)         = hasCtxForm l && hasCtxForm r
-        hasCtxForm _                       = False
+  where hasCtxForm (RBinary _ (ACtx _) _) = True
+        hasCtxForm (BBinary _ l' r)        = hasCtxForm l' && hasCtxForm r
+        hasCtxForm _                      = False
 leftMost (BBinary _ l _)
   | isLeaf l = l
   | otherwise = leftMost l
@@ -172,7 +173,7 @@ leftMost (Ctx _ _ a)
         isLeaf _           = False
 leftMost (AutoNot e)       = leftMost e
 leftMost x@(RBinary _ (ACtx _) (ALit _)) = x
-leftMost x@(RBinary _ l _)   = x
+leftMost x@(RBinary _ _ _)   = x
 leftMost x                 = x
 
 leftMost' :: ALang a -> ALang a
@@ -184,36 +185,6 @@ leftMost' (ABinary _ l _)
         isLeaf _        = False
 leftMost' (Neg e)       = leftMost' e
 leftMost' x             = x
-
-isLeftMost :: AutoLang a b -> Bool
-isLeftMost (BBinary _ l _)
-  | isLeaf l = True
-  | otherwise = isLeftMost l
-  where isLeaf (AutoLit _) = True
-        isLeaf (AutoRef _) = True
-        isLeaf _           = False
-isLeftMost (RBinary _ l _)
-  | isLeaf l = True
-  | otherwise = isLeftMost' l
-  where isLeaf (ALit _) = True
-        isLeaf (AVar _) = True
-        isLeaf _        = False
-isLeftMost (AutoNot (AutoLit _)) = True
-isLeftMost (AutoNot (AutoRef _)) = True
-isLeftMost (AutoNot e)           = isLeftMost e
-isLeftMost _                     = False
-
-isLeftMost' :: ALang a -> Bool
-isLeftMost' (ABinary _ l _)
-  | isLeaf l = True
-  | otherwise = isLeftMost' l
-  where isLeaf (ALit _) = True
-        isLeaf (AVar _) = True
-        isLeaf _        = False
-isLeftMost' (Neg (ALit _)) = True
-isLeftMost' (Neg (AVar _)) = True
-isLeftMost' (Neg e)        = isLeftMost' e
-isLeftMost' _              = False
 
 -- | whileM_ version for SBools
 -- whileM_ :: (Monad m, Mergeable (m ())) => m SBool -> m a -> m ()
@@ -238,7 +209,7 @@ autoSolve a@(AutoRef r) = do St.modify' (pushS (a, r))
                              return r
 autoSolve (AutoNot e) = bnot <$> autoSolve e
 autoSolve a@(BBinary op l r) =
-  do q <- St.get
+  do
      -- trace ("INBB: stack: " ++ show q) $ return ()
      -- St.lift $ io $ putStrLn "\n-----\n"
      -- St.lift $ io $ putStrLn $ "term: " ++ show a

@@ -3,6 +3,8 @@ module CaseStudy.Auto.Auto where
 import qualified Control.Monad.State.Strict as S
 import           Data.Aeson
 import           Data.Bifunctor             (bimap)
+import           Data.Bifoldable            (bifoldMap)
+import           Data.Monoid                (Sum(..))
 import qualified Data.Map                   as M
 import           Data.String                (IsString)
 import           Data.Text
@@ -231,3 +233,6 @@ idEncode' x           = x
 
 autoAndJoin :: [AutoLang a b] -> AutoLang a b
 autoAndJoin = fromList $ BBinary And
+
+autoLength :: AutoLang a b -> Int
+autoLength = getSum . bifoldMap (Sum . const 1) (Sum . const 1)

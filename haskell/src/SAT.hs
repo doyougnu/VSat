@@ -1,8 +1,10 @@
 module SAT where
 
-import Control.Monad (liftM2)
-import Data.SBV (Boolean(..),Predicate,SBool,Symbolic,isSatisfiable)
-import System.IO.Unsafe (unsafePerformIO)
+import           Control.Monad    (liftM2)
+import           Data.SBV         (Predicate, SBool, Symbolic, sFalse, fromBool,
+                                   isSatisfiable, sNot, sTrue, (.&&), (.<=>),
+                                   (.||))
+import           System.IO.Unsafe (unsafePerformIO)
 
 
 -- | A type class for types that can be converted to symbolic predicates
@@ -28,6 +30,39 @@ equivalent a b = tautology (a <=> b)
 
 
 -- Instances
+
+class Boolean b where
+  true  :: b
+  false :: b
+  bnot  :: b -> b
+  (&&&) :: b -> b -> b
+  (|||) :: b -> b -> b
+
+  (<=>) :: b -> b -> b
+  a <=> b = (a ==> b) &&& (b ==> a)
+
+  (==>) :: b -> b -> b
+  a ==> b = (bnot a) ||| b
+
+  (<+>) :: b -> b -> b
+  a <+> b = (a ||| b) &&& (bnot (a &&& b))
+
+instance Boolean SBool where
+  true  = sTrue
+  false = sFalse
+  bnot  = sNot
+  (&&&) = (.&&)
+  (|||) = (.||)
+  (<=>) = (.<=>)
+
+instance Boolean Bool where
+  true  =  True
+  false = False
+  bnot  = not
+  (&&&) = (&&)
+  (|||) = (||)
+
+
 
 instance Boolean b => Boolean (Symbolic b) where
   true  = return true

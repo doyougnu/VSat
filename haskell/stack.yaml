@@ -1,5 +1,7 @@
 flags: {}
 packages:
+  - '.'
+  - /home/doyougnu/Research/VSat/haskell/lib/sbv
 # system-ghc: false
 extra-deps:
   - genifunctors-0.4
@@ -18,8 +20,9 @@ build:
   library-profiling: true
   executable-profiling: true
 
-# extra-lib-dirs:
-  # - /home/doyougnu/Research/VSat/haskell/lib
+extra-lib-dirs:
+  - /home/doyougnu/Research/VSat/haskell/lib/
+
 
 # allow-newer: true
 
