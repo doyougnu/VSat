@@ -21,6 +21,7 @@ import           Prelude hiding (LT, GT, EQ)
 import Data.Foldable (foldr')
 import Data.Text (Text)
 import Control.Arrow                 (first, second)
+import qualified Data.Set            as S
 
 import Data.Maybe                    (catMaybes)
 
@@ -67,8 +68,8 @@ _emptySt = M.empty
 
 -- | Run the RWS monad with defaults of empty state, reader
 _runEnv :: Show a =>
-  Env d a r -> SMTConf d a a -> SatDict d -> IO (r, (SatDict d),  Log)
-_runEnv m opts st = runRWST m opts st
+  Env d a r -> SMTConf d a a -> SatDict d -> IO (r, SatDict d,  Log)
+_runEnv = runRWST
 
 runEnv :: Show a => (VProp d a a -> Env d a (Result d))
        -> SMTConf d a a
@@ -156,7 +157,7 @@ runVSMTSolve ::
   VProp d a a -> t IO (Result d)
 runVSMTSolve prop =
   do cnf <- ask
-     let prop' = St.evalStateT (propToSBool prop) (M.empty, M.empty)
+     let prop' = St.evalStateT (propToSBool prop) (mempty, mempty)
      res <- lift . S.runSMTWith (conf cnf) . vSMTSolve $ prop'
      lift . return $ res
 
@@ -164,9 +165,12 @@ runVSMTSolve prop =
 -- and their symbolic type, b, which is eta reduced here
 type UsedVars a = M.Map a
 
+-- | a set of dimensions that have been processed and have generated models
+type ProcDims a = S.Set (Dim a)
+
 -- | A state monad transformer that holds two usedvar maps, one for booleans and
 -- one for doubles
-type IncPack a = St.StateT ((UsedVars a S.SBool, UsedVars a SNum)) S.Symbolic
+type IncPack a = St.StateT (UsedVars a S.SBool, UsedVars a SNum) S.Symbolic
 
 -- | a map to keep track if a dimension has been seen before
 type UsedDims a = M.Map a Bool
@@ -174,7 +178,40 @@ type UsedDims a = M.Map a Bool
 -- | the internal state for the incremental solve algorithm, it holds a result
 -- list, and the used dims map, and is parameterized by the types of dimensions,
 -- d
-type IncState d = (Result d, UsedDims (Dim d))
+data IncState d = IncState { result :: Result d         -- * the result map
+                           , config :: UsedDims (Dim d) -- * the current config
+                           , procDims :: ProcDims d     -- * a set of dims that
+                                                        -- have been processed
+                                                        -- and generated models
+                           } deriving Eq
+
+emptySt :: Ord d => IncState d
+emptySt = IncState{result=mempty,config=mempty,procDims=mempty}
+
+isEmptySt :: (Eq d, Ord d) => IncState d -> Bool
+isEmptySt = (==) emptySt
+
+onResult :: (Result d -> Result d) -> IncState d -> IncState d
+onResult f (IncState {..}) = IncState {result=f result, ..}
+
+onConfig :: (UsedDims (Dim d) -> UsedDims (Dim d)) -> IncState d -> IncState d
+onConfig f (IncState {..}) = IncState {config=f config, ..}
+
+insertToConfig :: Ord d => (Dim d) -> Bool -> IncState d -> IncState d
+insertToConfig d b = onConfig $ M.insert d b
+
+deleteFromConfig :: Ord d => (Dim d) -> IncState d -> IncState d
+deleteFromConfig = onConfig . M.delete
+
+inProcDims :: Ord d => Dim d -> IncState d -> Bool
+inProcDims d IncState{..} = S.member d procDims
+
+
+inConfig :: (MonadState (IncState d) m) => (UsedDims (Dim d) -> Bool) -> m Bool
+inConfig f = get >>= return . f . config
+
+onProcDims :: (ProcDims d -> ProcDims d) -> IncState d -> IncState d
+onProcDims f (IncState {..}) = IncState {procDims=f procDims, ..}
 
 -- | the incremental solve monad, with the base monad being the query monad so
 -- we can pull out sbv models Hardcoding so that I don't have to write the mtl
@@ -190,15 +227,14 @@ vSMTSolve prop = do prop' <- prop
                     S.setOption $ SC.ProduceAssignments True
                     SC.query $
                       do
-                      (b, (res',_)) <- St.runStateT (vSMTSolve_ prop')
-                              (mempty, M.empty)
-                      res <- if isDMNull res'
+                      (b,resSt) <- St.runStateT (vSMTSolve_ prop') emptySt
+                      res <- if isEmptySt resSt
                              then do S.constrain b
                                      b' <- isSat
                                      if b'
                                        then getResult (toResultProp . LitB)
                                        else return mempty
-                             else return res'
+                             else return $ result resSt
                       return res
 
 -- | This ensures two things: 1st we need all variables to be symbolic before
@@ -272,7 +308,19 @@ instance (Monad m, I.SolverContext m) =>
   setOption = lift . S.setOption
 
 store :: (Eq d, Ord d) => Result d -> IncVSMTSolve d ()
-store = St.modify' . first . (<>)
+store = St.modify' . onResult . (<>)
+
+setDim :: Ord d => (Dim d) -> Bool -> IncVSMTSolve d ()
+setDim = (St.modify' .) . insertToConfig
+
+removeDim :: Ord d => (Dim d) -> IncVSMTSolve d ()
+removeDim = St.modify' . deleteFromConfig
+
+isDimProcessed :: Ord d => Dim d -> IncVSMTSolve d Bool
+isDimProcessed d = get >>= return . inProcDims d
+
+setDimProcessed :: Ord d => Dim d -> IncVSMTSolve d ()
+setDimProcessed = St.modify' . onProcDims . S.insert
 
 handleChc :: (Ord d, Boolean b, Resultable d, Show d) =>
   StateT (IncState d) SC.Query S.SBool ->
@@ -282,48 +330,54 @@ handleChc :: (Ord d, Boolean b, Resultable d, Show d) =>
   VProp d a c                         ->
   StateT (IncState d) SC.Query b
 handleChc goLeft goRight defL defR (ChcB d _ _) =
-  do (_, used) <- get
-     case M.lookup d used of
-       Just True  -> defL
-       Just False -> defR
-       Nothing    -> do
-                        let
-                          -- a prop that represents the current context
-                          !usedProp = configToResultProp used
-                          -- a prop that is sat with the current dim being true
-                          !trueProp = (dimToVar d) <:& usedProp
-                          -- a prop that is sat with the current dim being false
-                          !falseProp = (bnot $ dimToVar d) <:& usedProp
+  do st <- get
+     let cfg = config st
+     b <- isDimProcessed d
+     if (not b)
+       then do
+       case M.lookup d cfg of
+         Just True  -> defL
+         Just False -> defR
+         Nothing    -> do
+                          let
+                            -- a prop that represents the current context
+                            !usedProp = configToResultProp cfg
+                            -- a prop that is sat with the current dim being true
+                            !trueProp = dimToVar d <:& usedProp
+                            -- a prop that is sat with the current dim being false
+                            !falseProp = bnot ( dimToVar d) <:& usedProp
 
-                          -- TODO wrap into the Result module and hardcode
-                          dispatchProp :: ResultProp d -> Bool -> ResultProp d
-                          dispatchProp !p !x = if x
-                                               then p
-                                               else negateResultProp p
+                            -- TODO wrap into the Result module and hardcode
+                            dispatchProp :: ResultProp d -> Bool -> ResultProp d
+                            dispatchProp !p !x = if x
+                                                 then p
+                                                 else negateResultProp p
 
-                        -- the true variant
-                        St.modify' . second $ M.insert d True
-                        lift $! SC.push 1
-                        goLeft >>= (force S.constrain)
-                        bt <- lift isSat
-                        when bt $ St.modify' (first $ insertToSat trueProp)
-                        resMapT <- lift $ getResult (dispatchProp trueProp)
-                        lift $! SC.pop 1
+                          -- the true variant
+                          setDim d True
+                          lift $! SC.push 1
+                          goLeft >>= (force S.constrain)
+                          bt <- lift isSat
+                          when bt $ St.modify' (onResult $ insertToSat trueProp)
+                          resMapT <- lift $ getResult (dispatchProp trueProp)
+                          lift $! SC.pop 1
 
-                        -- false variant
-                        St.modify' . second $ M.adjust (const False) d
-                        lift $! SC.push 1
-                        goRight >>= (force S.constrain)
-                        bf <- lift isSat
-                        when bf $ St.modify' (first $ insertToSat falseProp)
-                        resMapF <- lift $ getResult (dispatchProp falseProp)
-                        lift $! SC.pop 1
+                          -- false variant
+                          setDim d False
+                          lift $! SC.push 1
+                          goRight >>= (force S.constrain)
+                          bf <- lift isSat
+                          when bf $ St.modify' (onResult $ insertToSat falseProp)
+                          resMapF <- lift $ getResult (dispatchProp falseProp)
+                          lift $! SC.pop 1
 
-                        store $! resMapT <> resMapF
-                        St.modify' . second $ M.delete d
-     -- this return statement should never matter because we've reset the
-     -- assertion stack. So I just return true here to fulfill the type
-                        return true
+                          store $! resMapT <> resMapF
+                          removeDim d
+                          setDimProcessed d
+       -- this return statement should never matter because we've reset the
+       -- assertion stack. So I just return true here to fulfill the type
+                          return true
+       else return true
 handleChc _ _ _ _ _ =
   error "[ERR] This function should only ever be called on a choice constructor"
 
