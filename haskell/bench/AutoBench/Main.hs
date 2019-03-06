@@ -1,7 +1,7 @@
 import           Control.Arrow           (first, second)
--- import           Criterion.Main
--- import           Criterion.Main.Options
--- import           Criterion.Types         (Config (..))
+import           Criterion.Main
+import           Criterion.Main.Options
+import           Criterion.Types         (Config (..))
 import           Data.Aeson              (decodeStrict)
 import           Control.Monad           (replicateM, foldM)
 import           Data.Bifunctor          (bimap)
@@ -48,7 +48,7 @@ chAutoFile = "bench/AutoBench/vsat_small_chunk.json"
 
 -- main :: IO (V String (Maybe ThmResult))
 
--- critConfig = defaultConfig {resamples = 1}
+critConfig = defaultConfig {resamples = 25}
 
 -- | generate an infinite list of unique strings and take n of them dropping the
 -- empty string
@@ -117,20 +117,21 @@ goodS prop' = do b <- foldM (helper) S.sTrue prop'
 -- run with stack bench --profile vsat:auto --benchmark-arguments='+RTS -S -RTS --output timings.html'
 main = do
   -- readfile is strict
-  -- sJsn <- BS.readFile smAutoFile
-  -- bJsn <- BS.readFile autoFileBool
-  -- let (Just sAuto) = decodeStrict sJsn :: Maybe Auto
-  -- let (Just bAuto) = decodeStrict bJsn :: Maybe Auto
-  --     !sCs = constraints sAuto -- looks like 4298/4299 are the culprits
-  --     !bCs = constraints bAuto
-  --     sPs' = parse langParser "" <$> sCs
-  --     sPs = rights sPs'
+  sJsn <- BS.readFile smAutoFile
+  bJsn <- BS.readFile autoFileBool
+  let (Just sAuto) = decodeStrict sJsn :: Maybe Auto
+  let (Just bAuto) = decodeStrict bJsn :: Maybe Auto
+      !sCs = constraints sAuto -- looks like 4298/4299 are the culprits
+      !bCs = constraints bAuto
+      sPs' = parse langParser "" <$> sCs
+      sPs = rights sPs'
 
-  --     bPs' = parse langParser "" <$> bCs
-  --     bPs = rights bPs'
+      bPs' = parse langParser "" <$> bCs
+      bPs = rights bPs'
 
-  --     !sProp = (naiveEncode . nestChoices . autoToVSat) $ autoAndJoin sPs
-  --     !bProp = (naiveEncode . nestChoices . autoToVSat) $ autoAndJoin (take 325 bPs)
+      !sProp = (naiveEncode . nestChoices . autoToVSat) $ autoAndJoin sPs
+      !bProp = (naiveEncode . nestChoices . autoToVSat) $
+               autoAndJoin (take 325 bPs)
 
   -- res <- satWith emptyConf $! bProp
   -- res' <- runIncrementalSolve bPs
@@ -146,28 +147,10 @@ main = do
   -- putStrLn "Running Good:\n"
   -- goodRes <- testS goodS 1000
 
-  putStrLn "Running Bad:\n"
-  badRes <- testS badS 1000
-
-  -- just ensuring evaluation
-  -- writeFile "goodRes" (show goodRes)
-  writeFile "badres" (show badRes)
-  -- print $ size res
-  -- defaultMainWith critConfig
-  --   [
-  --   bgroup "vsat" [ -- bench "small file" . nfIO $ satWith emptyConf sProp
-  --                 -- bench "large file" . nfIO $ satWith emptyConf bProp
-  --                 -- bench "large file" . whnfIO $ runIncrementalSolve bPs
-  --                 -- bench "2" . nfIO $ test 20
-  --                   bench "good: 10"   . nfIO $ test good 10
-  --                 , bench "good: 100"  . nfIO $ test good 100
-  --                 , bench "good: 1000" . nfIO $ test good 1000
-  --                 , bench "bad: 10"    . nfIO $ test bad 10
-  --                 , bench "bad: 100"   . nfIO $ test bad 100
-  --                 , bench "bad: 1000"  . nfIO $ test bad 1000
-  --                 -- , bench "100" . nfIO $ test 100
-  --                 -- , bench "1000" . nfIO $ test 1000
-  --                 -- , bench "10000" . nfIO $ test 10000
-  --                 -- , bench "20000" . nfIO $ test 20000
-  --                 ]
-  --   ]
+  defaultMainWith critConfig
+    [
+    bgroup "vsat" [ bench "small file" . nfIO $ satWith emptyConf sProp
+                  , bench "large file" . nfIO $ satWith emptyConf bProp
+                 -- bench "large file" . whnfIO $ runIncrementalSolve bPs
+                  ]
+    ]
