@@ -145,6 +145,10 @@ isNormalForm (ChcB _ (LitB _) (LitB _ )) = True
 isNormalForm (ChcB _ (RefB _) (LitB _ )) = True
 isNormalForm (ChcB _ (LitB _) (RefB _ )) = True
 isNormalForm (ChcB _ (RefB _) (RefB _ )) = True
+isNormalForm (ChcB _ (RefB _) (OpBB _ _ _)) = True
+isNormalForm (ChcB _ (OpBB _ _ _) (RefB _)) = True
+isNormalForm (ChcB _ (LitB _) (OpBB _ _ _)) = True
+isNormalForm (ChcB _ (OpBB _ _ _) (LitB _)) = True
 isNormalForm (ChcB _
                (OpIB _ l r)
                (OpIB _ l' r')) = isNormalForm' l && isNormalForm' r &&
@@ -169,24 +173,24 @@ prune :: Ord d => VProp d a b -> VProp d a b
 prune = prune' Map.empty
 
 prune' :: Ord d => Config d -> VProp d a b -> VProp d a b
-prune' tb (ChcB t y n) = case Map.lookup t tb of
-                             Nothing -> ChcB t
-                                        (prune' (Map.insert t True tb) y)
-                                        (prune' (Map.insert t False tb) n)
-                             Just True -> prune' tb y
-                             Just False -> prune' tb n
-prune' tb (OpB op x)  = OpB op $ prune' tb x
-prune' tb (OpBB a l r) = OpBB a (prune' tb l) (prune' tb r)
-prune' tb (OpIB op l r)  = OpIB op (prune'' tb l) (prune'' tb r)
+prune' conf (ChcB d t f) = case Map.lookup d conf of
+                             Nothing -> ChcB d
+                                        (prune' (Map.insert d True  conf) t)
+                                        (prune' (Map.insert d False conf) f)
+                             Just True  -> prune' conf t
+                             Just False -> prune' conf f
+prune' conf (OpB op x)     = OpB op $ prune' conf x
+prune' conf (OpBB a l r)   = OpBB a (prune' conf l) (prune' conf r)
+prune' conf (OpIB op l r)  = OpIB op (prune'' conf l) (prune'' conf r)
 prune' _ nonRecursive = nonRecursive
 
 prune'' :: Ord a => Config a -> VIExpr a b -> VIExpr a b
-prune'' tb (ChcI t y n) = case Map.lookup t tb of
+prune'' conf (ChcI t y n) = case Map.lookup t conf of
                              Nothing -> ChcI t
-                                        (prune'' (Map.insert t True tb) y)
-                                        (prune'' (Map.insert t False tb) n)
-                             Just True -> prune'' tb y
-                             Just False -> prune'' tb n
-prune'' tb (OpI op e) = OpI op $ prune'' tb e
-prune'' tb (OpII op l r) = OpII op (prune'' tb l) (prune'' tb r)
+                                        (prune'' (Map.insert t True conf) y)
+                                        (prune'' (Map.insert t False conf) n)
+                             Just True -> prune'' conf y
+                             Just False -> prune'' conf n
+prune'' conf (OpI op e) = OpI op $ prune'' conf e
+prune'' conf (OpII op l r) = OpII op (prune'' conf l) (prune'' conf r)
 prune'' _ nonRecursive = nonRecursive

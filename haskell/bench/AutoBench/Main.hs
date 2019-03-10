@@ -22,7 +22,7 @@ import           Api
 import           CaseStudy.Auto.Auto
 import           CaseStudy.Auto.Parser   (langParser)
 import           CaseStudy.Auto.Run
-import           Config                  (defConf, emptyConf)
+import           Config
 import           Opts
 import           Run                     (runAD, runBF)
 import           Result
@@ -48,71 +48,7 @@ chAutoFile = "bench/AutoBench/vsat_small_chunk.json"
 
 -- main :: IO (V String (Maybe ThmResult))
 
-critConfig = defaultConfig {resamples = 25}
-
--- | generate an infinite list of unique strings and take n of them dropping the
--- empty string
-stringList :: Int -> [String]
-stringList n = tail . take (n+1) $ concatMap (flip replicateM "abc") [0..]
-
--- | the test running, takes a computation that runs in the query monad and an
--- int that dictates size of the list of sbools
-test :: ([S.SBool] -> SC.Query (Map String Bool)) -> Int -> IO (Map String Bool)
-test f n = S.runSMT $
-           do
-             prop' <- S.sBools $! stringList n
-             SC.query $ f prop'
-
--- | I fold over the string of SBools here constraining at each accumulation,
--- this seems to blow up the internal cache severely leading to about 95% GC
--- time
-bad :: [S.SBool] -> SC.Query (Map String Bool)
-bad prop' = do b <- foldM (helper) S.sTrue prop'
-               S.constrain b
-               fmap (fmap SI.cvToBool) $ S.getModelDictionary <$> SC.getSMTResult
-  -- | combine the current sbool with the accumulated sbool, constrain the
-  -- two and then return the accumulated result
-  where helper x acc = do let b = x S..&& acc
-                          S.constrain b
-                          return b
-
--- | identical to the bad version but I do not constrain for each accumulation
-good :: [S.SBool] -> SC.Query (Map String Bool)
-good prop' = do b <- foldM (helper) S.sTrue prop'
-                S.constrain b
-                fmap (fmap SI.cvToBool) $ S.getModelDictionary <$> SC.getSMTResult
-  -- | this helper is equivalent to just foldr' (S.&&&)
-  where helper x acc = do let b = x S..&& acc
-                          return b
-
-
--- | the test runner, this time f returns a predicate and we have no query
--- | operations whatsoever
-testS :: ([S.SBool] -> S.Predicate) -> Int -> IO S.SatResult
-testS f n = S.sat $ (S.sBools $! stringList n) >>= f
-
-
--- | I fold over the string of SBools here constraining at each accumulation,
--- this seems to blow up the internal cache severely leading to about 95% GC
--- time
-badS :: [S.SBool] -> S.Predicate
-badS prop' = do b <- foldM (helper) S.sTrue prop'
-                S.constrain b
-                return b
-  -- | combine the current sbool with the accumulated sbool, constrain the
-  -- two and then return the accumulated result
-  where helper x acc = do let b = x S..&& acc
-                          S.constrain b
-                          return b
-
--- | identical to the bad version but I do not constrain for each accumulation
-goodS :: [S.SBool] -> S.Predicate
-goodS prop' = do b <- foldM (helper) S.sTrue prop'
-                 S.constrain b
-                 return b
-  -- | this helper is equivalent to just foldr' (S.&&&)
-  where helper x acc = do let b = x S..&& acc
-                          return b
+critConfig = defaultConfig {resamples = 1}
 
 -- run with stack bench --profile vsat:auto --benchmark-arguments='+RTS -S -RTS --output timings.html'
 main = do
@@ -130,15 +66,14 @@ main = do
       bPs = rights bPs'
 
       !sProp = (naiveEncode . nestChoices . autoToVSat) $ autoAndJoin sPs
-      !bProp = (naiveEncode . nestChoices . autoToVSat) $
-               autoAndJoin (take 325 bPs)
+      !bProp = (naiveEncode . nestChoices . autoToVSat) $ autoAndJoin bPs
 
   -- res <- satWith emptyConf $! bProp
   -- res' <- runIncrementalSolve bPs
   -- print sPs
   -- T.writeFile "testoutputSAT" (pack . show $ res)
   -- T.writeFile "testoutputInc" (pack . show $ res')
-  -- print res'
+  -- print res
   -- let !p = prop 6000
   -- print $ length p
   -- -- res <- test 10
@@ -149,8 +84,10 @@ main = do
 
   defaultMainWith critConfig
     [
-    bgroup "vsat" [ bench "small file" . nfIO $ satWith emptyConf sProp
-                  , bench "large file" . nfIO $ satWith emptyConf bProp
+    bgroup "vsat" [ bench "small file:NoOpts"  . nfIO $ satWith emptyConf sProp
+                  , bench "small file:DefOpts" . nfIO $ satWith defConf   sProp
+                  , bench "large file:NoOpts"  . nfIO $ satWith emptyConf bProp
+                  , bench "large file:DefOpts" . nfIO $ satWith defConf   bProp
                  -- bench "large file" . whnfIO $ runIncrementalSolve bPs
                   ]
     ]

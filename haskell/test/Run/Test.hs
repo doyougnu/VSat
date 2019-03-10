@@ -12,7 +12,7 @@ import Data.SBV ( SatResult(..)
                 , SMTSolver(..)
                 , Solver(..)
                 , Modelable(..))
-import Data.SBV.Internals (showModel, SMTModel(..), CW)
+import Data.SBV.Internals (showModel, SMTModel(..))
 import Data.SBV           (getModelDictionary)
 import Data.List          (all)
 import Control.Monad.Trans (liftIO)
@@ -71,11 +71,11 @@ unitTests = testGroup "Unit Tests"
   -- , chc_not_singleton_is_sat
   -- , chc_unbalanced_is_sat
   chc_balanced_is_sat
-  -- , chc_2_nested_is_sat
-  -- , bimpl_w_false_is_sat
-  -- , bimpl_w_false_chc_is_sat
-  -- , mixed_and_impl_is_sat
-    -- chces_not_in_model
+  , chc_2_nested_is_sat
+  , bimpl_w_false_is_sat
+  , bimpl_w_false_chc_is_sat
+  , mixed_and_impl_is_sat
+  , chces_not_in_model
   ]
 
 specTests :: TestTree
@@ -107,13 +107,13 @@ vsat_matches_BF_plain = QC.testProperty
   vsat_matches_BF_plain'
 
 
-dim_homo' = H.testCase
-            "dim homomorphism for simplest nested case"
-            dim_homo_unit
+-- dim_homo' = H.testCase
+--             "dim homomorphism for simplest nested case"
+--             dim_homo_unit
 
-dupDimensions = H.testCase
-                 "If we have duplicate dimensions on input, they are merged on output"
-                 dupDimensions'
+-- dupDimensions = H.testCase
+--                  "If we have duplicate dimensions on input, they are merged on output"
+--                  dupDimensions'
 
 andDecomp_terminatesSh = QC.testProperty
                          "And decomp terminates with shared generated props"
@@ -262,28 +262,28 @@ dim_homomorphism x = onlyInts x QC.==> QCM.monadicIO
 
        QCM.assert (length (dimensions x) == length (getProp $ getResSat a))
 
-dim_homo_unit = do a <- satWith emptyConf prop
-                   let numDimsAfter = length $ dimensions (getProp $ getResSat a)
-                       numDimsBefore = length $ dimensions prop
-                   print prop
-                   print a
+-- dim_homo_unit = do a <- satWith emptyConf prop
+--                    let numDimsAfter = length $ dimensions (getProp $ getResSat a)
+--                        numDimsBefore = length $ dimensions prop
+--                    print prop
+--                    print a
 
-                   H.assertBool "" (numDimsBefore == numDimsAfter)
-  where prop :: VProp Var Var Var
-        prop = (ChcB "AA" (bRef "x") (bRef "y")) ==> (ChcB "DD" true false)
+--                    H.assertBool "" (numDimsBefore == numDimsAfter)
+--   where prop :: VProp Var Var Var
+--         prop = (ChcB "AA" (bRef "x") (bRef "y")) ==> (ChcB "DD" true false)
 
 
-dupDimensions' = do a <- satWith emptyConf prop
-                    let numDimsAfter = length $ bvars $ getProp $ lookupRes_ "__SAT" a
-                        numDimsBefore = length $ dimensions prop
+-- dupDimensions' = do a <- satWith emptyConf prop
+--                     let numDimsAfter = length $ bvars $ getProp $ lookupRes_ "__SAT" a
+--                         numDimsBefore = length $ dimensions prop
 
-                    -- print numDimsBefore
-                    -- print numDimsAfter
-                    print prop
-                    print a
-                    H.assertBool "" (numDimsBefore >= numDimsAfter)
-  where prop :: VProp Var Var Var
-        prop = (ChcB "AA" (bRef "x") (bRef "y")) &&& ((bRef "z") ==> (ChcB "AA" true false))
+--                     -- print numDimsBefore
+--                     -- print numDimsAfter
+--                     print prop
+--                     print a
+--                     H.assertBool "" (numDimsBefore >= numDimsAfter)
+--   where prop :: VProp Var Var Var
+--         prop = (ChcB "AA" (bRef "x") (bRef "y")) &&& ((bRef "z") ==> (ChcB "AA" true false))
         -- prop = (ChcB "AA" (bRef "x") (bRef "y")) &&& (ChcB "AA" true false)
 
 sat_error_unit = do a <- sat prop
