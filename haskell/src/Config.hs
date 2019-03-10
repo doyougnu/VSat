@@ -9,12 +9,12 @@ import VProp.Types
 import Opts
 
 data Settings = Settings { solver :: Solver
-                         , optimizations :: [Opts]
+                         , optimizations :: ![Opts]
                          , seed :: Maybe Integer
                          } deriving (Show,Generic)
 
-data SMTConf d a b = SMTConf { conf :: SMTConfig
-                             , opts :: [VProp d a b -> VProp d a b]
+data SMTConf d a b = SMTConf { conf :: !SMTConfig
+                             , opts :: ![VProp d a b -> VProp d a b]
                              }
 
 data Solver = Z3
@@ -27,22 +27,22 @@ data Solver = Z3
 
 -- | Convert an interfacial interface to an SMT one
 toConf :: (Show a,Show d,Show b,Ord a,Ord b,Ord d) => Settings -> SMTConf d a b
-toConf Settings{..} = foldr' ($!) emptyConf ss
+toConf Settings{..} = foldr' ($) emptyConf ss
   where ss = [setSeed seed, setSolver solver, setOpts optimizations]
 
 -- | A default configuration uses z3 and tries to shrink propositions
 defSettings :: Settings
 defSettings = Settings{solver=Z3, optimizations=defs, seed=Nothing}
-  where defs = [MoveLeft, Atomize, Prune]
+  where defs = [Prune, Atomize, MoveRight]
 
 -- moveRight required for proper results
 minSettings :: Settings
 minSettings = Settings{solver=Z3, optimizations=defs, seed=Nothing}
-  where defs = [MoveLeft]
+  where defs = [MoveRight]
 
 allOptsSettings :: Settings
 allOptsSettings = Settings{ solver=Z3
-                          , optimizations=[MoveRight,Atomize,Prune,Shrink]
+                          , optimizations=[Atomize,Prune,Shrink,MoveRight]
                           , seed=Nothing}
 
 debugSettings :: Settings

@@ -1,10 +1,18 @@
 flags: {}
 packages:
   - '.'
-  - /home/doyougnu/Research/VSat/haskell/lib/sbv
+  # - /home/doyougnu/Research/VSat/haskell/lib/sbv
 # system-ghc: false
 extra-deps:
   - genifunctors-0.4
+  - sbv-8.0
+  # spock dependencies
+  # - Spock-0.13.0.0
+  # - Spock-core-0.13.0.0
+  # - reroute-0.5.0.0
+  # - stm-containers-1.1.0.2
+  # - stm-hamt-1.2.0.2
+  # - primitive-extras-0.7.1
 
 ## uncomment the following lines to tell stack you are in a nix environment
 nix:
@@ -14,14 +22,14 @@ nix:
 
 # resolver: lts-11.22
 resolver: lts-12.25
-# resolver: lts-13.0 -- for deriving via
+# resolver: lts-13.10
 
 build:
-  library-profiling: true
-  executable-profiling: true
+  library-profiling: false
+  executable-profiling: false
 
-extra-lib-dirs:
-  - /home/doyougnu/Research/VSat/haskell/lib/
+# extra-lib-dirs:
+#   - /home/doyougnu/Research/VSat/haskell/lib/
 
 
 # allow-newer: true
