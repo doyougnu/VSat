@@ -76,7 +76,7 @@ benchmarks:
   gen:
     main:                Main.hs
     source-dirs:
-      - bench
+      - bench/Gen
       - src
     ghc-options:
     - -O2

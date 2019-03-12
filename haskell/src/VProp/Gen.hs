@@ -3,22 +3,39 @@ module VProp.Gen where
 import qualified Control.Arrow         as A ((&&&))
 import           Control.Monad         (liftM2, liftM3)
 import           Prelude               hiding (EQ, GT, LT)
-import           Test.Tasty.QuickCheck (Arbitrary, Gen, arbitrary,
+import           Test.Tasty.QuickCheck (Arbitrary(..), Gen, arbitrary,
                                         arbitrarySizedIntegral, elements,
                                         frequency, generate, listOf, oneof,
-                                        resize, sized, suchThat)
+                                        resize, sized, suchThat, genericShrink)
 
-import           VProp.Core            (maxShared, noDupRefs, onlyBools)
+import           VProp.Core            (maxShared, noDupRefs, onlyBools, numVars)
 import           Data.Text             (Text, pack, toUpper, singleton)
 import           VProp.Types
 
 type ReadableProp = VProp Var Var Var
+type ReadableExpr = VIExpr Var Var
 
 instance Arbitrary Var where arbitrary = Var <$> genAlphaNumStr
+instance Arbitrary NPrim where arbitrary = genPrim
+instance Arbitrary RefN where arbitrary  = genRefN
+instance Arbitrary N_N where arbitrary   = genN_N
+instance Arbitrary NN_N where arbitrary  = genNN_N
+instance Arbitrary B_B where arbitrary   = genB_B
+instance Arbitrary BB_B where arbitrary  = genBB_B
+instance Arbitrary NN_B where arbitrary  = genNN_B
+
+instance Arbitrary ReadableExpr where
+  arbitrary = sized $ arbVIExpr genSharedDim arbitrary (repeat 3)
+  shrink = genericShrink
 
 -- | arbritrary instance for the generator monad
 instance Arbitrary ReadableProp where
   arbitrary = sized $ arbVProp genSharedDim arbitrary (repeat 3, repeat 3)
+  shrink (ChcB _ l r) = [l, r]
+  shrink (OpIB _ _ _) = []
+  shrink (OpBB _ l r) = [l, r]
+  shrink (OpB _ r)    = pure r
+  shrink x            = pure x
 
 -- | Generate only alphabetical characters
 genAlphaNum :: Gen Text
@@ -202,16 +219,19 @@ vPropShareIntOnly xs = sized g
 genVProp :: IO ReadableProp
 genVProp = generate arbitrary
 
+genReadable :: Gen ReadableProp
+genReadable = arbitrary
+
 -- | run With $ x <- generate . genBoolProp $ vPropNoShare (repeat 30)
 genBoolProp :: (Arbitrary a) => Gen (VProp d a a) -> Gen (VProp d a a)
 genBoolProp = flip suchThat onlyBools
 
 genVPropAtSize :: (Arbitrary a, Arbitrary b) =>
-  Int -> Gen (VProp d a b) -> Gen (VProp d a b)
-genVPropAtSize = resize
+  Integer -> Gen (VProp d a b) -> Gen (VProp d a b)
+genVPropAtSize n = flip suchThat $ (==n) . numVars
 
 genVPropAtShare :: Int -> Gen ReadableProp -> Gen ReadableProp
-genVPropAtShare n = flip suchThat $ (==n) . maxShared
+genVPropAtShare n = flip suchThat $ (>=n) . maxShared
 
 genVPropAtSizeIntOnly :: (Arbitrary a, Arbitrary b) =>
   Int -> Gen (VProp d a b) -> Gen (VProp d a b)
