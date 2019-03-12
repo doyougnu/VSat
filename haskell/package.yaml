@@ -73,8 +73,8 @@ executables:
     - vsat
 
 benchmarks:
-  sbv460-bench:
-    main:                Baselines.hs
+  gen:
+    main:                Main.hs
     source-dirs:
       - bench
       - src
@@ -83,6 +83,9 @@ benchmarks:
     - -threaded
     - -rtsopts
     - -with-rtsopts=-N
+    dependencies:
+    - criterion
+    - vsat
 
   auto:
     main:                Main.hs
