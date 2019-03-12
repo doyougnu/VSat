@@ -165,7 +165,13 @@ toList prop = go prop []
     go a acc              = a:acc
 
 numTerms :: VProp d a b -> Integer
-numTerms = toInteger. length . toList
+numTerms = getSum . trifoldMap f f f
+  where f = const 1
+
+
+numVars :: VProp d a b -> Integer
+numVars = getSum . trifoldMap (const 0) f f
+  where f = const 1
 
 -- | Count the choices in a tree
 numChc :: VProp d a b -> Integer
