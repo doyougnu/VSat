@@ -150,7 +150,7 @@ insertToResult = insertWith (<>)
 
 -- | O(1) insert a result prop into the result entry for special Sat variable
 insertToSat :: Resultable d => ResultProp d -> Result d -> Result d
-insertToSat = insertToResult "__Sat"
+insertToSat = insertWith (|||) "__Sat"
 
 -- | O(log n) given a key lookup the result prop
 lookupRes :: (Eq d, Ord d) => d -> Result d -> ResultProp d
