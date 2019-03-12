@@ -58,7 +58,7 @@ data Ctx d a b = InBBL BB_B  !(Ctx d a b) !(VProp d a b)
                deriving Show
 
 -- | a strict tuple type
-data Loc d a b = Loc !(VProp d a b) !(Ctx d a b)
+data Loc d a b = Loc !(VProp d a b) !(Ctx d a b) deriving Show
 
 mkLoc (x, y) = Loc x y
 
@@ -224,7 +224,6 @@ type IncVSMTSolve d = St.StateT (IncState d) SC.Query
 vSMTSolve :: (Ord d, Show d, Resultable d) =>
   S.Symbolic (VProp d S.SBool SNum) -> S.Symbolic (Result d)
 vSMTSolve prop = do prop' <- prop
-                    S.setOption $ SC.ProduceAssignments True
                     SC.query $
                       do
                       (b,resSt) <- St.runStateT (vSMTSolve_ prop') emptySt
@@ -322,88 +321,71 @@ isDimProcessed d = get >>= return . inProcDims d
 setDimProcessed :: Ord d => Dim d -> IncVSMTSolve d ()
 setDimProcessed = St.modify' . onProcDims . S.insert
 
-handleChc :: (Ord d, Boolean b, Resultable d, Show d) =>
-  StateT (IncState d) SC.Query S.SBool ->
-  StateT (IncState d) SC.Query S.SBool ->
-  StateT (IncState d) SC.Query b      ->
-  StateT (IncState d) SC.Query b      ->
-  VProp d a c                         ->
-  StateT (IncState d) SC.Query b
-handleChc goLeft goRight defL defR (ChcB d _ _) =
+-- handleChc :: (Ord d, Boolean b, Resultable d, Show d) =>
+--   StateT (IncState d) SC.Query S.SBool ->
+--   StateT (IncState d) SC.Query S.SBool ->
+--   StateT (IncState d) SC.Query b      ->
+--   StateT (IncState d) SC.Query b      ->
+--   VProp d a c                         ->
+--   StateT (IncState d) SC.Query b
+handleChc goLeft goRight d =
   do st <- get
      let cfg = config st
-     b <- isDimProcessed d
-     if (not b)
-       then do
-       case M.lookup d cfg of
-         Just True  -> defL
-         Just False -> defR
-         Nothing    -> do
-                          let
-                            -- a prop that represents the current context
-                            !usedProp = configToResultProp cfg
-                            -- a prop that is sat with the current dim being true
-                            !trueProp = dimToVar d <:& usedProp
+     case M.lookup d cfg of
+       Just True  -> goLeft
+       Just False -> goRight
+       Nothing    -> do
+                        b <- isDimProcessed d
+                        if b
+                          then return true
+                          else
+                          do
+                            let
+                              -- a prop that represents the current context
+                              !usedProp = configToResultProp cfg
+
+                              -- a prop that is sat with the current dim being true
+                              !trueProp = dimToVar d <:& usedProp
+
                             -- a prop that is sat with the current dim being false
-                            !falseProp = bnot ( dimToVar d) <:& usedProp
+                              !falseProp = bnot ( dimToVar d) <:& usedProp
 
-                            -- TODO wrap into the Result module and hardcode
-                            dispatchProp :: ResultProp d -> Bool -> ResultProp d
-                            dispatchProp !p !x = if x
-                                                 then p
-                                                 else negateResultProp p
+                              -- TODO wrap into the Result module and hardcode
+                              dispatchProp :: ResultProp d -> Bool -> ResultProp d
+                              dispatchProp !p !x = if x
+                                                   then p
+                                                   else negateResultProp p
 
-                          -- the true variant
-                          setDim d True
-                          lift $! SC.push 1
-                          goLeft >>= (force S.constrain)
-                          bt <- lift isSat
-                          when bt $ St.modify' (onResult $ insertToSat trueProp)
-                          resMapT <- lift $ getResult (dispatchProp trueProp)
-                          lift $! SC.pop 1
+                            i <- lift $ SC.getAssertionStackDepth
+                            lift $ SC.io
+                              $ putStrLn $ "Assertion stack depth: " ++ show i
 
-                          -- false variant
-                          setDim d False
-                          lift $! SC.push 1
-                          goRight >>= (force S.constrain)
-                          bf <- lift isSat
-                          when bf $ St.modify' (onResult $ insertToSat falseProp)
-                          resMapF <- lift $ getResult (dispatchProp falseProp)
-                          lift $! SC.pop 1
+                            -- the true variant
+                            setDim d True
+                            setDimProcessed d
+                            lift $! SC.push 1
+                            goLeft >>= S.constrain
+                            bt <- lift isSat
+                            when bt $ St.modify' (onResult $ insertToSat trueProp)
+                            resMapT <- lift $ getResult (dispatchProp trueProp)
+                            lift $! SC.pop 1
 
-                          store $! resMapT <> resMapF
-                          removeDim d
-                          setDimProcessed d
+                            -- false variant
+                            setDim d False
+                            lift $! SC.push 1
+                            goRight >>= S.constrain
+                            bf <- lift isSat
+                            when bf $ St.modify' (onResult $ insertToSat falseProp)
+                            resMapF <- lift $ getResult (dispatchProp falseProp)
+                            lift $! SC.pop 1
+
+                            -- store results and cleanup config
+                            store $! resMapT <> resMapF
+                            removeDim d
+
        -- this return statement should never matter because we've reset the
        -- assertion stack. So I just return true here to fulfill the type
-                          return true
-       else return true
-handleChc _ _ _ _ _ =
-  error "[ERR] This function should only ever be called on a choice constructor"
-
--- | Abstracts out the choice handling for use in handling contexts.
-handleChcCtx :: (Show d, Ord d, Resultable d) =>
-  Loc d S.SBool SNum ->
-  Loc d S.SBool SNum ->
-  VProp d b c        ->
-  IncVSMTSolve d S.SBool
-handleChcCtx goLeft goRight c = handleChc
-  (handleCtx goLeft) (handleCtx goRight)
-  (handleCtx goLeft) (handleCtx goRight) c
-
--- | abstracts out the choice handling for use in the vSMTsolve function.
--- Purposefully a partial function
-handleChcVSMT :: (Show d, Ord d, Resultable d) =>
-  VProp d S.SBool SNum ->
-  VProp d S.SBool SNum ->
-  VProp d S.SBool SNum ->
-  IncVSMTSolve d S.SBool
-handleChcVSMT goLeft goRight c@(ChcB _ l r) =
-  handleChc
-  (vSMTSolve_ goLeft) (vSMTSolve_ goRight)
-  (vSMTSolve_ l) (vSMTSolve_ r) c
-handleChcVSMT _      _       _  =
-  error "[ERR] this should only be called on a choice constructor"
+                            return true
 
 -- | Handle a choice in the IncVSMTSolve monad, we check to make sure that if a
 -- choice is already selected then the selection is maintained. If not then we
@@ -444,22 +426,58 @@ handleCtx (Loc (RefB b) (InB _ ctx)) = handleCtx $! mkLoc (RefB $ bnot b, ctx)
   -- parent context with the new accumulator being the result of computing the
   -- left side
 handleCtx (Loc (RefB b) (InBBR op acc (InBBL op' ctx r))) =
-  (handleCtx $! mkLoc (r , InBBR op' newAcc ctx))
+  do (handleCtx $! mkLoc (r , InBBR op' newAcc ctx))
   where !newAcc = bDispatch op acc b
   -- if we have two rhs contexts then we abuse the focus to
 handleCtx (Loc (RefB b) (InBBR op acc ctx)) =
-  (handleCtx $! mkLoc (RefB newAcc, ctx))
+  do (handleCtx $! mkLoc (RefB newAcc, ctx))
   where !newAcc = bDispatch op acc b
 handleCtx (Loc (LitB b) (InBBR op acc ctx)) =
   -- we wrap in RefB just to get the types to work out
-  (handleCtx $! mkLoc (RefB newAcc, ctx))
+  do (handleCtx $! mkLoc (RefB newAcc, ctx))
   where !newAcc = bDispatch op acc (S.literal b)
-handleCtx (Loc fcs (InB _ (InB _ ctx))) = handleCtx $! mkLoc (fcs, ctx)
+
+  -- reduce double negations
+handleCtx (Loc fcs (InB Not (InB Not ctx))) = handleCtx $! mkLoc (fcs, ctx)
+  -- accumulate a negation
+handleCtx (Loc fcs (InB Not (InBBR op acc ctx))) =
+  handleCtx $! mkLoc (fcs, (InBBR op (bnot acc) ctx))
 
   -- when we see a choice we describe the computations for each variant and
   -- offload it to a handler function that manipulates the sbv assertion stack
-handleCtx (Loc c@(ChcB _ l r) ctx) =
-  handleChcCtx goLeft goRight c
+handleCtx (Loc (ChcB d l r) ctx@(InBBR _ acc _)) =
+  do
+    -- push onto assertion stack
+    lift $! SC.push 1
+    -- constrain current accumulator
+    S.constrain acc
+    handleChc (handleCtx goLeft) (handleCtx goRight) d
+  where !goLeft  = mkLoc (l, ctx)
+        !goRight = mkLoc (r, ctx)
+
+  -- this handles the case when the accumulator is one parent node away
+handleCtx (Loc (ChcB d l r) ctx@(InBBL _ (InBBR _ acc _) _)) =
+  do
+    -- push onto assertion stack
+    lift $! SC.push 1
+    -- constrain current accumulator
+    S.constrain acc
+    handleChc (handleCtx goLeft) (handleCtx goRight) d
+  where !goLeft  = mkLoc (l, ctx)
+        !goRight = mkLoc (r, ctx)
+
+  -- When we observe the special case of a choice wrapped in a not we
+  -- distribute the not into the variants. This makes the zipper semantics
+  -- much easier because we don't have a clean way to negate the previous
+  -- accumulator in the zipper. Also such a negation would be an O(i) operation
+  -- in a hot loop. Best to avoid
+handleCtx (Loc (ChcB d l r) (InB Not ctx)) =
+    handleCtx $! Loc (ChcB d (bnot l) (bnot r)) ctx
+
+  -- If we see a choice with any other context then the ctx is either empty
+  -- or the choice is in the leftmost position of the ast
+handleCtx (Loc (ChcB d l r) ctx) =
+    handleChc (handleCtx goLeft) (handleCtx goRight) d
   where !goLeft  = mkLoc (l, ctx)
         !goRight = mkLoc (r, ctx)
 
@@ -477,12 +495,9 @@ vSMTSolve_ :: (Ord d, Show d, Resultable d) =>
   VProp d S.SBool SNum -> IncVSMTSolve d S.SBool
 vSMTSolve_ (RefB b) = return b
 vSMTSolve_ (LitB b) = return $! S.literal b
-vSMTSolve_ (OpB Not c@(ChcB _ l r)) = handleChcVSMT goLeft goRight c
-  where !goLeft = OpB Not l
-        !goRight = OpB Not r
 vSMTSolve_ (OpB Not (OpB Not notchc)) = vSMTSolve_ notchc
-vSMTSolve_ (OpB Not notchc) = bnot <$> vSMTSolve_ notchc
-vSMTSolve_ (OpBB op l r) = handleCtx $ Loc l $ InBBL op Empty r
+vSMTSolve_ (OpB Not e) = handleCtx   . Loc e $! InB Not Empty
+vSMTSolve_ (OpBB op l r) = handleCtx . Loc l $! InBBL op Empty r
 vSMTSolve_ (OpIB _ _ _) = error "Blame Jeff! This isn't implemented yet!"
 -- vSMTSolve_ !(OpIB op l r) = do l' <- vSMTSolve'_ l
 --                                r' <- vSMTSolve'_ r
@@ -496,4 +511,4 @@ vSMTSolve_ (OpIB _ _ _) = error "Blame Jeff! This isn't implemented yet!"
 --         handler GT  = (.>)
 --         handler EQ  = (.==)
 --         handler NEQ = (./=)
-vSMTSolve_ c@(ChcB _ l r) = handleChcVSMT l r c
+vSMTSolve_ c@(ChcB _ _ _) = handleCtx $! Loc c Empty

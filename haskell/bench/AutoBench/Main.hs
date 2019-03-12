@@ -3,8 +3,9 @@ import           Criterion.Main
 import           Criterion.Main.Options
 import           Criterion.Types         (Config (..))
 import           Data.Aeson              (decodeStrict)
-import           Control.Monad           (replicateM, foldM)
+import           Control.Monad           (replicateM, foldM, liftM2)
 import           Data.Bifunctor          (bimap)
+import           Data.Bitraversable      (bimapM)
 import qualified Data.ByteString         as BS (readFile)
 import           Data.Either             (lefts, rights)
 import           Data.Foldable           (foldr')
@@ -48,7 +49,12 @@ chAutoFile = "bench/AutoBench/vsat_small_chunk.json"
 
 -- main :: IO (V String (Maybe ThmResult))
 
-critConfig = defaultConfig {resamples = 1}
+critConfig = defaultConfig {resamples = 2}
+
+-- | generate an infinite list of unique strings and take n of them dropping the
+-- empty string
+stringList :: Int -> [String]
+stringList n = tail . take (n+1) $ concatMap (flip replicateM "abc") [0..]
 
 -- run with stack bench --profile vsat:auto --benchmark-arguments='+RTS -S -RTS --output timings.html'
 main = do
@@ -68,7 +74,44 @@ main = do
       !sProp = (naiveEncode . nestChoices . autoToVSat) $ autoAndJoin sPs
       !bProp = (naiveEncode . nestChoices . autoToVSat) $ autoAndJoin bPs
 
-  -- res <- satWith emptyConf $! bProp
+      conjoin' = foldr' (&&&) (LitB True)
+      seed = stringList 12
+      seed' = drop 2 seed
+      chcSeed = take 2 seed
+      left  = bRef <$> take 5 seed'
+      right = bRef <$> drop 5 seed'
+      c :: VProp String String String
+      c = OpB Not $ ChcB "AA"
+          (conjoin' $ bRef <$> take 1 chcSeed)
+          (conjoin' $ bRef <$> drop 1 chcSeed)
+      oProp :: VProp String String String
+      oProp = conjoin' $! left ++ right ++ pure c
+      uoProp = conjoin' $! left ++ c:right
+      badProp :: VProp String String String
+      badProp = conjoin' $! c:left ++ right
+
+  -- print $ oProp
+  -- putStrLn "--------------\n"
+  -- print $ uoProp
+  -- print $ oProp
+  -- putStrLn "--------------\n"
+  putStrLn $ "UnOpt'd: " ++ show uoProp
+  putStrLn $ "Opt'd: " ++ show oProp
+  putStrLn $ "bad'd: " ++  show badProp
+  putStrLn "--------------\n"
+  putStrLn "UnOptd"
+  res <- satWith emptyConf $! uoProp
+  putStrLn "--------------\n"
+  putStrLn "Optimized"
+  res' <- satWith emptyConf $! oProp
+  putStrLn "--------------\n"
+  putStrLn "Bad Prop"
+  res'' <- satWith emptyConf $! badProp
+  putStrLn "--------------\n"
+  putStrLn "Results"
+  print $ length $ show res
+  print $ length $ show res'
+  print $ length $ show res''
   -- res' <- runIncrementalSolve bPs
   -- print sPs
   -- T.writeFile "testoutputSAT" (pack . show $ res)
@@ -82,12 +125,18 @@ main = do
   -- putStrLn "Running Good:\n"
   -- goodRes <- testS goodS 1000
 
-  defaultMainWith critConfig
-    [
-    bgroup "vsat" [ bench "small file:NoOpts"  . nfIO $ satWith emptyConf sProp
-                  , bench "small file:DefOpts" . nfIO $ satWith defConf   sProp
-                  , bench "large file:NoOpts"  . nfIO $ satWith emptyConf bProp
-                  , bench "large file:DefOpts" . nfIO $ satWith defConf   bProp
-                 -- bench "large file" . whnfIO $ runIncrementalSolve bPs
-                  ]
-    ]
+  -- defaultMainWith critConfig
+  --   [
+  --   bgroup "vsat" [ -- bench "small file:NoOpts"  . nfIO $ satWith emptyConf sProp
+  --                  --, bench "small file:DefOpts" . nfIO $ satWith defConf   sProp
+  --                   bench "unOpt" . nfIO $ satWith emptyConf uoProp
+  --                 , bench "Opt" . nfIO $ satWith emptyConf oProp
+  --                 , bench "BadOpt" . nfIO $ satWith emptyConf badProp
+  --                 -- , bench "def:unOpt" . nfIO $ satWith defConf uoProp
+  --                 -- , bench "def:Opt" . nfIO $ satWith defConf oProp
+  --                 -- , bench "def:BadOpt" . nfIO $ satWith defConf badProp
+  --                 -- , bench "large file:NoOpts"  . nfIO $ satWith emptyConf bProp
+  --                 -- , bench "large file:DefOpts" . nfIO $ satWith defConf   bProp
+  --                -- bench "large file" . whnfIO $ runIncrementalSolve bPs
+  --                 ]
+  --   ]
