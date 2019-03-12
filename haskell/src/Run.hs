@@ -166,7 +166,8 @@ runVSMTSolve prop =
 type UsedVars a = M.Map a
 
 -- | a set of dimensions that have been processed and have generated models
-type ProcDims a = S.Set (Dim a)
+-- type ProcDims a = S.Set (Dim a)
+type GenModel = Bool
 
 -- | A state monad transformer that holds two usedvar maps, one for booleans and
 -- one for doubles
@@ -180,13 +181,13 @@ type UsedDims a = M.Map a Bool
 -- d
 data IncState d = IncState { result :: Result d         -- * the result map
                            , config :: UsedDims (Dim d) -- * the current config
-                           , procDims :: ProcDims d     -- * a set of dims that
+                           , processed :: GenModel       -- * a set of dims that
                                                         -- have been processed
                                                         -- and generated models
                            } deriving Eq
 
 emptySt :: Ord d => IncState d
-emptySt = IncState{result=mempty,config=mempty,procDims=mempty}
+emptySt = IncState{result=mempty,config=mempty,processed=False}
 
 isEmptySt :: (Eq d, Ord d) => IncState d -> Bool
 isEmptySt = (==) emptySt
@@ -203,15 +204,15 @@ insertToConfig d b = onConfig $ M.insert d b
 deleteFromConfig :: Ord d => (Dim d) -> IncState d -> IncState d
 deleteFromConfig = onConfig . M.delete
 
-inProcDims :: Ord d => Dim d -> IncState d -> Bool
-inProcDims d IncState{..} = S.member d procDims
+-- inProcDims :: Ord d => Dim d -> IncState d -> Bool
+-- inProcDims d IncState{..} = S.member d procDims
 
 
 inConfig :: (MonadState (IncState d) m) => (UsedDims (Dim d) -> Bool) -> m Bool
 inConfig f = get >>= return . f . config
 
-onProcDims :: (ProcDims d -> ProcDims d) -> IncState d -> IncState d
-onProcDims f (IncState {..}) = IncState {procDims=f procDims, ..}
+onProcessed :: (GenModel -> GenModel) -> IncState d -> IncState d
+onProcessed f (IncState {..}) = IncState {processed=f processed, ..}
 
 -- | the incremental solve monad, with the base monad being the query monad so
 -- we can pull out sbv models Hardcoding so that I don't have to write the mtl
@@ -315,11 +316,14 @@ setDim = (St.modify' .) . insertToConfig
 removeDim :: Ord d => (Dim d) -> IncVSMTSolve d ()
 removeDim = St.modify' . deleteFromConfig
 
-isDimProcessed :: Ord d => Dim d -> IncVSMTSolve d Bool
-isDimProcessed d = get >>= return . inProcDims d
+hasGenDModel :: IncVSMTSolve d Bool
+hasGenDModel = gets processed
 
-setDimProcessed :: Ord d => Dim d -> IncVSMTSolve d ()
-setDimProcessed = St.modify' . onProcDims . S.insert
+setModelGenD :: IncVSMTSolve d ()
+setModelGenD = St.modify' $ onProcessed (const True)
+
+setModelNotGenD :: IncVSMTSolve d ()
+setModelNotGenD = St.modify' $ onProcessed (const False)
 
 -- handleChc :: (Ord d, Boolean b, Resultable d, Show d) =>
 --   StateT (IncState d) SC.Query S.SBool ->
@@ -334,54 +338,68 @@ handleChc goLeft goRight d =
      case M.lookup d cfg of
        Just True  -> goLeft
        Just False -> goRight
-       Nothing    -> do
-                        b <- isDimProcessed d
-                        if b
-                          then return true
-                          else
-                          do
-                            let
-                              -- a prop that represents the current context
-                              !usedProp = configToResultProp cfg
+       Nothing    ->
+         do
+           let
+             -- TODO wrap into the Result module and hardcode
+             dispatchProp :: ResultProp d -> Bool -> ResultProp d
+             dispatchProp !p !x = if x
+                                  then p
+                                  else negateResultProp p
 
-                              -- a prop that is sat with the current dim being true
-                              !trueProp = dimToVar d <:& usedProp
+           --------------------- true variant ----------------------------------
+           setDim d True
+           setModelNotGenD
 
-                            -- a prop that is sat with the current dim being false
-                              !falseProp = bnot ( dimToVar d) <:& usedProp
+           -- the recursive computaton
+           lift $! SC.push 1
+           goLeft >>= S.constrain
 
-                              -- TODO wrap into the Result module and hardcode
-                              dispatchProp :: ResultProp d -> Bool -> ResultProp d
-                              dispatchProp !p !x = if x
-                                                   then p
-                                                   else negateResultProp p
+           -- check if the config was satisfiable, and if the recursion
+           -- generated a model
+           bt <- lift isSat
+           bd <- hasGenDModel
 
-                            -- the true variant
-                            setDim d True
-                            setDimProcessed d
-                            lift $! SC.push 1
-                            goLeft >>= S.constrain
-                            bt <- lift isSat
-                            when bt $ St.modify' (onResult $ insertToSat trueProp)
-                            resMapT <- lift $ getResult (dispatchProp trueProp)
-                            lift $! SC.pop 1
+           -- if satisfiable, and has not generated a model, then construct a
+           -- result
+           resMapT <- if (bt && not bd)
+                      then do trueProp <- gets (configToResultProp . config)
+                              St.modify' (onResult $ insertToSat trueProp)
+                              setModelGenD
+                              lift $ getResult (dispatchProp trueProp)
+                      else -- not sat or have gen'd a model so ignore
+                        return mempty
 
-                            -- false variant
-                            setDim d False
-                            lift $! SC.push 1
-                            goRight >>= S.constrain
-                            bf <- lift isSat
-                            when bf $ St.modify' (onResult $ insertToSat falseProp)
-                            resMapF <- lift $ getResult (dispatchProp falseProp)
-                            lift $! SC.pop 1
+           -- reset stack
+           lift $! SC.pop 1
 
-                            -- store results and cleanup config
-                            store $! resMapT <> resMapF
-                            removeDim d
+           -------------------- false variant ----------------------------------
+           setDim d False
+           setModelNotGenD
+
+           lift $! SC.push 1
+           goRight >>= S.constrain
+
+           bf <- lift isSat
+           bdf <- hasGenDModel
+
+           resMapF <- if (bf && not bdf)
+                      then do falseProp <- gets (configToResultProp . config)
+                              St.modify' (onResult $ insertToSat falseProp)
+                              setModelGenD
+                              lift $ getResult (dispatchProp falseProp)
+                      else
+                        return mempty
+
+           lift $! SC.pop 1
+
+           -- store results and cleanup config
+           store $! resMapT <> resMapF
+           removeDim d
 
        -- this return statement should never matter because we've reset the
        -- assertion stack. So I just return true here to fulfill the type
-                            return true
+           return true
 
 -- | Handle a choice in the IncVSMTSolve monad, we check to make sure that if a
 -- choice is already selected then the selection is maintained. If not then we
