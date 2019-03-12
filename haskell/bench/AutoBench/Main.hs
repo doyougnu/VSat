@@ -1,3 +1,5 @@
+module AutoBench.Main where
+
 import           Control.Arrow           (first, second)
 import           Criterion.Main
 import           Criterion.Main.Options

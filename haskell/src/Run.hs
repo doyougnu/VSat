@@ -356,10 +356,6 @@ handleChc goLeft goRight d =
                                                    then p
                                                    else negateResultProp p
 
-                            i <- lift $ SC.getAssertionStackDepth
-                            lift $ SC.io
-                              $ putStrLn $ "Assertion stack depth: " ++ show i
-
                             -- the true variant
                             setDim d True
                             setDimProcessed d
@@ -447,7 +443,9 @@ handleCtx (Loc fcs (InB Not (InBBR op acc ctx))) =
   -- offload it to a handler function that manipulates the sbv assertion stack
 handleCtx (Loc (ChcB d l r) ctx@(InBBR _ acc _)) =
   do
-    -- push onto assertion stack
+    -- we push onto the assertion and constrain to capture the solver state
+    -- before processing the choice. This allows us to cache the state before
+    -- the choice
     lift $! SC.push 1
     -- constrain current accumulator
     S.constrain acc
