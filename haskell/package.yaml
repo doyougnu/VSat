@@ -58,6 +58,7 @@ default-extensions:
   - MultiParamTypeClasses
   - RecordWildCards
   - TemplateHaskell
+  - ViewPatterns
 
 executables:
   vsat:

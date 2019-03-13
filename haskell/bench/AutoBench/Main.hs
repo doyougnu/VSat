@@ -125,18 +125,12 @@ main = do
   -- putStrLn "Running Good:\n"
   -- goodRes <- testS goodS 1000
 
-  -- defaultMainWith critConfig
-  --   [
-  --   bgroup "vsat" [ -- bench "small file:NoOpts"  . nfIO $ satWith emptyConf sProp
-  --                  --, bench "small file:DefOpts" . nfIO $ satWith defConf   sProp
-  --                   bench "unOpt" . nfIO $ satWith emptyConf uoProp
-  --                 , bench "Opt" . nfIO $ satWith emptyConf oProp
-  --                 , bench "BadOpt" . nfIO $ satWith emptyConf badProp
-  --                 -- , bench "def:unOpt" . nfIO $ satWith defConf uoProp
-  --                 -- , bench "def:Opt" . nfIO $ satWith defConf oProp
-  --                 -- , bench "def:BadOpt" . nfIO $ satWith defConf badProp
-  --                 -- , bench "large file:NoOpts"  . nfIO $ satWith emptyConf bProp
-  --                 -- , bench "large file:DefOpts" . nfIO $ satWith defConf   bProp
-  --                -- bench "large file" . whnfIO $ runIncrementalSolve bPs
-  --                 ]
-  --   ]
+  defaultMainWith critConfig
+    [
+    bgroup "vsat" [  bench "small file:NoOpts"  . nfIO $ satWith emptyConf sProp
+                   , bench "small file:DefOpts" . nfIO $ satWith defConf   sProp
+                   , bench "large file:NoOpts"  . nfIO $ satWith emptyConf bProp
+                   , bench "large file:DefOpts" . nfIO $ satWith defConf   bProp
+                 -- bench "large file" . whnfIO $ runIncrementalSolve bPs
+                  ]
+    ]
