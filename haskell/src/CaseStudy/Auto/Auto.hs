@@ -236,3 +236,25 @@ autoAndJoin = fromList $ BBinary And
 
 autoLength :: AutoLang a b -> Int
 autoLength = getSum . bifoldMap (Sum . const 1) (Sum . const 1)
+
+vPropToAuto :: V.VProp a a a -> AutoLang a a
+vPropToAuto (V.LitB b) = AutoLit b
+vPropToAuto (V.RefB r) = AutoRef r
+vPropToAuto (V.OpB V.Not e) = AutoNot $ vPropToAuto e
+vPropToAuto (V.OpBB op l r) =
+  BBinary (rdispatch op) (vPropToAuto l) (vPropToAuto r)
+vPropToAuto (V.ChcB d l _) = (BBinary Impl
+                              (RBinary LSTE
+                                (ACtx (AVar (V.dimName d)))
+                                (ALit 0)) (vPropToAuto l))
+
+rdispatch :: V.BB_B -> BOp
+rdispatch V.And    = And
+rdispatch V.Or     = Or
+rdispatch V.Impl   = Impl
+rdispatch V.BiImpl = Eqv
+rdispatch V.XOr    = Xor
+
+breakOnAnd :: AutoLang a a -> [AutoLang a a]
+breakOnAnd (BBinary And l r) = Prelude.concat [breakOnAnd l, breakOnAnd r]
+breakOnAnd x = [x]

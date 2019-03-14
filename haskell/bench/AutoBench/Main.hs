@@ -74,49 +74,11 @@ main = do
       !sProp = (naiveEncode . nestChoices . autoToVSat) $ autoAndJoin sPs
       !bProp = (naiveEncode . nestChoices . autoToVSat) $ autoAndJoin bPs
 
-      conjoin' = foldr' (&&&) (LitB True)
-      seed = stringList 12
-      seed' = drop 2 seed
-      chcSeed = take 2 seed
-      left  = bRef <$> take 5 seed'
-      right = bRef <$> drop 5 seed'
-      c :: VProp String String String
-      c = OpB Not $ ChcB "AA"
-          (conjoin' $ bRef <$> take 1 chcSeed)
-          (conjoin' $ bRef <$> drop 1 chcSeed)
-      oProp :: VProp String String String
-      oProp = conjoin' $! left ++ right ++ pure c
-      uoProp = conjoin' $! left ++ c:right
-      badProp :: VProp String String String
-      badProp = conjoin' $! c:left ++ right
-
-  -- print $ oProp
-  -- putStrLn "--------------\n"
-  -- print $ uoProp
-  -- print $ oProp
-  -- putStrLn "--------------\n"
-  putStrLn $ "UnOpt'd: " ++ show uoProp
-  putStrLn $ "Opt'd: " ++ show oProp
-  putStrLn $ "bad'd: " ++  show badProp
-  putStrLn "--------------\n"
-  putStrLn "UnOptd"
-  res <- satWith emptyConf $! uoProp
-  putStrLn "--------------\n"
-  putStrLn "Optimized"
-  res' <- satWith emptyConf $! oProp
-  putStrLn "--------------\n"
-  putStrLn "Bad Prop"
-  res'' <- satWith emptyConf $! badProp
-  putStrLn "--------------\n"
-  putStrLn "Results"
-  print $ length $ show res
-  print $ length $ show res'
-  print $ length $ show res''
-  -- res' <- runIncrementalSolve bPs
+  -- res' <- runIncrementalSolve sPs
   -- print sPs
   -- T.writeFile "testoutputSAT" (pack . show $ res)
   -- T.writeFile "testoutputInc" (pack . show $ res')
-  -- print res
+  -- print res'
   -- let !p = prop 6000
   -- print $ length p
   -- -- res <- test 10
@@ -125,12 +87,12 @@ main = do
   -- putStrLn "Running Good:\n"
   -- goodRes <- testS goodS 1000
 
-  defaultMainWith critConfig
+  defaultMain
     [
-    bgroup "vsat" [  bench "small file:NoOpts"  . nfIO $ satWith emptyConf sProp
-                   , bench "small file:DefOpts" . nfIO $ satWith defConf   sProp
-                   , bench "large file:NoOpts"  . nfIO $ satWith emptyConf bProp
-                   , bench "large file:DefOpts" . nfIO $ satWith defConf   bProp
-                 -- bench "large file" . whnfIO $ runIncrementalSolve bPs
+    bgroup "vsat" [  -- bench "small file:NoOpts"  . nfIO $ satWith emptyConf sProp
+                   --  bench "small file:DefOpts" . nfIO $ satWith defConf   sProp
+                     bench "Auto:VSolve:NoOpts"  . nfIO $ satWith emptyConf bProp
+                   , bench "Auto:VSolve:DefOpts" . nfIO $ satWith defConf   bProp
+                   , bench "Auto:IncrementalBaseline" . nfIO $ runIncrementalSolve bPs
                   ]
     ]
