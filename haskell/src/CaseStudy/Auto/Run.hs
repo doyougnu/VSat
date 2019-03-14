@@ -2,7 +2,7 @@ module CaseStudy.Auto.Run where
 
 import           Data.SBV
 import           Data.SBV.Control
-import           Control.Arrow (first)
+import           Control.Arrow (first,second)
 import           Data.String (IsString)
 import           Data.List (sort, groupBy)
 import           Data.Map
@@ -12,13 +12,11 @@ import qualified Data.Sequence  as Seq
 import qualified Control.Monad.State.Strict as St
 
 import           CaseStudy.Auto.Lang
-import           CaseStudy.Auto.Auto (autoLength)
 import           Run (IncPack, smtBool, smtInt)
 import           VProp.Types (Prim, SNum(..), PrimN(..))
 import qualified VProp.SBV as SB
 
 import SAT
-import Debug.Trace (trace)
 
 autoToSBool :: (Show a, Ord a) => AutoLang a a -> IncPack a (AutoLang SBool SNum)
 autoToSBool = bitraverse smtBool smtInt
@@ -101,25 +99,34 @@ instance (SolverContext (IncSolve a b)) where
 
 runIncrementalSolve :: (Show a, Ord a, IsString a) =>
   [AutoLang a a] -> IO [(AutoLang a a, SatResult)]
-runIncrementalSolve xs =
-  fmap toList $ mapM (fmap SatResult . runIncrementalSolve_) $
-  -- trace (show $ toList $ fmap autoLength $ assocMaps)
-  assocMaps
-  where assocList = groupBy isPlain $ sort $ fmap (first helper) $ splitCtx <$> xs
+runIncrementalSolve xs = fmap (fmap (second SatResult) . toList) $
+                         runIncrementalSolve_ assocMaps
+  where assocList = groupBy isPlain $ sort $ fmap (first helper) splitCtx <$> xs
         assocMaps' = unions $ (fromListWith (flip $ BBinary And) <$> assocList)
-        -- plains = assocMaps' ! (AutoRef "__plain__")
-        -- assocMaps = delete (AutoRef "__plain__") $ fmap (BBinary And plains) assocMaps'
-        assocMaps = Data.Map.take 1 assocMaps'
+        assocMaps = St.evalStateT (mapM (autoToSBool) assocMaps') (mempty,mempty)
         helper x | hasCtx x = x
                  | otherwise = AutoRef "__plain__"
 
-runIncrementalSolve_ :: (Show a, Ord a) => AutoLang a a -> IO SMTResult
-runIncrementalSolve_ props = runSMT $
-  do props' <- St.evalStateT (autoToSBool props) (mempty, mempty)
+
+runIncrementalSolve_ :: (Show a, Ord a,IsString a) =>
+  Symbolic (Map (AutoLang a a) (AutoLang SBool SNum)) -> IO (Map (AutoLang a a) SMTResult)
+runIncrementalSolve_  assocMap = runSMT $
+  do assocMap' <- assocMap
+     let ps = assocMap' ! (AutoRef "__plain__")
+         rest = delete (AutoRef "__plain__") assocMap'
+     ps' <- evalAutoExpr ps
      query $
-       do bs <- St.evalStateT (autoSolve props') emptyS
-          constrain bs
-          getSMTResult
+       do
+         push 1
+         constrain ps'
+         mapM runIncrementalSolve__ rest
+
+runIncrementalSolve__ :: AutoLang SBool SNum -> Query SMTResult
+runIncrementalSolve__ prop =
+       do
+         bs <- St.evalStateT (autoSolve prop) emptyS
+         constrain bs
+         getSMTResult
 
 splitCtx :: AutoLang a b -> (AutoLang a b, AutoLang a b)
 splitCtx a = (leftMost a, removeCtxs a)
