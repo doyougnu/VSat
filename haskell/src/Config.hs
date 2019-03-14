@@ -57,7 +57,7 @@ emptyConf :: (Show a,Show d,Show b,Ord a,Ord b,Ord d) => SMTConf d a b
 emptyConf = SMTConf{conf=z3, opts=[]}
 
 debugConf :: (Show a,Show d,Show b,Ord a,Ord b,Ord d) => SMTConf d a b
-debugConf = toConf debugSettings
+debugConf = setVerbose $ toConf debugSettings
 
 minConf ::(Show a,Show d,Show b,Ord a,Ord b,Ord d) => SMTConf d a b
 minConf = toConf minSettings
@@ -77,6 +77,10 @@ addOption f c = SMTConf {conf = c'{solverSetOptions=f sOpts}, opts = os}
 setSeed :: (Maybe Integer) -> SMTConf d a b -> SMTConf d a b
 setSeed (Just x) c = addOption ((RandomSeed x):) c
 setSeed Nothing  c = c
+
+
+setVerbose :: SMTConf d a b -> SMTConf d a b
+setVerbose SMTConf{..} = SMTConf{conf=conf{verbose=True}, opts}
 
 setSolver :: Solver -> SMTConf d a b -> SMTConf d a b
 setSolver Z3 a        = a{conf=z3}
