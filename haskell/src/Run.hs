@@ -10,7 +10,6 @@ module Run ( SatDict
            ) where
 
 import qualified Data.Map.Strict as M
-import Control.Monad (when)
 import Control.DeepSeq (force)
 import Control.Monad.RWS.Strict
 import Control.Monad.State.Strict    as St
@@ -21,7 +20,6 @@ import           Prelude hiding (LT, GT, EQ)
 import Data.Foldable (foldr')
 import Data.Text (Text)
 import Control.Arrow                 (first, second)
-import qualified Data.Set            as S
 
 import Data.Maybe                    (catMaybes)
 
@@ -307,6 +305,8 @@ instance (Monad m, I.SolverContext m) =>
   namedConstraint = (lift .) . S.namedConstraint
   setOption = lift . S.setOption
 
+-- Helper functions for solve routine
+
 store :: (Eq d, Ord d) => Result d -> IncVSMTSolve d ()
 store = St.modify' . onResult . (<>)
 
@@ -357,16 +357,18 @@ handleChc goLeft goRight d =
 
            -- check if the config was satisfiable, and if the recursion
            -- generated a model
-           bt <- lift isSat
            bd <- hasGenDModel
 
-           -- if satisfiable, and has not generated a model, then construct a
-           -- result
-           resMapT <- if (bt && not bd)
+           -- if not generated a model, then construct a -- result
+           resMapT <- if (not bd)
                       then do trueProp <- gets (configToResultProp . config)
-                              St.modify' (onResult $ insertToSat trueProp)
+                              lm <- lift $ getResult (dispatchProp trueProp)
                               setModelGenD
-                              lift $ getResult (dispatchProp trueProp)
+                              if not $ isResultNull lm
+                                -- if not null then sat
+                                then return $! insertToSat trueProp lm
+                                -- result was null so unsat
+                                else return mempty
                       else -- not sat or have gen'd a model so ignore
                         return mempty
 
@@ -380,14 +382,15 @@ handleChc goLeft goRight d =
            lift $! SC.push 1
            goRight >>= S.constrain
 
-           bf <- lift isSat
            bdf <- hasGenDModel
 
-           resMapF <- if (bf && not bdf)
+           resMapF <- if (not bdf)
                       then do falseProp <- gets (configToResultProp . config)
-                              St.modify' (onResult $ insertToSat falseProp)
+                              rm <- lift $ getResult (dispatchProp falseProp)
                               setModelGenD
-                              lift $ getResult (dispatchProp falseProp)
+                              if not $ isResultNull rm
+                                then return $! insertToSat falseProp rm
+                                else return mempty
                       else
                         return mempty
 
@@ -464,7 +467,7 @@ handleCtx (Loc (ChcB d l r) ctx@(InBBR _ acc _)) =
     -- we push onto the assertion and constrain to capture the solver state
     -- before processing the choice. This allows us to cache the state before
     -- the choice
-    lift $! SC.push 1
+    -- lift $! SC.push 1
     -- constrain current accumulator
     S.constrain acc
     handleChc (handleCtx goLeft) (handleCtx goRight) d
@@ -475,7 +478,7 @@ handleCtx (Loc (ChcB d l r) ctx@(InBBR _ acc _)) =
 handleCtx (Loc (ChcB d l r) ctx@(InBBL _ (InBBR _ acc _) _)) =
   do
     -- push onto assertion stack
-    lift $! SC.push 1
+    -- lift $! SC.push 1
     -- constrain current accumulator
     S.constrain acc
     handleChc (handleCtx goLeft) (handleCtx goRight) d

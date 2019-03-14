@@ -7,7 +7,7 @@ module Result ( Result (..)
               , lookupRes
               , lookupRes_
               , getResSat
-              , isDMNull
+              , isResultNull
               , configToResultProp
               , getResult
               , (&:>)
@@ -168,8 +168,8 @@ getResSat :: Resultable d => Result d -> ResultProp d
 getResSat = lookupRes_ "__Sat"
 
 -- | O(1) is result empty
-isDMNull :: Resultable d => Result d -> Bool
-isDMNull = M.null . getRes
+isResultNull :: Resultable d => Result d -> Bool
+isResultNull = M.null . getRes
 
 -- | grab a vsmt model from SBV, check if it is sat or not, if so return it
 getVSMTModel :: Query (Maybe SMTResult)
@@ -185,4 +185,4 @@ getResult !f =
   do as <- fmap (maybe mempty getModelDictionary) $! getVSMTModel
      return $
        Result (M.foldMapWithKey
-               (force (\k a -> M.singleton (fromString k) (f $ cvToBool a))) as)
+               (\k a -> M.singleton (fromString k) (f $ cvToBool a)) as)
