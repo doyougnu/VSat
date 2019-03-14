@@ -11,7 +11,7 @@ import           Data.Bifunctor          (bimap)
 import           Data.Bitraversable      (bimapM)
 import qualified Data.ByteString         as BS (readFile)
 import           Data.Either             (lefts, rights)
-import           Data.Foldable           (foldr')
+import           Data.Foldable           (foldr',foldl')
 import           Data.List               (sort)
 import           Data.Map                (size, Map)
 import qualified Data.SBV                as S
@@ -49,43 +49,46 @@ stringList n = tail . take (n+1) $ concatMap (flip replicateM "abc") [0..]
 main = do
   let conjoin' = foldr' (&&&) (LitB True)
       genIt n = genBoolProp (genVPropAtSize n genReadable)
-      seed = stringList 15
-      seed' = drop 5 seed
-      chcSeed = take 5 seed
-      left  = bRef <$> take 5 seed'
-      right = bRef <$> drop 5 seed'
+      m = 1000
+      n = 1000
+      seed' = stringList m
+      chcSeedL = show <$> [0..n]
+      chcSeedR = show <$> take n [n+1..]
+      left  = bRef <$> take (m `div` 2) seed'
+      right = bRef <$> drop (m `div` 2) seed'
       a :: VProp String String String
       a = ChcB "AA"
-          (conjoin' $! bRef <$> take 2 chcSeed)
-          (conjoin' $! bRef <$> drop 2 chcSeed)
+          (conjoin' $! bRef <$> chcSeedL)
+          (conjoin' $! bRef <$> chcSeedR)
 
       b :: VProp String String String
       b = ChcB "BB"
-          (conjoin' $! bRef <$> take 2 chcSeed)
-          (conjoin' $! bRef <$> drop 2 chcSeed)
+          (conjoin' $! bRef <$> fmap (++"a") chcSeedL)
+          (conjoin' $! bRef <$> fmap (++"b") chcSeedR)
 
       c :: VProp String String String
       c = ChcB "CC"
-          (conjoin' $! bRef <$> take 2 chcSeed)
-          (conjoin' $! bRef <$> drop 2 chcSeed)
+          (conjoin' $! bRef <$> fmap (++"c") chcSeedL)
+          (conjoin' $! bRef <$> fmap (++"d") chcSeedR)
 
       d :: VProp String String String
       d = ChcB "DD"
-          (conjoin' $! bRef <$> take 2 chcSeed)
-          (conjoin' $! bRef <$> drop 2 chcSeed)
+          (conjoin' $! bRef <$> fmap (++"e") chcSeedL)
+          (conjoin' $! bRef <$> fmap (++"f") chcSeedR)
 
       oProp :: VProp String String String
-      oProp = conjoin'   $! left ++ right ++ [a,b,d,c]
-      uoProp = conjoin'  $! left ++ a:b:d:c:right
+      oProp = conjoin'   $! left ++ right ++ [a,b,c,d]
+      uoProp = conjoin'  $! left ++ a:b:c:d:right
       badProp :: VProp String String String
-      badProp = conjoin' $! a:b:c:left ++ right
+      badProp = conjoin' $! a:b:c:d:left ++ right
 
-  res <- satWith emptyConf oProp
-  res' <- runIncrementalSolve $! breakOnAnd $ vPropToAuto oProp
-  putStrLn "--------------\n"
-  putStrLn "Result"
-  print res'
-  putStrLn "--------------\n"
+  -- print oProp
+  -- res <- satWith debugConf oProp
+  -- -- res' <- runIncrementalSolve $! breakOnAnd $ vPropToAuto oProp
+  -- putStrLn "--------------\n"
+  -- putStrLn "Result"
+  -- print $ res
+  -- putStrLn "--------------\n"
   -- print $ uoProp
   -- print $ oProp
   -- putStrLn "--------------\n"
@@ -109,13 +112,13 @@ main = do
   -- ps <- mapM (generate . genIt) [1..55]
   -- mapM_ (putStrLn . show) ps
 
-  -- defaultMainWith critConfig
-  --   [
-  --   bgroup "vsat" [ bench "unOpt" . nfIO $ satWith emptyConf uoProp
-  --                 , bench "Opt" . nfIO $ satWith emptyConf oProp
-  --                 , bench "BadOpt" . nfIO $ satWith emptyConf badProp
-  --                 , bench "def:unOpt" . nfIO $ satWith defConf uoProp
-  --                 , bench "def:Opt" . nfIO $ satWith defConf oProp
-  --                 , bench "def:BadOpt" . nfIO $ satWith defConf badProp
-  --                 ]
-  --   ]
+  defaultMainWith critConfig
+    [
+    bgroup "vsat" [ bench "unOpt" . nfIO $ satWith emptyConf uoProp
+                  , bench "Opt" . nfIO $ satWith emptyConf oProp
+                  , bench "BadOpt" . nfIO $ satWith emptyConf badProp
+                  , bench "def:unOpt" . nfIO $ satWith defConf uoProp
+                  , bench "def:Opt" . nfIO $ satWith defConf oProp
+                  , bench "def:BadOpt" . nfIO $ satWith defConf badProp
+                  ]
+    ]
