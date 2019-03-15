@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ExtendedDefaultRules #-}
 module Main where
 
 import           Control.Arrow           (first, second)
@@ -17,7 +19,7 @@ import           Data.Map                (size, Map)
 import qualified Data.SBV                as S
 import qualified Data.SBV.Control        as SC
 import qualified Data.SBV.Internals      as SI
-import           Data.Text               (pack, unpack)
+import           Data.Text               (pack, unpack,Text,cons)
 import qualified Data.Text.IO            as T (writeFile)
 import           System.IO
 import           Text.Megaparsec         (parse)
@@ -39,56 +41,64 @@ import           VProp.Types
 import           CaseStudy.Auto.Run
 
 critConfig = defaultConfig {resamples = 12}
-
+default (Text)
 -- | generate an infinite list of unique strings and take n of them dropping the
 -- empty string
-stringList :: Int -> [String]
-stringList n = tail . take (n+1) $ concatMap (flip replicateM "abc") [0..]
+stringList :: Int -> [Text]
+stringList n = fmap pack . tail . take (n+1) $
+               concatMap (flip replicateM "abc") [0..]
 
 -- run with stack bench --profile vsat:auto --benchmark-arguments='+RTS -S -RTS --output timings.html'
 main = do
-  let conjoin' = foldr' (&&&) (LitB True)
+  let conjoin' = foldl' (&&&) (LitB True)
       genIt n = genBoolProp (genVPropAtSize n genReadable)
-      m = 1000
-      n = 1000
+      m = 100
+      n = 100
       seed' = stringList m
-      chcSeedL = show <$> [0..n]
-      chcSeedR = show <$> take n [n+1..]
+      chcSeedL :: [Text]
+      chcSeedL = (pack . show) <$> [0..n]
+
+      chcSeedR :: [Text]
+      chcSeedR = (pack . show) <$> take n [n+1..]
+
       left  = bRef <$> take (m `div` 2) seed'
       right = bRef <$> drop (m `div` 2) seed'
-      a :: VProp String String String
+      a :: VProp Text Text Text
       a = ChcB "AA"
           (conjoin' $! bRef <$> chcSeedL)
           (conjoin' $! bRef <$> chcSeedR)
 
-      b :: VProp String String String
+      b :: VProp Text Text Text
       b = ChcB "BB"
-          (conjoin' $! bRef <$> fmap (++"a") chcSeedL)
-          (conjoin' $! bRef <$> fmap (++"b") chcSeedR)
+          (conjoin' $! bRef <$> fmap (cons 'a') chcSeedL)
+          (conjoin' $! bRef <$> fmap (cons 'b') chcSeedR)
 
-      c :: VProp String String String
+      c :: VProp Text Text Text
       c = ChcB "CC"
-          (conjoin' $! bRef <$> fmap (++"c") chcSeedL)
-          (conjoin' $! bRef <$> fmap (++"d") chcSeedR)
+          (conjoin' $! bRef <$> fmap (cons 'c') chcSeedL)
+          (conjoin' $! bRef <$> fmap (cons 'd') chcSeedR)
 
-      d :: VProp String String String
+      d :: VProp Text Text Text
       d = ChcB "DD"
-          (conjoin' $! bRef <$> fmap (++"e") chcSeedL)
-          (conjoin' $! bRef <$> fmap (++"f") chcSeedR)
+          (conjoin' $! bRef <$> fmap (cons 'e') chcSeedL)
+          (conjoin' $! bRef <$> fmap (cons 'f') chcSeedR)
 
-      oProp :: VProp String String String
+      oProp :: VProp Text Text Text
       oProp = conjoin'   $! left ++ right ++ [a,b,c,d]
+
+      uoProp :: VProp Text Text Text
       uoProp = conjoin'  $! left ++ a:b:c:d:right
-      badProp :: VProp String String String
+
+      badProp :: VProp Text Text Text
       badProp = conjoin' $! a:b:c:d:left ++ right
 
   -- print oProp
   -- res <- satWith debugConf oProp
-  -- -- res' <- runIncrementalSolve $! breakOnAnd $ vPropToAuto oProp
-  -- putStrLn "--------------\n"
-  -- putStrLn "Result"
-  -- print $ res
-  -- putStrLn "--------------\n"
+  res' <- runIncrementalSolve $! breakOnAnd $ vPropToAuto oProp
+  putStrLn "--------------\n"
+  putStrLn "Result"
+  print $ res'
+  putStrLn "--------------\n"
   -- print $ uoProp
   -- print $ oProp
   -- putStrLn "--------------\n"
@@ -112,13 +122,13 @@ main = do
   -- ps <- mapM (generate . genIt) [1..55]
   -- mapM_ (putStrLn . show) ps
 
-  defaultMainWith critConfig
-    [
-    bgroup "vsat" [ bench "unOpt" . nfIO $ satWith emptyConf uoProp
-                  , bench "Opt" . nfIO $ satWith emptyConf oProp
-                  , bench "BadOpt" . nfIO $ satWith emptyConf badProp
-                  , bench "def:unOpt" . nfIO $ satWith defConf uoProp
-                  , bench "def:Opt" . nfIO $ satWith defConf oProp
-                  , bench "def:BadOpt" . nfIO $ satWith defConf badProp
-                  ]
-    ]
+  -- defaultMainWith critConfig
+  --   [
+  --   bgroup "vsat" [ bench "unOpt" . nfIO $ satWith emptyConf uoProp
+  --                 , bench "Opt" . nfIO $ satWith emptyConf oProp
+  --                 , bench "BadOpt" . nfIO $ satWith emptyConf badProp
+  --                 , bench "def:unOpt" . nfIO $ satWith defConf uoProp
+  --                 , bench "def:Opt" . nfIO $ satWith defConf oProp
+  --                 , bench "def:BadOpt" . nfIO $ satWith defConf badProp
+  --                 ]
+  --   ]

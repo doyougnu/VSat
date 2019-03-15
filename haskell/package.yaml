@@ -87,6 +87,9 @@ benchmarks:
     dependencies:
     - criterion
     - vsat
+    default-extensions:
+    - OverloadedStrings
+
 
   auto:
     main:                Main.hs
