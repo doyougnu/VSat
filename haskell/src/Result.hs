@@ -1,7 +1,7 @@
-module Result ( Result (..)
-              , ResultProp (..)
-              , Resultable
-              , UniformProp
+module Result ( Result(..)
+              , ResultProp(..)
+              , Resultable(..)
+              , UniformProp(..)
               , insertToResult
               , insertToSat
               , lookupRes

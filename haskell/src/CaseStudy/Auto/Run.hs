@@ -2,9 +2,10 @@ module CaseStudy.Auto.Run where
 
 import           Data.SBV
 import           Data.SBV.Control
-import           Control.Arrow (first,second)
-import           Data.String (IsString)
-import           Data.List (sort, groupBy)
+import           Control.Arrow (first)
+import           Control.Monad (foldM)
+import           Data.Text (Text)
+import qualified Data.List as L (sort, groupBy, lookup,filter)
 import           Data.Map
 import           Data.SBV.Internals (SolverContext)
 import           Data.Bitraversable (bitraverse)
@@ -13,10 +14,12 @@ import qualified Control.Monad.State.Strict as St
 
 import           CaseStudy.Auto.Lang
 import           Run (IncPack, smtBool, smtInt)
-import           VProp.Types (Prim, SNum(..), PrimN(..))
+import           VProp.Types (Prim, SNum(..), PrimN(..),VProp(..))
 import qualified VProp.SBV as SB
 
+
 import SAT
+import Result
 
 autoToSBool :: (Show a, Ord a) => AutoLang a a -> IncPack a (AutoLang SBool SNum)
 autoToSBool = bitraverse smtBool smtInt
@@ -92,41 +95,80 @@ getBool = St.gets helper
           | isEmpty stk = error "[ERR]: Calling getBool on empty stack"
           | otherwise = peekBool stk
 
+-- | check if the current context is sat or not
+isSat :: Query Bool
+isSat = do cs <- checkSat
+           return $ case cs of
+                      Sat -> True
+                      _      -> False
+
 instance (SolverContext (IncSolve a b)) where
   constrain = St.lift . constrain
   namedConstraint = (St.lift .) . namedConstraint
   setOption = St.lift . setOption
 
-runIncrementalSolve :: (Show a, Ord a, IsString a) =>
-  [AutoLang a a] -> IO [(AutoLang a a, SatResult)]
-runIncrementalSolve xs = fmap (fmap (second SatResult) . toList) $
-                         runIncrementalSolve_ assocMaps
-  where assocList = groupBy isPlain $ sort $ fmap (first helper) splitCtx <$> xs
+runIncrementalSolve :: [AutoLang Text Text] -> IO (Result Text)
+runIncrementalSolve xs = runIncrementalSolve_ (toList <$> assocMaps)
+  where assocList = L.groupBy isPlain $ L.sort $ fmap (first helper) splitCtx <$> xs
         assocMaps' = unions $ (fromListWith (flip $ BBinary And) <$> assocList)
         assocMaps = St.evalStateT (mapM (autoToSBool) assocMaps') (mempty,mempty)
         helper x | hasCtx x = x
                  | otherwise = AutoRef "__plain__"
 
 
-runIncrementalSolve_ :: (Show a, Ord a,IsString a) =>
-  Symbolic (Map (AutoLang a a) (AutoLang SBool SNum)) -> IO (Map (AutoLang a a) SMTResult)
-runIncrementalSolve_  assocMap = runSMT $
-  do assocMap' <- assocMap
-     let ps = assocMap' ! (AutoRef "__plain__")
-         rest = delete (AutoRef "__plain__") assocMap'
+runIncrementalSolve_ :: Symbolic [(AutoLang Text Text, AutoLang SBool SNum)] ->
+  IO (Result Text)
+runIncrementalSolve_  assocList = runSMT $
+  do assocList' <- assocList
+     let (Just ps) = L.lookup (AutoRef "__plain__") assocList'
+         rest = L.filter (not . (==(AutoRef "__plain__")) . fst) assocList'
+         dispatchProp :: ResultProp d -> Bool -> ResultProp d
+         dispatchProp !p !x = if x
+                              then p
+                              else negateResultProp p
      ps' <- evalAutoExpr ps
      query $
        do
          push 1
          constrain ps'
-         mapM runIncrementalSolve__ rest
+         b <- isSat
+         resMap <- if b
+                   then
+                     do let plainProp = autoToResProp (AutoRef "__plain__")
+                        pm <- getResult (dispatchProp plainProp)
+                        if not $ isResultNull pm
+                          then return $! insertToSat plainProp pm
+                          else return mempty
+                   else return mempty
 
-runIncrementalSolve__ :: AutoLang SBool SNum -> Query SMTResult
+         foldM (\acc (v, prop) ->
+              do
+               io $ putStrLn $ show v
+               runIncrementalSolve__ prop
+               a <- isSat
+               resMap' <- if a
+                          then
+                            do let prop = autoToResProp v
+                               pm <- getResult (dispatchProp prop)
+                               if not $ isResultNull pm
+                                 then return $! insertToSat prop pm
+                                 else return mempty
+                          else return mempty
+               return $! acc <> resMap'
+           ) resMap rest
+
+
+runIncrementalSolve__ :: AutoLang SBool SNum -> Query ()
 runIncrementalSolve__ prop =
        do
          bs <- St.evalStateT (autoSolve prop) emptyS
          constrain bs
-         getSMTResult
+
+-- autoToResProp :: AutoLang a a -> ResultProp a
+autoToResProp :: AutoLang Text Text -> ResultProp Text
+autoToResProp = ResultProp . Just . UniformProp . helper
+  where helper (RBinary _ (ACtx (AVar a)) _) = RefB a
+        helper (AutoRef a) = RefB a
 
 splitCtx :: AutoLang a b -> (AutoLang a b, AutoLang a b)
 splitCtx a = (leftMost a, removeCtxs a)

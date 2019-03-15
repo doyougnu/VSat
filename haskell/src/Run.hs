@@ -58,6 +58,7 @@ data Ctx d a b = InBBL BB_B  !(Ctx d a b) !(VProp d a b)
 -- | a strict tuple type
 data Loc d a b = Loc !(VProp d a b) !(Ctx d a b) deriving Show
 
+mkLoc :: (VProp d a b, Ctx d a b) -> Loc d a b
 mkLoc (x, y) = Loc x y
 
 -- | An empty reader monad environment, in the future read these from config file
@@ -332,6 +333,11 @@ setModelNotGenD = St.modify' $ onProcessed (const False)
 --   StateT (IncState d) SC.Query b      ->
 --   VProp d a c                         ->
 --   StateT (IncState d) SC.Query b
+handleChc :: Resultable d =>
+  StateT (IncState d) SC.Query S.SBool ->
+  StateT (IncState d) SC.Query S.SBool ->
+  Dim d                                ->
+  StateT (IncState d) SC.Query S.SBool
 handleChc goLeft goRight d =
   do st <- get
      let cfg = config st
