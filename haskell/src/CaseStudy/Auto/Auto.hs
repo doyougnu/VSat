@@ -243,10 +243,15 @@ vPropToAuto (V.RefB r) = AutoRef r
 vPropToAuto (V.OpB V.Not e) = AutoNot $ vPropToAuto e
 vPropToAuto (V.OpBB op l r) =
   BBinary (rdispatch op) (vPropToAuto l) (vPropToAuto r)
-vPropToAuto (V.ChcB d l _) = (BBinary Impl
+vPropToAuto (V.ChcB d l r) = (BBinary And
+                              (BBinary Impl
                               (RBinary LSTE
                                 (ACtx (AVar (V.dimName d)))
                                 (ALit 0)) (vPropToAuto l))
+                              (BBinary Impl
+                              (RBinary LSTE
+                                (ACtx (AVar (V.dimName d)))
+                                (ALit 0)) (vPropToAuto r)))
 
 rdispatch :: V.BB_B -> BOp
 rdispatch V.And    = And
