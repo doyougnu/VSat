@@ -89,10 +89,10 @@ main = do
 
   defaultMain
     [
-    bgroup "vsat" [  -- bench "small file:NoOpts"  . nfIO $ satWith emptyConf sProp
-                   --  bench "small file:DefOpts" . nfIO $ satWith defConf   sProp
-                     bench "Auto:VSolve:NoOpts"  . nfIO $ satWith emptyConf bProp
-                   , bench "Auto:VSolve:DefOpts" . nfIO $ satWith defConf   bProp
-                   , bench "Auto:IncrementalBaseline" . nfIO $ runIncrementalSolve bPs
+    bgroup "vsat" [  bench "small file:NoOpts"  . nfIO $ satWith emptyConf sProp
+                   , bench "small file:DefOpts" . nfIO $ satWith defConf   sProp
+                   --   bench "Auto:VSolve:NoOpts"  . nfIO $ satWith emptyConf bProp
+                   -- , bench "Auto:VSolve:DefOpts" . nfIO $ satWith defConf   bProp
+                   -- , bench "Auto:IncrementalBaseline" . nfIO $ runIncrementalSolve bPs
                   ]
     ]

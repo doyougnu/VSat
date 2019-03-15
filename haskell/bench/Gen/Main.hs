@@ -51,6 +51,7 @@ stringList n = fmap pack . tail . take (n+1) $
 -- run with stack bench --profile vsat:auto --benchmark-arguments='+RTS -S -RTS --output timings.html'
 main = do
   let conjoin' = foldl' (&&&) (LitB True)
+      runInc = runIncrementalSolve . breakOnAnd . vPropToAuto
       genIt n = genBoolProp (genVPropAtSize n genReadable)
       m = 100
       n = 100
@@ -94,11 +95,11 @@ main = do
 
   -- print oProp
   -- res <- satWith debugConf oProp
-  res' <- runIncrementalSolve $! breakOnAnd $ vPropToAuto oProp
-  putStrLn "--------------\n"
-  putStrLn "Result"
-  print $ res'
-  putStrLn "--------------\n"
+  -- res' <- runIncrementalSolve $! breakOnAnd $ vPropToAuto oProp
+  -- putStrLn "--------------\n"
+  -- putStrLn "Result"
+  -- print $ res'
+  -- putStrLn "--------------\n"
   -- print $ uoProp
   -- print $ oProp
   -- putStrLn "--------------\n"
@@ -122,13 +123,17 @@ main = do
   -- ps <- mapM (generate . genIt) [1..55]
   -- mapM_ (putStrLn . show) ps
 
-  -- defaultMainWith critConfig
-  --   [
-  --   bgroup "vsat" [ bench "unOpt" . nfIO $ satWith emptyConf uoProp
-  --                 , bench "Opt" . nfIO $ satWith emptyConf oProp
-  --                 , bench "BadOpt" . nfIO $ satWith emptyConf badProp
-  --                 , bench "def:unOpt" . nfIO $ satWith defConf uoProp
-  --                 , bench "def:Opt" . nfIO $ satWith defConf oProp
-  --                 , bench "def:BadOpt" . nfIO $ satWith defConf badProp
-  --                 ]
-  --   ]
+  defaultMainWith critConfig
+    [
+    bgroup "vsat"
+      [ bench "Inc:Mid" . nfIO $ runInc oProp
+      , bench "Inc:Right" . nfIO $ runInc uoProp
+      , bench "Inc:Left" . nfIO $ runInc badProp
+      , bench "VSolve:Empty:Mid" . nfIO $ satWith emptyConf uoProp
+      , bench "VSolve:Empty:Right" . nfIO $ satWith emptyConf oProp
+      , bench "VSolve:Empty:Left" . nfIO $ satWith emptyConf badProp
+      , bench "VSolve:Def:Mid" . nfIO $ satWith defConf uoProp
+      , bench "VSolve:Def:Right" . nfIO $ satWith defConf oProp
+      , bench "VSolve:Def:Left" . nfIO $ satWith defConf badProp
+      ]
+    ]

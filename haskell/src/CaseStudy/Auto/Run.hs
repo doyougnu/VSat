@@ -143,7 +143,6 @@ runIncrementalSolve_  assocList = runSMT $
 
          foldM (\acc (v, prop) ->
               do
-               io $ putStrLn $ show v
                runIncrementalSolve__ prop
                a <- isSat
                resMap' <- if a
