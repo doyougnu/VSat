@@ -79,8 +79,8 @@ isPlain :: VProp a b c -> Bool
 isPlain = null . trifoldMap (:[]) mempty mempty
 
 -- | Does the prop contain choices
-isVariational :: VProp a b c -> Bool
-isVariational = not . isPlain
+hasChc :: VProp a b c -> Bool
+hasChc = not . isPlain
 
 -- | Does the prop only contain boolean values? No ints or floats
 onlyBools :: VProp d a b -> Bool
