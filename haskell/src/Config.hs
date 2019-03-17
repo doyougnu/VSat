@@ -96,8 +96,8 @@ setOpts os c = c{opts=convertOpts <$> os}
 
 convertOpts :: (Ord a,Ord b,Ord d,Show d,Show a,Show b) =>
   Opts -> VProp d a b -> VProp d a b
-convertOpts MoveRight = moveChcToRight
-convertOpts MoveLeft  = moveChcToLeft
+convertOpts MoveRight = chcToRight
+convertOpts MoveLeft  = chcToLeft
 convertOpts Shrink    = shrinkProp
 convertOpts Prune     = prune
 -- convertOpts CNF       = toCNF
