@@ -24,12 +24,40 @@ data Opts = MoveRight
 chcToRight :: (Ord a, Ord b, Ord d) => VProp d a b -> VProp d a b
   -- structural instances
 chcToRight (OpBB Impl l r)
-  | hasChc l = chcToRight $ OpBB Or r (bnot l)
+  | l' && r' = OpBB Impl (chcToRight l) (chcToRight r)
+  | l' = chcToRight $ OpBB Or r (bnot l)
   | otherwise = OpBB Impl (chcToRight l) (chcToRight r)
+  where l' = hasChc l
+        r' = hasChc r
   -- associativity move
+chcToRight (OpBB And x@(OpBB And l' r') r)
+  | bl' && br' && br = (OpBB And
+                        (OpBB And (chcToRight l') (chcToRight r'))
+                        (chcToRight r))
+  | bl' && br' = OpBB And (chcToRight r) (chcToRight x)
+  | bl' = OpBB And (OpBB And r' r) l'
+  | br' = OpBB And (OpBB And r' r) l'
+  where bl' = hasChc l'
+        br' = hasChc r'
+        br  = hasChc r
+
+chcToRight (OpBB Or x@(OpBB Or l' r') r)
+  | bl' && br' && br = (OpBB Or
+                        (OpBB Or (chcToRight l') (chcToRight r'))
+                        (chcToRight r))
+  | bl' && br' = OpBB Or (chcToRight r) (chcToRight x)
+  | bl' = OpBB Or (OpBB Or r' r) l'
+  | br' = OpBB Or (OpBB Or r' r) l'
+  where bl' = hasChc l'
+        br' = hasChc r'
+        br  = hasChc r
+
 chcToRight (OpBB op l r)
+  | l' && r' = OpBB op (chcToRight l) (chcToRight r)
   | hasChc l = chcToRight $ OpBB op r l
   | otherwise = OpBB op (chcToRight l) (chcToRight r)
+  where l' = hasChc l
+        r' = hasChc r
   -- inner move
 chcToRight (OpIB LT x@(ChcI _ _ _) r) = OpIB GT (chcToRight' r) (chcToRight' x)
 chcToRight (OpIB GT x@(ChcI _ _ _) r) = OpIB LT (chcToRight' r) (chcToRight' x)
@@ -54,12 +82,18 @@ chcToRight' nonRecursive  = nonRecursive
 -- | Given any arbritrary prop move any choices to the left
 chcToLeft :: (Ord a, Ord b, Ord d) => VProp d a b -> VProp d a b
 chcToLeft (OpBB Impl l r)
-  | hasChc r = chcToLeft $ OpBB Or r (bnot l)
+  | l' && r' = OpBB Impl (chcToRight l) (chcToRight r)
+  | r' = chcToLeft $ OpBB Or r (bnot l)
   | otherwise = OpBB Impl (chcToRight l) (chcToRight r)
+  where l' = hasChc l
+        r' = hasChc r
   -- associativity move
 chcToLeft (OpBB op l r)
-  | hasChc r = chcToLeft $ OpBB op r l
+  | l' && r' = OpBB op (chcToRight l) (chcToRight r)
+  | r'= chcToLeft $ OpBB op r l
   | otherwise = OpBB op (chcToRight l) (chcToRight r)
+  where l' = hasChc l
+        r' = hasChc r
   -- structural instances
 chcToLeft (OpIB LT l x@(ChcI _ _ _)) = OpIB GT (chcToLeft' x) (chcToLeft' l)
 chcToLeft (OpIB GT l x@(ChcI _ _ _)) = OpIB LT (chcToLeft' x) (chcToLeft' l)
