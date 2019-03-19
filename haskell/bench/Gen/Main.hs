@@ -125,9 +125,11 @@ main = do
   let
       runInc = runIncrementalSolve . breakOnAnd . vPropToAuto
       genIt n = genBoolProp (genVPropAtSize n genReadable)
-      !propsER = runEmptyRight <$> [1..3] <*> [1,10,100] <*> [1,10,100]
-      !propsEL = runEmptyLeft <$> [1..3] <*> [1,10,100] <*> [1,10,100]
-      !propsDL = runDefLeft <$> [1..3] <*> [1,10,100] <*> [1,10,100]
+      n = [1,300,600,900,1200]
+      m = [0,2,4]
+      !propsER = runEmptyRight <$> m <*> n <*> n
+      !propsEL = runEmptyLeft <$> m <*> n <*> n
+      !propsDL = runDefLeft <$> m <*> n <*> n
       !props = propsER ++ propsEL ++ propsDL
 
   defaultMain

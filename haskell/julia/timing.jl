@@ -13,7 +13,7 @@ id = x -> x
 function mungeName(nameString) arr = split(nameString, "/") end
 
 function genCol(df, colName, index, f)
-    df[colName] = map(name -> f(mungeName(name)[index]), df[:Name])
+    df[colName] = map(name -> mungeName(name) |> x -> getindex(x,index) |> f, df[:Name])
     df
 end
 
@@ -38,7 +38,7 @@ function mungeDF!(df::DataFrame)
     df |>
         addNumPlain |>
         addAlg |>
-        addNumPlain |>
+        # addNumPlain |>
         addConf |>
         addNumChc |>
         addChc |>
