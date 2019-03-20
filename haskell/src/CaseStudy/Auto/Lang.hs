@@ -21,7 +21,7 @@ data AutoLang a b = AutoLit Bool
                 deriving (Eq, Ord, Functor, Foldable, Traversable, Generic)
 
 data BOp = And | Or | Impl | Eqv | Xor deriving (Eq, Ord,Generic)
-data RBOp = GRT | GRTE | EQL | LST | LSTE  | NEQL deriving (Eq, Ord,Generic)
+data RBOp = LST | EQL | GRT | LSTE  | NEQL | GRTE  deriving (Eq,Ord,Generic)
 
 data ALang a = ALit Integer
              | AVar a

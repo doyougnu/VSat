@@ -109,11 +109,22 @@ instance (SolverContext (IncSolve a b)) where
 
 runIncrementalSolve :: [AutoLang Text Text] -> IO (Result Text)
 runIncrementalSolve xs = runIncrementalSolve_ (toList <$> assocMaps)
-  where assocList = L.groupBy isPlain $ L.sort $ fmap (first helper) splitCtx <$> xs
+  where assocList = makeAssocList xs
         assocMaps' = unions $ (fromListWith (flip $ BBinary And) <$> assocList)
         assocMaps = St.evalStateT (mapM (autoToSBool) assocMaps') (mempty,mempty)
-        helper x | hasCtx x = x
-                 | otherwise = AutoRef "__plain__"
+
+-- | Make an association list. this finds a context by position, if it exists it
+-- is captured in the lhs of a tuple, if not then we create a ref called
+-- "__plain__", then we sort and group on these split terms. This results in a
+-- list of lists which contain all the associated terms for a single evolution
+-- context, so the list for say evo_ctx < 1 will have _every_ formula that
+-- pretained to that context
+makeAssocList :: [AutoLang Text Text] -> [[(AutoLang Text Text, AutoLang Text Text)]]
+makeAssocList xs = L.groupBy isPlain $ L.sort $ fmap (first helper) splitCtx <$> xs
+  where helper x
+          | hasCtx x = x
+          | otherwise = AutoRef "__plain__"
+
 
 
 runIncrementalSolve_ :: Symbolic [(AutoLang Text Text, AutoLang SBool SNum)] ->
