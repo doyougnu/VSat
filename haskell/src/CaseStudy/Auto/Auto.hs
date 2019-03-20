@@ -216,6 +216,28 @@ naiveEncode (V.OpB op e) = V.OpB op (naiveEncode e)
 naiveEncode (V.ChcB d l r) = V.ChcB d (naiveEncode l) (naiveEncode r)
 naiveEncode nonrecursive = nonrecursive
 
+-- | Compressed encoding, reasons
+-- about the operators and uses the
+-- false leaves of the choices
+compEncode :: (IsString a, Eq a, Ord a, Eq d) => DimMap a Text -> V.VProp d a a -> V.VProp d a a
+compEncode dimMap (V.OpBB V.Impl a@(V.ChcB dim l r) r')
+  | hasHole a = fill a r'
+  | otherwise = V.OpBB V.Impl
+                (V.ChcB dim (compEncode dimMap l) (compEncode dimMap r))
+                (compEncode dimMap r')
+
+compEncode dimMap (V.OpBB V.Impl l' a@(V.ChcB dim l r))
+  | hasHole a = fill a l'
+  | otherwise = V.OpBB V.Impl
+                (compEncode dimMap l')
+                (V.ChcB dim
+                 (compEncode dimMap l) (compEncode dimMap r))
+
+compEncode dimMap (V.OpBB op l r) = V.OpBB op (compEncode dimMap l) (compEncode dimMap r)
+compEncode dimMap (V.OpB op e) = V.OpB op (compEncode dimMap e)
+compEncode dimMap (V.ChcB d l r) = V.ChcB d (compEncode dimMap l) (compEncode dimMap r)
+compEncode _ nonrecursive = nonrecursive
+
 -- | An identical encoding just removes contexts and treats the language as
 -- plain
 idEncode :: (IsString a, IsString b) => AutoLang a b -> AutoLang a b
