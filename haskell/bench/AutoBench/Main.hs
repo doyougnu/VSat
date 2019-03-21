@@ -23,6 +23,7 @@ import           Api
 import           CaseStudy.Auto.Auto
 import           CaseStudy.Auto.Parser   (langParser)
 import           CaseStudy.Auto.Run
+import           CaseStudy.Auto.CompactEncode
 import           Config
 import           Opts
 import           Run                     (runAD, runBF)
@@ -51,11 +52,6 @@ chAutoFile = "bench/AutoBench/vsat_small_chunk.json"
 
 critConfig = defaultConfig {resamples = 2}
 
--- | generate an infinite list of unique strings and take n of them dropping the
--- empty string
-stringList :: Int -> [String]
-stringList n = tail . take (n+1) $ concatMap (flip replicateM "abc") [0..]
-
 -- run with stack bench --profile vsat:auto --benchmark-arguments='+RTS -S -RTS --output timings.html'
 main = do
   -- readfile is strict
@@ -73,12 +69,16 @@ main = do
 
       !sProp = (naiveEncode . nestChoices . autoToVSat) $ autoAndJoin sPs
       !bProp = (naiveEncode . nestChoices . autoToVSat) $ autoAndJoin bPs
+      dimConf' = foldr' (&&&) true
+                $ (bRef . pack) <$> ["D_0","D_1","D_2","D_3","D_4","D_5"]
+      dimConf = toDimProp dimConf'
 
   -- res' <- runIncrementalSolve sPs
-  -- print sPs
   -- T.writeFile "testoutputSAT" (pack . show $ res)
   -- T.writeFile "testoutputInc" (pack . show $ res')
-  -- print res'
+  res' <- satWithConf (Just dimConf) emptyConf sProp
+  print res'
+  -- print $ compactEncode sPs
   -- let !p = prop 6000
   -- print $ length p
   -- -- res <- test 10
@@ -87,12 +87,14 @@ main = do
   -- putStrLn "Running Good:\n"
   -- goodRes <- testS goodS 1000
 
-  defaultMain
-    [
-    bgroup "vsat" [  bench "small file:NoOpts"  . nfIO $ satWith emptyConf sProp
-                   , bench "small file:DefOpts" . nfIO $ satWith defConf   sProp
-                   --   bench "Auto:VSolve:NoOpts"  . nfIO $ satWith emptyConf bProp
-                   -- , bench "Auto:VSolve:DefOpts" . nfIO $ satWith defConf   bProp
-                   -- , bench "Auto:IncrementalBaseline" . nfIO $ runIncrementalSolve bPs
-                  ]
-    ]
+  -- defaultMain
+  --   [
+  --   bgroup "vsat" [ -- bench "small file:NoOpts"  . nfIO $ satWith emptyConf sProp
+  --                  -- , bench "small file:DefOpts" . nfIO $ satWith defConf   sProp
+  --                  -- , bench "small file:Empty:Compact" . nfIO $ satWith defConf   (compactEncode sPs)
+  --                  -- --   bench "Auto:VSolve:NoOpts"  . nfIO $ satWith emptyConf bProp
+  --                  -- -- , bench "Auto:VSolve:DefOpts" . nfIO $ satWith defConf   bProp
+  --                  -- , bench "Auto:IncrementalBaseline:Naive" . nfIO $ runIncrementalSolve bPs
+  --                  -- bench "Auto:IncrementalBaseline:Compact" . nfIO $! satWith emptyConf (compactEncode bPs)
+  --                 ]
+  --   ]

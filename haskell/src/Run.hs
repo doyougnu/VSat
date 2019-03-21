@@ -21,7 +21,7 @@ import Data.Foldable (foldr')
 import Data.Text (Text)
 import Control.Arrow                 (first, second)
 
-import Data.Maybe                    (catMaybes)
+import Data.Maybe                    (catMaybes,fromMaybe)
 
 import SAT
 import VProp.Types
@@ -70,9 +70,11 @@ _runEnv :: Show a =>
   Env d a r -> SMTConf d a a -> SatDict d -> IO (r, SatDict d,  Log)
 _runEnv = runRWST
 
-runEnv :: Show a => (VProp d a a -> Env d a (Result d))
+runEnv :: Show a =>
+          (VProp d a a -> Env d a (Result d))
        -> SMTConf d a a
-       -> VProp d a a -> IO (Result d, SatDict d, Log)
+       -> VProp d a a
+       -> IO (Result d, SatDict d, Log)
 runEnv f conf x = _runEnv (f x') conf _emptySt
   where x' = foldr' ($) x (opts conf)
 
@@ -91,10 +93,11 @@ runBF os p = fst' <$> runEnv runBruteForce os p
 
 -- | Run the VSMT solver given a list of optimizations and a prop
 runVSMT :: (Show d, Show a, Ord a, Ord d, Resultable d) =>
+           Maybe (UsedDims d)         ->
            SMTConf d a a              ->
            VProp d a a                ->
            IO (Result d, SatDict d, Log)
-runVSMT = runEnv runVSMTSolve
+runVSMT dimConf = runEnv (runVSMTSolve dimConf)
 
 -- | Given a VProp a term generate the satisfiability map
 initSt :: Ord d => VProp d a a -> SatDict d
@@ -153,11 +156,13 @@ runAndDecomp prop f =
 runVSMTSolve ::
   (Show d, Show a, Ord a, Ord d, MonadTrans t, Resultable d
   , MonadReader (SMTConf d a a) (t IO)) =>
-  VProp d a a -> t IO (Result d)
-runVSMTSolve prop =
+  Maybe (UsedDims d)
+  -> VProp d a a
+  ->  t IO (Result d)
+runVSMTSolve dimFormula prop =
   do cnf <- ask
      let prop' = St.evalStateT (propToSBool prop) (mempty, mempty)
-     res <- lift . S.runSMTWith (conf cnf) . vSMTSolve $ prop'
+     res <- lift . S.runSMTWith (conf cnf) $! vSMTSolve prop' dimFormula
      lift . return $ res
 
 -- | wrapper around map to keep track of the variable references we've seen, a,
@@ -173,14 +178,14 @@ type GenModel = Bool
 type IncPack a = St.StateT (UsedVars a S.SBool, UsedVars a SNum) S.Symbolic
 
 -- | a map to keep track if a dimension has been seen before
-type UsedDims a = M.Map a Bool
+type UsedDims a = M.Map (Dim a) Bool
 
 -- | the internal state for the incremental solve algorithm, it holds a result
 -- list, and the used dims map, and is parameterized by the types of dimensions,
 -- d
 data IncState d = IncState { result :: Result d         -- * the result map
-                           , config :: UsedDims (Dim d) -- * the current config
-                           , processed :: GenModel       -- * a set of dims that
+                           , config :: UsedDims d       -- * the current config
+                           , processed :: GenModel      -- * a set of dims that
                                                         -- have been processed
                                                         -- and generated models
                            } deriving Eq
@@ -194,7 +199,7 @@ isEmptySt = (==) emptySt
 onResult :: (Result d -> Result d) -> IncState d -> IncState d
 onResult f (IncState {..}) = IncState {result=f result, ..}
 
-onConfig :: (UsedDims (Dim d) -> UsedDims (Dim d)) -> IncState d -> IncState d
+onConfig :: (UsedDims d -> UsedDims d) -> IncState d -> IncState d
 onConfig f (IncState {..}) = IncState {config=f config, ..}
 
 insertToConfig :: Ord d => (Dim d) -> Bool -> IncState d -> IncState d
@@ -207,7 +212,7 @@ deleteFromConfig = onConfig . M.delete
 -- inProcDims d IncState{..} = S.member d procDims
 
 
-inConfig :: (MonadState (IncState d) m) => (UsedDims (Dim d) -> Bool) -> m Bool
+inConfig :: (MonadState (IncState d) m) => (UsedDims d -> Bool) -> m Bool
 inConfig f = get >>= return . f . config
 
 onProcessed :: (GenModel -> GenModel) -> IncState d -> IncState d
@@ -222,19 +227,22 @@ type IncVSMTSolve d = St.StateT (IncState d) SC.Query
 -- underlying solver, inspects the results to see if they were variational or
 -- not, if not then it gets the model and wraps it in a V datatype
 vSMTSolve :: (Ord d, Show d, Resultable d) =>
-  S.Symbolic (VProp d S.SBool SNum) -> S.Symbolic (Result d)
-vSMTSolve prop = do prop' <- prop
-                    SC.query $
-                      do
-                      (b,resSt) <- St.runStateT (vSMTSolve_ prop') emptySt
-                      res <- if isEmptySt resSt
-                             then do S.constrain b
-                                     b' <- isSat
-                                     if b'
-                                       then getResult (toResultProp . LitB)
-                                       else return mempty
-                             else return $ result resSt
-                      return res
+  S.Symbolic (VProp d S.SBool SNum) -> Maybe (UsedDims d) -> S.Symbolic (Result d)
+vSMTSolve prop dimConfig =
+  do prop' <- prop
+     SC.query $
+       do
+         let conf = fromMaybe mempty dimConfig
+             startState = onConfig (const conf) emptySt
+         (b,resSt) <- St.runStateT (vSMTSolve_ prop') startState
+         res <- if isEmptySt resSt
+                then do S.constrain b
+                        b' <- isSat
+                        if b'
+                          then getResult (toResultProp . LitB)
+                          else return mempty
+                else return $ result resSt
+         return res
 
 -- | This ensures two things: 1st we need all variables to be symbolic before
 -- starting query mode. 2nd we cannot allow any duplicates to be called on a
