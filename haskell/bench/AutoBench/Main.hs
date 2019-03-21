@@ -14,7 +14,7 @@ import           Data.Map                (size, Map)
 import qualified Data.SBV                as S
 import qualified Data.SBV.Control        as SC
 import qualified Data.SBV.Internals      as SI
-import           Data.Text               (pack, unpack)
+import           Data.Text               (pack, unpack,Text)
 import qualified Data.Text.IO            as T (writeFile)
 import           System.IO
 import           Text.Megaparsec         (parse)
@@ -69,16 +69,16 @@ main = do
 
       !sProp = (naiveEncode . nestChoices . autoToVSat) $ autoAndJoin sPs
       !bProp = (naiveEncode . nestChoices . autoToVSat) $ autoAndJoin bPs
+      dimConf' :: VProp Text String String
       dimConf' = foldr' (&&&) true
-                $ (bRef . pack) <$> ["D_0","D_1","D_2","D_3","D_4","D_5"]
+                $ bRef <$> ["D_0","D_1","D_2","D_3","D_4","D_5"]
       dimConf = toDimProp dimConf'
 
   -- res' <- runIncrementalSolve sPs
   -- T.writeFile "testoutputSAT" (pack . show $ res)
   -- T.writeFile "testoutputInc" (pack . show $ res')
-  res' <- satWithConf (Just dimConf) emptyConf sProp
-  print res'
-  -- print $ compactEncode sPs
+  res' <- satWith emptyConf sProp
+  print $ res'
   -- let !p = prop 6000
   -- print $ length p
   -- -- res <- test 10
