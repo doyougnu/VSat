@@ -185,10 +185,11 @@ type UsedDims a = M.Map (Dim a) Bool
 -- d
 data IncState d = IncState { result :: Result d         -- * the result map
                            , config :: UsedDims d       -- * the current config
-                           , processed :: GenModel      -- * a set of dims that
-                                                        -- have been processed
-                                                        -- and generated models
-                           } deriving Eq
+                           , processed :: GenModel      -- * a flag denoting
+                                                        -- that a model has been
+                                                        -- generated during a
+                                                        -- recursive call
+                           } deriving (Eq,Show)
 
 emptySt :: Ord d => IncState d
 emptySt = IncState{result=mempty,config=mempty,processed=False}
@@ -334,85 +335,65 @@ setModelGenD = St.modify' $ onProcessed (const True)
 setModelNotGenD :: IncVSMTSolve d ()
 setModelNotGenD = St.modify' $ onProcessed (const False)
 
--- handleChc :: (Ord d, Boolean b, Resultable d, Show d) =>
---   StateT (IncState d) SC.Query S.SBool ->
---   StateT (IncState d) SC.Query S.SBool ->
---   StateT (IncState d) SC.Query b      ->
---   StateT (IncState d) SC.Query b      ->
---   VProp d a c                         ->
---   StateT (IncState d) SC.Query b
-handleChc :: Resultable d =>
-  StateT (IncState d) SC.Query S.SBool ->
-  StateT (IncState d) SC.Query S.SBool ->
-  Dim d                                ->
-  StateT (IncState d) SC.Query S.SBool
-handleChc goLeft goRight d =
-  do st <- get
-     let cfg = config st
-     case M.lookup d cfg of
-       Just True  -> goLeft
-       Just False -> goRight
-       Nothing    ->
-         do
-           let
-             -- TODO wrap into the Result module and hardcode
-             dispatchProp :: ResultProp d -> Bool -> ResultProp d
-             dispatchProp !p !x = if x
-                                  then p
-                                  else negateResultProp p
-
-           --------------------- true variant ----------------------------------
-           setDim d True
+solveVariant :: (Resultable d, Show d) =>
+  IncVSMTSolve d S.SBool -> IncVSMTSolve d (Result d)
+solveVariant go = do
            setModelNotGenD
 
            -- the recursive computaton
            lift $! SC.push 1
-           goLeft >>= S.constrain
+           go >>= S.constrain
 
            -- check if the config was satisfiable, and if the recursion
            -- generated a model
            bd <- hasGenDModel
 
            -- if not generated a model, then construct a -- result
-           resMapT <- if (not bd)
-                      then do trueProp <- gets (configToResultProp . config)
-                              lm <- lift $ getResult (dispatchProp trueProp)
-                              setModelGenD
-                              if not $ isResultNull lm
-                                -- if not null then sat
-                                then return $! insertToSat trueProp lm
-                                -- result was null so unsat
-                                else return mempty
+           resMap <- if (not bd)
+                     then do prop <- gets (configToResultProp . config)
+                             lm <- lift $ getResult prop
+                             b <- lift $ isSat
+                             setModelGenD
+                             if not $ isResultNull lm
+                               -- if not null then sat
+                               then return $! insertToSat prop lm
+                               -- result was null so unsat
+                               else return mempty
                       else -- not sat or have gen'd a model so ignore
-                        return mempty
+                       return mempty
 
            -- reset stack
            lift $! SC.pop 1
+           return resMap
+
+handleChc :: (Show d, Ord d, Boolean b) =>
+  IncVSMTSolve d (Result d) ->
+  IncVSMTSolve d (Result d) ->
+  Dim d ->
+  IncVSMTSolve d b
+handleChc goLeft goRight d =
+  do st <- get
+     let cfg = config st
+     case M.lookup d cfg of
+       Just True  -> do resMapT <- goLeft
+                        store resMapT
+                        return true
+       Just False -> do resMapF <- goRight
+                        store resMapF
+                        return true
+       Nothing    ->
+         do
+           --------------------- true variant ----------------------------------
+           setDim d True
+           resMapT <- goLeft
 
            -------------------- false variant ----------------------------------
            setDim d False
-           setModelNotGenD
-
-           lift $! SC.push 1
-           goRight >>= S.constrain
-
-           bdf <- hasGenDModel
-
-           resMapF <- if (not bdf)
-                      then do falseProp <- gets (configToResultProp . config)
-                              rm <- lift $ getResult (dispatchProp falseProp)
-                              setModelGenD
-                              if not $ isResultNull rm
-                                then return $! insertToSat falseProp rm
-                                else return mempty
-                      else
-                        return mempty
-
-           lift $! SC.pop 1
+           resMapF <- goRight
 
            -- store results and cleanup config
            store $! resMapT <> resMapF
-           removeDim d
+           removeDim d -- this is required still TODO figure out why
 
        -- this return statement should never matter because we've reset the
        -- assertion stack. So I just return true here to fulfill the type
@@ -484,9 +465,9 @@ handleCtx (Loc (ChcB d l r) ctx@(InBBR _ acc _)) =
     -- lift $! SC.push 1
     -- constrain current accumulator
     S.constrain acc
-    handleChc (handleCtx goLeft) (handleCtx goRight) d
-  where !goLeft  = mkLoc (l, ctx)
-        !goRight = mkLoc (r, ctx)
+    handleChc goLeft goRight d
+  where !goLeft  = solveVariant (handleCtx (mkLoc (l, ctx)))
+        !goRight = solveVariant (handleCtx (mkLoc (r, ctx)))
 
   -- this handles the case when the accumulator is one parent node away
 handleCtx (Loc (ChcB d l r) ctx@(InBBL _ (InBBR _ acc _) _)) =
@@ -495,9 +476,9 @@ handleCtx (Loc (ChcB d l r) ctx@(InBBL _ (InBBR _ acc _) _)) =
     -- lift $! SC.push 1
     -- constrain current accumulator
     S.constrain acc
-    handleChc (handleCtx goLeft) (handleCtx goRight) d
-  where !goLeft  = mkLoc (l, ctx)
-        !goRight = mkLoc (r, ctx)
+    handleChc goLeft goRight d
+  where !goLeft  = solveVariant (handleCtx (mkLoc (l, ctx)))
+        !goRight = solveVariant (handleCtx (mkLoc (r, ctx)))
 
   -- When we observe the special case of a choice wrapped in a not we
   -- distribute the not into the variants. This makes the zipper semantics
@@ -510,9 +491,9 @@ handleCtx (Loc (ChcB d l r) (InB Not ctx)) =
   -- If we see a choice with any other context then the ctx is either empty
   -- or the choice is in the leftmost position of the ast
 handleCtx (Loc (ChcB d l r) ctx) =
-    handleChc (handleCtx goLeft) (handleCtx goRight) d
-  where !goLeft  = mkLoc (l, ctx)
-        !goRight = mkLoc (r, ctx)
+    handleChc goLeft goRight d
+  where !goLeft  = solveVariant (handleCtx (mkLoc (l, ctx)))
+        !goRight = solveVariant (handleCtx (mkLoc (r, ctx)))
 
 handleCtx (Loc (OpB Not e) (InB _ ctx)) = handleCtx $! mkLoc (e, ctx)
 handleCtx (Loc (OpB op e) ctx) = handleCtx $! mkLoc (e, InB op ctx)

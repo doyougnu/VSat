@@ -122,31 +122,39 @@ runDefRight = runDef ["RightGen"] rightGen
 
 -- run with stack bench --profile vsat:auto --benchmark-arguments='+RTS -S -RTS --output timings.html'
 main = do
-  let
-      runInc = runIncrementalSolve . breakOnAnd . vPropToAuto
-      genIt n = genBoolProp (genVPropAtSize n genReadable)
-      -- n = [1,300,600,900,1200]
-      n = [1000]
-      m = [0,2,4]
-      !propsER = runEmptyRight <$> m <*> n <*> n
-      !propsEL = runEmptyLeft <$> m <*> n <*> n
-      !propsDL = runDefLeft <$> m <*> n <*> n
-      !props = propsER ++ propsEL ++ propsDL
-      !lg = (leftGen 3 100 5000)
-      !lgR = chcToRight lg
-      !rg = (rightGen 3 100 5000)
+--   let
+--       runInc = runIncrementalSolve . breakOnAnd . vPropToAuto
+--       genIt n = genBoolProp (genVPropAtSize n genReadable)
+--       -- n = [1,300,600,900,1200]
+--       n = [4]
+--       m = [2]
+--       !propsER = runEmptyRight <$> m <*> n <*> n
+--       !propsEL = runEmptyLeft <$> m <*> n <*> n
+--       !propsDL = runDefLeft <$> m <*> n <*> n
+--       !props = propsER ++ propsEL ++ propsDL
+--       !lg = (leftGen 3 100 5000)
+--       !lgR = chcToRight lg
+--       !rg = (rightGen 3 100 5000)
 
-  defaultMain
-    [
-    bgroup "vsat"
-      [ bench "lg"  $ nfIO $! satWith emptyConf lg
-      , bench "lgr" $ nfIO $! satWith emptyConf lgR
-      , bench "rg"  $ nfIO $! satWith emptyConf rg
-      ]
-    ]
+--   defaultMain
+--     [
+--     bgroup "vsat"
+--       [ bench "lg"  $ nfIO $! satWith emptyConf lg
+--       , bench "lgr" $ nfIO $! satWith emptyConf lgR
+--       , bench "rg"  $ nfIO $! satWith emptyConf rg
+--       ]
+--     ]
   -- putStrLn $ "LeftGen: " ++ show
   -- putStrLn mempty
   -- putStrLn $ "Right'd LG: " ++ show (chcToRight $ leftGen 3 1 3)
   -- putStrLn mempty
   -- putStrLn $ "RightGen" ++ show
+  let
+      dimConf' :: VProp Text String String
+      dimConf' = ((bRef "aa") &&& bRef "bb") ||| ((bRef "aa") &&& bnot (bRef "bb"))
+      dimConf = toDimProp dimConf'
+
+  -- res' <- satWithConf (Just dimConf) emptyConf sProp
+  res' <- satWithConf (Just dimConf) emptyConf (midGen 2 2 2)
+  print $ res'
   return ()

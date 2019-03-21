@@ -24,7 +24,7 @@ import           Data.Map.Internal.Debug (showTree)
 import qualified Data.Map.Strict         as M
 import           Data.Maybe              (maybe)
 import           Data.SBV                (SMTResult (..), getModelDictionary,sat)
-import           Data.SBV.Control        (Query, getSMTResult)
+import           Data.SBV.Control        (Query, getSMTResult,io)
 import           Data.SBV.Internals      (cvToBool)
 import           Data.String             (IsString, fromString)
 import           Data.Text               (Text)
@@ -181,9 +181,19 @@ getVSMTModel = pure <$> getSMTResult
 -- when f is applied "x" == True result from f. This is used to turn
 -- dictionaries into <var> == <formula of dimensions where var is True>
 -- associations
-getResult :: Resultable d => (Bool -> ResultProp d) -> Query (Result d)
-getResult !f =
+getResult' :: Resultable d => (Bool -> ResultProp d) -> Query (Result d)
+getResult' !f =
   do as <- fmap (maybe mempty getModelDictionary) $! getVSMTModel
+     io $ putStrLn $ "Model " ++ show as
      return $
        Result (M.foldMapWithKey
                (\k a -> M.singleton (fromString k) (f $ cvToBool a)) as)
+
+-- TODO wrap into the Result module and hardcode
+dispatchProp :: ResultProp d -> Bool -> ResultProp d
+dispatchProp !p !x = if x
+                     then p
+                     else negateResultProp p
+
+getResult :: Resultable d => ResultProp d -> Query (Result d)
+getResult = getResult' . dispatchProp
