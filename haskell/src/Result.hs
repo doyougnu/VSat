@@ -17,7 +17,6 @@ module Result ( Result(..)
               , toResultProp
               , consWithOr
               , negateResultProp
-              , getResultMap
               ) where
 
 import           Control.DeepSeq         (NFData)
@@ -188,10 +187,3 @@ getResult !f =
      return $
        Result (M.foldMapWithKey
                (\k a -> M.singleton (fromString k) (f $ cvToBool a)) as)
-
-getResultMap :: (Resultable d, Show a,Show b,Show d,Ord a, Ord d, Ord b) =>
-  VProp d a b -> IO (M.Map (Dim d) Bool)
-getResultMap p =
-  do
-    resMap <- getModelDictionary <$> (sat $ toPredicate p)
-    return $! M.foldMapWithKey (\k a -> M.singleton (Dim $ fromString k) (cvToBool a)) $ resMap

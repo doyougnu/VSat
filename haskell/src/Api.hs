@@ -9,21 +9,65 @@ module Api ( sat
            , toDimProp
            ) where
 
-import VProp.Types
-import VProp.SBV
-import SAT
-import Config (defConf, debugConf, SMTConf(..), emptyConf)
-import Result
-import Run
-import Utils (fst')
+import qualified Data.Map           as M
+import           Data.Maybe         (fromMaybe)
+import qualified Data.SBV           as S
+import           Data.SBV.Internals (cvToBool)
+import qualified Data.Set           as Set
+import           Data.String        (IsString(..))
+
+import           VProp.Core
+import           VProp.SBV
+import           VProp.Types
+
+import           Config             (SMTConf (..), debugConf, defConf,
+                                     emptyConf)
+import           Result
+import           Run
+import           SAT
+import           Utils              (fst')
 
 -- | a newtype wrapper to denote that this proposition can only have dimensions
 -- as variables
-newtype DimProp d a = DimProp {getDimProp :: VProp d (Dim a) (Dim a)}
-  deriving (Boolean, SAT)
+newtype DimProp d = DimProp {getDimProp :: VProp d (Dim String) (Dim String)}
+  deriving (Boolean,Show)
 
-toDimProp :: VProp d a a -> DimProp d a
-toDimProp = DimProp . trimap id Dim Dim
+toDimProp :: VProp d String String -> DimProp d
+toDimProp = DimProp . trimap id f f
+  where f = Dim
+
+instance (Show d, Ord d) =>
+  SAT (DimProp d) where toPredicate = symbolicPropExpr'
+
+getResultMap :: (Resultable d, Show d, Ord d) =>
+  DimProp d -> IO (M.Map (Dim d) Bool)
+getResultMap p =
+  do
+    resMap <- S.getModelDictionary <$> (S.sat $ toPredicate p)
+    return $! M.foldMapWithKey (\k a -> M.singleton (Dim $ fromString k) (cvToBool a)) $ resMap
+
+-- | Generate a symbolic predicate for a feature expression.
+symbolicPropExpr' :: (Ord d,Show d) => DimProp d -> S.Predicate
+symbolicPropExpr' e' = do
+    let e = trimap id dimName dimName $ getDimProp e'
+        vs = Set.toList (bvars e)
+        ds = Set.toList (dimensions e)
+        isType = Set.toList (ivarsWithType e)
+
+        helper (RefD, d) = sequence $ (d, SD <$> S.sDouble d)
+        helper (RefI, i) = sequence $ (i, SI <$> S.sInt64 i)
+
+    syms  <- fmap (M.fromList . zip vs) (S.sBools vs)
+    dims  <- fmap (M.fromList . zip ds) (S.sBools (map (show . dimName) ds))
+    isyms <- M.fromList <$> traverse helper isType
+    let look f  = fromMaybe err  (M.lookup f syms)
+        lookd d = fromMaybe errd (M.lookup d dims)
+        looki i = fromMaybe erri (M.lookup i isyms)
+    return (evalPropExpr lookd looki look e)
+  where err = error "symbolicPropExpr: Internal error, no symbol found."
+        errd = error "symbolicPropExpr: Internal error, no dimension found."
+        erri = error "symbolicPropExpr: Internal error, no int symbol found."
+
 
 -- | Run VSMT and return variable bindings
 sat :: (Show a, Ord a, Ord d, Show d, Resultable d)
@@ -35,11 +79,13 @@ satWith :: (Show a, Ord a, Ord d, Show d, Resultable d)
 satWith = satWithConf Nothing
 
 satWithConf :: (Show a, Ord a, Ord d, Show d, Resultable d)
-  => Maybe (DimProp d a) -> SMTConf d a a -> VProp d a a -> IO (Result d)
+  => Maybe (DimProp d) -> SMTConf d a a -> VProp d a a -> IO (Result d)
 satWithConf Nothing          conf prop = fst' <$> runVSMT mempty conf prop
 satWithConf (Just dimConfig) conf prop =
-  do configMap <- getResultMap (trimap id dimName dimName $ getDimProp dimConfig)
-     fst' <$> runVSMT (Just configMap) conf prop
+  do
+    configMap <- getResultMap dimConfig
+     -- putStrLn $ show configMap
+    fst' <$> runVSMT (Just configMap) conf prop
 
 
 
