@@ -13,6 +13,7 @@ import qualified Data.Sequence  as Seq
 import qualified Control.Monad.State.Strict as St
 
 import           CaseStudy.Auto.Lang
+import           CaseStudy.Auto.Auto
 import           Run (IncPack, smtBool, smtInt)
 import           VProp.Types (Prim, SNum(..), PrimN(..),VProp(..))
 import qualified VProp.SBV as SB
@@ -20,6 +21,8 @@ import qualified VProp.SBV as SB
 
 import SAT
 import Result
+
+import Debug.Trace (trace)
 
 autoToSBool :: (Show a, Ord a) => AutoLang a a -> IncPack a (AutoLang SBool SNum)
 autoToSBool = bitraverse smtBool smtInt
@@ -125,6 +128,20 @@ makeAssocList xs = L.groupBy isPlain $ L.sort $ fmap (first helper) splitCtx <$>
           | hasCtx x = x
           | otherwise = AutoRef "__plain__"
 
+-- | this is particular to the data, we check each evolution context and
+-- convolve the ones that overlap i.e., evo_ctx <= 2, must consider the <1, <=1
+-- <=0 and <0 case
+correctFormulas :: Map (AutoLang Text Text) (AutoLang Text Text) -> Map (AutoLang Text Text) (AutoLang Text Text)
+correctFormulas m = trace (show m ++ "||||||||||||" ++ show ctxs) $ m
+  where
+    ctxs = mapKeys getEvoCtx m
+
+getEvoCtx :: AutoLang Text Text -> [EvoContext Text]
+getEvoCtx (BBinary _
+           (RBinary op ref i)
+           (RBinary op' ref' i')) = [(op, i), (op',i')]
+getEvoCtx (RBinary op ref i) = pure (op, i)
+getEvoCtx _ = []
 
 
 runIncrementalSolve_ :: Symbolic [(AutoLang Text Text, AutoLang SBool SNum)] ->

@@ -125,17 +125,28 @@ main = do
   let
       runInc = runIncrementalSolve . breakOnAnd . vPropToAuto
       genIt n = genBoolProp (genVPropAtSize n genReadable)
-      n = [1,300,600,900,1200]
+      -- n = [1,300,600,900,1200]
+      n = [1000]
       m = [0,2,4]
       !propsER = runEmptyRight <$> m <*> n <*> n
       !propsEL = runEmptyLeft <$> m <*> n <*> n
       !propsDL = runDefLeft <$> m <*> n <*> n
       !props = propsER ++ propsEL ++ propsDL
+      !lg = (leftGen 3 100 5000)
+      !lgR = chcToRight lg
+      !rg = (rightGen 3 100 5000)
 
   defaultMain
     [
-    bgroup "vsat" props
+    bgroup "vsat"
+      [ bench "lg"  $ nfIO $! satWith emptyConf lg
+      , bench "lgr" $ nfIO $! satWith emptyConf lgR
+      , bench "rg"  $ nfIO $! satWith emptyConf rg
+      ]
     ]
-  -- print $ length $ show r
-  -- print $ length $ show r'
+  -- putStrLn $ "LeftGen: " ++ show
+  -- putStrLn mempty
+  -- putStrLn $ "Right'd LG: " ++ show (chcToRight $ leftGen 3 1 3)
+  -- putStrLn mempty
+  -- putStrLn $ "RightGen" ++ show
   return ()

@@ -1,6 +1,6 @@
 module Result ( Result(..)
               , ResultProp(..)
-              , Resultable(..)
+              , Resultable
               , UniformProp(..)
               , insertToResult
               , insertToSat
@@ -17,13 +17,14 @@ module Result ( Result(..)
               , toResultProp
               , consWithOr
               , negateResultProp
+              , getResultMap
               ) where
 
-import           Control.DeepSeq         (NFData, force)
+import           Control.DeepSeq         (NFData)
 import           Data.Map.Internal.Debug (showTree)
 import qualified Data.Map.Strict         as M
 import           Data.Maybe              (maybe)
-import           Data.SBV                (SMTResult (..), getModelDictionary)
+import           Data.SBV                (SMTResult (..), getModelDictionary,sat)
 import           Data.SBV.Control        (Query, getSMTResult)
 import           Data.SBV.Internals      (cvToBool)
 import           Data.String             (IsString, fromString)
@@ -31,8 +32,9 @@ import           Data.Text               (Text)
 import           GHC.Generics            (Generic)
 
 import           VProp.Core              (dimToVar)
+import           VProp.SBV               (toPredicate)
 import           VProp.Types             (BB_B (..), B_B (..), Config,
-                                          VProp (..), Var, Dim)
+                                          VProp (..), Var, Dim(..))
 
 -- | A custom type whose only purpose is to define a monoid instance over VProp
 -- with logical or as the concat operation and false as unit. We constrain all
@@ -186,3 +188,10 @@ getResult !f =
      return $
        Result (M.foldMapWithKey
                (\k a -> M.singleton (fromString k) (f $ cvToBool a)) as)
+
+getResultMap :: (Resultable d, Show a,Show b,Show d,Ord a, Ord d, Ord b) =>
+  VProp d a b -> IO (M.Map (Dim d) Bool)
+getResultMap p =
+  do
+    resMap <- getModelDictionary <$> (sat $ toPredicate p)
+    return $! M.foldMapWithKey (\k a -> M.singleton (Dim $ fromString k) (cvToBool a)) $ resMap
