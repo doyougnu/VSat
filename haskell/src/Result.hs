@@ -10,6 +10,7 @@ module Result ( Result(..)
               , isResultNull
               , configToResultProp
               , getResult
+              , getResultWith
               , (&:>)
               , (<:|)
               , (<:&)
@@ -181,8 +182,8 @@ getVSMTModel = pure <$> getSMTResult
 -- when f is applied "x" == True result from f. This is used to turn
 -- dictionaries into <var> == <formula of dimensions where var is True>
 -- associations
-getResult' :: Resultable d => (Bool -> ResultProp d) -> Query (Result d)
-getResult' !f =
+getResultWith :: Resultable d => (Bool -> ResultProp d) -> Query (Result d)
+getResultWith !f =
   do as <- fmap (maybe mempty getModelDictionary) $! getVSMTModel
      io $ putStrLn $ "Model " ++ show as
      return $
@@ -196,4 +197,4 @@ dispatchProp !p !x = if x
                      else negateResultProp p
 
 getResult :: Resultable d => ResultProp d -> Query (Result d)
-getResult = getResult' . dispatchProp
+getResult = getResultWith . dispatchProp
