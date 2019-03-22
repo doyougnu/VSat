@@ -150,10 +150,6 @@ runIncrementalSolve_  assocList = runSMT $
   do assocList' <- assocList
      let (Just ps) = L.lookup (AutoRef "__plain__") assocList'
          rest = L.filter (not . (==(AutoRef "__plain__")) . fst) assocList'
-         dispatchProp :: ResultProp d -> Bool -> ResultProp d
-         dispatchProp !p !x = if x
-                              then p
-                              else negateResultProp p
      ps' <- evalAutoExpr ps
      query $
        do
@@ -163,7 +159,7 @@ runIncrementalSolve_  assocList = runSMT $
          resMap <- if b
                    then
                      do let plainProp = autoToResProp (AutoRef "__plain__")
-                        pm <- getResult (dispatchProp plainProp)
+                        pm <- getResult plainProp
                         if not $ isResultNull pm
                           then return $! insertToSat plainProp pm
                           else return mempty
@@ -176,7 +172,7 @@ runIncrementalSolve_  assocList = runSMT $
                resMap' <- if a
                           then
                             do let prop = autoToResProp v
-                               pm <- getResult (dispatchProp prop)
+                               pm <- getResult prop
                                if not $ isResultNull pm
                                  then return $! insertToSat prop pm
                                  else return mempty

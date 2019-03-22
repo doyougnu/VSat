@@ -39,12 +39,14 @@ toDimProp = DimProp . trimap id f f
 instance (Show d, Ord d) =>
   SAT (DimProp d) where toPredicate = symbolicPropExpr'
 
-getResultMap :: (Resultable d, Show d, Ord d) =>
-  DimProp d -> IO (M.Map (Dim d) Bool)
-getResultMap p =
+genConfigPool :: (Resultable d, Show d, Ord d) =>
+  DimProp d -> IO [(M.Map (Dim d) Bool)]
+genConfigPool p =
   do
-    resMap <- S.getModelDictionary <$> (S.sat $ toPredicate p)
-    return $! M.foldMapWithKey (\k a -> M.singleton (Dim $ fromString k) (cvToBool a)) $ resMap
+    S.AllSatResult (_,_,allRes) <- S.allSat $ toPredicate p
+    let resMaps = S.getModelDictionary <$> allRes
+    return $!
+      M.foldMapWithKey (\k a -> M.singleton (Dim $ fromString k) (cvToBool a)) <$> resMaps
 
 -- | Generate a symbolic predicate for a feature expression.
 symbolicPropExpr' :: (Ord d,Show d) => DimProp d -> S.Predicate
@@ -83,9 +85,9 @@ satWithConf :: (Show a, Ord a, Ord d, Show d, Resultable d)
 satWithConf Nothing          conf prop = fst' <$> runVSMT mempty conf prop
 satWithConf (Just dimConfig) conf prop =
   do
-    configMap <- getResultMap dimConfig
+    configPool <- genConfigPool dimConfig
      -- putStrLn $ show configMap
-    fst' <$> runVSMT (Just configMap) conf prop
+    fst' <$> runVSMT configPool conf prop
 
 
 
