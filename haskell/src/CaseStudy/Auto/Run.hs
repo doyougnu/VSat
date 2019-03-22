@@ -4,7 +4,7 @@ import           Data.SBV
 import           Data.SBV.Control
 import           Control.Arrow (first)
 import           Control.Monad (foldM)
-import           Data.Text (Text)
+import           Data.Text (Text,pack)
 import qualified Data.List as L (sort, groupBy, lookup,filter)
 import           Data.Map
 import           Data.SBV.Internals (SolverContext)
@@ -15,7 +15,7 @@ import qualified Control.Monad.State.Strict as St
 import           CaseStudy.Auto.Lang
 import           CaseStudy.Auto.Auto
 import           Run (IncPack, smtBool, smtInt)
-import           VProp.Types (Prim, SNum(..), PrimN(..),VProp(..))
+import           VProp.Types (Prim, SNum(..), PrimN(..),VProp(..),VIExpr(..),RefN(..),NPrim(..))
 import qualified VProp.SBV as SB
 
 
@@ -103,7 +103,7 @@ isSat :: Query Bool
 isSat = do cs <- checkSat
            return $ case cs of
                       Sat -> True
-                      _      -> False
+                      _   -> False
 
 instance (SolverContext (IncSolve a b)) where
   constrain = St.lift . constrain
@@ -113,7 +113,7 @@ instance (SolverContext (IncSolve a b)) where
 runIncrementalSolve :: [AutoLang Text Text] -> IO (Result Text)
 runIncrementalSolve xs = runIncrementalSolve_ (toList <$> assocMaps)
   where assocList = makeAssocList xs
-        assocMaps' = unions $ (fromListWith (flip $ BBinary And) <$> assocList)
+        assocMaps' = correctFormulas . unions $ (fromListWith (flip $ BBinary And) <$> assocList)
         assocMaps = St.evalStateT (mapM (autoToSBool) assocMaps') (mempty,mempty)
 
 -- | Make an association list. this finds a context by position, if it exists it
@@ -128,13 +128,22 @@ makeAssocList xs = L.groupBy isPlain $ L.sort $ fmap (first helper) splitCtx <$>
           | hasCtx x = x
           | otherwise = AutoRef "__plain__"
 
+-- | a map of contexts to formulas, we abuse the types here
+type AssocMap = Map (AutoLang Text Text) (AutoLang Text Text)
+
 -- | this is particular to the data, we check each evolution context and
 -- convolve the ones that overlap i.e., evo_ctx <= 2, must consider the <1, <=1
 -- <=0 and <0 case
-correctFormulas :: Map (AutoLang Text Text) (AutoLang Text Text) -> Map (AutoLang Text Text) (AutoLang Text Text)
-correctFormulas m = trace (show m ++ "||||||||||||" ++ show ctxs) $ m
+correctFormulas :: AssocMap -> AssocMap
+correctFormulas m = m
   where
     ctxs = mapKeys getEvoCtx m
+    m' = mapWithKey (\k v -> (autoAndJoin' $ v : concatMap (flip findLessThan  ctxs) k)) ctxs
+    expandedMap = mapKeys helper m'
+      where helper []  = AutoRef "__plain__"
+            helper xs = autoAndJoin' $ reconstruct <$> xs
+            reconstruct (op, i) = (RBinary op (ACtx (AVar (pack "evo_ctx"))) i)
+
 
 getEvoCtx :: AutoLang Text Text -> [EvoContext Text]
 getEvoCtx (BBinary _
@@ -143,13 +152,19 @@ getEvoCtx (BBinary _
 getEvoCtx (RBinary op ref i) = pure (op, i)
 getEvoCtx _ = []
 
+-- | Given an evo context, find all of the formulas that correspond to evo
+-- contexts that are less than the input one
+findLessThan :: EvoContext Text -> Map [EvoContext Text] (AutoLang Text Text) -> [AutoLang Text Text]
+findLessThan e = elems . filterWithKey (\ks _ -> any (< e) ks)
+
 
 runIncrementalSolve_ :: Symbolic [(AutoLang Text Text, AutoLang SBool SNum)] ->
   IO (Result Text)
 runIncrementalSolve_  assocList = runSMT $
   do assocList' <- assocList
      let (Just ps) = L.lookup (AutoRef "__plain__") assocList'
-         rest = L.filter (not . (==(AutoRef "__plain__")) . fst) assocList'
+         rest = L.filter ((/=(AutoRef "__plain__")) . fst) assocList'
+
      ps' <- evalAutoExpr ps
      query $
        do
@@ -167,16 +182,18 @@ runIncrementalSolve_  assocList = runSMT $
 
          foldM (\acc (v, prop) ->
               do
+               push 1
                runIncrementalSolve__ prop
                a <- isSat
                resMap' <- if a
                           then
-                            do let prop = autoToResProp v
-                               pm <- getResult prop
+                            do let prp = autoToResProp v
+                               pm <- getResult prp
                                if not $ isResultNull pm
-                                 then return $! insertToSat prop pm
+                                 then return $! insertToSat prp pm
                                  else return mempty
                           else return mempty
+               pop 1
                return $! acc <> resMap'
            ) resMap rest
 
@@ -186,11 +203,14 @@ runIncrementalSolve__ prop =
        do
          bs <- St.evalStateT (autoSolve prop) emptyS
          constrain bs
+         return ()
 
 -- autoToResProp :: AutoLang a a -> ResultProp a
 autoToResProp :: AutoLang Text Text -> ResultProp Text
 autoToResProp = ResultProp . Just . UniformProp . helper
-  where helper (RBinary _ (ACtx (AVar a)) _) = RefB a
+  where helper (RBinary op (ACtx (AVar a)) (ALit i))
+          = OpIB (idispatch op) (Ref RefI a) (LitI $ I (fromInteger i))
+        helper (BBinary op l r) = OpBB (rdispatch' op) (helper l) (helper r)
         helper (AutoRef a) = RefB a
 
 splitCtx :: AutoLang a b -> (AutoLang a b, AutoLang a b)
@@ -300,7 +320,7 @@ autoSolve a@(BBinary op l r) =
               let op' = bDispatch op
                   b = l' `op'` r'
               St.lift $ push 1
-              constrain b
+              -- constrain b
               St.modify $ pushS (a,b)
               return b
 autoSolve a@(RBinary op l r) = do -- onQ <- peekM a
@@ -320,7 +340,7 @@ autoSolve a@(RBinary op l r) = do -- onQ <- peekM a
                                           let op' = nDispatch op
                                               b   = l' `op'` r'
                                           St.lift $ push 1
-                                          constrain b
+                                          -- constrain b
                                           St.modify popS
                                           St.modify $ pushS (a,b)
                                           return b
