@@ -10,7 +10,7 @@ import           Data.String                (IsString)
 import           Data.Text
 
 import           CaseStudy.Auto.Lang
-import           Utils                      (fromList)
+import           Utils                      (fromList, fromList')
 import           VProp.Core                 ()
 import qualified VProp.Types                as V
 
@@ -256,6 +256,9 @@ idEncode' x           = x
 autoAndJoin :: [AutoLang a b] -> AutoLang a b
 autoAndJoin = fromList $ BBinary And
 
+autoAndJoin' :: [AutoLang a b] -> AutoLang a b
+autoAndJoin' = fromList' $ BBinary And
+
 autoLength :: AutoLang a b -> Int
 autoLength = getSum . bifoldMap (Sum . const 1) (Sum . const 1)
 
@@ -281,6 +284,22 @@ rdispatch V.Or     = Or
 rdispatch V.Impl   = Impl
 rdispatch V.BiImpl = Eqv
 rdispatch V.XOr    = Xor
+
+rdispatch' :: BOp -> V.BB_B
+rdispatch' And    = V.And
+rdispatch' Or     = V.Or
+rdispatch' Impl   = V.Impl
+rdispatch' Eqv    = V.BiImpl
+rdispatch' Xor    = V.XOr
+
+idispatch :: RBOp -> V.NN_B
+idispatch LST  = V.LT
+idispatch EQL  = V.EQ
+idispatch GRT  = V.GT
+idispatch LSTE = V.LTE
+idispatch GRTE = V.GTE
+idispatch NEQL = V.NEQ
+
 
 breakOnAnd :: AutoLang a a -> [AutoLang a a]
 breakOnAnd (BBinary And l r) = Prelude.concat [breakOnAnd l, breakOnAnd r]
