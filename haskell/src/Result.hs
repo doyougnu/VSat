@@ -23,7 +23,7 @@ module Result ( Result(..)
 import           Control.DeepSeq         (NFData)
 import           Data.Map.Internal.Debug (showTree)
 import qualified Data.Map.Strict         as M
-import           Data.Maybe              (maybe)
+import           Data.Maybe              (maybe,fromMaybe)
 import           Data.SBV                (SMTResult (..), getModelDictionary,sat)
 import           Data.SBV.Control        (Query, getSMTResult,io)
 import           Data.SBV.Internals      (cvToBool)
@@ -31,6 +31,7 @@ import           Data.String             (IsString, fromString)
 import           Data.Text               (Text)
 import           GHC.Generics            (Generic)
 
+import           SAT
 import           VProp.Core              (dimToVar)
 import           VProp.SBV               (toPredicate)
 import           VProp.Types             (BB_B (..), B_B (..), Config,
@@ -39,7 +40,7 @@ import           VProp.Types             (BB_B (..), B_B (..), Config,
 -- | A custom type whose only purpose is to define a monoid instance over VProp
 -- with logical or as the concat operation and false as unit. We constrain all
 -- variable references to be the same just for the Result type
-newtype UniformProp d = UniformProp {uniProp :: VProp d d d} deriving (Eq,Generic)
+newtype UniformProp d = UniformProp {uniProp :: VProp d d d} deriving (Eq,Generic,Boolean)
 
 instance Show d => Show (UniformProp d) where
   show = show . uniProp
@@ -63,39 +64,39 @@ negateResultProp :: ResultProp d -> ResultProp d
 negateResultProp = ResultProp . fmap (UniformProp . OpB Not . uniProp) . getProp
 
 -- | internal only, allows for more flexibility in cons'ing onto a resultProp
-consWith :: (VProp d d d -> VProp d d d -> VProp d d d) -> VProp d d d -> ResultProp d -> ResultProp d
+consWith :: (UniformProp d -> UniformProp d -> UniformProp d) -> UniformProp d -> ResultProp d -> ResultProp d
 consWith f x xs = ResultProp $ do xs' <- getProp xs
-                                  let res = f x (uniProp xs')
-                                  return $ UniformProp res
+                                  let res = f x xs'
+                                  return res
 
 -- | cons the first resultProp onto the second with an Or, if the first is
 -- larger than the second then this will be O(i). O(1) in the case where the
 -- first is a singleton
-consWithOr :: VProp d d d -> ResultProp d -> ResultProp d
-consWithOr = consWith (OpBB Or)
+consWithOr :: UniformProp d -> ResultProp d -> ResultProp d
+consWithOr = consWith (|||)
 
-consWithAnd :: VProp d d d -> ResultProp d -> ResultProp d
-consWithAnd = consWith (OpBB And)
+consWithAnd :: UniformProp d -> ResultProp d -> ResultProp d
+consWithAnd = consWith (&&&)
 
 -- | O(1) cons result prop infix form with a logical And. Note that this proper
 -- use is x :&> y, where |y| << |x| and will result in [y,x]. This is purposeful
 -- and for convenience in the Run module. Essentially put the smaller argument where the angle points
 infixr 5 &:>
 (&:>) :: ResultProp d -> VProp d d d -> ResultProp d
-(&:>) = flip consWithAnd
+(&:>) x y = consWithAnd (UniformProp y) x
 
 infixr 5 <:&
 (<:&) :: VProp d d d -> ResultProp d -> ResultProp d
-(<:&) = consWithAnd
+(<:&) = consWithAnd . UniformProp
 
 -- | O(1) cons result prop infix form with a logical Or
 infixr 5 <:|
 (<:|) :: VProp d d d -> ResultProp d -> ResultProp d
-(<:|) = consWithOr
+(<:|) = consWithOr . UniformProp
 
 infixr 5 |:>
 (|:>) :: ResultProp d -> VProp d d d -> ResultProp d
-(|:>) = flip consWithOr
+(|:>) = flip (<:|)
 
 instance NFData d => NFData (UniformProp d)
 instance NFData d => NFData (ResultProp d)
@@ -137,8 +138,20 @@ instance Show d => Show (Result d) where
 
 instance NFData d => NFData (Result d)
 
-instance (Eq d, Ord d) => Semigroup (Result d) where
-  x <> y = Result $ M.unionWith (<>) (getRes x) (getRes y)
+-- | a bad form global variable for this module, this probably should be a type
+-- family. Used as a special variable for the result map to accumulate
+-- satisfiable configurations on variational formulas
+satKey :: Resultable d => d
+satKey = fromString "__Sat"
+
+instance (Eq d, Ord d, Resultable d) => Semigroup (Result d) where
+  x <> y = Result $ M.unionWithKey helper (getRes x) (getRes y)
+    where helper k m1 m2
+            | k == satKey = consWithOr' m1 m2
+            | otherwise = (<>) m1 m2
+          consWithOr' p rp =  p' `consWithOr` rp
+            where p' = fromMaybe (UniformProp $ LitB False) $ getProp p
+
 
 insertWith :: (Eq d, Ord d) => (ResultProp d -> ResultProp d -> ResultProp d) ->
   d -> ResultProp d -> Result d -> Result d
@@ -150,11 +163,11 @@ insertToResult = insertWith (<>)
 
 -- | O(1) insert a result prop into the result entry for special Sat variable
 insertToSat :: Resultable d => ResultProp d -> Result d -> Result d
-insertToSat = insertWith helper "__Sat"
+insertToSat = insertWith helper satKey
   where
     helper :: ResultProp d -> ResultProp d -> ResultProp d
     helper (getProp -> Nothing)    y = y
-    helper (getProp -> Just uprop) y = consWithOr (uniProp uprop) y
+    helper (getProp -> Just uprop) y = consWithOr uprop y
     helper _                       _ = ResultProp Nothing
 
 
@@ -167,7 +180,7 @@ lookupRes_ :: (Eq d, Ord d) => d -> Result d -> ResultProp d
 lookupRes_ k res = (M.!) (getRes res) k
 
 getResSat :: Resultable d => Result d -> ResultProp d
-getResSat = lookupRes_ "__Sat"
+getResSat = lookupRes_ satKey
 
 -- | O(1) is result empty
 isResultNull :: Resultable d => Result d -> Bool
@@ -185,12 +198,10 @@ getVSMTModel = pure <$> getSMTResult
 getResultWith :: Resultable d => (Bool -> ResultProp d) -> Query (Result d)
 getResultWith !f =
   do as <- fmap (maybe mempty getModelDictionary) $! getVSMTModel
-     io $ putStrLn $ "Model " ++ show as
      return $
        Result (M.foldMapWithKey
                (\k a -> M.singleton (fromString k) (f $ cvToBool a)) as)
 
--- TODO wrap into the Result module and hardcode
 dispatchProp :: ResultProp d -> Bool -> ResultProp d
 dispatchProp !p !x = if x
                      then p
