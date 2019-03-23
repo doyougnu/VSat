@@ -9,7 +9,7 @@ import           Data.Bitraversable      (bimapM)
 import qualified Data.ByteString         as BS (readFile)
 import           Data.Either             (lefts, rights)
 import           Data.Foldable           (foldr')
-import           Data.List               (sort)
+import           Data.List               (sort,delete)
 import           Data.Map                (size, Map)
 import qualified Data.SBV                as S
 import qualified Data.SBV.Control        as SC
@@ -69,11 +69,17 @@ main = do
 
       !sProp = (naiveEncode . nestChoices . autoToVSat) $ autoAndJoin sPs
       !bProp = (naiveEncode . nestChoices . autoToVSat) $ autoAndJoin bPs
-      dimConf' :: VProp Text String String
-      dimConf' = foldr' (&&&) true
-                $ bRef <$> ["D_0","D_1","D_2","D_3","D_4","D_5"]
+      dimensions = bRef <$> ["D_0","D_1","D_2","D_3","D_4","D_5"]
+      -- dimConf' :: VProp Text String String
+      dimConf' = xorList dimensions
+      xorList xs = fromList' (|||) $ fmap (fromList' (&&&)) (go xs)
+        where
+          go :: [VProp Text String String] -> [[VProp Text String String]]
+          go [] = []
+          go (x:xs) = (x : fmap ((<+>) x) (delete x dimensions)) : go xs
       dimConf = toDimProp dimConf'
 
+  print dimConf'
   -- res' <- runIncrementalSolve sPs
   -- T.writeFile "testoutputSAT" (pack . show $ res)
   -- T.writeFile "testoutputInc" (pack . show $ res')
@@ -89,12 +95,12 @@ main = do
 
   -- defaultMain
   --   [
-  --   bgroup "vsat" [ -- bench "small file:NoOpts"  . nfIO $ satWith emptyConf sProp
+  --   bgroup "vsat" [  bench "small file:NoOpts"  . nfIO $ satWithConf Nothing emptyConf sProp
   --                  -- , bench "small file:DefOpts" . nfIO $ satWith defConf   sProp
   --                  -- , bench "small file:Empty:Compact" . nfIO $ satWith defConf   (compactEncode sPs)
-  --                  -- --   bench "Auto:VSolve:NoOpts"  . nfIO $ satWith emptyConf bProp
+  --                  --   bench "Auto:VSolve:NoOpts"  . nfIO $ satWith emptyConf bProp
   --                  -- -- , bench "Auto:VSolve:DefOpts" . nfIO $ satWith defConf   bProp
-  --                  -- , bench "Auto:IncrementalBaseline:Naive" . nfIO $ runIncrementalSolve bPs
+  --                  -- bench "Auto:IncrementalBaseline:Naive" . nfIO $ runIncrementalSolve bPs
   --                  -- bench "Auto:IncrementalBaseline:Compact" . nfIO $! satWith emptyConf (compactEncode bPs)
   --                 ]
   --   ]

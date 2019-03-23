@@ -154,7 +154,12 @@ main = do
       dimConf' = ((bRef "aa") &&& bRef "bb") ||| ((bRef "aa") &&& bnot (bRef "bb"))
       dimConf = toDimProp dimConf'
 
+      prop = midGen 3 2 2
+
   -- res' <- satWithConf (Just dimConf) emptyConf sProp
-  res' <- satWithConf (Just dimConf) emptyConf (midGen 2 2 2)
+  putStrLn $ show prop
+  res' <- satWithConf (Just dimConf) emptyConf prop
+  -- res' <- satWithConf Nothing emptyConf prop
   print $ res'
+
   return ()
