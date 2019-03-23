@@ -204,12 +204,11 @@ naiveEncode (V.OpBB V.Impl a@(V.ChcB dim l r) r')
                 (V.ChcB dim (naiveEncode l) (naiveEncode r))
                 (naiveEncode r')
 
-naiveEncode (V.OpBB V.Impl l' a@(V.ChcB dim l r))
-  | hasHole a = fill a l'
+naiveEncode (V.OpBB V.Impl l r')
+  | hasHole l = fill l r'
   | otherwise = V.OpBB V.Impl
-                (naiveEncode l')
-                (V.ChcB dim
-                 (naiveEncode l) (naiveEncode r))
+                (naiveEncode l)
+                (naiveEncode r')
 
 naiveEncode (V.OpBB op l r) = V.OpBB op (naiveEncode l) (naiveEncode r)
 naiveEncode (V.OpB op e) = V.OpB op (naiveEncode e)
