@@ -52,11 +52,11 @@ instance FromJSON Auto where
 -- | run the state monad and get a vprop expression back
 autoToVSat :: (IsString a, Show a, Eq a, Ord a, Monoid a) =>
   AutoLang a a -> V.VProp Text a a
-autoToVSat = fst . runAutoToVSat__
+autoToVSat = fst . runAutoToVSat'
 
-runAutoToVSat__ :: (IsString a, Show a, Eq a, Ord a, Monoid a) =>
+runAutoToVSat' :: (IsString a, Show a, Eq a, Ord a, Monoid a) =>
   AutoLang a a -> (V.VProp Text a a, (DimMap a Text, Integer))
-runAutoToVSat__ = flip S.runState (M.empty, 0) . autoToVSat_
+runAutoToVSat' = flip S.runState (M.empty, 0) . autoToVSat_
 
 -- | A hole that is used as a placeholder for reifying nested choices in
 -- autoToVsat
