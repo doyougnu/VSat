@@ -86,7 +86,8 @@ satWithConf Nothing          conf prop = fst' <$> runVSMT mempty conf prop
 satWithConf (Just dimConfig) conf prop =
   do
     configPool <- genConfigPool dimConfig
-     -- putStrLn $ show configMap
+    -- mapM_ (putStrLn . show) configPool
+    -- putStrLn . show $ (length configPool)
     fst' <$> runVSMT configPool conf prop
 
 
