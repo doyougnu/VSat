@@ -135,7 +135,7 @@ type AssocMap = Map (AutoLang Text Text) (AutoLang Text Text)
 -- convolve the ones that overlap i.e., evo_ctx <= 2, must consider the <1, <=1
 -- <=0 and <0 case
 correctFormulas :: AssocMap -> AssocMap
-correctFormulas m = m
+correctFormulas m = expandedMap
   where
     ctxs = mapKeys getEvoCtx m
     m' = mapWithKey (\k v -> (autoAndJoin' $ v : concatMap (flip findLessThan  ctxs) k)) ctxs
