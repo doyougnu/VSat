@@ -226,10 +226,10 @@ isEmptySt :: (Resultable d, Monoid d) => IncState d -> Bool
 isEmptySt = (==) emptySt
 
 onResult :: (ResultMap d -> ResultMap d) -> IncState d -> IncState d
-onResult f (IncState {..}) = IncState {result=f result, ..}
+onResult f IncState {..} = IncState {result=f result, ..}
 
 onConfig :: (Config d -> Config d) -> IncState d -> IncState d
-onConfig f (IncState {..}) = IncState {config=f <$> config, ..}
+onConfig f IncState {..} = IncState {config=f <$> config, ..}
 
 onConfigPool :: (ConfigPool d -> ConfigPool d) -> IncState d -> IncState d
 onConfigPool f (IncState {..}) = IncState {configPool=f configPool, ..}
@@ -262,7 +262,7 @@ replaceConfig :: Config d -> IncState d -> IncState d
 replaceConfig = onConfig . const
 
 onProcessed :: (GenModel -> GenModel) -> IncState d -> IncState d
-onProcessed f (IncState {..}) = IncState {processed=f processed, ..}
+onProcessed f IncState {..} = IncState {processed=f processed, ..}
 
 -- | the incremental solve monad, with the base monad being the query monad so
 -- we can pull out sbv models Hardcoding so that I don't have to write the mtl
@@ -363,11 +363,12 @@ instance (Monad m, I.SolverContext m) =>
 -- Helper functions for solve routine
 
 store :: (Eq d, Ord d, Resultable d) => Result d -> IncVSMTSolve d ()
+store EmptyResult = return ()
 store (Result res) = St.modify' $! onResult ((<>) res)
 store (UnSatResult res) =
   do cfg' <- gets config
      let cfg = configToResultProp $! fromMaybe mempty cfg'
-     St.modify' (onUnSatResult ((<>) (M.singleton cfg res)))
+     St.modify' (onUnSatResult (M.singleton cfg res <>))
 
 setDim :: Ord d => (Dim d) -> Bool -> IncVSMTSolve d ()
 setDim = (St.modify' .) . insertToConfig
