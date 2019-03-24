@@ -57,7 +57,7 @@ import SAT
 
 -- | A feature is a named, boolean configuration option.
 newtype Var = Var { varName :: Text}
-  deriving (Data,Eq,IsString,Ord,Typeable,Generic,NFData)
+  deriving (Data,Eq,IsString,Ord,Typeable,Generic,NFData,Semigroup,Monoid)
 
 newtype Dim a = Dim { dimName ::  a}
   deriving (Data,Eq,IsString,Ord,Show,Typeable,Generic,NFData,Arbitrary,Functor,Traversable,Foldable)

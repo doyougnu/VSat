@@ -67,8 +67,8 @@ main = do
       bPs' = parse langParser "" <$> bCs
       bPs = rights bPs'
 
-      !sProp = (naiveEncode . nestChoices . autoToVSat) $ autoAndJoin sPs
-      !bProp = (naiveEncode . nestChoices . autoToVSat) $ autoAndJoin bPs
+      !sProp = (naiveEncode . autoToVSat) $ autoAndJoin sPs
+      !bProp = (naiveEncode . autoToVSat) $ autoAndJoin bPs
       dimensions = bRef <$> ["D_0","D_1","D_2","D_3","D_4","D_5"]
       -- dimConf' :: VProp Text String String
       dimConf' = xorList dimensions

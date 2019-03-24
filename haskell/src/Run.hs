@@ -11,7 +11,7 @@ module Run ( SatDict
 
 import qualified Data.Map.Strict as M
 import Control.Monad (when)
-import Data.Maybe (isJust, fromJust)
+import Data.Maybe (isJust, fromJust,fromMaybe)
 import Control.DeepSeq (force)
 import Control.Monad.RWS.Strict
 import Control.Monad.State.Strict    as St
@@ -87,7 +87,7 @@ runAD :: (Show a, Show d, Ord d, Ord a, Resultable d) =>
       -> IO (Result d)
 runAD os p f = fst' <$> runEnv (flip runAndDecomp f) os p
 
-runBF :: (Show a, Show d, Ord a, Ord d, Resultable d) =>
+runBF :: (Show a, Show d, Ord a, Resultable d,Monoid d) =>
          SMTConf d a a
       -> VProp d a a
       -> IO (Result d)
@@ -129,7 +129,7 @@ runForDict x = S.runSMT $
 -- | Run the brute force baseline case, that is select every plain variant and
 -- run them to the sat solver
 runBruteForce ::
-  (MonadTrans t, Show a,Show d, Ord a, Ord d, Resultable d
+  (MonadTrans t, Show a,Show d, Ord a, Ord d, Resultable d, Monoid d
   , MonadState (SatDict d) (t IO)) =>
   VProp d a a -> t IO (Result d)
 runBruteForce prop = lift $ flip evalStateT (initSt prop) $
@@ -186,33 +186,46 @@ type IncPack a = St.StateT (UsedVars a S.SBool, UsedVars a SNum) S.Symbolic
 -- data structure
 type ConfigPool a = [(Config a)]
 
+-- | a mapping keeping the config and the unsatisfiable core of the config; used
+-- in the case of an usat result
+type UnSatResult d = M.Map (ResultProp d) UnSatCore
+
 -- | the internal state for the incremental solve algorithm, it holds a result
 -- list, and the used dims map, and is parameterized by the types of dimensions,
 -- d
-data IncState d = IncState { result :: !(Result d)         -- * the result map
-                           , configPool :: !(ConfigPool d) -- * the pool of
-                                                        -- configs that
-                                                        -- dictate
-                                                        -- selection
-                           , runViaPool :: Bool
-                           , config :: !(Maybe (Config d)) -- * the current config
-                           , processed :: GenModel      -- * a flag denoting
-                                                        -- that a model has been
-                                                        -- generated during a
-                                                        -- recursive call
-                           } deriving (Eq,Show)
+data IncState d =
+  IncState { result      :: !(ResultMap d)     -- * the result map
+           , configPool  :: !(ConfigPool d) -- * the pool of
+                                            -- configs that
+                                            -- dictate
+                                            -- selection
+           , runViaPool  :: Bool            -- * Boolean flag dictating whether
+                                            -- to inspect the config pool or not
+           , config      :: !(Maybe (Config d)) -- * the current config
+           , processed   :: GenModel            -- * a flag denoting
+                                                -- that a model has been
+                                                -- generated during a
+                                                -- recursive call
+           , unSatResult :: UnSatResult d       -- * a result mapping
+                                                -- to store
+                                                -- unsatisfiable
+                                                -- cores in the case
+                                                -- of an unsat call
+           } deriving (Eq,Show)
 
-emptySt :: Resultable d => IncState d
+emptySt :: (Resultable d, Monoid d) => IncState d
 emptySt = IncState{ result=mempty
                   , configPool=mempty
                   , config=(Just mempty)
                   , processed=False
-                  , runViaPool=False}
+                  , runViaPool=False
+                  , unSatResult=mempty
+                  }
 
-isEmptySt :: Resultable d => IncState d -> Bool
+isEmptySt :: (Resultable d, Monoid d) => IncState d -> Bool
 isEmptySt = (==) emptySt
 
-onResult :: (Result d -> Result d) -> IncState d -> IncState d
+onResult :: (ResultMap d -> ResultMap d) -> IncState d -> IncState d
 onResult f (IncState {..}) = IncState {result=f result, ..}
 
 onConfig :: (Config d -> Config d) -> IncState d -> IncState d
@@ -220,6 +233,9 @@ onConfig f (IncState {..}) = IncState {config=f <$> config, ..}
 
 onConfigPool :: (ConfigPool d -> ConfigPool d) -> IncState d -> IncState d
 onConfigPool f (IncState {..}) = IncState {configPool=f configPool, ..}
+
+onUnSatResult :: (UnSatResult d -> UnSatResult d) -> IncState d -> IncState d
+onUnSatResult f (IncState {..}) = IncState {unSatResult=f unSatResult, ..}
 
 setViaPool :: Bool -> IncState d -> IncState d
 setViaPool b (IncState {..}) = IncState {runViaPool=b, ..}
@@ -238,6 +254,9 @@ replacePool = onConfigPool . const
 
 insertToConfig :: Ord d => (Dim d) -> Bool -> IncState d -> IncState d
 insertToConfig d b = onConfig $ M.insert d b
+
+insertToUnSat :: Ord d => ResultProp d -> [String] -> IncState d -> IncState d
+insertToUnSat cfg reason = onUnSatResult $ M.insert cfg reason
 
 replaceConfig :: Config d -> IncState d -> IncState d
 replaceConfig = onConfig . const
@@ -260,17 +279,16 @@ vSMTSolve prop configPool =
      SC.query $
        do
          let
-           f = if (null configPool) then runWithoutPool else runWithPool
+           f = if null configPool then runWithoutPool else runWithPool
            startState = f $! replacePool configPool emptySt
          (b,resSt) <- St.runStateT (vSMTSolve_ prop') startState
-         res <- if isEmptySt resSt
-                then do S.constrain b
-                        b' <- isSat
-                        if b'
-                          then getResultWith (toResultProp . LitB)
-                          else return mempty
-                else return $ result resSt
-         return res
+         if isEmptySt resSt
+           then do S.constrain b
+                   b' <- isSat
+                   if b'
+                     then getResultWith (toResultProp . LitB)
+                     else return mempty
+           else return . Result $ result resSt
 
 -- | This ensures two things: 1st we need all variables to be symbolic before
 -- starting query mode. 2nd we cannot allow any duplicates to be called on a
@@ -345,7 +363,11 @@ instance (Monad m, I.SolverContext m) =>
 -- Helper functions for solve routine
 
 store :: (Eq d, Ord d, Resultable d) => Result d -> IncVSMTSolve d ()
-store = St.modify' . onResult . (<>)
+store (Result res) = St.modify' $! onResult ((<>) res)
+store (UnSatResult res) =
+  do cfg' <- gets config
+     let cfg = configToResultProp $! fromMaybe mempty cfg'
+     St.modify' (onUnSatResult ((<>) (M.singleton cfg res)))
 
 setDim :: Ord d => (Dim d) -> Bool -> IncVSMTSolve d ()
 setDim = (St.modify' .) . insertToConfig
@@ -447,7 +469,8 @@ handleChc goLeft goRight d =
                 resMapF <- goRight
 
                 -- store results and cleanup config
-                store $! resMapT <> resMapF
+                store $! resMapT
+                store $! resMapF
 
                 -- we remove the Dim from the config so that when the recursion
                 -- completes the last false branch of the last choice is not
