@@ -186,15 +186,11 @@ type IncPack a = St.StateT (UsedVars a S.SBool, UsedVars a SNum) S.Symbolic
 -- data structure
 type ConfigPool a = [(Config a)]
 
--- | a mapping keeping the config and the unsatisfiable core of the config; used
--- in the case of an usat result
-type UnSatResult d = M.Map (ResultProp d) UnSatCore
-
 -- | the internal state for the incremental solve algorithm, it holds a result
 -- list, and the used dims map, and is parameterized by the types of dimensions,
 -- d
 data IncState d =
-  IncState { result      :: !(ResultMap d)     -- * the result map
+  IncState { result      :: !(Result d)     -- * the result map
            , configPool  :: !(ConfigPool d) -- * the pool of
                                             -- configs that
                                             -- dictate
@@ -206,11 +202,6 @@ data IncState d =
                                                 -- that a model has been
                                                 -- generated during a
                                                 -- recursive call
-           , unSatResult :: UnSatResult d       -- * a result mapping
-                                                -- to store
-                                                -- unsatisfiable
-                                                -- cores in the case
-                                                -- of an unsat call
            } deriving (Eq,Show)
 
 emptySt :: (Resultable d, Monoid d) => IncState d
@@ -219,13 +210,12 @@ emptySt = IncState{ result=mempty
                   , config=(Just mempty)
                   , processed=False
                   , runViaPool=False
-                  , unSatResult=mempty
                   }
 
 isEmptySt :: (Resultable d, Monoid d) => IncState d -> Bool
 isEmptySt = (==) emptySt
 
-onResult :: (ResultMap d -> ResultMap d) -> IncState d -> IncState d
+onResult :: (Result d -> Result d) -> IncState d -> IncState d
 onResult f IncState {..} = IncState {result=f result, ..}
 
 onConfig :: (Config d -> Config d) -> IncState d -> IncState d
@@ -233,9 +223,6 @@ onConfig f IncState {..} = IncState {config=f <$> config, ..}
 
 onConfigPool :: (ConfigPool d -> ConfigPool d) -> IncState d -> IncState d
 onConfigPool f (IncState {..}) = IncState {configPool=f configPool, ..}
-
-onUnSatResult :: (UnSatResult d -> UnSatResult d) -> IncState d -> IncState d
-onUnSatResult f (IncState {..}) = IncState {unSatResult=f unSatResult, ..}
 
 setViaPool :: Bool -> IncState d -> IncState d
 setViaPool b (IncState {..}) = IncState {runViaPool=b, ..}
@@ -254,9 +241,6 @@ replacePool = onConfigPool . const
 
 insertToConfig :: Ord d => (Dim d) -> Bool -> IncState d -> IncState d
 insertToConfig d b = onConfig $ M.insert d b
-
-insertToUnSat :: Ord d => ResultProp d -> [String] -> IncState d -> IncState d
-insertToUnSat cfg reason = onUnSatResult $ M.insert cfg reason
 
 replaceConfig :: Config d -> IncState d -> IncState d
 replaceConfig = onConfig . const
@@ -288,7 +272,7 @@ vSMTSolve prop configPool =
                    if b'
                      then getResultWith (toResultProp . LitB)
                      else return mempty
-           else return . Result $ result resSt
+           else return $ result resSt
 
 -- | This ensures two things: 1st we need all variables to be symbolic before
 -- starting query mode. 2nd we cannot allow any duplicates to be called on a
@@ -362,13 +346,8 @@ instance (Monad m, I.SolverContext m) =>
 
 -- Helper functions for solve routine
 
-store :: (Eq d, Ord d, Resultable d) => Result d -> IncVSMTSolve d ()
-store EmptyResult = return ()
-store (Result res) = St.modify' $! onResult ((<>) res)
-store (UnSatResult res) =
-  do cfg' <- gets config
-     let cfg = configToResultProp $! fromMaybe mempty cfg'
-     St.modify' (onUnSatResult (M.singleton cfg res <>))
+store :: Resultable d => Result d -> IncVSMTSolve d ()
+store = St.modify' . onResult  . (<>)
 
 setDim :: Ord d => (Dim d) -> Bool -> IncVSMTSolve d ()
 setDim = (St.modify' .) . insertToConfig

@@ -26,14 +26,18 @@ instance ToJSON SMTResult where
 instance ToJSON SMTReasonUnknown
 instance ToJSON SatResult where toJSON (SatResult x) = toJSON x
 instance ToJSON ThmResult where toJSON (ThmResult x) = toJSON x
+instance FromJSON d => FromJSON (R.ResultProp d)
+instance ToJSON d => ToJSON (R.ResultProp d)
+instance (FromJSON d, FromJSONKey d) => FromJSONKey (R.ResultProp d)
+instance (ToJSON d, ToJSONKey d) => ToJSONKey (R.ResultProp d)
 instance (R.Resultable d, ToJSONKey d, ToJSON d) => ToJSON (R.Result d)
 instance (R.Resultable d, ToJSONKey d, ToJSON d) => ToJSON (R.ResultMap d)
+instance (R.Resultable d, ToJSONKey d, ToJSON d) => ToJSON (R.UnSatResult d)
+instance (R.Resultable d, FromJSONKey d, FromJSON d) => FromJSON (R.UnSatResult d)
 instance (R.Resultable d, FromJSONKey d, FromJSON d) => FromJSON (R.Result d)
 instance (R.Resultable d, FromJSONKey d, FromJSON d) => FromJSON (R.ResultMap d)
 instance FromJSON d => FromJSON (R.UniformProp d)
 instance ToJSON d => ToJSON (R.UniformProp d)
-instance FromJSON d => FromJSON (R.ResultProp d)
-instance ToJSON d => ToJSON (R.ResultProp d)
 
 instance (Show d, Show a, ToJSON a, ToJSON d) => ToJSON (V a d) where
   toJSON (Plain x) = toJSON x
