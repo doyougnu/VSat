@@ -141,6 +141,7 @@ instance Show d => Show (ResultMap d) where
   show = showTree . getRes
 
 instance NFData d => NFData (ResultMap d)
+instance NFData d => NFData (Result d)
 
 -- | An unsat core is a list of strings as dictated by SBV, see issue #21
 type UnSatCore = [String]
@@ -151,9 +152,12 @@ data Result d = Result (ResultMap d)
               deriving (Eq,Show,Generic)
 
 instance (Semigroup d,Resultable d) => Semigroup (Result d) where
+  (<>) EmptyResult EmptyResult = EmptyResult
+  (<>) EmptyResult  x = x
+  (<>) x EmptyResult  = x
   (<>) (Result a ) (Result b) = Result (a <> b)
-  (<>) (UnSatResult a) x@(Result b) = x
-  (<>)  x@(Result b) (UnSatResult a)= x
+  (<>) (UnSatResult _) x@(Result _) = x
+  (<>)  x@(Result _) (UnSatResult _)= x
   (<>) (UnSatResult a) (UnSatResult b) = UnSatResult (a <> b)
 
 
