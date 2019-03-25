@@ -195,10 +195,10 @@ data IncState d =
                                             -- configs that
                                             -- dictate
                                             -- selection
-           , runViaPool  :: Bool            -- * Boolean flag dictating whether
+           , runViaPool  :: !Bool            -- * Boolean flag dictating whether
                                             -- to inspect the config pool or not
            , config      :: !(Maybe (Config d)) -- * the current config
-           , processed   :: GenModel            -- * a flag denoting
+           , processed   :: !GenModel            -- * a flag denoting
                                                 -- that a model has been
                                                 -- generated during a
                                                 -- recursive call
@@ -262,17 +262,21 @@ vSMTSolve prop configPool =
   do prop' <- prop
      SC.query $
        do
-         let
-           f = if null configPool then runWithoutPool else runWithPool
-           startState = f $! replacePool configPool emptySt
-         (b,resSt) <- St.runStateT (vSMTSolve_ prop') startState
-         if isEmptySt resSt
-           then do S.constrain b
-                   b' <- isSat
-                   if b'
-                     then getResultWith (toResultProp . LitB)
-                     else return mempty
+         let f = if null configPool then runWithoutPool else runWithPool
+             startState = f $! replacePool configPool emptySt
+         (bs,resSt) <- St.runStateT
+           (mapM (\cfg -> setConfig cfg >> vSMTSolve_ prop') configPool) startState
+         if isResultNull (result resSt)
+           then mconcat <$> mapM solvePlain bs
            else return $ result resSt
+
+solvePlain :: Resultable d => S.SBool -> SC.Query (Result d)
+solvePlain b = do S.constrain b
+                  b' <- isSat
+                  if b'
+                    then getResultWith (toResultProp . LitB)
+                    else return mempty
+
 
 -- | This ensures two things: 1st we need all variables to be symbolic before
 -- starting query mode. 2nd we cannot allow any duplicates to be called on a
@@ -407,12 +411,7 @@ solveVariant go = do
            lift $! SC.pop 1
            return resMap
 
--- handleChc :: (Ord d, Boolean b) =>
---   IncVSMTSolve d (Result d) ->
---   IncVSMTSolve d (Result d) ->
---   Dim d ->
---   IncVSMTSolve d b
-handleChc goLeft goRight d =
+dispatchConfig goLeft goRight d =
   do rvp <- gets runViaPool
   -- when we have the flag to run with a pool we manipulate the current config
   -- and pool to generate configs when the config is empty. We denote the end of
@@ -421,6 +420,7 @@ handleChc goLeft goRight d =
          st <- get
          let currentCfg' = config st
              cfgPool = configPool st
+         lift $ SC.io $ putStrLn $ "Checking CONF: " ++ show currentCfg' ++ " ::: " ++ show cfgPool
          if (maybe False M.null currentCfg')
            -- then we aren't solving a config, so check pool
            then if (not $ null cfgPool)
@@ -434,34 +434,7 @@ handleChc goLeft goRight d =
            --  we have a current config so we just leave it unchanged
            else return ()
 
-     currentCfg <- gets config
-     when (isJust currentCfg) $ do
-            case M.lookup d (fromJust currentCfg) of
-              Just True  -> do goLeft >>= store
-              Just False -> do goRight >>= store
-              Nothing    -> do
-                --------------------- true variant -----------------------------
-                setDim d True
-                resMapT <- goLeft
-
-                -------------------- false variant -----------------------------
-                setDim d False
-                resMapF <- goRight
-
-                -- store results and cleanup config
-                store $! resMapT
-                store $! resMapF
-
-                -- we remove the Dim from the config so that when the recursion
-                -- completes the last false branch of the last choice is not
-                -- remembered. For Example if we have A<p,q> /\ B<r,s> then the
-                -- recursion starts at A and completes at the right variants of
-                -- B, namely s. If we don't remove the dimension from the config
-                -- then the config will retain the selection of (B, False) and
-                -- therefore on the (A, False) branch of the recursion it'll
-                -- miss (B, True)
-                removeDim d
-                return ()
+     -- handleChc goLeft goRight d
 
      -- this return statement should never matter because we've reset the
      -- assertion stack. So I just return true here, this last check is to tie
@@ -469,10 +442,48 @@ handleChc goLeft goRight d =
      -- our config is not nothign which means the recursion is complete. If both
      -- are the case then we reset the config and recur, if not then we return
      -- true as we are done
+     lift $ SC.io $ putStrLn $ "Cleaning up config"
+     currentCfg <- gets config
      if (isJust currentCfg &&& rvp)
        then do resetConfig
-               handleChc goLeft goRight d
+               dispatchConfig goLeft goRight d
        else return true
+
+
+-- handleChc :: (Ord d, Boolean b) =>
+--   IncVSMTSolve d (Result d) ->
+--   IncVSMTSolve d (Result d) ->
+--   Dim d ->
+--   IncVSMTSolve d b
+handleChc goLeft goRight d =
+  do currentCfg <- gets config
+     case M.lookup d (fromJust currentCfg) of
+       Just True  -> goLeft >>= store
+       Just False -> goRight >>= store
+       Nothing    -> do
+         lift $ SC.io $ putStrLn $ "Dim Not Found: " ++ show d ++ " in " ++ show currentCfg
+         --------------------- true variant -----------------------------
+         lift $ SC.io $ putStrLn $ "solving True Variant of " ++ show d
+         setDim d True
+         resMapT <- goLeft
+
+         lift $ SC.io $ putStrLn $ "SOlving False Variant of " ++ show d
+         -------------------- false variant -----------------------------
+         setDim d False
+         resMapF <- goRight
+
+         -- store results and cleanup config
+         store $! resMapT <> resMapF
+
+         -- we remove the Dim from the config so that when the recursion
+         -- completes the last false branch of the last choice is not
+         -- remembered. For Example if we have A<p,q> /\ B<r,s> then the
+         -- recursion starts at A and completes at the right variants of
+         -- B, namely s. If we don't remove the dimension from the config
+         -- then the config will retain the selection of (B, False) and
+         -- therefore on the (A, False) branch of the recursion it'll
+         -- miss (B, True)
+         removeDim d
 
 -- | Handle a choice in the IncVSMTSolve monad, we check to make sure that if a
 -- choice is already selected then the selection is maintained. If not then we
@@ -541,6 +552,7 @@ handleCtx (Loc (ChcB d l r) ctx@(InBBR _ acc _)) =
     -- constrain current accumulator
     S.constrain acc
     handleChc goLeft goRight d
+    return true
   where !goLeft  = solveVariant (handleCtx (mkLoc (l, ctx)))
         !goRight = solveVariant (handleCtx (mkLoc (r, ctx)))
 
@@ -552,6 +564,7 @@ handleCtx (Loc (ChcB d l r) ctx@(InBBL _ (InBBR _ acc _) _)) =
     -- constrain current accumulator
     S.constrain acc
     handleChc goLeft goRight d
+    return true
   where !goLeft  = solveVariant (handleCtx (mkLoc (l, ctx)))
         !goRight = solveVariant (handleCtx (mkLoc (r, ctx)))
 
@@ -566,7 +579,7 @@ handleCtx (Loc (ChcB d l r) (InB Not ctx)) =
   -- If we see a choice with any other context then the ctx is either empty
   -- or the choice is in the leftmost position of the ast
 handleCtx (Loc (ChcB d l r) ctx) =
-    handleChc goLeft goRight d
+    handleChc goLeft goRight d >> return true
   where !goLeft  = solveVariant (handleCtx (mkLoc (l, ctx)))
         !goRight = solveVariant (handleCtx (mkLoc (r, ctx)))
 
