@@ -233,12 +233,14 @@ vSMTSolve :: (Ord d, Show d, Resultable d) =>
   S.Symbolic (VProp d S.SBool SNum) -> ConfigPool d-> S.Symbolic (Result d)
 vSMTSolve prop configPool =
   do prop' <- prop
+     S.setOption $ SC.ProduceUnsatCores True
      SC.query $
        do
          (bs,resSt) <- St.runStateT
            (mapM (\cfg -> setConfig cfg >> vSMTSolve_ prop') configPool) emptySt
+         SC.io $ putStrLn $ show $ bs
          if isResultNull (result resSt)
-           then mconcat <$> mapM solvePlain bs
+           then St.evalStateT (vSMTSolve_ prop')  emptySt >>= solvePlain
            else return $ result resSt
 
 solvePlain :: Resultable d => S.SBool -> SC.Query (Result d)
