@@ -10,8 +10,7 @@ module Run ( SatDict
            ) where
 
 import qualified Data.Map.Strict as M
-import Control.Monad (when)
-import Data.Maybe (isJust, fromJust,fromMaybe)
+import Data.Maybe (fromJust)
 import Control.DeepSeq (force)
 import Control.Monad.RWS.Strict
 import Control.Monad.State.Strict    as St
@@ -191,12 +190,6 @@ type ConfigPool a = [(Config a)]
 -- d
 data IncState d =
   IncState { result      :: !(Result d)     -- * the result map
-           , configPool  :: !(ConfigPool d) -- * the pool of
-                                            -- configs that
-                                            -- dictate
-                                            -- selection
-           , runViaPool  :: !Bool            -- * Boolean flag dictating whether
-                                            -- to inspect the config pool or not
            , config      :: !(Maybe (Config d)) -- * the current config
            , processed   :: !GenModel            -- * a flag denoting
                                                 -- that a model has been
@@ -206,10 +199,8 @@ data IncState d =
 
 emptySt :: (Resultable d, Monoid d) => IncState d
 emptySt = IncState{ result=mempty
-                  , configPool=mempty
                   , config=(Just mempty)
                   , processed=False
-                  , runViaPool=False
                   }
 
 isEmptySt :: (Resultable d, Monoid d) => IncState d -> Bool
@@ -221,23 +212,8 @@ onResult f IncState {..} = IncState {result=f result, ..}
 onConfig :: (Config d -> Config d) -> IncState d -> IncState d
 onConfig f IncState {..} = IncState {config=f <$> config, ..}
 
-onConfigPool :: (ConfigPool d -> ConfigPool d) -> IncState d -> IncState d
-onConfigPool f (IncState {..}) = IncState {configPool=f configPool, ..}
-
-setViaPool :: Bool -> IncState d -> IncState d
-setViaPool b (IncState {..}) = IncState {runViaPool=b, ..}
-
 deleteFromConfig :: Ord d => (Dim d) -> IncState d -> IncState d
 deleteFromConfig = onConfig . M.delete
-
-runWithPool :: IncState d -> IncState d
-runWithPool = setViaPool True
-
-runWithoutPool :: IncState d -> IncState d
-runWithoutPool = setViaPool False
-
-replacePool :: ConfigPool d -> IncState d -> IncState d
-replacePool = onConfigPool . const
 
 insertToConfig :: Ord d => (Dim d) -> Bool -> IncState d -> IncState d
 insertToConfig d b = onConfig $ M.insert d b
@@ -262,10 +238,8 @@ vSMTSolve prop configPool =
   do prop' <- prop
      SC.query $
        do
-         let f = if null configPool then runWithoutPool else runWithPool
-             startState = f $! replacePool configPool emptySt
          (bs,resSt) <- St.runStateT
-           (mapM (\cfg -> setConfig cfg >> vSMTSolve_ prop') configPool) startState
+           (mapM (\cfg -> setConfig cfg >> vSMTSolve_ prop') configPool) emptySt
          if isResultNull (result resSt)
            then mconcat <$> mapM solvePlain bs
            else return $ result resSt
@@ -359,18 +333,8 @@ setDim = (St.modify' .) . insertToConfig
 removeDim :: Ord d => (Dim d) -> IncVSMTSolve d ()
 removeDim = St.modify' . deleteFromConfig
 
-setConfigPool :: ConfigPool d -> IncVSMTSolve d ()
-setConfigPool = St.modify' . replacePool
-
 setConfig :: Config d -> IncVSMTSolve d ()
 setConfig = St.modify' . replaceConfig
-
-resetConfig :: Ord d => IncVSMTSolve d ()
-resetConfig = setConfig mempty
-
-setConfig' :: Maybe (Config d) -> IncVSMTSolve d ()
-setConfig' c = St.modify' $ helper
-  where helper (IncState{..}) = IncState{config=c,..}
 
 hasGenDModel :: IncVSMTSolve d Bool
 hasGenDModel = gets processed
@@ -410,45 +374,6 @@ solveVariant go = do
            -- reset stack
            lift $! SC.pop 1
            return resMap
-
-dispatchConfig goLeft goRight d =
-  do rvp <- gets runViaPool
-  -- when we have the flag to run with a pool we manipulate the current config
-  -- and pool to generate configs when the config is empty. We denote the end of
-  -- processing when the config is Nothing
-     when rvp $ do
-         st <- get
-         let currentCfg' = config st
-             cfgPool = configPool st
-         lift $ SC.io $ putStrLn $ "Checking CONF: " ++ show currentCfg' ++ " ::: " ++ show cfgPool
-         if (maybe False M.null currentCfg')
-           -- then we aren't solving a config, so check pool
-           then if (not $ null cfgPool)
-                -- we still have a pool of configs to draw from so pick one
-                then do let (cfg:pool) = cfgPool
-                        setConfig cfg
-                        setConfigPool pool
-                -- else we no longer have a pool and a config, so we return Nothing
-                -- which denotes being finished processing
-                else setConfig' Nothing
-           --  we have a current config so we just leave it unchanged
-           else return ()
-
-     -- handleChc goLeft goRight d
-
-     -- this return statement should never matter because we've reset the
-     -- assertion stack. So I just return true here, this last check is to tie
-     -- the know for the recursion. We check that we run with the pool and that
-     -- our config is not nothign which means the recursion is complete. If both
-     -- are the case then we reset the config and recur, if not then we return
-     -- true as we are done
-     lift $ SC.io $ putStrLn $ "Cleaning up config"
-     currentCfg <- gets config
-     if (isJust currentCfg &&& rvp)
-       then do resetConfig
-               dispatchConfig goLeft goRight d
-       else return true
-
 
 -- handleChc :: (Ord d, Boolean b) =>
 --   IncVSMTSolve d (Result d) ->
