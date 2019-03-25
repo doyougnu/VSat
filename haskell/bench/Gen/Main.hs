@@ -14,7 +14,7 @@ import           Data.Bitraversable      (bimapM)
 import qualified Data.ByteString         as BS (readFile)
 import           Data.Either             (lefts, rights)
 import           Data.Foldable           (foldr',foldl')
-import           Data.List               (sort,splitAt,intersperse)
+import           Data.List               (sort,splitAt,intersperse,foldl1')
 import           Data.Map                (size, Map)
 import qualified Data.SBV                as S
 import qualified Data.SBV.Control        as SC
@@ -48,7 +48,7 @@ stringList n = fmap pack . tail . take (n+1) $
                concatMap (flip replicateM "abc") [0..]
 
 conjoin' :: [VProp Text Text Text] -> VProp Text Text Text
-conjoin' = foldl' (&&&) (LitB True)
+conjoin' = foldl1' (&&&)
 
 genChcList :: Int -> Int -> [VProp Text Text Text]
 genChcList nChc variantSize = chc's
@@ -154,12 +154,14 @@ main = do
       dimConf' = ((bRef "aa") &&& bRef "bb") ||| ((bRef "aa") &&& bnot (bRef "bb"))
       dimConf = toDimProp dimConf'
 
-      prop = midGen 3 2 2
+      -- prop = midGen 1 1 2
+      prop = bRef "a" &&& (bChc "AA" (bRef "b") (bRef "c")) &&& bRef "d"
 
   -- res' <- satWithConf (Just dimConf) emptyConf sProp
   putStrLn $ show prop
-  res' <- satWithConf (Just dimConf) emptyConf prop
+  putStrLn $ show (compressionRatio prop :: Rational)
+  -- res' <- satWithConf (Just dimConf) emptyConf prop
   -- res' <- satWithConf Nothing emptyConf prop
-  print $ res'
+  -- print $ res'
 
   return ()
