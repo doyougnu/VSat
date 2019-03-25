@@ -10,8 +10,6 @@ module Run ( SatDict
            ) where
 
 import qualified Data.Map.Strict as M
-import Control.Monad (when)
-import Data.Maybe (isJust, fromJust)
 import Control.DeepSeq (force)
 import Control.Monad.RWS.Strict
 import Control.Monad.State.Strict    as St
@@ -87,7 +85,7 @@ runAD :: (Show a, Show d, Ord d, Ord a, Resultable d) =>
       -> IO (Result d)
 runAD os p f = fst' <$> runEnv (flip runAndDecomp f) os p
 
-runBF :: (Show a, Show d, Ord a, Ord d, Resultable d) =>
+runBF :: (Show a, Show d, Ord a, Resultable d,Monoid d) =>
          SMTConf d a a
       -> VProp d a a
       -> IO (Result d)
@@ -104,8 +102,7 @@ runVSMT dimConf = runEnv (runVSMTSolve dimConf)
 -- | Given a VProp a term generate the satisfiability map
 initSt :: Ord d => VProp d a a -> SatDict d
 initSt prop = sats
-  where sats = M.fromList . fmap (\x -> (x, False)) $
-               M.fromList <$> choices prop
+  where sats = M.fromList . fmap (\x -> (x, False)) $ choices prop
 
 -- | Some logging functions
 _logBaseline :: (Show a, MonadWriter [Char] m) => a -> m ()
@@ -129,7 +126,7 @@ runForDict x = S.runSMT $
 -- | Run the brute force baseline case, that is select every plain variant and
 -- run them to the sat solver
 runBruteForce ::
-  (MonadTrans t, Show a,Show d, Ord a, Ord d, Resultable d
+  (MonadTrans t, Show a,Show d, Ord a, Ord d, Resultable d, Monoid d
   , MonadState (SatDict d) (t IO)) =>
   VProp d a a -> t IO (Result d)
 runBruteForce prop = lift $ flip evalStateT (initSt prop) $
@@ -189,52 +186,29 @@ type ConfigPool a = [(Config a)]
 -- | the internal state for the incremental solve algorithm, it holds a result
 -- list, and the used dims map, and is parameterized by the types of dimensions,
 -- d
-data IncState d = IncState { result :: !(Result d)         -- * the result map
-                           , configPool :: !(ConfigPool d) -- * the pool of
-                                                        -- configs that
-                                                        -- dictate
-                                                        -- selection
-                           , runViaPool :: Bool
-                           , config :: !(Maybe (Config d)) -- * the current config
-                           , processed :: GenModel      -- * a flag denoting
-                                                        -- that a model has been
-                                                        -- generated during a
-                                                        -- recursive call
-                           } deriving (Eq,Show)
+data IncState d =
+  IncState { result      :: !(Result d)     -- * the result map
+           , config      :: !(Config d) -- * the current config
+           , processed   :: !GenModel            -- * a flag denoting
+                                                -- that a model has been
+                                                -- generated during a
+                                                -- recursive call
+           } deriving (Eq,Show)
 
-emptySt :: Resultable d => IncState d
+emptySt :: (Resultable d, Monoid d) => IncState d
 emptySt = IncState{ result=mempty
-                  , configPool=mempty
-                  , config=(Just mempty)
+                  , config=mempty
                   , processed=False
-                  , runViaPool=False}
-
-isEmptySt :: Resultable d => IncState d -> Bool
-isEmptySt = (==) emptySt
+                  }
 
 onResult :: (Result d -> Result d) -> IncState d -> IncState d
-onResult f (IncState {..}) = IncState {result=f result, ..}
+onResult f IncState {..} = IncState {result=f result, ..}
 
 onConfig :: (Config d -> Config d) -> IncState d -> IncState d
-onConfig f (IncState {..}) = IncState {config=f <$> config, ..}
-
-onConfigPool :: (ConfigPool d -> ConfigPool d) -> IncState d -> IncState d
-onConfigPool f (IncState {..}) = IncState {configPool=f configPool, ..}
-
-setViaPool :: Bool -> IncState d -> IncState d
-setViaPool b (IncState {..}) = IncState {runViaPool=b, ..}
+onConfig f IncState {..} = IncState {config=f config, ..}
 
 deleteFromConfig :: Ord d => (Dim d) -> IncState d -> IncState d
 deleteFromConfig = onConfig . M.delete
-
-runWithPool :: IncState d -> IncState d
-runWithPool = setViaPool True
-
-runWithoutPool :: IncState d -> IncState d
-runWithoutPool = setViaPool False
-
-replacePool :: ConfigPool d -> IncState d -> IncState d
-replacePool = onConfigPool . const
 
 insertToConfig :: Ord d => (Dim d) -> Bool -> IncState d -> IncState d
 insertToConfig d b = onConfig $ M.insert d b
@@ -243,7 +217,7 @@ replaceConfig :: Config d -> IncState d -> IncState d
 replaceConfig = onConfig . const
 
 onProcessed :: (GenModel -> GenModel) -> IncState d -> IncState d
-onProcessed f (IncState {..}) = IncState {processed=f processed, ..}
+onProcessed f IncState {..} = IncState {processed=f processed, ..}
 
 -- | the incremental solve monad, with the base monad being the query monad so
 -- we can pull out sbv models Hardcoding so that I don't have to write the mtl
@@ -257,20 +231,26 @@ vSMTSolve :: (Ord d, Show d, Resultable d) =>
   S.Symbolic (VProp d S.SBool SNum) -> ConfigPool d-> S.Symbolic (Result d)
 vSMTSolve prop configPool =
   do prop' <- prop
+     S.setOption $ SC.ProduceUnsatCores True
      SC.query $
        do
-         let
-           f = if (null configPool) then runWithoutPool else runWithPool
-           startState = f $! replacePool configPool emptySt
-         (b,resSt) <- St.runStateT (vSMTSolve_ prop') startState
-         res <- if isEmptySt resSt
-                then do S.constrain b
-                        b' <- isSat
-                        if b'
-                          then getResultWith (toResultProp . LitB)
-                          else return mempty
-                else return $ result resSt
-         return res
+         -- TODO expose this limit to user and find good default
+         let pool = if length configPool > 50
+                    then take 50 configPool
+                    else configPool
+         (_,resSt) <- St.runStateT
+           (mapM (\cfg -> setConfig cfg >> vSMTSolve_ prop') pool) emptySt
+         if isResultNull (result resSt)
+           then St.evalStateT (vSMTSolve_ prop')  emptySt >>= solvePlain
+           else return $ result resSt
+
+solvePlain :: Resultable d => S.SBool -> SC.Query (Result d)
+solvePlain b = do S.constrain b
+                  b' <- isSat
+                  if b'
+                    then getResultWith (toResultProp . LitB)
+                    else return mempty
+
 
 -- | This ensures two things: 1st we need all variables to be symbolic before
 -- starting query mode. 2nd we cannot allow any duplicates to be called on a
@@ -344,8 +324,8 @@ instance (Monad m, I.SolverContext m) =>
 
 -- Helper functions for solve routine
 
-store :: (Eq d, Ord d, Resultable d) => Result d -> IncVSMTSolve d ()
-store = St.modify' . onResult . (<>)
+store :: Resultable d => Result d -> IncVSMTSolve d ()
+store = St.modify' . onResult  . (<>)
 
 setDim :: Ord d => (Dim d) -> Bool -> IncVSMTSolve d ()
 setDim = (St.modify' .) . insertToConfig
@@ -353,18 +333,8 @@ setDim = (St.modify' .) . insertToConfig
 removeDim :: Ord d => (Dim d) -> IncVSMTSolve d ()
 removeDim = St.modify' . deleteFromConfig
 
-setConfigPool :: ConfigPool d -> IncVSMTSolve d ()
-setConfigPool = St.modify' . replacePool
-
 setConfig :: Config d -> IncVSMTSolve d ()
 setConfig = St.modify' . replaceConfig
-
-resetConfig :: Ord d => IncVSMTSolve d ()
-resetConfig = setConfig mempty
-
-setConfig' :: Maybe (Config d) -> IncVSMTSolve d ()
-setConfig' c = St.modify' $ helper
-  where helper (IncState{..}) = IncState{config=c,..}
 
 hasGenDModel :: IncVSMTSolve d Bool
 hasGenDModel = gets processed
@@ -389,15 +359,10 @@ solveVariant go = do
            bd <- hasGenDModel
 
            -- if not generated a model, then construct a -- result
-           resMap <- if (not bd)
-                     then do prop <- gets (configToResultProp . fromJust . config)
-                             lm <- lift $ getResult prop
+           resMap <- if not bd
+                     then do prop <- gets (configToResultProp . config)
                              setModelGenD
-                             if not $ isResultNull lm
-                               -- if not null then sat
-                               then return $! insertToSat prop lm
-                               -- result was null so unsat
-                               else return mempty
+                             lift $ getResult prop
                       else -- not sat or have gen'd a model so ignore
                        return mempty
 
@@ -405,71 +370,37 @@ solveVariant go = do
            lift $! SC.pop 1
            return resMap
 
--- handleChc :: (Ord d, Boolean b) =>
---   IncVSMTSolve d (Result d) ->
---   IncVSMTSolve d (Result d) ->
---   Dim d ->
---   IncVSMTSolve d b
+handleChc :: Resultable d =>
+  IncVSMTSolve d (Result d)
+  -> IncVSMTSolve d (Result d)
+  -> Dim d
+  -> IncVSMTSolve d ()
 handleChc goLeft goRight d =
-  do rvp <- gets runViaPool
-  -- when we have the flag to run with a pool we manipulate the current config
-  -- and pool to generate configs when the config is empty. We denote the end of
-  -- processing when the config is Nothing
-     when rvp $ do
-         st <- get
-         let currentCfg' = config st
-             cfgPool = configPool st
-         if (maybe False M.null currentCfg')
-           -- then we aren't solving a config, so check pool
-           then if (not $ null cfgPool)
-                -- we still have a pool of configs to draw from so pick one
-                then do let (cfg:pool) = cfgPool
-                        setConfig cfg
-                        setConfigPool pool
-                -- else we no longer have a pool and a config, so we return Nothing
-                -- which denotes being finished processing
-                else setConfig' Nothing
-           --  we have a current config so we just leave it unchanged
-           else return ()
+  do currentCfg <- gets config
+     case M.lookup d currentCfg of
+       Just True  -> goLeft >>= store
+       Just False -> goRight >>= store
+       Nothing    -> do
+         --------------------- true variant -----------------------------
+         setDim d True
+         resMapT <- goLeft
 
-     currentCfg <- gets config
-     when (isJust currentCfg) $ do
-            case M.lookup d (fromJust currentCfg) of
-              Just True  -> do goLeft >>= store
-              Just False -> do goRight >>= store
-              Nothing    -> do
-                --------------------- true variant -----------------------------
-                setDim d True
-                resMapT <- goLeft
+         -------------------- false variant -----------------------------
+         setDim d False
+         resMapF <- goRight
 
-                -------------------- false variant -----------------------------
-                setDim d False
-                resMapF <- goRight
+         -- store results and cleanup config
+         store $! resMapT <> resMapF
 
-                -- store results and cleanup config
-                store $! resMapT <> resMapF
-
-                -- we remove the Dim from the config so that when the recursion
-                -- completes the last false branch of the last choice is not
-                -- remembered. For Example if we have A<p,q> /\ B<r,s> then the
-                -- recursion starts at A and completes at the right variants of
-                -- B, namely s. If we don't remove the dimension from the config
-                -- then the config will retain the selection of (B, False) and
-                -- therefore on the (A, False) branch of the recursion it'll
-                -- miss (B, True)
-                removeDim d
-                return ()
-
-     -- this return statement should never matter because we've reset the
-     -- assertion stack. So I just return true here, this last check is to tie
-     -- the know for the recursion. We check that we run with the pool and that
-     -- our config is not nothign which means the recursion is complete. If both
-     -- are the case then we reset the config and recur, if not then we return
-     -- true as we are done
-     if (isJust currentCfg &&& rvp)
-       then do resetConfig
-               handleChc goLeft goRight d
-       else return true
+         -- we remove the Dim from the config so that when the recursion
+         -- completes the last false branch of the last choice is not
+         -- remembered. For Example if we have A<p,q> /\ B<r,s> then the
+         -- recursion starts at A and completes at the right variants of
+         -- B, namely s. If we don't remove the dimension from the config
+         -- then the config will retain the selection of (B, False) and
+         -- therefore on the (A, False) branch of the recursion it'll
+         -- miss (B, True)
+         removeDim d
 
 -- | Handle a choice in the IncVSMTSolve monad, we check to make sure that if a
 -- choice is already selected then the selection is maintained. If not then we
@@ -538,6 +469,7 @@ handleCtx (Loc (ChcB d l r) ctx@(InBBR _ acc _)) =
     -- constrain current accumulator
     S.constrain acc
     handleChc goLeft goRight d
+    return true
   where !goLeft  = solveVariant (handleCtx (mkLoc (l, ctx)))
         !goRight = solveVariant (handleCtx (mkLoc (r, ctx)))
 
@@ -549,6 +481,7 @@ handleCtx (Loc (ChcB d l r) ctx@(InBBL _ (InBBR _ acc _) _)) =
     -- constrain current accumulator
     S.constrain acc
     handleChc goLeft goRight d
+    return true
   where !goLeft  = solveVariant (handleCtx (mkLoc (l, ctx)))
         !goRight = solveVariant (handleCtx (mkLoc (r, ctx)))
 
@@ -563,7 +496,7 @@ handleCtx (Loc (ChcB d l r) (InB Not ctx)) =
   -- If we see a choice with any other context then the ctx is either empty
   -- or the choice is in the leftmost position of the ast
 handleCtx (Loc (ChcB d l r) ctx) =
-    handleChc goLeft goRight d
+    handleChc goLeft goRight d >> return true
   where !goLeft  = solveVariant (handleCtx (mkLoc (l, ctx)))
         !goRight = solveVariant (handleCtx (mkLoc (r, ctx)))
 

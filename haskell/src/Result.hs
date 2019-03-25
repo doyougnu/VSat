@@ -1,7 +1,9 @@
-module Result ( Result(..)
-              , ResultProp(..)
+module Result ( ResultProp(..)
               , Resultable
               , UniformProp(..)
+              , UnSatResult(..)
+              , Result(..)
+              , ResultMap(..)
               , insertToResult
               , insertToSat
               , lookupRes
@@ -24,8 +26,8 @@ import           Control.DeepSeq         (NFData)
 import           Data.Map.Internal.Debug (showTree)
 import qualified Data.Map.Strict         as M
 import           Data.Maybe              (maybe,fromMaybe)
-import           Data.SBV                (SMTResult (..), getModelDictionary,sat)
-import           Data.SBV.Control        (Query, getSMTResult,io)
+import           Data.SBV                (SMTResult(..), getModelDictionary)
+import           Data.SBV.Control        (Query, getSMTResult)
 import           Data.SBV.Internals      (cvToBool)
 import           Data.String             (IsString, fromString)
 import           Data.Text               (Text)
@@ -33,14 +35,14 @@ import           GHC.Generics            (Generic)
 
 import           SAT
 import           VProp.Core              (dimToVar)
-import           VProp.SBV               (toPredicate)
 import           VProp.Types             (BB_B (..), B_B (..), Config,
                                           VProp (..), Var, Dim(..))
 
 -- | A custom type whose only purpose is to define a monoid instance over VProp
 -- with logical or as the concat operation and false as unit. We constrain all
--- variable references to be the same just for the Result type
-newtype UniformProp d = UniformProp {uniProp :: VProp d d d} deriving (Eq,Generic,Boolean)
+-- variable references to be the same just for the ResultMap type
+newtype UniformProp d = UniformProp {uniProp :: VProp d d d}
+  deriving (Eq,Ord,Generic,Boolean)
 
 instance Show d => Show (UniformProp d) where
   show = show . uniProp
@@ -49,7 +51,7 @@ instance Show d => Show (UniformProp d) where
 -- monoid where mempty in Nothing, and mappend is logical Or. Think of this as a
 -- list
 newtype ResultProp d = ResultProp {getProp :: Maybe (UniformProp d)}
-  deriving (Eq,Generic,Semigroup,Monoid)
+  deriving (Eq,Ord,Generic,Semigroup,Monoid)
 
 instance Show d => Show (ResultProp d) where
   show rp = maybe mempty show $ getProp rp
@@ -124,19 +126,45 @@ configToResultProp = M.foldMapWithKey step
 
 
 -- | a type class synonym for constraints required to produce a result
-class (IsString a, Eq a, Ord a) => Resultable a
+class (IsString a, Eq a, Ord a, Monoid a) => Resultable a
 
 -- | a result is a map of propositions where SAT is a boolean formula on
 -- dimensions, the rest of the keys are variables of the prop to boolean
 -- formulas on dimensions that dictate the values of those variables be they
 -- true or false
-newtype Result d = Result {getRes :: M.Map d (ResultProp d)}
+newtype ResultMap d = ResultMap {getRes :: M.Map d (ResultProp d)}
   deriving (Eq,Generic,Monoid)
 
-instance Show d => Show (Result d) where
+instance Show d => Show (ResultMap d) where
   show = showTree . getRes
 
+instance NFData d => NFData (ResultMap d)
+instance NFData d => NFData (UnSatResult d)
 instance NFData d => NFData (Result d)
+
+-- | An unsat core is a list of strings as dictated by SBV, see issue #21
+type UnSatCore = [String]
+
+-- | a mapping keeping the config and the unsatisfiable core of the config; used
+-- in the case of an usat result
+newtype UnSatResult d = UnSatResult (M.Map (ResultProp d) UnSatCore)
+                      deriving (Eq,Show,Generic,Semigroup,Monoid)
+
+newtype Result d = Result (ResultMap d, UnSatResult d)
+                 deriving (Eq,Show,Generic,Semigroup,Monoid)
+
+onResMap :: (ResultMap d -> ResultMap d) -> Result d -> Result d
+onResMap f (Result (a,b)) = Result (f a, b)
+
+onUnSatRes :: (UnSatResult d -> UnSatResult d) -> Result d -> Result d
+onUnSatRes f (Result (a,b)) = Result (a, f b)
+
+mapToResult :: Resultable d => ResultMap d -> Result d
+mapToResult r = onResMap (const r) mempty
+
+unSatToResult :: Resultable d => ResultProp d -> UnSatCore -> Result d
+unSatToResult r u = onUnSatRes (const uSatRes) mempty
+  where uSatRes = UnSatResult $ M.singleton r u
 
 -- | a bad form global variable for this module, this probably should be a type
 -- family. Used as a special variable for the result map to accumulate
@@ -144,26 +172,25 @@ instance NFData d => NFData (Result d)
 satKey :: Resultable d => d
 satKey = fromString "__Sat"
 
-instance (Eq d, Ord d, Resultable d) => Semigroup (Result d) where
-  x <> y = Result $ M.unionWithKey helper (getRes x) (getRes y)
+instance (Resultable d) => Semigroup (ResultMap d) where
+  x <> y = ResultMap $ M.unionWithKey helper (getRes x) (getRes y)
     where helper k m1 m2
             | k == satKey = consWithOr' m1 m2
             | otherwise = (<>) m1 m2
           consWithOr' p rp =  p' `consWithOr` rp
             where p' = fromMaybe (UniformProp $ LitB False) $ getProp p
 
-
 insertWith :: (Eq d, Ord d) => (ResultProp d -> ResultProp d -> ResultProp d) ->
-  d -> ResultProp d -> Result d -> Result d
-insertWith f k v = Result . M.insertWith f k v . getRes
+  d -> ResultProp d -> ResultMap d -> ResultMap d
+insertWith f k v = ResultMap . M.insertWith f k v . getRes
 
 -- | O(log n + O(1)) insert a resultProp into a result. Uses the Monoid instance of ResultProp i.e. x <> y = x && y
-insertToResult :: (Eq d, Ord d) => d -> ResultProp d -> Result d -> Result d
-insertToResult = insertWith (<>)
+insertToResult :: Resultable d => d -> ResultProp d -> Result d -> Result d
+insertToResult d prop = onResMap (insertWith (<>) d prop)
 
 -- | O(1) insert a result prop into the result entry for special Sat variable
 insertToSat :: Resultable d => ResultProp d -> Result d -> Result d
-insertToSat = insertWith helper satKey
+insertToSat = onResMap . insertWith helper satKey
   where
     helper :: ResultProp d -> ResultProp d -> ResultProp d
     helper (getProp -> Nothing)    y = y
@@ -172,23 +199,27 @@ insertToSat = insertWith helper satKey
 
 
 -- | O(log n) given a key lookup the result prop
-lookupRes :: (Eq d, Ord d) => d -> Result d -> ResultProp d
-lookupRes k res = maybe mempty id $ M.lookup k (getRes res)
+lookupRes :: (Eq d, Ord d) => d -> ResultMap d -> ResultProp d
+lookupRes k res = fromMaybe mempty $ M.lookup k (getRes res)
 
 -- | unsafe O(log n) lookup Res
-lookupRes_ :: (Eq d, Ord d) => d -> Result d -> ResultProp d
+lookupRes_ :: (Eq d, Ord d) => d -> ResultMap d -> ResultProp d
 lookupRes_ k res = (M.!) (getRes res) k
 
-getResSat :: Resultable d => Result d -> ResultProp d
+getResSat :: Resultable d => ResultMap d -> ResultProp d
 getResSat = lookupRes_ satKey
 
 -- | O(1) is result empty
 isResultNull :: Resultable d => Result d -> Bool
-isResultNull = M.null . getRes
+isResultNull = (==) nullResult
+
+nullResult :: (Resultable d) => Result d
+nullResult = Result mempty
+
 
 -- | grab a vsmt model from SBV, check if it is sat or not, if so return it
-getVSMTModel :: Query (Maybe SMTResult)
-getVSMTModel = pure <$> getSMTResult
+getVSMTModel :: Query SMTResult
+getVSMTModel = getSMTResult
 
 -- | getResult from the query monad, takes a function f that is used to dispatch
 -- result bools to resultProps i.e. if the model says variable "x" == True then
@@ -197,10 +228,25 @@ getVSMTModel = pure <$> getSMTResult
 -- associations
 getResultWith :: Resultable d => (Bool -> ResultProp d) -> Query (Result d)
 getResultWith !f =
-  do as <- fmap (maybe mempty getModelDictionary) $! getVSMTModel
-     return $
-       Result (M.foldMapWithKey
-               (\k a -> M.singleton (fromString k) (f $ cvToBool a)) as)
+  do model <- getVSMTModel
+     return $!
+       case model of
+         m@(Satisfiable _ _)         ->
+           -- when satisfiable we get the model dictionary, turn it into a
+           -- result map and then insert the config proposition that created the
+           -- satisfiable result into the __Sat element of the map
+           insertToSat (f True) . mapToResult . toResMap . getModelDictionary $! m
+         (Unsatisfiable _ unsatCore) ->
+           -- we apply f to True here because in the case of an unsat we want to
+           -- save the proposition that produced the unsat, if we applied to
+           -- false then we would have the negation of that proposition for
+           -- unsat
+           unSatToResult (f True) $! fromMaybe mempty unsatCore
+         _                           -> mempty
+  where
+    toResMap = ResultMap . M.foldMapWithKey
+               (\k a -> M.singleton (fromString k) (f $! cvToBool a))
+
 
 dispatchProp :: ResultProp d -> Bool -> ResultProp d
 dispatchProp !p !x = if x
