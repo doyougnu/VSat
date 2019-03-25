@@ -27,7 +27,7 @@ import           Data.Map.Internal.Debug (showTree)
 import qualified Data.Map.Strict         as M
 import           Data.Maybe              (maybe,fromMaybe)
 import           Data.SBV                (SMTResult(..), getModelDictionary)
-import           Data.SBV.Control        (Query, getSMTResult)
+import           Data.SBV.Control        (io, Query, getSMTResult)
 import           Data.SBV.Internals      (cvToBool)
 import           Data.String             (IsString, fromString)
 import           Data.Text               (Text)
@@ -232,7 +232,10 @@ getResultWith !f =
      return $!
        case model of
          m@(Satisfiable _ _)         ->
-           mapToResult . toResMap . getModelDictionary $! m
+           -- when satisfiable we get the model dictionary, turn it into a
+           -- result map and then insert the config proposition that created the
+           -- satisfiable result into the __Sat element of the map
+           insertToSat (f True) . mapToResult . toResMap . getModelDictionary $! m
          (Unsatisfiable _ unsatCore) ->
            -- we apply f to True here because in the case of an unsat we want to
            -- save the proposition that produced the unsat, if we applied to

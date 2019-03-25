@@ -203,9 +203,6 @@ emptySt = IncState{ result=mempty
                   , processed=False
                   }
 
-isEmptySt :: (Resultable d, Monoid d) => IncState d -> Bool
-isEmptySt = (==) emptySt
-
 onResult :: (Result d -> Result d) -> IncState d -> IncState d
 onResult f IncState {..} = IncState {result=f result, ..}
 
@@ -359,15 +356,10 @@ solveVariant go = do
            bd <- hasGenDModel
 
            -- if not generated a model, then construct a -- result
-           resMap <- if (not bd)
+           resMap <- if not bd
                      then do prop <- gets (configToResultProp . fromJust . config)
-                             lm <- lift $ getResult prop
                              setModelGenD
-                             if not $ isResultNull lm
-                               -- if not null then sat
-                               then return $! insertToSat prop lm
-                               -- result was null so unsat
-                               else return mempty
+                             lift $ getResult prop
                       else -- not sat or have gen'd a model so ignore
                        return mempty
 
@@ -375,24 +367,21 @@ solveVariant go = do
            lift $! SC.pop 1
            return resMap
 
--- handleChc :: (Ord d, Boolean b) =>
---   IncVSMTSolve d (Result d) ->
---   IncVSMTSolve d (Result d) ->
---   Dim d ->
---   IncVSMTSolve d b
+handleChc :: Resultable d =>
+  IncVSMTSolve d (Result d)
+  -> IncVSMTSolve d (Result d)
+  -> Dim d
+  -> IncVSMTSolve d ()
 handleChc goLeft goRight d =
   do currentCfg <- gets config
      case M.lookup d (fromJust currentCfg) of
        Just True  -> goLeft >>= store
        Just False -> goRight >>= store
        Nothing    -> do
-         lift $ SC.io $ putStrLn $ "Dim Not Found: " ++ show d ++ " in " ++ show currentCfg
          --------------------- true variant -----------------------------
-         lift $ SC.io $ putStrLn $ "solving True Variant of " ++ show d
          setDim d True
          resMapT <- goLeft
 
-         lift $ SC.io $ putStrLn $ "SOlving False Variant of " ++ show d
          -------------------- false variant -----------------------------
          setDim d False
          resMapF <- goRight
