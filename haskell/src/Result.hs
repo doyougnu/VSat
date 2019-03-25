@@ -27,7 +27,7 @@ import           Data.Map.Internal.Debug (showTree)
 import qualified Data.Map.Strict         as M
 import           Data.Maybe              (maybe,fromMaybe)
 import           Data.SBV                (SMTResult(..), getModelDictionary)
-import           Data.SBV.Control        (io, Query, getSMTResult)
+import           Data.SBV.Control        (Query, getSMTResult)
 import           Data.SBV.Internals      (cvToBool)
 import           Data.String             (IsString, fromString)
 import           Data.Text               (Text)
