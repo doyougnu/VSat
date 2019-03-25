@@ -119,6 +119,32 @@ noDupRefs :: Ord a => VProp d a a -> Bool
 noDupRefs prop = Set.null $ (bvars prop) `Set.intersection` (ivars prop)
 
 -- ----------------------------- Choice Manipulation ------------------------------
+selectVariantTotal :: Ord d => Config d -> VProp d a b -> VProp d a b
+selectVariantTotal tbs (ChcB t y n) =
+  case Map.lookup t tbs of
+    Just True  -> selectVariantTotal tbs y
+    Just False -> selectVariantTotal tbs n
+    Nothing    -> error "Under specified config supplied to selectVariantTotal function"
+selectVariantTotal tb (OpB op x)    = OpB op $ selectVariantTotal tb x
+selectVariantTotal tb (OpBB a l r)  = OpBB a
+                                      (selectVariantTotal tb l)
+                                      (selectVariantTotal tb r)
+selectVariantTotal tb (OpIB op l r) = OpIB op
+                                      (selectVariantTotal' tb l)
+                                      (selectVariantTotal' tb r)
+selectVariantTotal _  x             = x
+
+selectVariantTotal' :: Ord d => Config d -> VIExpr d b -> VIExpr d b
+selectVariantTotal' tb (ChcI t y n) =
+  case Map.lookup t tb of
+    Just True  -> selectVariantTotal' tb y
+    Just False -> selectVariantTotal' tb n
+    Nothing    -> error "Under specified config supplied to selectVariantTotal' function"
+selectVariantTotal' tb (OpI op e)    = OpI op $ selectVariantTotal' tb e
+selectVariantTotal' tb (OpII op l r) = OpII op (selectVariantTotal' tb l) (selectVariantTotal' tb r)
+selectVariantTotal' _  x             = x
+
+
 -- | Given a config and a Variational VProp term select the element out that the
 -- config points to
 selectVariant :: Ord d => Config d -> VProp d a b -> Maybe (VProp d a b)
@@ -168,6 +194,11 @@ numTerms :: VProp d a b -> Integer
 numTerms = getSum . trifoldMap f f f
   where f = const 1
 
+compressionRatio :: (Ord d, Fractional c) => VProp d a b -> c
+compressionRatio prop = ((fromIntegral numerator) / (fromIntegral total))
+  where numerator = length $ toList prop
+        configs = choices prop
+        total = sum $ (length . toList . flip selectVariantTotal prop) <$> configs
 
 numVars :: VProp d a b -> Integer
 numVars = getSum . trifoldMap (const 0) f f
@@ -218,8 +249,8 @@ dimensions' = nub . trifoldMap ((:[]) . Dim) mempty mempty
 
 -- | wrapper around choices engine, called choices_ with [] results in [] always
 -- being returned. Works properly with [[]]
-choices :: Eq d => VProp d a b -> [[(Dim d, Bool)]]
-choices = booleanCombinations . dimensions'
+choices :: (Eq d,Ord d) => VProp d a b -> [Config d]
+choices = fmap Map.fromList . booleanCombinations . dimensions'
 
 -- | TODO implement choices' for IBs
 choices' :: (Ord b) => VIExpr d b -> Set.Set (RefN, b)

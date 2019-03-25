@@ -10,7 +10,6 @@ module Run ( SatDict
            ) where
 
 import qualified Data.Map.Strict as M
-import Data.Maybe (fromJust)
 import Control.DeepSeq (force)
 import Control.Monad.RWS.Strict
 import Control.Monad.State.Strict    as St
@@ -103,8 +102,7 @@ runVSMT dimConf = runEnv (runVSMTSolve dimConf)
 -- | Given a VProp a term generate the satisfiability map
 initSt :: Ord d => VProp d a a -> SatDict d
 initSt prop = sats
-  where sats = M.fromList . fmap (\x -> (x, False)) $
-               M.fromList <$> choices prop
+  where sats = M.fromList . fmap (\x -> (x, False)) $ choices prop
 
 -- | Some logging functions
 _logBaseline :: (Show a, MonadWriter [Char] m) => a -> m ()
@@ -190,7 +188,7 @@ type ConfigPool a = [(Config a)]
 -- d
 data IncState d =
   IncState { result      :: !(Result d)     -- * the result map
-           , config      :: !(Maybe (Config d)) -- * the current config
+           , config      :: !(Config d) -- * the current config
            , processed   :: !GenModel            -- * a flag denoting
                                                 -- that a model has been
                                                 -- generated during a
@@ -199,7 +197,7 @@ data IncState d =
 
 emptySt :: (Resultable d, Monoid d) => IncState d
 emptySt = IncState{ result=mempty
-                  , config=(Just mempty)
+                  , config=mempty
                   , processed=False
                   }
 
@@ -207,7 +205,7 @@ onResult :: (Result d -> Result d) -> IncState d -> IncState d
 onResult f IncState {..} = IncState {result=f result, ..}
 
 onConfig :: (Config d -> Config d) -> IncState d -> IncState d
-onConfig f IncState {..} = IncState {config=f <$> config, ..}
+onConfig f IncState {..} = IncState {config=f config, ..}
 
 deleteFromConfig :: Ord d => (Dim d) -> IncState d -> IncState d
 deleteFromConfig = onConfig . M.delete
@@ -236,9 +234,12 @@ vSMTSolve prop configPool =
      S.setOption $ SC.ProduceUnsatCores True
      SC.query $
        do
-         (bs,resSt) <- St.runStateT
-           (mapM (\cfg -> setConfig cfg >> vSMTSolve_ prop') configPool) emptySt
-         SC.io $ putStrLn $ show $ bs
+         -- TODO expose this limit to user and find good default
+         let pool = if length configPool > 50
+                    then take 50 configPool
+                    else configPool
+         (_,resSt) <- St.runStateT
+           (mapM (\cfg -> setConfig cfg >> vSMTSolve_ prop') pool) emptySt
          if isResultNull (result resSt)
            then St.evalStateT (vSMTSolve_ prop')  emptySt >>= solvePlain
            else return $ result resSt
@@ -359,7 +360,7 @@ solveVariant go = do
 
            -- if not generated a model, then construct a -- result
            resMap <- if not bd
-                     then do prop <- gets (configToResultProp . fromJust . config)
+                     then do prop <- gets (configToResultProp . config)
                              setModelGenD
                              lift $ getResult prop
                       else -- not sat or have gen'd a model so ignore
@@ -376,7 +377,7 @@ handleChc :: Resultable d =>
   -> IncVSMTSolve d ()
 handleChc goLeft goRight d =
   do currentCfg <- gets config
-     case M.lookup d (fromJust currentCfg) of
+     case M.lookup d currentCfg of
        Just True  -> goLeft >>= store
        Just False -> goRight >>= store
        Nothing    -> do
