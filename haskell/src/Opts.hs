@@ -1,15 +1,17 @@
 module Opts where
 
-import           Data.SBV         (isSatisfiable)
-import           GHC.Generics     (Generic)
+import           Data.SBV (isSatisfiable)
+import           GHC.Generics (Generic)
 import           System.IO.Unsafe (unsafePerformIO)
 
-import qualified Data.Map.Strict  as Map
-import           Prelude          hiding (EQ, GT, LT)
-import           VProp.SBV        (SAT, toPredicate)
+import qualified Data.Map.Strict as Map
+import           Prelude hiding (EQ, GT, LT)
+import           VProp.SBV (SAT, toPredicate)
 import           VProp.Types
+import           VProp.Core (isChc,associativeLeft,associativeRight,pSort)
 
-import Debug.Trace
+import           Debug.Trace
+
 -- | Data type to represent the optimization options
 -- Used for the JSON parser
 data Opts = MoveRight
@@ -20,114 +22,14 @@ data Opts = MoveRight
           | None
           deriving (Generic,Show)
 
+
 -- | Given any arbritrary prop move any choices to the right
 chcToRight :: (Ord a, Ord b, Ord d) => VProp d a b -> VProp d a b
-  -- structural instances
-chcToRight (OpBB Impl l r) = chcToRight $ OpBB Or (bnot l) r
-
-  -- base case
-chcToRight (OpBB op l@(ChcB _ _ _) r@(ChcB _ _ _)) =
-  (OpBB op (chcToRight r) (chcToRight l))
-
-  -- associative move
-chcToRight (OpBB op l@(ChcB _ _ _) r) =
-  OpBB op (chcToRight r) (chcToRight l)
-
-  -- right tree rotation
-chcToRight (OpBB And (OpBB And l' a@(ChcB _ _ _)) r)
-  = chcToRight (OpBB And l' (OpBB And r a))
-
-chcToRight (OpBB And (OpBB And a@(ChcB _ _ _) r') r)
-  = chcToRight (OpBB And r' (OpBB And r a))
-
-  -- right tree rotation
-chcToRight (OpBB Or (OpBB Or l' a@(ChcB _ _ _)) r)
-  = chcToRight (OpBB Or l' (OpBB Or r a))
-
-chcToRight (OpBB Or (OpBB Or a@(ChcB _ _ _) r') r)
-  = chcToRight (OpBB Or r' (OpBB Or r a))
-
-  -- inner move
-chcToRight (OpIB LT x@(ChcI _ _ _) r) = OpIB GT (chcToRight' r) (chcToRight' x)
-chcToRight (OpIB GT x@(ChcI _ _ _) r) = OpIB LT (chcToRight' r) (chcToRight' x)
-chcToRight (OpIB LTE x@(ChcI _ _ _) r) = OpIB GTE (chcToRight' r) (chcToRight' x)
-chcToRight (OpIB GTE x@(ChcI _ _ _) r) = OpIB LTE (chcToRight' r) (chcToRight' x)
-chcToRight (OpIB op x@(ChcI _ _ _) r) = OpIB op (chcToRight' r) (chcToRight' x)
-  -- recursive instances
-chcToRight (OpIB op l r) = OpIB op (chcToRight' l) (chcToRight' r)
-chcToRight (ChcB d l r)  = ChcB d  (chcToRight l) (chcToRight r)
-chcToRight (OpB op e)    = OpB op  (chcToRight e)
-chcToRight (OpBB op l r) = OpBB op (chcToRight l) (chcToRight r)
-chcToRight nonRecursive = nonRecursive
-
-chcToRight' :: (Ord a) => VIExpr a b -> VIExpr a b
-  -- structural instances
-chcToRight' (OpII op x@(ChcI _ _ _) r)  = OpII op (chcToRight' r) (chcToRight' x)
-  -- recursive instances
-chcToRight' (OpII op l r) = OpII op (chcToRight' l) (chcToRight' r)
-chcToRight' (OpI op e)    = OpI op (chcToRight' e)
-chcToRight' (ChcI d l r)  = ChcI d (chcToRight' l) (chcToRight' r)
-chcToRight' nonRecursive  = nonRecursive
+chcToRight = associativeLeft . pSort
 
 -- | Given any arbritrary prop move any choices to the left
-chcToLeft :: (Ord a, Ord b, Ord d, Show d, Show a, Show b) => VProp d a b -> VProp d a b
-
-  -- structural instances
-chcToLeft (OpBB Impl l r) = chcToLeft $ OpBB Or (bnot l) r
-
-  -- base case
-chcToLeft (OpBB op l@(ChcB _ _ _) r@(ChcB _ _ _)) =
-  OpBB op (chcToLeft r) (chcToLeft l)
-
-  -- associative move
-chcToLeft (OpBB op l r@(ChcB _ _ _)) =
-  OpBB op (chcToLeft r) (chcToLeft l)
-
-  -- left tree rotation and
-chcToLeft (OpBB And r (OpBB And l a@(ChcB _ _ _)))
-  = chcToLeft (OpBB And a (OpBB And l r))
-
-chcToLeft (OpBB And r (OpBB And a@(ChcB _ _ _) r'))
-  = chcToLeft (OpBB And a (OpBB And r r'))
-
-chcToLeft (OpBB And (OpBB And l a@(ChcB _ _ _)) r)
-  = chcToLeft (OpBB And a (OpBB And l r))
-
-chcToLeft (OpBB And (OpBB And a@(ChcB _ _ _) r') r)
-  = chcToLeft (OpBB And a (OpBB And r r'))
-
-  -- left tree rotation or
-chcToLeft (OpBB Or r (OpBB Or l' a@(ChcB _ _ _)))
-  = chcToLeft (OpBB Or a (OpBB Or l' r))
-
-chcToLeft (OpBB Or r (OpBB Or a@(ChcB _ _ _) r'))
-  = chcToLeft (OpBB Or a (OpBB Or r r'))
-
-  -- structural instances
-chcToLeft (OpIB LT l x@(ChcI _ _ _)) = OpIB GT (chcToLeft' x) (chcToLeft' l)
-chcToLeft (OpIB GT l x@(ChcI _ _ _)) = OpIB LT (chcToLeft' x) (chcToLeft' l)
-chcToLeft (OpIB EQ l x@(ChcI _ _ _)) = OpIB EQ (chcToLeft' x) (chcToRight' l)
-chcToLeft (OpIB NEQ l x@(ChcI _ _ _)) = OpIB NEQ (chcToLeft' x) (chcToRight' l)
-chcToLeft (OpIB LTE l x@(ChcI _ _ _)) = OpIB GTE (chcToLeft' x) (chcToRight' l)
-chcToLeft (OpIB GTE l x@(ChcI _ _ _)) = OpIB LTE (chcToLeft' x) (chcToRight' l)
-  -- recursive instances
-chcToLeft (OpIB op l r) = OpIB op (chcToLeft' l) (chcToLeft' r)
-chcToLeft (OpBB op l r) = OpBB op (chcToLeft l) (chcToLeft r)
-chcToLeft (ChcB d l r)  = ChcB d  (chcToLeft l) (chcToLeft r)
-chcToLeft (OpB op e)    = OpB op  (chcToLeft e)
-chcToLeft nonRecursive = nonRecursive
-
-chcToLeft' :: (Ord a) => VIExpr a b -> VIExpr a b
-  -- structural instances
-  -- TODO redo these with pattern guards
-chcToLeft' (OpII Add l x@(ChcI _ _ _))  = OpII Add (chcToLeft' x) (chcToLeft' l)
-chcToLeft' (OpII Mult l x@(ChcI _ _ _)) = OpII Mult (chcToLeft' x) (chcToLeft' l)
-chcToLeft' (OpII Sub l x@(ChcI _ _ _)) = OpII Add (negate $ chcToLeft' x) (chcToLeft' l)
-  -- recursive instances
-chcToLeft' (OpII op l r) = OpII op (chcToLeft' l) (chcToLeft' r)
-chcToLeft' (OpI op e)    = OpI op (chcToLeft' e)
-chcToLeft' (ChcI d l r)  = ChcI d (chcToLeft' l) (chcToLeft' r)
-chcToLeft' nonRecursive  = nonRecursive
+chcToLeft :: (Ord a, Ord b, Ord d) => VProp d a b -> VProp d a b
+chcToLeft = associativeRight . pSortDec
 
 -- | Given a VProp try to eliminate some terms based on simple rules
 shrinkProp :: (Show a, Show d, Show b,  Ord a, Ord b, Ord d) =>

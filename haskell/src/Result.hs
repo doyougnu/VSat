@@ -108,7 +108,7 @@ instance NFData d => NFData (ResultProp d)
 -- and mappend will prioritize the first argument, x, over y, so if |x| > |y|
 -- you'll have an O(n) cons
 instance Semigroup (UniformProp d) where
-  (<>) x y = UniformProp $ OpBB And (uniProp x) (uniProp y)
+  (<>) x y = UniformProp $! OpBB And (uniProp x) (uniProp y)
 
 instance Resultable Var
 instance Resultable String
@@ -241,7 +241,7 @@ getResultWith !f =
            -- save the proposition that produced the unsat, if we applied to
            -- false then we would have the negation of that proposition for
            -- unsat
-           unSatToResult (f True) $! fromMaybe mempty unsatCore
+           unSatToResult (f True) $ fromMaybe mempty unsatCore
          _                           -> mempty
   where
     toResMap = ResultMap . M.foldMapWithKey

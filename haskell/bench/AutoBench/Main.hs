@@ -83,7 +83,7 @@ main = do
   -- res' <- runIncrementalSolve sPs
   -- T.writeFile "testoutputSAT" (pack . show $ res)
   -- T.writeFile "testoutputInc" (pack . show $ res')
-  res' <- satWithConf (Just dimConf) emptyConf sProp
+  res' <- satWithConf (Just (bnot dimConf)) emptyConf bProp
   print $ res'
   -- let !p = prop 6000
   -- print $ length p
