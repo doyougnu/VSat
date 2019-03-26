@@ -74,6 +74,10 @@ dToSNum :: Double -> SNum
 dToSNum = SD . literal
 
 ----------------------------- Predicates ---------------------------------------
+isChc :: VProp d a b -> Bool
+isChc (ChcB _ _ _) = True
+isChc _            = False
+
 -- | true iff a propositions has no chcs whatsoever
 isPlain :: VProp a b c -> Bool
 isPlain = null . trifoldMap (:[]) mempty mempty
@@ -178,6 +182,65 @@ dimToVarBy f = RefB . f
 dimToVar :: Dim d -> (VProp d d b)
 dimToVar = RefB . dimName
 
+-- | sort the AST pushing greater nodes up and to the right
+pSort :: (Ord a, Ord b, Ord d) => VProp d a b -> VProp d a b
+pSort (OpBB op (OpBB op' il ir) r)
+  | o && ilGtir && irGtR  = pSort (OpBB op (OpBB op' r ir) il)
+  | o && ilGir  && rGtir  = pSort (OpBB op (OpBB op' ir r) il)
+  | o && irGtil && ilGir  = pSort (OpBB op (OpBB op' r il) ir)
+  | o && irGtR  && rGtil  = pSort (OpBB op (OpBB op' il r) ir)
+  | o && rGtil  && ilGtir = pSort (OpBB op (OpBB op' ir il) r)
+  | otherwise = (OpBB op (OpBB op' (pSort il) (pSort ir)) (pSort r))
+  where o = op == op'
+        ilGtir = il > ir
+        ilGir  = il > r
+        irGtil = ir > il
+        irGtR  = ir > r
+        rGtil  = r > il
+        rGtir  = r > ir
+
+pSort (OpBB op r (OpBB op' il ir))
+  | o && ilGtir && irGtR  = pSort (OpBB op (OpBB op' r ir) il)
+  | o && ilGir  && rGtir  = pSort (OpBB op (OpBB op' ir r) il)
+  | o && irGtil && ilGir  = pSort (OpBB op (OpBB op' r il) ir)
+  | o && irGtR  && rGtil  = pSort (OpBB op (OpBB op' il r) ir)
+  | o && rGtil  && ilGtir = pSort (OpBB op (OpBB op' ir il) r)
+  | otherwise = (OpBB op (OpBB op' (pSort il) (pSort ir)) (pSort r))
+  where o = op == op'
+        ilGtir = il > ir
+        ilGir  = il > r
+        irGtil = ir > il
+        irGtR  = ir > r
+        rGtil  = r > il
+        rGtir  = r > ir
+pSort (OpB o e) = OpB o $ pSort e
+pSort (ChcB d l r) = ChcB d (pSort l) (pSort r)
+pSort (OpIB _ _ _) = error "Not implemented yet"
+pSort nonRecursive = nonRecursive
+
+associativeRight :: VProp d a b -> VProp d a b
+associativeRight (OpBB Impl l r) = associativeRight (OpBB Or (bnot l) r)
+associativeRight (OpBB op (OpBB op' l r) r')
+  | op == op' = associativeRight (OpBB op l (OpBB op' r r'))
+  | otherwise = OpBB op
+                (OpBB op' (associativeRight l) (associativeRight r))
+                (associativeRight r')
+associativeRight (OpB o e) = OpB o (associativeRight e)
+associativeRight (ChcB d l r) = (ChcB d (associativeRight l) (associativeRight r))
+associativeRight (OpIB _ _ _) = error "Not implemented yet"
+associativeRight nonRecursive = nonRecursive
+
+associativeLeft :: VProp d a b -> VProp d a b
+associativeLeft (OpBB Impl l r) = associativeLeft (OpBB Or (bnot l) r)
+associativeLeft (OpBB op l (OpBB op' r r'))
+  | op == op' = associativeLeft (OpBB op (OpBB op' l r) r')
+  | otherwise = OpBB op
+                (OpBB op' (associativeLeft l) (associativeLeft r))
+                (associativeLeft r')
+associativeLeft (OpB o e) = OpB o (associativeLeft e)
+associativeLeft (ChcB d l r) = (ChcB d (associativeLeft l) (associativeLeft r))
+associativeLeft (OpIB _ _ _) = error "Not implemented yet"
+associativeLeft nonRecursive = nonRecursive
 -- --------------------------- Descriptors ----------------------------------------
 -- | TODO fix all this redundancy by abstracting the dimensions and instancing Bifoldable
 -- | Convert a prop into a list of Terms
