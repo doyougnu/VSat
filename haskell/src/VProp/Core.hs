@@ -11,6 +11,7 @@ import           Prelude       hiding (EQ, GT, LT)
 
 import           Utils
 import           VProp.Types
+import           SAT
 
 instance Show Var where show = unpack . varName
 instance (Show a, Show b, Show c) => Show (VProp a b c) where
@@ -391,3 +392,8 @@ disjoin = fromList $ OpBB Or
 
 xOrJoin :: [VProp d a b] -> VProp d a b
 xOrJoin = fromList $ OpBB XOr
+
+atMost1 :: (Boolean b, Eq b) => [b] -> b
+atMost1 [] = error "empty list on input of atMost1"
+atMost1 xs = fromList' (&&&) disjuncs
+  where disjuncs = [(bnot x ||| bnot y) &&& x | x <- xs, y <- xs, x /= y]

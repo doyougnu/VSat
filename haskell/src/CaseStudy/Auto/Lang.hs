@@ -84,17 +84,10 @@ instance NFData AOp
 instance NFData RBOp
 instance NFData BOp
 
-
-
--- xAOrJoin :: [AutoLang a b] -> AutoLang a b
--- xAOrJoin = fromList $ BBinary Xor
-
-xAOrJoin :: (Eq a,Eq b) => [AutoLang a b] -> AutoLang a b
-xAOrJoin xs = fromList' (|||) $ fmap (fromList' (&&&)) (go xs)
-  where
-    -- go :: [AutoLang a b] -> [[AutoLang a b]]
-    go [] = []
-    go (y:ys) = (y : fmap ((BBinary Xor) y) (delete y xs)) : go ys
+atMost1 :: (Eq a,Eq b) => [AutoLang a b] -> AutoLang a b
+atMost1 [] = error "empty list on input of atMost1"
+atMost1 xs = fromList' (&&&) disjuncs
+  where disjuncs = [(bnot x ||| bnot y) &&& x | x <- xs, y <- xs, x /= y]
 
 instance Boolean (AutoLang a b) where
   true  = AutoLit True
