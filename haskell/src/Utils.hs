@@ -43,7 +43,8 @@ fromList cnstr ps = go m ps
               else Prelude.drop (n' + 1) xs
 
 fromList' :: (a -> a -> a) -> [a] -> a
-fromList' = foldl1'
+fromList' _ [] = error "Empty List in fromList'"
+fromList' f xs = foldl1' f xs
 
 -- | given a list of stuff, generate a list of those things tagged with every
 -- possible boolean combination. i.e. booleanCombinations [1..3] = [[(1, True),
