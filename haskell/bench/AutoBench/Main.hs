@@ -50,8 +50,6 @@ chAutoFile = "bench/AutoBench/vsat_small_chunk.json"
 
 -- main :: IO (V String (Maybe ThmResult))
 
-critConfig = defaultConfig {resamples = 2}
-
 -- run with stack bench --profile vsat:auto --benchmark-arguments='+RTS -S -RTS --output timings.html'
 main = do
   -- readfile is strict
@@ -69,22 +67,22 @@ main = do
 
       !sProp = (naiveEncode . autoToVSat) $ autoAndJoin sPs
       !bProp = (naiveEncode . autoToVSat) $ autoAndJoin bPs
+      dimensions :: [VProp Text String String]
       dimensions = bRef <$> ["D_0","D_1","D_2","D_3","D_4","D_5"]
       -- dimConf' :: VProp Text String String
       dimConf' = xorList dimensions
+      xorList :: [VProp Text String String] -> VProp Text String String
       xorList xs = fromList' (|||) $ fmap (fromList' (&&&)) (go xs)
         where
-          go :: [VProp Text String String] -> [[VProp Text String String]]
           go [] = []
-          go (x:xs) = (x : fmap ((<+>) x) (delete x dimensions)) : go xs
-      dimConf = toDimProp dimConf'
+          go (y:ys) = (y : fmap ((<+>) y) (delete y xs)) : go ys
 
-  print dimConf'
+      dimConf = toDimProp (fromList' (&&&) $ bnot <$> dimensions)
+
+  print dimensions
   -- res' <- runIncrementalSolve sPs
-  -- T.writeFile "testoutputSAT" (pack . show $ res)
-  -- T.writeFile "testoutputInc" (pack . show $ res')
-  res' <- satWithConf (Just (bnot dimConf)) emptyConf bProp
-  print $ res'
+  -- res' <- satWithConf (Just dimConf) emptyConf bProp
+  -- print $ res'
   -- let !p = prop 6000
   -- print $ length p
   -- -- res <- test 10
