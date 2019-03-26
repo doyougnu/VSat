@@ -9,27 +9,27 @@ module Run ( SatDict
            , smtInt
            ) where
 
+import           Control.Arrow (first, second)
+import           Control.DeepSeq (force)
+import           Control.Monad.RWS.Strict
+import           Control.Monad.State.Strict as St
+import           Data.Foldable (foldr')
 import qualified Data.Map.Strict as M
-import Control.DeepSeq (force)
-import Control.Monad.RWS.Strict
-import Control.Monad.State.Strict    as St
-import qualified Data.SBV.Internals  as I
-import qualified Data.SBV            as S
-import qualified Data.SBV.Control    as SC
+import qualified Data.SBV as S
+import qualified Data.SBV.Control as SC
+import qualified Data.SBV.Internals as I
+import           Data.Text (Text)
 import           Prelude hiding (LT, GT, EQ)
-import Data.Foldable (foldr')
-import Data.Text (Text)
-import Control.Arrow                 (first, second)
 
-import Data.Maybe                    (catMaybes)
+import           Data.Maybe (catMaybes)
 
-import SAT
-import VProp.Types
-import VProp.SBV
-import VProp.Core
-import Utils
-import Config
-import Result
+import           SAT
+import           VProp.Types
+import           VProp.SBV
+import           VProp.Core
+import           Utils
+import           Config
+import           Result
 
 -- | The satisfiable dictionary, this is actually the "state" keys are configs
 -- (an mapping from dimensions to booleans denoting selection) and values are
@@ -61,7 +61,8 @@ data Loc d a b = Loc !(VProp d a b) !(Ctx d a b) deriving Show
 mkLoc :: (VProp d a b, Ctx d a b) -> Loc d a b
 mkLoc (x, y) = Loc x y
 
--- | An empty reader monad environment, in the future read these from config file
+-- | An empty reader monad environment, in the future read these from config
+-- file
 _emptySt :: SatDict d
 _emptySt = M.empty
 
@@ -187,12 +188,12 @@ type ConfigPool a = [(Config a)]
 -- list, and the used dims map, and is parameterized by the types of dimensions,
 -- d
 data IncState d =
-  IncState { result      :: !(Result d)     -- * the result map
+  IncState { result      :: !(Result d) -- * the result map
            , config      :: !(Config d) -- * the current config
-           , processed   :: !GenModel            -- * a flag denoting
-                                                -- that a model has been
-                                                -- generated during a
-                                                -- recursive call
+           , processed   :: !GenModel   -- * a flag denoting
+                                        -- that a model has been
+                                        -- generated during a
+                                        -- recursive call
            } deriving (Eq,Show)
 
 emptySt :: (Resultable d, Monoid d) => IncState d
@@ -465,8 +466,6 @@ handleCtx (Loc (ChcB d l r) ctx@(InBBR _ acc _)) =
     -- we push onto the assertion and constrain to capture the solver state
     -- before processing the choice. This allows us to cache the state before
     -- the choice
-    -- lift $! SC.push 1
-    -- constrain current accumulator
     S.constrain acc
     handleChc goLeft goRight d
     return true
@@ -477,8 +476,6 @@ handleCtx (Loc (ChcB d l r) ctx@(InBBR _ acc _)) =
 handleCtx (Loc (ChcB d l r) ctx@(InBBL _ (InBBR _ acc _) _)) =
   do
     -- push onto assertion stack
-    -- lift $! SC.push 1
-    -- constrain current accumulator
     S.constrain acc
     handleChc goLeft goRight d
     return true

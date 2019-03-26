@@ -25,6 +25,9 @@ data Solver = Z3
             | Cvc4
             deriving (Show,Generic)
 
+applyOpts :: SMTConf d a b -> VProp d a b -> VProp d a b
+applyOpts conf p = foldr' ($) p (opts conf)
+
 -- | Convert an interfacial interface to an SMT one
 toConf :: (Show a,Show d,Show b,Ord a,Ord b,Ord d) => Settings -> SMTConf d a b
 toConf Settings{..} = foldr' ($) emptyConf ss
