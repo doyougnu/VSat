@@ -183,17 +183,53 @@ dimToVar :: Dim d -> (VProp d d b)
 dimToVar = RefB . dimName
 
 -- | sort the AST pushing greater nodes up and to the right
+pSortDec :: (Ord a, Ord b, Ord d) => VProp d a b -> VProp d a b
+pSortDec (OpBB op (OpBB op' il ir) r)
+  | o && ilLtir && irLtR  = pSortDec (OpBB op (OpBB op' il ir) r)
+  | o && ilLtR && rLtir   = pSortDec (OpBB op (OpBB op' il r) ir)
+  | o && irLtil && ilLtR  = pSortDec (OpBB op (OpBB op' ir il) r)
+  | o && irLtR  && rLtil  = pSortDec (OpBB op (OpBB op' ir r) il)
+  | o && rLtil  && ilLtir = pSortDec (OpBB op (OpBB op' r il) ir)
+  | otherwise = (OpBB op (OpBB op' (pSortDec il) (pSortDec ir)) (pSortDec r))
+  where o = op == op'
+        ilLtir = il < ir
+        ilLtR  = il < r
+        irLtil = ir < il
+        irLtR  = ir < r
+        rLtil  = r < il
+        rLtir  = r < ir
+
+pSortDec (OpBB op r (OpBB op' il ir))
+  | o && ilLtir && irLtR  = pSortDec (OpBB op (OpBB op' il ir) r)
+  | o && ilLtR && rLtir   = pSortDec (OpBB op (OpBB op' il r) ir)
+  | o && irLtil && ilLtR  = pSortDec (OpBB op (OpBB op' ir il) r)
+  | o && irLtR  && rLtil  = pSortDec (OpBB op (OpBB op' ir r) il)
+  | o && rLtil  && ilLtir = pSortDec (OpBB op (OpBB op' r il) ir)
+  | otherwise = (OpBB op (OpBB op' (pSortDec il) (pSortDec ir)) (pSortDec r))
+  where o = op == op'
+        ilLtir = il < ir
+        ilLtR  = il < r
+        irLtil = ir < il
+        irLtR  = ir < r
+        rLtil  = r < il
+        rLtir  = r < ir
+pSortDec (OpB o e) = OpB o $ pSortDec e
+pSortDec (ChcB d l r) = ChcB d (pSortDec l) (pSortDec r)
+pSortDec (OpIB _ _ _) = error "Not implemented yet"
+pSortDec nonRecursive = nonRecursive
+
+-- | sort the AST pushing greater nodes up and to the right
 pSort :: (Ord a, Ord b, Ord d) => VProp d a b -> VProp d a b
 pSort (OpBB op (OpBB op' il ir) r)
   | o && ilGtir && irGtR  = pSort (OpBB op (OpBB op' r ir) il)
-  | o && ilGir  && rGtir  = pSort (OpBB op (OpBB op' ir r) il)
-  | o && irGtil && ilGir  = pSort (OpBB op (OpBB op' r il) ir)
+  | o && ilGtR  && rGtir  = pSort (OpBB op (OpBB op' ir r) il)
+  | o && irGtil && ilGtR  = pSort (OpBB op (OpBB op' r il) ir)
   | o && irGtR  && rGtil  = pSort (OpBB op (OpBB op' il r) ir)
   | o && rGtil  && ilGtir = pSort (OpBB op (OpBB op' ir il) r)
   | otherwise = (OpBB op (OpBB op' (pSort il) (pSort ir)) (pSort r))
   where o = op == op'
         ilGtir = il > ir
-        ilGir  = il > r
+        ilGtR  = il > r
         irGtil = ir > il
         irGtR  = ir > r
         rGtil  = r > il
@@ -201,14 +237,14 @@ pSort (OpBB op (OpBB op' il ir) r)
 
 pSort (OpBB op r (OpBB op' il ir))
   | o && ilGtir && irGtR  = pSort (OpBB op (OpBB op' r ir) il)
-  | o && ilGir  && rGtir  = pSort (OpBB op (OpBB op' ir r) il)
-  | o && irGtil && ilGir  = pSort (OpBB op (OpBB op' r il) ir)
+  | o && ilGtR  && rGtir  = pSort (OpBB op (OpBB op' ir r) il)
+  | o && irGtil && ilGtR  = pSort (OpBB op (OpBB op' r il) ir)
   | o && irGtR  && rGtil  = pSort (OpBB op (OpBB op' il r) ir)
   | o && rGtil  && ilGtir = pSort (OpBB op (OpBB op' ir il) r)
   | otherwise = (OpBB op (OpBB op' (pSort il) (pSort ir)) (pSort r))
   where o = op == op'
         ilGtir = il > ir
-        ilGir  = il > r
+        ilGtR  = il > r
         irGtil = ir > il
         irGtR  = ir > r
         rGtil  = r > il
