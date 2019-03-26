@@ -8,7 +8,7 @@ import qualified Data.Map.Strict as Map
 import           Prelude hiding (EQ, GT, LT)
 import           VProp.SBV (SAT, toPredicate)
 import           VProp.Types
-import           VProp.Core (isChc,associativeLeft,associativeRight,pSort)
+import           VProp.Core (isChc,associativeLeft,associativeRight,pSort,pSortDec)
 
 import           Debug.Trace
 

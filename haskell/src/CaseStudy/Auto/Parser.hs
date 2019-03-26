@@ -52,7 +52,7 @@ bTerm =  (parens bExpr)
          <|> (try contextRef)
          <|> boolRef
          <|> rExpr
-         <|> aXor
+         <|> atMost1Expr
          <|> (AutoLit True <$ reserved "true")
          <|> (AutoLit False <$ reserved "false")
 
@@ -99,11 +99,10 @@ arithRef = do reserved "feature"
 aVariable :: Parser T.Text
 aVariable = mconcat <$> sepBy1 (T.pack <$> many alphaNumChar) dash
 
-aXor :: Parser (AutoLang T.Text T.Text)
-aXor = do reserved "oneonly"
-          features <- brackets (sepBy1 boolRef comma)
-          let xorDList = xAOrJoin features
-          return xorDList
+atMost1Expr :: Parser (AutoLang T.Text T.Text)
+atMost1Expr = do reserved "oneonly"
+                 features <- brackets (sepBy1 boolRef comma)
+                 return $! atMost1 features
 
 
 bOperators :: [[Operator Parser (AutoLang a a)]]
