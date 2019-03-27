@@ -1,6 +1,6 @@
 module CaseStudy.Auto.Lang where
 
-import           Utils (fromList)
+import           Utils (fromList,fromList')
 import           Data.List (delete)
 import           Data.SBV (EqSymbolic(..), literal)
 import           Data.Bifunctor
@@ -10,6 +10,7 @@ import           Data.Monoid ((<>))
 import           GHC.Generics
 import           Control.DeepSeq (NFData)
 
+import Debug.Trace
 import qualified VProp.Types as V
 import SAT (Boolean(..))
 
@@ -86,7 +87,8 @@ instance NFData BOp
 
 atMost1 :: (Eq a,Eq b) => [AutoLang a b] -> AutoLang a b
 atMost1 [] = error "empty list on input of atMost1"
-atMost1 xs = cs &&& fromList (&&&) disjuncs
+atMost1 [x] = x
+atMost1 xs = cs &&& fromList' (&&&) disjuncs
   where disjuncs = [(bnot x ||| bnot y) | (x, i) <- labeled
                                               , (y, j) <- labeled
                                               , x /= y
