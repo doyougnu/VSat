@@ -1,6 +1,6 @@
 module CaseStudy.Auto.Lang where
 
-import           Utils (fromList')
+import           Utils (fromList)
 import           Data.List (delete)
 import           Data.SBV (EqSymbolic(..), literal)
 import           Data.Bifunctor
@@ -86,8 +86,15 @@ instance NFData BOp
 
 atMost1 :: (Eq a,Eq b) => [AutoLang a b] -> AutoLang a b
 atMost1 [] = error "empty list on input of atMost1"
-atMost1 xs = fromList' (&&&) disjuncs
-  where disjuncs = [(bnot x ||| bnot y) &&& x | x <- xs, y <- xs, x /= y]
+atMost1 xs = cs &&& fromList (&&&) disjuncs
+  where disjuncs = [(bnot x ||| bnot y) | (x, i) <- labeled
+                                              , (y, j) <- labeled
+                                              , x /= y
+                                              , i < j
+                                              ]
+
+        labeled = zip xs [1..]
+        cs = fromList (|||) xs
 
 instance Boolean (AutoLang a b) where
   true  = AutoLit True
