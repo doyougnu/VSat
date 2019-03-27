@@ -398,10 +398,9 @@ atMost1 [] = error "empty list on input of atMost1"
 atMost1 [x] = x
 atMost1 xs = cs &&& fromList' (&&&) disjuncs
   where disjuncs = [(bnot x ||| bnot y) | (x, i) <- labeled
-                                              , (y, j) <- labeled
-                                              , x /= y
-                                              , i < j
-                                              ]
+                                        , (y, j) <- labeled
+                                        , i < j
+                                        ]
 
         labeled = zip xs [1..]
         cs = fromList' (|||) xs
