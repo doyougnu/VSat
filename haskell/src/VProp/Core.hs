@@ -395,5 +395,12 @@ xOrJoin = fromList $ OpBB XOr
 
 atMost1 :: (Boolean b, Eq b) => [b] -> b
 atMost1 [] = error "empty list on input of atMost1"
-atMost1 xs = fromList' (&&&) disjuncs
-  where disjuncs = [(bnot x ||| bnot y) &&& x | x <- xs, y <- xs, x /= y]
+atMost1 xs = cs &&& fromList' (&&&) disjuncs
+  where disjuncs = [(bnot x ||| bnot y) | (x, i) <- labeled
+                                              , (y, j) <- labeled
+                                              , x /= y
+                                              , i < j
+                                              ]
+
+        labeled = zip xs [1..]
+        cs = fromList' (|||) xs
