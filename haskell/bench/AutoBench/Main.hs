@@ -50,6 +50,22 @@ chAutoFile = "bench/AutoBench/vsat_small_chunk.json"
 
 -- main :: IO (V String (Maybe ThmResult))
 
+sliceAndNegate n xs = fromList' (&&&) $ bnot <$> drop n xs
+
+ds :: [VProp Text String String]
+ds = bRef <$> ["D_0","D_1","D_2","D_3","D_4","D_5"]
+
+[d0, d1, d2, d3, d4, d5] = ds
+
+-- dimConf' :: VProp Text String String
+-- encoding for 6 configs that make sure the inequalities encompass each other
+dimConf = (d0 &&& fromList' (&&&) (bnot <$> tail ds)) -- <0
+          ||| ((d0 &&& d1) &&& sliceAndNegate 2 ds)   -- <0 /\ <=0
+          ||| (d0 &&& d1 &&& d4 &&& (bnot d5 &&& bnot d2 &&& bnot d3)) -- <0 /\ <=0 /\ <1
+          ||| (d0 &&& d1 &&& d4 &&& d5 &&& (bnot d2 &&& bnot d3)) -- <0 /\ <=0 /\ <1 /\ <=1
+          ||| (d0 &&& d1 &&& d2 &&& d4 &&& d5 &&& bnot d3)  -- <0 /\ <=0 /\ <1 /\ <=1 /\ <2
+          ||| fromList' (&&&) ds -- <0 /\ <=0 /\ <1 /\ <=1 /\ <2 /\ <= 2
+
 -- run with stack bench --profile vsat:auto --benchmark-arguments='+RTS -S -RTS --output timings.html'
 main = do
   -- readfile is strict
@@ -66,22 +82,13 @@ main = do
       bPs = rights bPs'
 
       !sProp = (naiveEncode . autoToVSat) $ autoAndJoin sPs
-      !bProp = (naiveEncode . autoToVSat) $ autoAndJoin bPs
-      dimensions :: [VProp Text String String]
-      dimensions = bRef <$> ["D_0","D_1","D_2","D_3","D_4","D_5"]
-      -- dimConf' :: VProp Text String String
-      dimConf' = xorList dimensions
-      xorList :: [VProp Text String String] -> VProp Text String String
-      xorList xs = fromList' (|||) $ fmap (fromList' (&&&)) (go xs)
-        where
-          go [] = []
-          go (y:ys) = (y : fmap ((<+>) y) (delete y xs)) : go ys
+      --  -- take 4500 bPs produces a solution for the plain case (all dims set to false)
+      !bProp = (naiveEncode . autoToVSat) $ autoAndJoin (take 4000 bPs)
+      autoConf = (Just $ toDimProp dimConf)
 
-      dimConf = toDimProp (fromList' (&&&) $ bnot <$> dimensions)
 
-  print dimensions
   -- res' <- runIncrementalSolve sPs
-  -- res' <- satWithConf (Just dimConf) emptyConf bProp
+  -- res' <- satWithConf autoConf  emptyConf bProp
   -- print $ res'
   -- let !p = prop 6000
   -- print $ length p
@@ -91,14 +98,14 @@ main = do
   -- putStrLn "Running Good:\n"
   -- goodRes <- testS goodS 1000
 
-  -- defaultMain
-  --   [
-  --   bgroup "vsat" [  bench "small file:NoOpts"  . nfIO $ satWithConf Nothing emptyConf sProp
-  --                  -- , bench "small file:DefOpts" . nfIO $ satWith defConf   sProp
-  --                  -- , bench "small file:Empty:Compact" . nfIO $ satWith defConf   (compactEncode sPs)
-  --                  --   bench "Auto:VSolve:NoOpts"  . nfIO $ satWith emptyConf bProp
-  --                  -- -- , bench "Auto:VSolve:DefOpts" . nfIO $ satWith defConf   bProp
-  --                  -- bench "Auto:IncrementalBaseline:Naive" . nfIO $ runIncrementalSolve bPs
-  --                  -- bench "Auto:IncrementalBaseline:Compact" . nfIO $! satWith emptyConf (compactEncode bPs)
-  --                 ]
-  --   ]
+  defaultMain
+    [
+    bgroup "vsat" [--  bench "small file:NoOpts"  . nfIO $ satWithConf Nothing emptyConf sProp
+                   -- bench "small file:DefOpts" . nfIO $ satWith defConf   sProp
+                   -- , bench "small file:Empty:Compact" . nfIO $ satWith defConf   (compactEncode sPs)
+                     bench "Auto:VSolve:NoOpts"  . nfIO $ satWithConf autoConf emptyConf bProp
+                   , bench "Auto:VSolve:DefOpts" . nfIO $ satWithConf autoConf defConf   bProp
+                   , bench "Auto:IncrementalBaseline:Naive" . nfIO $ runIncrementalSolve (take 4000 bPs)
+                   -- bench "Auto:IncrementalBaseline:Compact" . nfIO $! satWith emptyConf (compactEncode bPs)
+                  ]
+    ]
