@@ -228,19 +228,27 @@ type IncVSMTSolve d = St.StateT (IncState d) SC.Query
 -- | Top level wrapper around engine and monad stack, this sets options for the
 -- underlying solver, inspects the results to see if they were variational or
 -- not, if not then it gets the plain model
-vSMTSolve :: (Ord d, Show d, Resultable d) =>
+vSMTSolve :: (Show d, Resultable d) =>
   S.Symbolic (VProp d S.SBool SNum) -> ConfigPool d-> S.Symbolic (Result d)
 vSMTSolve prop configPool =
   do prop' <- prop
      S.setOption $ SC.ProduceUnsatCores True
      SC.query $
        do
-         -- TODO expose this limit to user and find good default
-         let pool = if length configPool > 50
-                    then take 50 configPool
-                    else configPool
-         (_,resSt) <- St.runStateT
-           (mapM (\cfg -> setConfig cfg >> vSMTSolve_ prop') pool) emptySt
+         -- TODO expose this limit to user and find good default we take a chunk
+         -- from the pool to process with because it may be infinite we pull an
+         -- initial config to share its plain information on the assertion stack
+         let (fstConfig, pool) = splitAt 1 $
+                                 if length configPool > 50
+                                 then take 50 configPool
+                                 else configPool
+         -- prep assertion stack with first configs plain terms
+         (_, fstSt) <- St.runStateT (solveVariational fstConfig prop') emptySt
+
+         -- solve the rest of the pool and check if models where generated. If
+         -- they weren't then the prop was plain (no choices) because we only
+         -- grab models from choices
+         (_,resSt) <- St.runStateT (solveVariational pool prop') fstSt
          if isResultNull (result resSt)
            then St.evalStateT (vSMTSolve_ prop')  emptySt >>= solvePlain
            else return $ result resSt
@@ -251,6 +259,16 @@ solvePlain b = do S.constrain b
                   if b'
                     then getResultWith (toResultProp . LitB)
                     else return mempty
+
+solveVariational :: (Show d, Resultable d) =>
+                    ConfigPool d -> VProp d S.SBool SNum -> IncVSMTSolve d ()
+solveVariational []        _    = return ()
+solveVariational [x]       p    = do setConfig x; vSMTSolve_ p; return ()
+solveVariational cs prop = mapM_ step cs
+  where step cfg = do lift $ SC.push 1
+                      setConfig cfg
+                      vSMTSolve_ prop
+                      lift $ SC.pop 1
 
 
 -- | This ensures two things: 1st we need all variables to be symbolic before
