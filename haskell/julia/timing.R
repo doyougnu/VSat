@@ -4,7 +4,9 @@ timingsResultsFile <- "../data/data.csv"
 
 data <- read.csv(file=timingsResultsFile)
 
-ggplot(data, aes(x=PlainCount,
+ggplot(data, aes(x=CompressionRatio,
                  y=Mean,color=FormulaType)) +
   geom_smooth() +  geom_jitter() +
-  facet_grid(VariantSize ~ ChcCount)
+  facet_grid(Config ~ .)
+
+ggsave("compRatio",device = "png")
