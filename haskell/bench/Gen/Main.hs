@@ -47,6 +47,7 @@ stringList :: Int -> [Text]
 stringList n = fmap pack . tail . take (n+1) $
                concatMap (flip replicateM "abc") [0..]
 
+
 conjoin' :: [VProp Text Text Text] -> VProp Text Text Text
 conjoin' = foldl1' (&&&)
 
@@ -90,25 +91,32 @@ midGen  nChc vSize nPln = insertAt
                           (genPlainList nPln)
 leftGen nChc vSize nPln = genChc nChc vSize &&& genPlain nPln
 
-run desc conf f =
-  bench desc $! nfIO (satWith conf f)
+run !desc !conf !f = bench desc $! nfIO (satWith conf f)
 
 -- | keep a desc so that you can add to it later
-runEmpty descriptor f nChc vSize nPln = run desc emptyConf (f nChc vSize nPln)
-  where desc' = [ "Chc",show nChc
-                , "VariantSize",show vSize
-                , "numPlain", show nPln
-                ]
-        alg = ["VSolve","Empty"]
-        desc = mconcat $ intersperse "/" $ alg ++ desc' ++ descriptor
+runEmpty !descriptor !f !nChc !vSize !nPln = run desc emptyConf prop
+  where !desc' = [ "Chc",show nChc
+                 , "VariantSize",show vSize
+                 , "numPlain", show nPln
+                 , "Compression", show ratio
+                 ]
+        !alg = ["VSolve","Empty"]
+        !desc = mconcat $ intersperse "/" $ alg ++ desc' ++ descriptor
+        !prop = (f nChc vSize nPln)
+        ratio :: Double
+        !ratio = fromRational $ compressionRatio prop
 
-runDef descriptor f nChc vSize nPln = run desc defConf (f nChc vSize nPln)
-  where desc' = [ "Chc",show nChc
-                , "VariantSize",show vSize
-                , "numPlain", show nPln
-                ]
-        alg = ["VSolve","Def"]
-        desc = mconcat $ intersperse "/" $ alg ++ desc' ++ descriptor
+runDef !descriptor !f !nChc !vSize !nPln = run desc emptyConf prop
+  where !desc' = [ "Chc",show nChc
+                 , "VariantSize",show vSize
+                 , "numPlain", show nPln
+                 , "Compression", show ratio
+                 ]
+        !alg = ["VSolve","Def"]
+        !desc = mconcat $ intersperse "/" $ alg ++ desc' ++ descriptor
+        !prop = applyOpts defConf $! f nChc vSize nPln
+        ratio :: Double
+        !ratio = fromRational $ compressionRatio prop
 
 runEmptyLeft = runEmpty ["LeftGen"] leftGen
 runEmptyMid = runEmpty ["MidGen"] midGen
@@ -122,46 +130,71 @@ runDefRight = runDef ["RightGen"] rightGen
 
 -- run with stack bench --profile vsat:auto --benchmark-arguments='+RTS -S -RTS --output timings.html'
 main = do
---   let
---       runInc = runIncrementalSolve . breakOnAnd . vPropToAuto
---       genIt n = genBoolProp (genVPropAtSize n genReadable)
---       -- n = [1,300,600,900,1200]
---       n = [4]
---       m = [2]
---       !propsER = runEmptyRight <$> m <*> n <*> n
---       !propsEL = runEmptyLeft <$> m <*> n <*> n
---       !propsDL = runDefLeft <$> m <*> n <*> n
---       !props = propsER ++ propsEL ++ propsDL
---       !lg = (leftGen 3 100 5000)
---       !lgR = chcToRight lg
---       !rg = (rightGen 3 100 5000)
-
---   defaultMain
---     [
---     bgroup "vsat"
---       [ bench "lg"  $ nfIO $! satWith emptyConf lg
---       , bench "lgr" $ nfIO $! satWith emptyConf lgR
---       , bench "rg"  $ nfIO $! satWith emptyConf rg
---       ]
---     ]
-  -- putStrLn $ "LeftGen: " ++ show
-  -- putStrLn mempty
-  -- putStrLn $ "Right'd LG: " ++ show (chcToRight $ leftGen 3 1 3)
-  -- putStrLn mempty
-  -- putStrLn $ "RightGen" ++ show
   let
       dimConf' :: VProp Text String String
       dimConf' = ((bRef "aa") &&& bRef "bb") ||| ((bRef "aa") &&& bnot (bRef "bb"))
       dimConf = toDimProp dimConf'
+      -- nC = 5
+      -- nV = 20
+      -- nP = 200
+      nC = 4
+      nV = 10
+      nP = 100
 
-      -- prop = midGen 1 1 2
-      prop = bRef "a" &&& (bChc "AA" (bRef "b") (bRef "c")) &&& bRef "d"
+      !propM = midGen nC nV nP
+      -- !propL = leftGen nC nV nP
+      !propR = rightGen nC nV nP
+      !optdPropMSorted = pSort propM
+      !optdPropMAssoc = associativeLeft $ pSort propM
+      -- !optdPropL = applyOpts defConf propL
+      n = [10,100]
+      -- v = [10,200]
+      m = [2,4]
 
-  -- res' <- satWithConf (Just dimConf) emptyConf sProp
-  putStrLn $ show prop
-  putStrLn $ show (compressionRatio prop :: Rational)
-  -- res' <- satWithConf (Just dimConf) emptyConf prop
-  -- res' <- satWithConf Nothing emptyConf prop
-  -- print $ res'
+      -- propsER = runEmptyRight <$> m <*> n <*> n
+      -- propsEL = runEmptyLeft <$> m <*> n <*> n
+      propsEM = runEmptyMid <$> m <*> n <*> n
+      -- propsOER = runDefRight <$> m <*> n <*> n
+      -- propsOEL = runDefLeft <$> m <*> n <*> n
+      propsOEM = runDefMid <$> m <*> n <*> n
+      -- !propsNaive =  concat $ zipWith3 (\x y z -> [x,y,z]) propsER propsEL propsEM
+      -- !propsOptd =  concat $ zipWith3 (\x y z -> [x,y,z]) propsOER propsOEL propsOEM
+      -- !props = concat $ zipWith (\x y -> [x,y]) propsNaive propsOptd
+      interleaveProps x y  = concat $ zipWith (\x y -> [x,y]) x y
+      props = interleaveProps propsEM propsOEM
 
-  return ()
+
+
+  -- putStrLn $ show propL
+  -- putStrLn ""
+  -- putStrLn $ "[Mid]: " ++ show propM
+  -- -- putStrLn $ "[MidS]: " ++ show (propR < propM)
+  -- putStrLn ""
+  -- putStrLn $ "[Sorted]: " ++ (show optdPropMSorted)
+  -- putStrLn $ "[Ass]: " ++ (show optdPropMAssoc)
+  -- putStrLn ""
+  -- putStrLn $ "[RIGHT]: " ++ show propR
+
+  -- putStrLn $ "----------"
+  -- putStrLn $ "Empty Ratios: "
+  -- putStrLn $ show (compressionRatio propL :: Rational)
+  -- putStrLn $ show (compressionRatio propM :: Rational)
+  -- putStrLn $ show (compressionRatio propR :: Rational)
+  -- putStrLn $ "Def Ratios: "
+  -- putStrLn $ show (compressionRatio optdPropL :: Rational)
+  -- putStrLn $ show (compressionRatio optdPropM :: Rational)
+  -- putStrLn $ show (compressionRatio optdPropR :: Rational)
+
+  defaultMain
+    [
+    bgroup "vsat" -- props
+      [ -- bench "Empty:propL"  $ nfIO $! satWith emptyConf propL
+      bench "Empty:propM" $ nfIO  $! satWith emptyConf propM
+      , bench "Empty:propM:Sorted" $ nfIO  $! satWith emptyConf optdPropMSorted
+      , bench "Empty:propM:Assoc" $ nfIO  $! satWith emptyConf optdPropMAssoc
+      -- , bench "Empty:propR"  $ nfIO $! satWith emptyConf propR
+      -- , bench "Def:propL"  $ nfIO $! satWith emptyConf propL
+      -- , bench "Def:propM" $ nfIO  $! satWith emptyConf propM
+      , bench "Def:propR"  $ nfIO $! satWith emptyConf propR
+      ]
+    ]

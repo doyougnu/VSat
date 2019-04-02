@@ -83,7 +83,8 @@ main = do
 
       !sProp = (naiveEncode . autoToVSat) $ autoAndJoin sPs
       --  -- take 4500 bPs produces a solution for the plain case (all dims set to false)
-      !bProp = (naiveEncode . autoToVSat) $ autoAndJoin (take 4000 bPs)
+      !bProp = (naiveEncode . autoToVSat) $ autoAndJoin (take 500 bPs)
+      !bPropOpts = applyOpts defConf bProp
       autoConf = (Just $ toDimProp dimConf)
 
 
@@ -104,8 +105,8 @@ main = do
                    -- bench "small file:DefOpts" . nfIO $ satWith defConf   sProp
                    -- , bench "small file:Empty:Compact" . nfIO $ satWith defConf   (compactEncode sPs)
                      bench "Auto:VSolve:NoOpts"  . nfIO $ satWithConf autoConf emptyConf bProp
-                   , bench "Auto:VSolve:DefOpts" . nfIO $ satWithConf autoConf defConf   bProp
-                   , bench "Auto:IncrementalBaseline:Naive" . nfIO $ runIncrementalSolve (take 4000 bPs)
+                   , bench "Auto:VSolve:DefOpts" . nfIO $ satWithConf autoConf emptyConf bPropOpts
+                   , bench "Auto:IncrementalBaseline:Naive" . nfIO $ runIncrementalSolve (take 500 bPs)
                    -- bench "Auto:IncrementalBaseline:Compact" . nfIO $! satWith emptyConf (compactEncode bPs)
                   ]
     ]

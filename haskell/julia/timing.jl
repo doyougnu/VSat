@@ -31,7 +31,9 @@ function addVariantSize(df) genCol(df, :Variant, 6, id) end
 
 function addNumVariant(df) genCol(df, :VariantSize, 7, x->parse(Int,x)) end
 
-function addType(df) genCol(df, :FormulaType, 10, id) end
+function addType(df) genCol(df, :FormulaType, 12, id) end
+
+function addComp(df) genCol(df, :CompressionRatio, 11, x->parse(Float64,x)) end
 
 # mutate the data by splitting on the name column
 function mungeDF!(df::DataFrame)
@@ -43,7 +45,8 @@ function mungeDF!(df::DataFrame)
         addNumChc |>
         addChc |>
         addVariantSize |>
-        addNumVariant |> addType
+        addNumVariant |>
+        addComp |> addType
 end
 
 ## perform the mutation

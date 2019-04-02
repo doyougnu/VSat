@@ -199,11 +199,10 @@ runIncrementalSolve_  assocList = runSMT $
 
 
 runIncrementalSolve__ :: AutoLang SBool SNum -> Query ()
-runIncrementalSolve__ prop =
-       do
-         bs <- St.evalStateT (autoSolve prop) emptyS
-         constrain bs
-         return ()
+runIncrementalSolve__ prop = evalAutoExpr__ prop >>= constrain
+       -- do
+       --   bs <- St.evalStateT (autoSolve prop) emptyS
+       --   constrain bs
 
 -- autoToResProp :: AutoLang a a -> ResultProp a
 autoToResProp :: AutoLang Text Text -> ResultProp Text
@@ -407,3 +406,32 @@ evalAutoExpr' (ABinary op l r) = do l' <- evalAutoExpr' l
                                         b   = l' `op'` r'
                                     return b
 evalAutoExpr' _ = error "[ERR] in evalAutoExpr'; perhaps you forgot to call idEncode?"
+
+evalAutoExpr__ :: AutoLang SBool SNum -> Query SBool
+evalAutoExpr__ (AutoLit b) = return $ literal b
+evalAutoExpr__ (AutoRef r) = return r
+evalAutoExpr__ (AutoNot e) = bnot <$> evalAutoExpr__ e
+evalAutoExpr__ (BBinary op l r) = do l' <- evalAutoExpr__ l
+                                     r' <- evalAutoExpr__ r
+                                     let op' = bDispatch op
+                                         b = l' `op'` r'
+                                     constrain b
+                                     return b
+evalAutoExpr__ (RBinary op l r) = do l' <- evalAutoExpr__' l
+                                     r' <- evalAutoExpr__' r
+                                     let op' = nDispatch op
+                                         b   = l' `op'` r'
+                                     constrain b
+                                     return b
+evalAutoExpr__ _ = error "[ERR] in evalAutoExpr__; perhaps you forgot to call idEncode?"
+
+evalAutoExpr__' :: ALang SNum -> Query SNum
+evalAutoExpr__' (ALit i) = return . SI . literal $ fromIntegral i
+evalAutoExpr__' (AVar a) = return a
+evalAutoExpr__' (Neg e)  = negate <$> evalAutoExpr__' e
+evalAutoExpr__' (ABinary op l r) = do l' <- evalAutoExpr__' l
+                                      r' <- evalAutoExpr__' r
+                                      let op' = aDispatch op
+                                          b   = l' `op'` r'
+                                      return b
+evalAutoExpr__' _ = error "[ERR] in evalAutoExpr__'; perhaps you forgot to call idEncode?"
