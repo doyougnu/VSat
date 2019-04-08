@@ -31,6 +31,8 @@ import           Utils
 import           Config
 import           Result
 
+import Debug.Trace
+
 -- | The satisfiable dictionary, this is actually the "state" keys are configs
 -- (an mapping from dimensions to booleans denoting selection) and values are
 -- whether that config is satisfiable or not (a bool)
@@ -372,7 +374,8 @@ setModelNotGenD :: IncVSMTSolve d ()
 setModelNotGenD = St.modify' $ onProcessed (const False)
 
 constrain :: S.SBool -> ConstraintName -> IncVSMTSolve d ()
-constrain b !name = S.namedConstraint (mconcat name) b
+constrain b [] = S.constrain b
+constrain b !name = trace (show name) $ S.namedConstraint (mconcat name) b
 
 solveVariant :: (Resultable d, Show d) =>
   IncVSMTSolve d (S.SBool, ConstraintName) -> IncVSMTSolve d (Result d)
