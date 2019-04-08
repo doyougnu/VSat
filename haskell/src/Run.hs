@@ -14,8 +14,6 @@ import           Control.DeepSeq (force)
 import           Control.Monad.RWS.Strict
 import           Control.Monad.State.Strict as St
 import           Data.Foldable (foldr')
-import qualified Data.Sequence as Sq
-import           Data.String    (IsString)
 import qualified Data.Map.Strict as M
 import qualified Data.SBV as S
 import qualified Data.SBV.Control as SC
@@ -164,7 +162,7 @@ runVSMTSolve ::
 runVSMTSolve configPool prop =
   do cnf <- ask
      -- convert all refs to SBools
-     let prop' = St.evalStateT (propToSBool prop mempty) (mempty, mempty)
+     let prop' = St.evalStateT (propToSBool prop) (mempty, mempty)
      -- run the inner driver
      res <- lift . S.runSMTWith (conf cnf) $! vSMTSolve prop' configPool
      lift . return $ res
@@ -231,7 +229,7 @@ type IncVSMTSolve d = St.StateT (IncState d) SC.Query
 -- underlying solver, inspects the results to see if they were variational or
 -- not, if not then it gets the plain model
 vSMTSolve :: (Show d, Resultable d) =>
-  S.Symbolic (VProp d (S.SBool, ConstraintName) SNum) -> ConfigPool d-> S.Symbolic (Result d)
+  S.Symbolic (VProp d (S.SBool, Name) SNum) -> ConfigPool d-> S.Symbolic (Result d)
 vSMTSolve prop configPool =
   do prop' <- prop
      S.setOption $ SC.ProduceUnsatCores True
@@ -252,7 +250,7 @@ vSMTSolve prop configPool =
          -- grab models from choices
          (_,resSt) <- St.runStateT (solveVariational pool prop') fstSt
          if isResultNull (result resSt)
-           then St.evalStateT (vSMTSolve_ prop')  emptySt >>= solvePlain
+           then St.evalStateT (vSMTSolve_ prop')  emptySt >>= solvePlain . fst
            else return $ result resSt
 
 solvePlain :: Resultable d => S.SBool -> SC.Query (Result d)
@@ -264,14 +262,14 @@ solvePlain b = do S.constrain b
 
 solveVariational :: (Show d, Resultable d) =>
                     ConfigPool d ->
-                    VProp d (S.SBool, ConstraintName) SNum ->
+                    VProp d (S.SBool, Name) SNum ->
                     IncVSMTSolve d ()
 solveVariational []        _    = return ()
-solveVariational [x]       p    = do setConfig x; vSMTSolve_ p; return ()
+solveVariational [x]       p    = do setConfig x; _ <- vSMTSolve_ p; return ()
 solveVariational cs prop = mapM_ step cs
   where step cfg = do lift $ SC.push 1
                       setConfig cfg
-                      vSMTSolve_ prop
+                      _ <- vSMTSolve_ prop
                       lift $ SC.pop 1
 
 
@@ -479,8 +477,8 @@ handleCtx (Loc (RefB b) (InB _ ctx)) =
 handleCtx (Loc (RefB (b, name)) (InBBR op (acc, accName) (InBBL op' ctx r))) =
   do (handleCtx $! mkLoc (r , InBBR op' newAcc ctx))
   where !bAcc = bDispatch op acc b
-        !accName = name : show op : accName
-        newAcc = (bAcc, accName)
+        !newName = name : show op : accName
+        !newAcc = (bAcc, newName)
 
 
   -- if we have two rhs contexts then we abuse the focus to
@@ -559,16 +557,4 @@ vSMTSolve_ (OpB Not (OpB Not notchc)) = vSMTSolve_ notchc
 vSMTSolve_ (OpB Not e) = handleCtx   . Loc e $! InB Not Empty
 vSMTSolve_ (OpBB op l r) = handleCtx . Loc l $! InBBL op Empty r
 vSMTSolve_ (OpIB _ _ _) = error "Blame Jeff! This isn't implemented yet!"
--- vSMTSolve_ !(OpIB op l r) = do l' <- vSMTSolve'_ l
---                                r' <- vSMTSolve'_ r
---                                _ <- reifyArithChcs l' r' (handler op)
---   -- this result should, and will never matter the return values from the
---   -- handler are handled in side effects
---                                return true
---   where handler LT  = (.<)
---         handler LTE = (.<=)
---         handler GTE = (.>=)
---         handler GT  = (.>)
---         handler EQ  = (.==)
---         handler NEQ = (./=)
 vSMTSolve_ c@(ChcB _ _ _) = handleCtx $! Loc c Empty
