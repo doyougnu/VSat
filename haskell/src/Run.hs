@@ -9,11 +9,13 @@ module Run ( SatDict
            , smtInt
            ) where
 
-import           Control.Arrow (first, second)
+import           Control.Arrow (first, second, (***))
 import           Control.DeepSeq (force)
 import           Control.Monad.RWS.Strict
 import           Control.Monad.State.Strict as St
 import           Data.Foldable (foldr')
+import qualified Data.Sequence as Sq
+import           Data.String    (IsString)
 import qualified Data.Map.Strict as M
 import qualified Data.SBV as S
 import qualified Data.SBV.Control as SC
@@ -50,7 +52,7 @@ type Env d a r = RWST (SMTConf d a a) Log (SatDict d) IO r -- ^ the monad stack
 -- operators we keep a prop that is the focus and a context which represents the
 -- parent and adjacent child
 data Ctx d a b = InBBL BB_B  !(Ctx d a b) !(VProp d a b)
-               | InBBR BB_B !S.SBool  !(Ctx d a b)
+               | InBBR BB_B !(S.SBool, ConstraintName) !(Ctx d a b)
                | InB B_B !(Ctx d a b)
                | Empty
                deriving Show
@@ -162,7 +164,7 @@ runVSMTSolve ::
 runVSMTSolve configPool prop =
   do cnf <- ask
      -- convert all refs to SBools
-     let prop' = St.evalStateT (propToSBool prop) (mempty, mempty)
+     let prop' = St.evalStateT (propToSBool prop mempty) (mempty, mempty)
      -- run the inner driver
      res <- lift . S.runSMTWith (conf cnf) $! vSMTSolve prop' configPool
      lift . return $ res
@@ -182,7 +184,7 @@ type IncPack a = St.StateT (UsedVars a S.SBool, UsedVars a SNum) S.Symbolic
 -- here because we only use it as a stack, or a single traversal and we require
 -- the semantics of a possible infinite (co-inductive for you nerds)
 -- data structure
-type ConfigPool a = [(Config a)]
+type ConfigPool a = [Config a]
 
 -- | the internal state for the incremental solve algorithm, it holds a result
 -- list, and the used dims map, and is parameterized by the types of dimensions,
@@ -229,7 +231,7 @@ type IncVSMTSolve d = St.StateT (IncState d) SC.Query
 -- underlying solver, inspects the results to see if they were variational or
 -- not, if not then it gets the plain model
 vSMTSolve :: (Show d, Resultable d) =>
-  S.Symbolic (VProp d S.SBool SNum) -> ConfigPool d-> S.Symbolic (Result d)
+  S.Symbolic (VProp d (S.SBool, ConstraintName) SNum) -> ConfigPool d-> S.Symbolic (Result d)
 vSMTSolve prop configPool =
   do prop' <- prop
      S.setOption $ SC.ProduceUnsatCores True
@@ -261,7 +263,9 @@ solvePlain b = do S.constrain b
                     else return mempty
 
 solveVariational :: (Show d, Resultable d) =>
-                    ConfigPool d -> VProp d S.SBool SNum -> IncVSMTSolve d ()
+                    ConfigPool d ->
+                    VProp d (S.SBool, ConstraintName) SNum ->
+                    IncVSMTSolve d ()
 solveVariational []        _    = return ()
 solveVariational [x]       p    = do setConfig x; vSMTSolve_ p; return ()
 solveVariational cs prop = mapM_ step cs
@@ -271,11 +275,16 @@ solveVariational cs prop = mapM_ step cs
                       lift $ SC.pop 1
 
 
+type Name = String
+type ConstraintName = [String]
+
 -- | This ensures two things: 1st we need all variables to be symbolic before
 -- starting query mode. 2nd we cannot allow any duplicates to be called on a
 -- string -> symbolic a function or missiles will launch.
-propToSBool :: (Show a,Ord a) => VProp d a a -> IncPack a (VProp d S.SBool SNum)
-propToSBool (RefB x)     = RefB   <$> smtBool x
+propToSBool :: (Show a,Ord a) => VProp d a a ->
+  IncPack a (VProp d (S.SBool, Name) SNum)
+propToSBool (RefB x)     = do b <- smtBool x
+                              return $! RefB (b, show x)
 propToSBool (OpB o e)    = OpB  o <$> propToSBool e
 propToSBool (OpBB o l r) = OpBB o <$> propToSBool l <*> propToSBool r
 propToSBool (ChcB d l r) = ChcB d <$> propToSBool l <*> propToSBool r
@@ -364,14 +373,17 @@ setModelGenD = St.modify' $ onProcessed (const True)
 setModelNotGenD :: IncVSMTSolve d ()
 setModelNotGenD = St.modify' $ onProcessed (const False)
 
+constrain :: S.SBool -> ConstraintName -> IncVSMTSolve d ()
+constrain b !name = S.namedConstraint (mconcat name) b
+
 solveVariant :: (Resultable d, Show d) =>
-  IncVSMTSolve d S.SBool -> IncVSMTSolve d (Result d)
+  IncVSMTSolve d (S.SBool, ConstraintName) -> IncVSMTSolve d (Result d)
 solveVariant go = do
            setModelNotGenD
 
            -- the recursive computaton
            lift $! SC.push 1
-           go >>= S.constrain
+           go >>= uncurry constrain
 
            -- check if the config was satisfiable, and if the recursion
            -- generated a model
@@ -434,69 +446,83 @@ handleChc goLeft goRight d =
 -- context to solve recursively by selecting a variant as our new focus and
 -- recurring.
 handleCtx :: (Ord d, Show d, Resultable d) =>
-  Loc d S.SBool SNum -> IncVSMTSolve d S.SBool
+  Loc d (S.SBool,Name) SNum ->
+  IncVSMTSolve d (S.SBool, ConstraintName)
   -- when we have no ctx we just solve the unit clause
 handleCtx (Loc (OpIB _ _ _) _) = error "what?!?! How did you even get here! Get Jeff on the phone this isn't implemented yet!"
-handleCtx (Loc (RefB b) Empty) = return b
-handleCtx (Loc (LitB b) Empty) = return $! S.literal b
+handleCtx (Loc (RefB (b,name)) Empty) = return (b, pure name)
+handleCtx (Loc (LitB b) Empty) = return $! (S.literal b, pure $ show b)
   -- when we have a context that holds only an accumulator we combine the atomic
   -- with the accum and return the result
-handleCtx (Loc (RefB b) (InBBR op acc Empty)) =
-  return $! bDispatch op acc b
-handleCtx (Loc (LitB b) (InBBR op acc Empty)) =
-  return $! bDispatch op acc (S.literal b)
+handleCtx (Loc (RefB (b, name)) (InBBR op (acc, accName) Empty)) =
+  return $! (bDispatch op acc b, newName)
+  where newName = name : show op : accName
+handleCtx (Loc (LitB b) (InBBR op (acc, accName) Empty)) =
+  return $! (bDispatch op acc (S.literal b), show b : show op : accName)
 
   -- When we see an atomic in a left context we add that atomic to the
   -- accumulator and recur to the rhs of the operator
-handleCtx (Loc (RefB b) (InBBL op ctx rbranch)) =
-  handleCtx $! mkLoc (rbranch, InBBR op b ctx)
+handleCtx (Loc (RefB (b, name)) (InBBL op ctx rbranch)) =
+  handleCtx $! mkLoc (rbranch, InBBR op (b, pure name) ctx)
 handleCtx (Loc (LitB b) (InBBL op ctx rbranch)) =
-  handleCtx $! mkLoc (rbranch, InBBR op (S.literal b) ctx)
+  handleCtx $! mkLoc (rbranch, InBBR op acc ctx)
+  where name = pure (show b)
+        acc = (S.literal b, name)
 handleCtx (Loc (LitB b) (InB _ ctx)) = handleCtx $! mkLoc (LitB $ bnot b, ctx)
-handleCtx (Loc (RefB b) (InB _ ctx)) = handleCtx $! mkLoc (RefB $ bnot b, ctx)
+handleCtx (Loc (RefB b) (InB _ ctx)) =
+  handleCtx $! mkLoc (RefB $ first bnot b, ctx)
 
   -- when we are in the left side of a context and the right side of a subtree
   -- we add the atomics to the accumulator and swap to the right side of the
   -- parent context with the new accumulator being the result of computing the
   -- left side
-handleCtx (Loc (RefB b) (InBBR op acc (InBBL op' ctx r))) =
+handleCtx (Loc (RefB (b, name)) (InBBR op (acc, accName) (InBBL op' ctx r))) =
   do (handleCtx $! mkLoc (r , InBBR op' newAcc ctx))
-  where !newAcc = bDispatch op acc b
+  where !bAcc = bDispatch op acc b
+        !accName = name : show op : accName
+        newAcc = (bAcc, accName)
+
+
   -- if we have two rhs contexts then we abuse the focus to
-handleCtx (Loc (RefB b) (InBBR op acc ctx)) =
-  do (handleCtx $! mkLoc (RefB newAcc, ctx))
+handleCtx (Loc (RefB (b, name)) (InBBR op (acc, accName) ctx)) =
+  handleCtx $! mkLoc (RefB (newAcc, newAccName), ctx)
   where !newAcc = bDispatch op acc b
-handleCtx (Loc (LitB b) (InBBR op acc ctx)) =
+        !newAccName = mconcat $ [name,show op] ++ accName
+
+
+handleCtx (Loc (LitB b) (InBBR op (acc, accName) ctx)) =
   -- we wrap in RefB just to get the types to work out
   do (handleCtx $! mkLoc (RefB newAcc, ctx))
-  where !newAcc = bDispatch op acc (S.literal b)
+  where !newAcc = (bDispatch op acc (S.literal b), newName)
+        !newName = mconcat $ show b : show op : accName
 
   -- reduce double negations
 handleCtx (Loc fcs (InB Not (InB Not ctx))) = handleCtx $! mkLoc (fcs, ctx)
   -- accumulate a negation
 handleCtx (Loc fcs (InB Not (InBBR op acc ctx))) =
-  handleCtx $! mkLoc (fcs, (InBBR op (bnot acc) ctx))
+  handleCtx $! mkLoc (fcs, (InBBR op newAcc ctx))
+  where newAcc = bnot *** (show Not :) $ acc
 
   -- when we see a choice we describe the computations for each variant and
   -- offload it to a handler function that manipulates the sbv assertion stack
-handleCtx (Loc (ChcB d l r) ctx@(InBBR _ acc _)) =
+handleCtx (Loc (ChcB d l r) ctx@(InBBR _ (acc, accName) _)) =
   do
     -- we push onto the assertion and constrain to capture the solver state
     -- before processing the choice. This allows us to cache the state before
     -- the choice
-    S.constrain acc
+    constrain acc accName
     handleChc goLeft goRight d
-    return true
+    return (true, mempty)
   where !goLeft  = solveVariant (handleCtx (mkLoc (l, ctx)))
         !goRight = solveVariant (handleCtx (mkLoc (r, ctx)))
 
   -- this handles the case when the accumulator is one parent node away
-handleCtx (Loc (ChcB d l r) ctx@(InBBL _ (InBBR _ acc _) _)) =
+handleCtx (Loc (ChcB d l r) ctx@(InBBL _ (InBBR _ (acc, accName) _) _)) =
   do
     -- push onto assertion stack
-    S.constrain acc
+    constrain acc accName
     handleChc goLeft goRight d
-    return true
+    return (true, mempty)
   where !goLeft  = solveVariant (handleCtx (mkLoc (l, ctx)))
         !goRight = solveVariant (handleCtx (mkLoc (r, ctx)))
 
@@ -511,7 +537,7 @@ handleCtx (Loc (ChcB d l r) (InB Not ctx)) =
   -- If we see a choice with any other context then the ctx is either empty
   -- or the choice is in the leftmost position of the ast
 handleCtx (Loc (ChcB d l r) ctx) =
-    handleChc goLeft goRight d >> return true
+    handleChc goLeft goRight d >> return (true, mempty)
   where !goLeft  = solveVariant (handleCtx (mkLoc (l, ctx)))
         !goRight = solveVariant (handleCtx (mkLoc (r, ctx)))
 
@@ -526,9 +552,9 @@ handleCtx (Loc (OpBB op l r) ctx) = handleCtx $! mkLoc (l, InBBL op ctx r)
 -- | The main solver algorithm. You can think of this as the sem function for
 -- the dsl
 vSMTSolve_ :: (Ord d, Show d, Resultable d) =>
-  VProp d S.SBool SNum -> IncVSMTSolve d S.SBool
-vSMTSolve_ (RefB b) = return b
-vSMTSolve_ (LitB b) = return $! S.literal b
+  VProp d (S.SBool, Name) SNum -> IncVSMTSolve d (S.SBool, ConstraintName)
+vSMTSolve_ (RefB (b,name)) = return (b, pure name)
+vSMTSolve_ (LitB b) = return $! (S.literal b, pure $ show b)
 vSMTSolve_ (OpB Not (OpB Not notchc)) = vSMTSolve_ notchc
 vSMTSolve_ (OpB Not e) = handleCtx   . Loc e $! InB Not Empty
 vSMTSolve_ (OpBB op l r) = handleCtx . Loc l $! InBBL op Empty r
