@@ -4,6 +4,7 @@ import Data.SBV.Control (SMTOption(..))
 import Data.SBV (SMTConfig(..),z3,yices,mathSAT,boolector,abc,cvc4)
 import GHC.Generics (Generic)
 import Data.Foldable (foldr')
+import Data.Text (Text)
 
 import VProp.Types
 import Opts
@@ -16,6 +17,8 @@ data Settings = Settings { solver :: Solver
 data SMTConf d a b = SMTConf { conf :: !SMTConfig
                              , opts :: ![VProp d a b -> VProp d a b]
                              }
+
+type ReadableSMTConf d = SMTConf d Text Text
 
 data Solver = Z3
             | Yices
