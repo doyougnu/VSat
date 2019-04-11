@@ -18,6 +18,7 @@ import qualified Data.Map.Strict as M
 import qualified Data.SBV as S
 import qualified Data.SBV.Control as SC
 import qualified Data.SBV.Internals as I
+import           Data.HashSet (HashSet, member, insert)
 import           Data.Text (unpack, pack, Text)
 import           Prelude hiding (LT, GT, EQ)
 
@@ -30,8 +31,6 @@ import           VProp.Core
 import           Utils
 import           Config
 import           Result
-
-import Debug.Trace
 
 -- | The satisfiable dictionary, this is actually the "state" keys are configs
 -- (an mapping from dimensions to booleans denoting selection) and values are
@@ -184,6 +183,10 @@ type IncPack a = St.StateT (UsedVars a S.SBool, UsedVars a SNum) S.Symbolic
 -- data structure
 type ConfigPool a = [Config a]
 
+type Used = HashSet Text
+
+type UsedConstraint = Text
+
 -- | the internal state for the incremental solve algorithm, it holds a result
 -- list, and the used dims map, and is parameterized by the types of dimensions,
 -- d
@@ -194,12 +197,16 @@ data IncState d =
                                         -- that a model has been
                                         -- generated during a
                                         -- recursive call
+           , usedConstraints :: !(Used) -- * a set that checks constraints so we
+                                        -- don't send redundant constraints to
+                                        -- sbv
            } deriving (Eq,Show)
 
 emptySt :: (Resultable d, Monoid d) => IncState d
 emptySt = IncState{ result=mempty
                   , config=mempty
                   , processed=False
+                  , usedConstraints=mempty
                   }
 
 onResult :: (Result d -> Result d) -> IncState d -> IncState d
@@ -219,6 +226,15 @@ replaceConfig = onConfig . const
 
 onProcessed :: (GenModel -> GenModel) -> IncState d -> IncState d
 onProcessed f IncState {..} = IncState {processed=f processed, ..}
+
+onUsed :: (Used -> Used) -> IncState d -> IncState d
+onUsed f IncState {..} = IncState {usedConstraints =f usedConstraints, ..}
+
+isUsed :: UsedConstraint -> Used -> Bool
+isUsed = member
+
+insertUsed :: UsedConstraint -> IncState d -> IncState d
+insertUsed = onUsed . insert
 
 -- | the incremental solve monad, with the base monad being the query monad so
 -- we can pull out sbv models Hardcoding so that I don't have to write the mtl
@@ -243,7 +259,10 @@ vSMTSolve prop configPool =
                                  then take 50 configPool
                                  else configPool
          -- prep assertion stack with first configs plain terms
-         (_, fstSt) <- St.runStateT (solveVariational fstConfig prop') emptySt
+         (_, fstSt) <-
+           if not $ null pool
+           then St.runStateT (solveVariational fstConfig prop') emptySt
+           else return ((), emptySt)
 
          -- solve the rest of the pool and check if models where generated. If
          -- they weren't then the prop was plain (no choices) because we only
@@ -272,9 +291,11 @@ solveVariational cs prop = mapM_ step cs
                       _ <- vSMTSolve_ prop
                       lift $ SC.pop 1
 
-
+-- | The name of a reference
 type Name = Text
-type ConstraintName = [Text]
+
+-- | The name of a constraint is a list of reference names and operators
+type ConstraintName = [Name]
 
 -- | This ensures two things: 1st we need all variables to be symbolic before
 -- starting query mode. 2nd we cannot allow any duplicates to be called on a
@@ -373,9 +394,24 @@ setModelGenD = St.modify' $ onProcessed (const True)
 setModelNotGenD :: IncVSMTSolve d ()
 setModelNotGenD = St.modify' $ onProcessed (const False)
 
+setUsed :: UsedConstraint -> IncVSMTSolve d ()
+setUsed = St.modify' . insertUsed
+
+-- | A smart constrain method, this inspects a set of constraint names to see if
+-- we have a duplicate constraint name. If we do (if the name representing the
+-- sbool is in the set) then we simply constrain the bool unnamed, if not then
+-- we add the named constraint and insert into the set. We use an unordered
+-- hashset for performance reasons because these strings can get quite long
+-- leading to poor Eq performance
 constrain :: S.SBool -> ConstraintName -> IncVSMTSolve d ()
 constrain b [] = S.constrain b
-constrain b !name = S.namedConstraint (unpack $ mconcat name) b
+constrain b !name = do
+  used <- gets usedConstraints
+  if not (isUsed usedName used)
+    then do S.namedConstraint name' b; setUsed usedName
+    else S.constrain b
+  where !name' = (unpack $ mconcat name)
+        !usedName = mconcat name
 
 toText :: Show a => a -> Text
 toText = pack . show
@@ -405,7 +441,7 @@ solveVariant go = do
            lift $! SC.pop 1
            return resMap
 
-handleChc :: Resultable d =>
+handleChc :: (Show d, Resultable d) =>
   IncVSMTSolve d (Result d)
   -> IncVSMTSolve d (Result d)
   -> Dim d
