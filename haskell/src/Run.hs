@@ -18,7 +18,7 @@ import qualified Data.Map.Strict as M
 import qualified Data.SBV as S
 import qualified Data.SBV.Control as SC
 import qualified Data.SBV.Internals as I
-import           Data.Text (Text)
+import           Data.Text (unpack, pack, Text)
 import           Prelude hiding (LT, GT, EQ)
 
 import           Data.Maybe (catMaybes)
@@ -42,7 +42,10 @@ type SatDict a = M.Map (Config a) Bool
 type Log = Text
 
 -- | Takes a dimension d, a type for values a, and a result r
-type Env d a r = RWST (SMTConf d a a) Log (SatDict d) IO r -- ^ the monad stack
+type Env d = RWST (SMTConf d Text Text) Log (SatDict d) IO
+
+-- | A VProp with strings
+type ReadableProp d = VProp d Text Text
 
 -- | A Ctx is a zipper over the VProp data type. This is used in the vsmtsolve
 -- routine to maintain a context when a choice is observed. This way we always
@@ -69,36 +72,37 @@ _emptySt :: SatDict d
 _emptySt = M.empty
 
 -- | Run the RWS monad with defaults of empty state, reader
-_runEnv :: Show a =>
-  Env d a r -> SMTConf d a a -> SatDict d -> IO (r, SatDict d,  Log)
+_runEnv :: Env d r ->
+           SMTConf d Text Text ->
+           SatDict d ->
+           IO (r, SatDict d,  Log)
 _runEnv = runRWST
 
-runEnv :: Show a =>
-          (VProp d a a -> Env d a (Result d))
-       -> SMTConf d a a
-       -> VProp d a a
-       -> IO (Result d, SatDict d, Log)
+runEnv :: (ReadableProp d -> Env d (Result d)) ->
+          SMTConf d Text Text ->
+          ReadableProp d ->
+          IO (Result d, SatDict d, Log)
 runEnv f conf x = _runEnv (f x') conf _emptySt
   where x' = foldr' ($) x (opts conf)
 
-runAD :: (Show a, Show d, Ord d, Ord a, Resultable d) =>
-         SMTConf d a a
-      -> VProp d a a
-      -> (d -> a)
+runAD :: (Show d, Resultable d) =>
+         SMTConf d Text Text
+      -> ReadableProp d
+      -> (d -> Text)
       -> IO (Result d)
 runAD os p f = fst' <$> runEnv (flip runAndDecomp f) os p
 
-runBF :: (Show a, Show d, Ord a, Resultable d,Monoid d) =>
-         SMTConf d a a
-      -> VProp d a a
+runBF :: (Show d, Resultable d) =>
+         SMTConf d Text Text
+      -> ReadableProp d
       -> IO (Result d)
 runBF os p = fst' <$> runEnv runBruteForce os p
 
 -- | Run the VSMT solver given a list of optimizations and a prop
-runVSMT :: (Show d, Show a, Ord a, Ord d, Resultable d) =>
-           ConfigPool d               ->
-           SMTConf d a a              ->
-           VProp d a a                ->
+runVSMT :: (Show d, Resultable d) =>
+           ConfigPool d        ->
+           SMTConf d Text Text ->
+           ReadableProp d      ->
            IO (Result d, SatDict d, Log)
 runVSMT dimConf = runEnv (runVSMTSolve dimConf)
 
@@ -129,9 +133,8 @@ runForDict x = S.runSMT $
 -- | Run the brute force baseline case, that is select every plain variant and
 -- run them to the sat solver
 runBruteForce ::
-  (MonadTrans t, Show a,Show d, Ord a, Ord d, Resultable d, Monoid d
-  , MonadState (SatDict d) (t IO)) =>
-  VProp d a a -> t IO (Result d)
+  (MonadTrans t, Show d, Resultable d , MonadState (SatDict d) (t IO)) =>
+  ReadableProp d -> t IO (Result d)
 runBruteForce prop = lift $ flip evalStateT (initSt prop) $
   do
   _confs <- get
@@ -149,18 +152,16 @@ runBruteForce prop = lift $ flip evalStateT (initSt prop) $
 
 -- | Run the and decomposition baseline case, that is deconstruct every choice
 -- and then run the sat solver
-runAndDecomp :: (Show a, Show d, Ord d, Ord a, Resultable d,
-                MonadTrans t, Monad (t IO)) =>
-  VProp d a a -> (d -> a) -> t IO (Result d)
+runAndDecomp :: (Show d, Resultable d, MonadTrans t, Monad (t IO)) =>
+  ReadableProp d -> (d -> Text) -> t IO (Result d)
 runAndDecomp prop f =
   lift $ runForDict $ symbolicPropExpr $ andDecomp prop (f . dimName)
 
 runVSMTSolve ::
-  (Show d, Show a, Ord a, Ord d, MonadTrans t, Resultable d
-  , MonadReader (SMTConf d a a) (t IO)) =>
-  ConfigPool d
-  -> VProp d a a
-  ->  t IO (Result d)
+  (Show d, MonadTrans t, Resultable d , MonadReader (SMTConf d a a) (t IO)) =>
+  ConfigPool d ->
+  ReadableProp d ->
+  t IO (Result d)
 runVSMTSolve configPool prop =
   do cnf <- ask
      -- convert all refs to SBools
@@ -275,16 +276,15 @@ solveVariational cs prop = mapM_ step cs
                       lift $ SC.pop 1
 
 
-type Name = String
-type ConstraintName = [String]
+type Name = Text
+type ConstraintName = [Text]
 
 -- | This ensures two things: 1st we need all variables to be symbolic before
 -- starting query mode. 2nd we cannot allow any duplicates to be called on a
 -- string -> symbolic a function or missiles will launch.
-propToSBool :: (Show a,Ord a) => VProp d a a ->
-  IncPack a (VProp d (S.SBool, Name) SNum)
+propToSBool :: ReadableProp d -> IncPack Text (VProp d (S.SBool, Name) SNum)
 propToSBool (RefB x)     = do b <- smtBool x
-                              return $! RefB (b, show x)
+                              return $! RefB (b, x)
 propToSBool (OpB o e)    = OpB  o <$> propToSBool e
 propToSBool (OpBB o l r) = OpBB o <$> propToSBool l <*> propToSBool r
 propToSBool (ChcB d l r) = ChcB d <$> propToSBool l <*> propToSBool r
@@ -351,7 +351,6 @@ instance (Monad m, I.SolverContext m) =>
   setOption = lift . S.setOption
 
 -- Helper functions for solve routine
-
 store :: Resultable d => Result d -> IncVSMTSolve d ()
 store = St.modify' . onResult  . (<>)
 
@@ -375,7 +374,10 @@ setModelNotGenD = St.modify' $ onProcessed (const False)
 
 constrain :: S.SBool -> ConstraintName -> IncVSMTSolve d ()
 constrain b [] = S.constrain b
-constrain b !name = trace (show name) $ S.namedConstraint (mconcat name) b
+constrain b !name = S.namedConstraint (unpack $ mconcat name) b
+
+toText :: Show a => a -> Text
+toText = pack . show
 
 solveVariant :: (Resultable d, Show d) =>
   IncVSMTSolve d (S.SBool, ConstraintName) -> IncVSMTSolve d (Result d)
@@ -452,14 +454,14 @@ handleCtx :: (Ord d, Show d, Resultable d) =>
   -- when we have no ctx we just solve the unit clause
 handleCtx (Loc (OpIB _ _ _) _) = error "what?!?! How did you even get here! Get Jeff on the phone this isn't implemented yet!"
 handleCtx (Loc (RefB (b,name)) Empty) = return (b, pure name)
-handleCtx (Loc (LitB b) Empty) = return $! (S.literal b, pure $ show b)
+handleCtx (Loc (LitB b) Empty) = return $! (S.literal b, pure $ toText b)
   -- when we have a context that holds only an accumulator we combine the atomic
   -- with the accum and return the result
 handleCtx (Loc (RefB (b, name)) (InBBR op (acc, accName) Empty)) =
   return $! (bDispatch op acc b, newName)
-  where newName = name : show op : accName
+  where newName = name : toText op : accName
 handleCtx (Loc (LitB b) (InBBR op (acc, accName) Empty)) =
-  return $! (bDispatch op acc (S.literal b), show b : show op : accName)
+  return $! (bDispatch op acc (S.literal b), toText b : toText op : accName)
 
   -- When we see an atomic in a left context we add that atomic to the
   -- accumulator and recur to the rhs of the operator
@@ -467,7 +469,7 @@ handleCtx (Loc (RefB (b, name)) (InBBL op ctx rbranch)) =
   handleCtx $! mkLoc (rbranch, InBBR op (b, pure name) ctx)
 handleCtx (Loc (LitB b) (InBBL op ctx rbranch)) =
   handleCtx $! mkLoc (rbranch, InBBR op acc ctx)
-  where name = pure (show b)
+  where name = pure (toText b)
         acc = (S.literal b, name)
 handleCtx (Loc (LitB b) (InB _ ctx)) = handleCtx $! mkLoc (LitB $ bnot b, ctx)
 handleCtx (Loc (RefB b) (InB _ ctx)) =
@@ -480,7 +482,7 @@ handleCtx (Loc (RefB b) (InB _ ctx)) =
 handleCtx (Loc (RefB (b, name)) (InBBR op (acc, accName) (InBBL op' ctx r))) =
   do (handleCtx $! mkLoc (r , InBBR op' newAcc ctx))
   where !bAcc = bDispatch op acc b
-        !newName = name : show op : accName
+        !newName = name : toText op : accName
         !newAcc = (bAcc, newName)
 
 
@@ -488,21 +490,21 @@ handleCtx (Loc (RefB (b, name)) (InBBR op (acc, accName) (InBBL op' ctx r))) =
 handleCtx (Loc (RefB (b, name)) (InBBR op (acc, accName) ctx)) =
   handleCtx $! mkLoc (RefB (newAcc, newAccName), ctx)
   where !newAcc = bDispatch op acc b
-        !newAccName = mconcat $ [name,show op] ++ accName
+        !newAccName = mconcat $ [name, toText op] ++ accName
 
 
 handleCtx (Loc (LitB b) (InBBR op (acc, accName) ctx)) =
   -- we wrap in RefB just to get the types to work out
   do (handleCtx $! mkLoc (RefB newAcc, ctx))
   where !newAcc = (bDispatch op acc (S.literal b), newName)
-        !newName = mconcat $ show b : show op : accName
+        !newName = mconcat $ toText b : toText op : accName
 
   -- reduce double negations
 handleCtx (Loc fcs (InB Not (InB Not ctx))) = handleCtx $! mkLoc (fcs, ctx)
   -- accumulate a negation
 handleCtx (Loc fcs (InB Not (InBBR op acc ctx))) =
   handleCtx $! mkLoc (fcs, (InBBR op newAcc ctx))
-  where newAcc = bnot *** (show Not :) $ acc
+  where newAcc = bnot *** (toText Not :) $ acc
 
   -- when we see a choice we describe the computations for each variant and
   -- offload it to a handler function that manipulates the sbv assertion stack
@@ -555,7 +557,7 @@ handleCtx (Loc (OpBB op l r) ctx) = handleCtx $! mkLoc (l, InBBL op ctx r)
 vSMTSolve_ :: (Ord d, Show d, Resultable d) =>
   VProp d (S.SBool, Name) SNum -> IncVSMTSolve d (S.SBool, ConstraintName)
 vSMTSolve_ (RefB (b,name)) = return (b, pure name)
-vSMTSolve_ (LitB b) = return $! (S.literal b, pure $ show b)
+vSMTSolve_ (LitB b) = return $! (S.literal b, pure . toText $ b)
 vSMTSolve_ (OpB Not (OpB Not notchc)) = vSMTSolve_ notchc
 vSMTSolve_ (OpB Not e) = handleCtx   . Loc e $! InB Not Empty
 vSMTSolve_ (OpBB op l r) = handleCtx . Loc l $! InBBL op Empty r
