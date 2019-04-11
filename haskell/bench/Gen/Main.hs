@@ -162,10 +162,17 @@ main = do
       -- !props = concat $ zipWith (\x y -> [x,y]) propsNaive propsOptd
       interleaveProps x y  = concat $ zipWith (\x y -> [x,y]) x y
       props = interleaveProps propsEM propsOEM
+      -- testProp = (bChc "AA" (bRef "a" &&& bRef "d") (bRef "b")) &&& (bChc "BB" (bRef "a" &&& bRef "d") (bRef "a"))
+      testProp = ((bChc ("AA" :: Text) (bRef "a") (bRef "b")) &&& bRef "c") &&& ((bRef "a") &&& (bRef "c"))
+      -- testProp = (bRef "a") &&& (bRef "b") &&& (bnot (bRef "a"))
+      testDimConf = toDimProp $ (bRef "AA" &&& bRef "BB")
 
 
 
-  -- putStrLn $ show propL
+  putStrLn $ show testProp
+  res <- satWith emptyConf testProp
+  -- res <- satWithConf (Just $ testDimConf) emptyConf testProp
+  putStrLn $ show res
   -- putStrLn ""
   -- putStrLn $ "[Mid]: " ++ show propM
   -- -- putStrLn $ "[MidS]: " ++ show (propR < propM)
@@ -185,16 +192,16 @@ main = do
   -- putStrLn $ show (compressionRatio optdPropM :: Rational)
   -- putStrLn $ show (compressionRatio optdPropR :: Rational)
 
-  defaultMain
-    [
-    bgroup "vsat" -- props
-      [ -- bench "Empty:propL"  $ nfIO $! satWith emptyConf propL
-      bench "Empty:propM" $ nfIO  $! satWith emptyConf propM
-      , bench "Empty:propM:Sorted" $ nfIO  $! satWith emptyConf optdPropMSorted
-      , bench "Empty:propM:Assoc" $ nfIO  $! satWith emptyConf optdPropMAssoc
-      -- , bench "Empty:propR"  $ nfIO $! satWith emptyConf propR
-      -- , bench "Def:propL"  $ nfIO $! satWith emptyConf propL
-      -- , bench "Def:propM" $ nfIO  $! satWith emptyConf propM
-      , bench "Def:propR"  $ nfIO $! satWith emptyConf propR
-      ]
-    ]
+  -- defaultMain
+  --   [
+  --   bgroup "vsat" -- props
+  --     [ -- bench "Empty:propL"  $ nfIO $! satWith emptyConf propL
+  --     bench "Empty:propM" $ nfIO  $! satWith emptyConf propM
+  --     , bench "Empty:propM:Sorted" $ nfIO  $! satWith emptyConf optdPropMSorted
+  --     , bench "Empty:propM:Assoc" $ nfIO  $! satWith emptyConf optdPropMAssoc
+  --     -- , bench "Empty:propR"  $ nfIO $! satWith emptyConf propR
+  --     -- , bench "Def:propL"  $ nfIO $! satWith emptyConf propL
+  --     -- , bench "Def:propM" $ nfIO  $! satWith emptyConf propM
+  --     , bench "Def:propR"  $ nfIO $! satWith emptyConf propR
+  --     ]
+  --   ]

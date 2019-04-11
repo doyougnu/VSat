@@ -6,6 +6,7 @@ import GHC.Generics (Generic)
 import Data.Aeson hiding (json)
 import Data.Maybe (fromMaybe)
 import Network.Wai.Middleware.RequestLogger
+import Data.Text (Text)
 
 import Data.ByteString.Lazy (appendFile)
 import Data.ByteString.Char8 (pack)
@@ -55,7 +56,7 @@ logfile = "timing_desc_data.csv"
 -- TODO cleanup these types and refactor out the logging to middleware
 satWithHandler :: ActionCtxT () (WebStateM () () ()) b
 satWithHandler = do
-  req <- jsonBody' :: ApiAction (Request Var Var Var)
+  req <- jsonBody' :: ApiAction (Request Var Text Text)
   let prop = proposition req
       sets = fromMaybe defSettings (settings req)
       conf = toConf sets
@@ -75,7 +76,7 @@ satWithHandler = do
 
 satHandler :: ActionCtxT () (WebStateM () () ()) b
 satHandler = do
-  req <- jsonBody' :: ApiAction (Request Var Var Var)
+  req <- jsonBody' :: ApiAction (Request Var Text Text)
   let prop = proposition req
   (runtime, res) <- liftIO . timeProc . sat $ prop
   _ <- liftIO . forkIO $ logData prop defSettings runtime logfile
@@ -112,7 +113,7 @@ instance C.ToRecord RunData
 instance C.ToRecord Settings
 instance C.ToRecord Opts
 
-logData :: VProp Var Var Var -> Settings -> Double -> FilePath -> IO ()
+logData :: VProp Var Text Text -> Settings -> Double -> FilePath -> IO ()
 logData prop sets runTime fn =
   do time <- getCurrentTime
      let row = RunData time sets runTime s c p sd sp ms

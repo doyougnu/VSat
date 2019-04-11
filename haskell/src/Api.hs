@@ -15,13 +15,14 @@ import qualified Data.SBV           as S
 import           Data.SBV.Internals (cvToBool)
 import qualified Data.Set           as Set
 import           Data.String        (IsString(..))
+import Data.Text (Text)
 
 import           VProp.Core
 import           VProp.SBV
 import           VProp.Types
 
 import           Config             (SMTConf (..), debugConf, defConf,
-                                     emptyConf)
+                                     emptyConf, ReadableSMTConf)
 import           Result
 import           Run
 import           SAT
@@ -72,16 +73,15 @@ symbolicPropExpr' e' = do
 
 
 -- | Run VSMT and return variable bindings
-sat :: (Show a, Ord a, Ord d, Show d, Resultable d)
-  => VProp d a a -> IO (Result d)
+sat :: (Show d, Resultable d) => ReadableProp d -> IO (Result d)
 sat = satWith defConf
 
-satWith :: (Show a, Ord a, Ord d, Show d, Resultable d)
-  => SMTConf d a a -> VProp d a a -> IO (Result d)
+satWith :: (Show d, Resultable d)
+  => ReadableSMTConf d -> ReadableProp d -> IO (Result d)
 satWith = satWithConf Nothing
 
-satWithConf :: (Show a, Ord a, Ord d, Show d, Resultable d)
-  => Maybe (DimProp d) -> SMTConf d a a -> VProp d a a -> IO (Result d)
+satWithConf :: (Show d, Resultable d)
+  => Maybe (DimProp d) -> ReadableSMTConf d -> ReadableProp d -> IO (Result d)
 satWithConf Nothing          conf prop = fst' <$> runVSMT mempty conf prop
 satWithConf (Just dimConfig) conf prop =
   do
@@ -92,21 +92,22 @@ satWithConf (Just dimConfig) conf prop =
 
 
 
-bfWith :: (Show a, Ord a, Ord d, Show d, Resultable d)
-  => SMTConf d a a -> VProp d a a -> IO (Result d)
+bfWith :: (Show d, Resultable d)
+  => ReadableSMTConf d -> ReadableProp d -> IO (Result d)
 bfWith = runBF
 
 
-bf :: (Show a, Ord a, Ord d, Show d, Resultable d)
-  => VProp d a a -> IO (Result d)
+bf :: (Show d, Resultable d) => ReadableProp d -> IO (Result d)
 bf = bfWith defConf
 
 
-adWith :: (Show a, Ord a, Ord d, Show d, Resultable d)
-  => SMTConf d a a -> (d -> a) -> VProp d a a -> IO (Result d)
+adWith :: (Show d, Resultable d)
+       => ReadableSMTConf d ->
+          (d -> Text)       ->
+          ReadableProp d    ->
+          IO (Result d)
 adWith conf f prop = runAD conf prop f
 
 
-ad :: (Show a, Ord a, Ord d, Show d, Resultable d)
-  => (d -> a) -> VProp d a a -> IO (Result d)
+ad :: (Show d, Resultable d) => (d -> Readable) -> ReadableProp d -> IO (Result d)
 ad = adWith defConf

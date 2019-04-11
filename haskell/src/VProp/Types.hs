@@ -13,6 +13,8 @@ module VProp.Types ( Var(..)
                    , RefN(..)
                    , PrimN(..)
                    , Prim(..)
+                   , ReadableProp
+                   , Readable
                    , true
                    , false
                    , bnot
@@ -42,7 +44,7 @@ import           Data.Bifunctor        (Bifunctor, bimap)
 import           Data.Bitraversable    (Bitraversable, bitraverse)
 import           Data.Generics.Genifunctors
 import           Data.Data             (Data, Typeable)
-import           Data.Text             (Text)
+import           Data.Text             (pack, Text)
 import           Data.Fixed            (mod')
 import           Data.Map              (Map)
 import           Data.Monoid           ((<>))
@@ -65,6 +67,12 @@ newtype Dim a = Dim { dimName ::  a}
 type VConfig a b = a -> b
 type DimBool a = (Dim a) -> S.SBool
 type Config  a = Map (Dim a) Bool
+
+-- | Hiding the Text
+type Readable = Text
+
+-- | A VProp with Text
+type ReadableProp d = VProp d Readable Readable
 
 --
 -- * Syntax
@@ -152,6 +160,8 @@ bChc = ChcB . Dim
 iChc :: IsString d => d -> VIExpr d a -> VIExpr d a -> VIExpr d a
 iChc = ChcI . Dim
 
+toReadable :: Show a => a -> Readable
+toReadable = pack . show
 
 -- | Begin primitive instances
 
