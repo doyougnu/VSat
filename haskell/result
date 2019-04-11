@@ -1,0 +1,6 @@
+(("AA"≺"a", "b"≻) ∧ "c") ∧ (¬"a" ∧ "c")Result ("b":=¬"AA"
++--"a":=¬¬"AA"
+|  +--"__Sat":=¬"AA"
+|  +--|
++--"c":=¬"AA"
+,UnSatResult (fromList [("AA",["c\8743a\8743c\8743a"])]))
