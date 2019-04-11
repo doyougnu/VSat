@@ -5,7 +5,7 @@ module Run ( SatDict
            , runVSMT
            , fst'
            , IncPack
-           , smtBool
+           , smtBoolWith
            , smtInt
            ) where
 
@@ -43,9 +43,6 @@ type Log = Text
 
 -- | Takes a dimension d, a type for values a, and a result r
 type Env d = RWST (SMTConf d Text Text) Log (SatDict d) IO
-
--- | A VProp with strings
-type ReadableProp d = VProp d Text Text
 
 -- | A Ctx is a zipper over the VProp data type. This is used in the vsmtsolve
 -- routine to maintain a context when a choice is observed. This way we always
@@ -104,7 +101,7 @@ runVSMT :: (Show d, Resultable d) =>
            SMTConf d Text Text ->
            ReadableProp d      ->
            IO (Result d, SatDict d, Log)
-runVSMT dimConf = runEnv (runVSMTSolve dimConf)
+runVSMT = runEnv . runVSMTSolve
 
 -- | Given a VProp a term generate the satisfiability map
 initSt :: Ord d => VProp d a a -> SatDict d
@@ -267,7 +264,7 @@ solveVariational :: (Show d, Resultable d) =>
                     ConfigPool d ->
                     VProp d (S.SBool, Name) SNum ->
                     IncVSMTSolve d ()
-solveVariational []        _    = return ()
+solveVariational []        p    = do _ <- vSMTSolve_ p; return ()
 solveVariational [x]       p    = do setConfig x; _ <- vSMTSolve_ p; return ()
 solveVariational cs prop = mapM_ step cs
   where step cfg = do lift $ SC.push 1
@@ -317,13 +314,17 @@ mkSmt f g str = do (_,st) <- get
 
 -- | convert every reference to a boolean, keeping track of what you've seen
 -- before, can't use mkStatement here because its a special case
-smtBool :: (Show a, Ord a) => a -> IncPack a S.SBool
-smtBool str = do (st,_) <- get
-                 case str `M.lookup` st of
-                   Nothing -> do b <- lift . S.sBool $ show str
-                                 St.modify' (first $ M.insert str b)
-                                 return b
-                   Just x  -> return x
+smtBoolWith :: (Show a, Ord a) => a -> (a -> String) -> IncPack a S.SBool
+smtBoolWith str f =
+  do (st,_) <- get
+     case str `M.lookup` st of
+       Nothing -> do b <- lift . S.sBool $ f str
+                     St.modify' (first $ M.insert str b)
+                     return b
+       Just x  -> return x
+
+smtBool :: Text -> IncPack Text S.SBool
+smtBool = flip smtBoolWith unpack
 
 -- | convert every reference to a Integer, keeping track of what you've seen
 -- before
@@ -554,7 +555,7 @@ handleCtx (Loc (OpBB op l r) ctx) = handleCtx $! mkLoc (l, InBBL op ctx r)
 
 -- | The main solver algorithm. You can think of this as the sem function for
 -- the dsl
-vSMTSolve_ :: (Ord d, Show d, Resultable d) =>
+vSMTSolve_ :: (Show d, Resultable d) =>
   VProp d (S.SBool, Name) SNum -> IncVSMTSolve d (S.SBool, ConstraintName)
 vSMTSolve_ (RefB (b,name)) = return (b, pure name)
 vSMTSolve_ (LitB b) = return $! (S.literal b, pure . toText $ b)

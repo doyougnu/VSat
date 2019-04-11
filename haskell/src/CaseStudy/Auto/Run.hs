@@ -14,7 +14,7 @@ import qualified Control.Monad.State.Strict as St
 
 import           CaseStudy.Auto.Lang
 import           CaseStudy.Auto.Auto
-import           Run (IncPack, smtBool, smtInt)
+import           Run (IncPack, smtBoolWith, smtInt)
 import           VProp.Types (Prim, SNum(..), PrimN(..),VProp(..),VIExpr(..),RefN(..),NPrim(..))
 import qualified VProp.SBV as SB
 
@@ -25,7 +25,7 @@ import Result
 import Debug.Trace (trace)
 
 autoToSBool :: (Show a, Ord a) => AutoLang a a -> IncPack a (AutoLang SBool SNum)
-autoToSBool = bitraverse smtBool smtInt
+autoToSBool = bitraverse (flip smtBoolWith show) smtInt
 
 instance (Show a, Ord a) => SB.SAT (AutoLang a a) where
   toPredicate p = St.evalStateT (autoToSBool p) (mempty, mempty) >>= evalAutoExpr
