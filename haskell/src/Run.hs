@@ -14,12 +14,12 @@ import           Control.DeepSeq (force)
 import           Control.Monad.RWS.Strict
 import           Control.Monad.State.Strict as St
 import           Data.Foldable (foldr')
+import           Data.HashSet (HashSet, member, insert)
 import qualified Data.Map.Strict as M
 import qualified Data.SBV as S
 import qualified Data.SBV.Control as SC
 import qualified Data.SBV.Internals as I
-import           Data.HashSet (HashSet, member, insert)
-import           Data.Text (unpack, pack, Text)
+import           Data.Text (unpack, pack, Text, append)
 import           Prelude hiding (LT, GT, EQ)
 
 import           Data.Maybe (catMaybes)
@@ -31,6 +31,7 @@ import           VProp.Core
 import           Utils
 import           Config
 import           Result
+
 
 -- | The satisfiable dictionary, this is actually the "state" keys are configs
 -- (an mapping from dimensions to booleans denoting selection) and values are
@@ -371,6 +372,9 @@ instance (Monad m, I.SolverContext m) =>
   constrain = lift . (force S.constrain)
   namedConstraint = (lift .) . S.namedConstraint
   setOption = lift . S.setOption
+  softConstrain = lift . I.softConstrain
+  constrainWithAttribute = (lift .) . I.constrainWithAttribute
+
 
 -- Helper functions for solve routine
 store :: Resultable d => Result d -> IncVSMTSolve d ()
@@ -509,8 +513,9 @@ handleCtx (Loc (LitB b) (InBBL op ctx rbranch)) =
   where name = pure (toText b)
         acc = (S.literal b, name)
 handleCtx (Loc (LitB b) (InB _ ctx)) = handleCtx $! mkLoc (LitB $ bnot b, ctx)
-handleCtx (Loc (RefB b) (InB _ ctx)) =
-  handleCtx $! mkLoc (RefB $ first bnot b, ctx)
+
+handleCtx (Loc (RefB b) (InB nOp ctx)) = handleCtx $! mkLoc (RefB b', ctx)
+  where b' = bnot *** (toText nOp `append`) $ b
 
   -- when we are in the left side of a context and the right side of a subtree
   -- we add the atomics to the accumulator and swap to the right side of the
@@ -581,7 +586,7 @@ handleCtx (Loc (ChcB d l r) ctx) =
   where !goLeft  = solveVariant (handleCtx (mkLoc (l, ctx)))
         !goRight = solveVariant (handleCtx (mkLoc (r, ctx)))
 
-handleCtx (Loc (OpB Not e) (InB _ ctx)) = handleCtx $! mkLoc (e, ctx)
+-- handleCtx (Loc (OpB Not e) (InB _ ctx)) = handleCtx $! mkLoc (e, ctx)
 handleCtx (Loc (OpB op e) ctx) = handleCtx $! mkLoc (e, InB op ctx)
 
   -- when we have a subtree as our focus we recur as far left as possible until
