@@ -66,7 +66,8 @@ negateResultProp :: ResultProp d -> ResultProp d
 negateResultProp = ResultProp . fmap (UniformProp . OpB Not . uniProp) . getProp
 
 -- | internal only, allows for more flexibility in cons'ing onto a resultProp
-consWith :: (UniformProp d -> UniformProp d -> UniformProp d) -> UniformProp d -> ResultProp d -> ResultProp d
+consWith :: (UniformProp d -> UniformProp d -> UniformProp d)
+         -> UniformProp d -> ResultProp d -> ResultProp d
 consWith f x xs = ResultProp $ do xs' <- getProp xs
                                   let res = f x xs'
                                   return res
@@ -173,10 +174,8 @@ satKey :: Resultable d => d
 satKey = fromString "__Sat"
 
 instance (Resultable d) => Semigroup (ResultMap d) where
-  x <> y = ResultMap $ M.unionWithKey helper (getRes x) (getRes y)
-    where helper k m1 m2
-            | k == satKey = consWithOr' m1 m2
-            | otherwise = (<>) m1 m2
+  x <> y = ResultMap $ M.unionWith helper (getRes x) (getRes y)
+    where helper m1 m2 = consWithOr' m1 m2
           consWithOr' p rp =  p' `consWithOr` rp
             where p' = fromMaybe (UniformProp $ LitB False) $ getProp p
 
