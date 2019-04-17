@@ -20,6 +20,7 @@ import qualified Data.SBV as S
 import qualified Data.SBV.Control as SC
 import qualified Data.SBV.Internals as I
 import           Data.Text (unpack, pack, Text, append)
+import           Data.List (intersperse)
 import           Prelude hiding (LT, GT, EQ)
 
 import           Data.Maybe (catMaybes)
@@ -75,6 +76,7 @@ _runEnv :: Env d r ->
            IO (r, SatDict d,  Log)
 _runEnv = runRWST
 
+
 runEnv :: (ReadableProp d -> Env d (Result d)) ->
           SMTConf d Text Text ->
           ReadableProp d ->
@@ -99,6 +101,7 @@ runBF os p = fst' <$> runEnv runBruteForce os p
 runVSMT :: (Show d, Resultable d) =>
            ConfigPool d        ->
            SMTConf d Text Text ->
+
            ReadableProp d      ->
            IO (Result d, SatDict d, Log)
 runVSMT = runEnv . runVSMTSolve
@@ -414,7 +417,7 @@ constrain b !name = do
   if not (isUsed usedName used)
     then do S.namedConstraint name' b; setUsed usedName
     else S.constrain b
-  where !name' = (unpack $ mconcat name)
+  where !name' = (unpack $ mconcat (intersperse " " name))
         !usedName = mconcat name
 
 toText :: Show a => a -> Text
@@ -492,6 +495,12 @@ handleChc goLeft goRight d =
 handleCtx :: (Ord d, Show d, Resultable d) =>
   Loc d (S.SBool,Name) SNum ->
   IncVSMTSolve d (S.SBool, ConstraintName)
+
+  -- when we see an And we take advantage of the intrinsic "and"'ing of the
+  -- insertion stack
+-- handleCtx (Loc (OpBB And l r) ctx) =
+--   do _ <- handleCtx $! mkLoc (l, ctx); handleCtx $! mkLoc (r, ctx)
+
   -- when we have no ctx we just solve the unit clause
 handleCtx (Loc (OpIB _ _ _) _) = error "what?!?! How did you even get here! Get Jeff on the phone this isn't implemented yet!"
 handleCtx (Loc (RefB (b,name)) Empty) = return (b, pure name)
@@ -528,11 +537,10 @@ handleCtx (Loc (RefB (b, name)) (InBBR op (acc, accName) (InBBL op' ctx r))) =
         !newAcc = (bAcc, newName)
 
 
-  -- if we have two rhs contexts then we abuse the focus to
 handleCtx (Loc (RefB (b, name)) (InBBR op (acc, accName) ctx)) =
   handleCtx $! mkLoc (RefB (newAcc, newAccName), ctx)
   where !newAcc = bDispatch op acc b
-        !newAccName = mconcat $ [name, toText op] ++ accName
+        !newAccName = mconcat . intersperse " " $ [name, toText op] ++ accName
 
 
 handleCtx (Loc (LitB b) (InBBR op (acc, accName) ctx)) =
