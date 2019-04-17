@@ -40,6 +40,7 @@ dependencies:
 # - heaps
 - megaparsec >= 6.4
 # - parser-combinators >= 1.0
+- unicode-show # just for result output
 
 library:
   source-dirs: src
