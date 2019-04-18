@@ -27,7 +27,7 @@ instance SAT (ReadableProp Text) where
 -- | convert data constructors to SBV operators, note that the type is
 -- purposefully constrained to return SBools and not Boolean b => (b -> b -> b)
 -- because we want to ensure that we are translating to the SBV domain
-bDispatch :: BB_B -> S.SBool -> S.SBool -> S.SBool
+bDispatch :: Boolean b => BB_B -> b -> b -> b
 bDispatch And    = (&&&)
 bDispatch Or     = (|||)
 bDispatch Impl   = (==>)
