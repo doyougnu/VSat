@@ -145,7 +145,7 @@ runBruteForce prop = lift $ flip evalStateT (initSt prop) $
   plainMs <- lift $
              mapM (bitraverse
                    (pure . configToResultProp)
-                   (runForDict . symbolicPropExpr)) $ catMaybes plainProps
+                   (runForDict . symbolicPropExpr show show show)) $ catMaybes plainProps
   return $ foldMap (uncurry helper) plainMs
   where
         helper c as =  insertToSat c as
@@ -155,7 +155,7 @@ runBruteForce prop = lift $ flip evalStateT (initSt prop) $
 runAndDecomp :: (Show d, Resultable d, MonadTrans t, Monad (t IO)) =>
   ReadableProp d -> (d -> Text) -> t IO (Result d)
 runAndDecomp prop f =
-  lift $ runForDict $ symbolicPropExpr $ andDecomp prop (f . dimName)
+  lift $ runForDict $ symbolicPropExpr show show show $ andDecomp prop (f . dimName)
 
 runVSMTSolve ::
   (Show d, MonadTrans t, Resultable d , MonadReader (SMTConf d a a) (t IO)) =>

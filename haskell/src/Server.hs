@@ -25,6 +25,7 @@ import Opts
 import Config
 import VProp.Types
 import VProp.Core
+import SAT
 
 -- * Api is the type for the spock server. I leave each config parameter as Unit
 -- * because I do not need a backend only a server daemon
@@ -42,7 +43,7 @@ instance (FromJSON a, FromJSONKey a) => FromJSONKey (Dim a)
 instance (FromJSON d, FromJSON a, FromJSON b) => FromJSON (Request d a b)
 instance (ToJSON d, ToJSON a, ToJSON b) => ToJSON (Request d a b)
 
-app :: Api ()
+app :: (SAT (VProp Var Text Text)) => Api ()
 app = do
   middleware logStdout
   post "satWith" satWithHandler
@@ -54,7 +55,7 @@ logfile :: FilePath
 logfile = "timing_desc_data.csv"
 
 -- TODO cleanup these types and refactor out the logging to middleware
-satWithHandler :: ActionCtxT () (WebStateM () () ()) b
+satWithHandler :: (SAT (ReadableProp Var)) => ActionCtxT () (WebStateM () () ()) b
 satWithHandler = do
   req <- jsonBody' :: ApiAction (Request Var Text Text)
   let prop = proposition req
@@ -74,7 +75,7 @@ satWithHandler = do
 --   _ <- liftIO . forkIO $ logData prop sets runtime logfile
 --   json res
 
-satHandler :: ActionCtxT () (WebStateM () () ()) b
+satHandler :: (SAT (ReadableProp Var)) => ActionCtxT () (WebStateM () () ()) b
 satHandler = do
   req <- jsonBody' :: ApiAction (Request Var Text Text)
   let prop = proposition req

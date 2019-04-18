@@ -21,8 +21,8 @@ import           VProp.Core
 import           VProp.SBV
 import           VProp.Types
 
-import           Config             (SMTConf (..), debugConf, defConf,
-                                     emptyConf, ReadableSMTConf)
+import           Config             (defConf, ReadableSMTConf)
+
 import           Result
 import           Run
 import           SAT
@@ -73,7 +73,8 @@ symbolicPropExpr' e' = do
 
 
 -- | Run VSMT and return variable bindings
-sat :: (Show d, Resultable d) => ReadableProp d -> IO (Result d)
+sat :: (Show d, Resultable d, SAT (ReadableProp d)) =>
+  ReadableProp d -> IO (Result d)
 sat = satWith defConf
 
 satWith :: (Show d, Resultable d)
@@ -97,7 +98,8 @@ bfWith :: (Show d, Resultable d)
 bfWith = runBF
 
 
-bf :: (Show d, Resultable d) => ReadableProp d -> IO (Result d)
+bf :: (Show d, Resultable d, SAT (ReadableProp d)) =>
+  ReadableProp d -> IO (Result d)
 bf = bfWith defConf
 
 
@@ -109,5 +111,6 @@ adWith :: (Show d, Resultable d)
 adWith conf f prop = runAD conf prop f
 
 
-ad :: (Show d, Resultable d) => (d -> Readable) -> ReadableProp d -> IO (Result d)
+ad :: (Show d, Resultable d, SAT (ReadableProp d)) =>
+  (d -> Readable) -> ReadableProp d -> IO (Result d)
 ad = adWith defConf
