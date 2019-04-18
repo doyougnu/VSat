@@ -22,22 +22,26 @@ module Result ( ResultProp(..)
               , negateResultProp
               , deriveSatValues
               , deriveModels
+              , deriveValues
+              , getResMap
+              , getUnSatMap
               ) where
 
 import           Control.DeepSeq (NFData)
 import           Data.Map.Internal.Debug (showTree)
 import qualified Data.Map.Strict as M
-import           Data.Maybe (maybe,fromMaybe)
-import           Data.SBV (allSat, AllSatResult(..), SMTResult(..), getModelDictionary)
+import           Data.Maybe (fromJust, maybe,fromMaybe)
+import           Data.SBV (sat, allSat, AllSatResult(..), SMTResult(..), getModelDictionary)
 import           Data.SBV.Control (Query, getSMTResult)
 import           Data.SBV.Internals (cvToBool)
 import           Data.String (IsString, fromString)
-import           Data.Text (Text)
+import           Data.Text (pack, Text)
 import           GHC.Generics (Generic)
 
 import           SAT
 import           VProp.SBV()
-import           VProp.Core (dimToVar)
+import           VProp.Boolean
+import           VProp.Core (toList, dimToVar)
 import           VProp.Types             (BB_B (..), B_B (..), Config,
                                           VProp (..), Var, Dim(..))
 
@@ -172,6 +176,13 @@ unSatToResult :: Resultable d => ResultProp d -> UnSatCore -> Result d
 unSatToResult r u = onUnSatRes (const uSatRes) mempty
   where uSatRes = UnSatResult $ M.singleton r u
 
+getResMap :: Result d -> M.Map d (VProp d d d)
+getResMap (Result x) = fmap (uniProp . fromJust . getProp) . getRes $ fst x
+
+getUnSatMap :: Result d -> UnSatResult d
+getUnSatMap (Result x) = snd x
+
+
 -- | a bad form global variable for this module, this probably should be a type
 -- family. Used as a special variable for the result map to accumulate
 -- satisfiable configurations on variational formulas
@@ -268,5 +279,10 @@ deriveSatValues m =
     let resMaps = getModelDictionary <$> allRes
     return $! fmap cvToBool <$> resMaps
 
-deriveModels :: Result Text -> IO [M.Map String Bool]
-deriveModels (Result (satRes, _)) = deriveSatValues satRes
+deriveModels :: Result Text -> IO [M.Map Text Bool]
+deriveModels (Result (satRes, _)) = fmap (M.mapKeys pack)
+                                    <$> deriveSatValues satRes
+
+deriveValues :: Ord d => Result d -> (M.Map d Bool) -> (M.Map d Bool)
+deriveValues (getResMap -> res) model =
+  fmap (solveLiterals . substitute (M.toList model)) res
