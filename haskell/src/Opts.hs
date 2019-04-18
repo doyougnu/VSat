@@ -8,9 +8,7 @@ import qualified Data.Map.Strict as Map
 import           Prelude hiding (EQ, GT, LT)
 import           VProp.SBV (SAT, toPredicate)
 import           VProp.Types
-import           VProp.Core (isChc,associativeLeft,associativeRight,pSort,pSortDec)
-
-import           Debug.Trace
+import           VProp.Core (associativeLeft,associativeRight,pSort,pSortDec)
 
 -- | Data type to represent the optimization options
 -- Used for the JSON parser
@@ -32,8 +30,7 @@ chcToLeft :: (Ord a, Ord b, Ord d) => VProp d a b -> VProp d a b
 chcToLeft = associativeRight . pSortDec
 
 -- | Given a VProp try to eliminate some terms based on simple rules
-shrinkProp :: (Show a, Show d, Show b,  Ord a, Ord b, Ord d) =>
-  VProp d a b -> VProp d a b
+shrinkProp :: (SAT (VProp d a b)) => VProp d a b -> VProp d a b
 shrinkProp (OpB Not (OpB Not x)) = shrinkProp x
 shrinkProp e
   | unsatisfiable e = false

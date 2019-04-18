@@ -18,14 +18,11 @@ import VProp.Types
 import VProp.Core
 import SAT
 
-instance (Show a, Show b, Show d, Ord a, Ord b, Ord d) =>
-  SAT (VProp d a b) where toPredicate = symbolicPropExpr show show show
+instance SAT (VProp String String String) where
+  toPredicate = symbolicPropExpr id id id
 
 instance SAT (ReadableProp Text) where
   toPredicate = symbolicPropExpr unpack unpack unpack
-
-instance (Show d, Ord d) => SAT (VProp d d d) where
-  toPredicate = symbolicPropExpr show show show
 
 -- | convert data constructors to SBV operators, note that the type is
 -- purposefully constrained to return SBools and not Boolean b => (b -> b -> b)
