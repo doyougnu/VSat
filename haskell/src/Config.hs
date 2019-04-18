@@ -8,6 +8,7 @@ import Data.Text (Text)
 
 import VProp.Types
 import Opts
+import SAT
 
 data Settings = Settings { solver :: Solver
                          , optimizations :: ![Opts]
@@ -32,7 +33,7 @@ applyOpts :: SMTConf d a b -> VProp d a b -> VProp d a b
 applyOpts conf p = foldr' ($) p (opts conf)
 
 -- | Convert an interfacial interface to an SMT one
-toConf :: (Show a,Show d,Show b,Ord a,Ord b,Ord d) => Settings -> SMTConf d a b
+toConf :: (SAT (VProp d a b), Ord a,Ord b,Ord d) => Settings -> SMTConf d a b
 toConf Settings{..} = foldr' ($) emptyConf ss
   where ss = [setSeed seed, setSolver solver, setOpts optimizations]
 
@@ -56,19 +57,19 @@ debugSettings = Settings{ solver=Z3
                         , optimizations=[MoveRight,Atomize]
                         , seed=Nothing}
 
-defConf :: (Show a,Show d,Show b,Ord a,Ord b,Ord d) => SMTConf d a b
+defConf :: (SAT (VProp d a b), Ord a,Ord b,Ord d) => SMTConf d a b
 defConf = toConf defSettings
 
-emptyConf :: (Show a,Show d,Show b,Ord a,Ord b,Ord d) => SMTConf d a b
+emptyConf :: (SAT (VProp d a b), Ord a,Ord b,Ord d) => SMTConf d a b
 emptyConf = SMTConf{conf=z3, opts=[]}
 
-debugConf :: (Show a,Show d,Show b,Ord a,Ord b,Ord d) => SMTConf d a b
+debugConf :: (SAT (VProp d a b),Ord a,Ord b,Ord d) => SMTConf d a b
 debugConf = setVerbose $ toConf debugSettings
 
-minConf ::(Show a,Show d,Show b,Ord a,Ord b,Ord d) => SMTConf d a b
+minConf ::(SAT (VProp d a b),Ord a,Ord b,Ord d) => SMTConf d a b
 minConf = toConf minSettings
 
-allOptsConf ::(Show a,Show d,Show b,Ord a,Ord b,Ord d) => SMTConf d a b
+allOptsConf ::(SAT (VProp d a b),Ord a,Ord b,Ord d) => SMTConf d a b
 allOptsConf = toConf allOptsSettings
 
 -- | apply some function on the solver options. This could be done more cleanly
@@ -96,11 +97,11 @@ setSolver Boolector a = a{conf=boolector}
 setSolver Abc a       = a{conf=abc}
 setSolver Cvc4 a      = a{conf=cvc4}
 
-setOpts :: (Ord a,Ord b,Ord d,Show d,Show b,Show a) =>
+setOpts :: (Ord a,Ord b,Ord d, SAT (VProp d a b)) =>
   [Opts] -> SMTConf d a b -> SMTConf d a b
 setOpts os c = c{opts=convertOpts <$> os}
 
-convertOpts :: (Ord a,Ord b,Ord d,Show d,Show a,Show b) =>
+convertOpts :: (SAT (VProp d a b), Ord a, Ord b, Ord d) =>
   Opts -> VProp d a b -> VProp d a b
 convertOpts MoveRight = chcToRight
 convertOpts MoveLeft  = chcToLeft

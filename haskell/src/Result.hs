@@ -20,21 +20,24 @@ module Result ( ResultProp(..)
               , toResultProp
               , consWithOr
               , negateResultProp
+              , deriveSatValues
+              , deriveModels
               ) where
 
-import           Control.DeepSeq         (NFData)
+import           Control.DeepSeq (NFData)
 import           Data.Map.Internal.Debug (showTree)
-import qualified Data.Map.Strict         as M
-import           Data.Maybe              (maybe,fromMaybe)
-import           Data.SBV                (SMTResult(..), getModelDictionary)
-import           Data.SBV.Control        (Query, getSMTResult)
-import           Data.SBV.Internals      (cvToBool)
-import           Data.String             (IsString, fromString)
-import           Data.Text               (Text)
-import           GHC.Generics            (Generic)
+import qualified Data.Map.Strict as M
+import           Data.Maybe (maybe,fromMaybe)
+import           Data.SBV (allSat, AllSatResult(..), SMTResult(..), getModelDictionary)
+import           Data.SBV.Control (Query, getSMTResult)
+import           Data.SBV.Internals (cvToBool)
+import           Data.String (IsString, fromString)
+import           Data.Text (Text)
+import           GHC.Generics (Generic)
 
 import           SAT
-import           VProp.Core              (dimToVar)
+import           VProp.SBV()
+import           VProp.Core (dimToVar)
 import           VProp.Types             (BB_B (..), B_B (..), Config,
                                           VProp (..), Var, Dim(..))
 
@@ -43,6 +46,8 @@ import           VProp.Types             (BB_B (..), B_B (..), Config,
 -- variable references to be the same just for the ResultMap type
 newtype UniformProp d = UniformProp {uniProp :: VProp d d d}
   deriving (Eq,Ord,Generic,Boolean)
+
+instance SAT (UniformProp Text) where toPredicate = toPredicate . uniProp
 
 instance Show d => Show (UniformProp d) where
   show = show . uniProp
@@ -254,3 +259,14 @@ dispatchProp !p !x = if x
 
 getResult :: Resultable d => ResultProp d -> Query (Result d)
 getResult = getResultWith . dispatchProp
+
+deriveSatValues :: ResultMap Text -> IO [M.Map String Bool]
+deriveSatValues m =
+  do
+    let prop = fromMaybe true (getProp $ getResSat m)
+    AllSatResult (_,_,allRes) <- allSat $ toPredicate prop
+    let resMaps = getModelDictionary <$> allRes
+    return $! fmap cvToBool <$> resMaps
+
+deriveModels :: Result Text -> IO [M.Map String Bool]
+deriveModels (Result (satRes, _)) = deriveSatValues satRes
