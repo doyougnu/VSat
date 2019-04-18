@@ -404,3 +404,22 @@ atMost1 xs = cs &&& fromList' (&&&) disjuncs
 
         labeled = zip xs [1..]
         cs = fromList' (|||) xs
+
+-------------------------------- Bool Manipulation -----------------------------
+-- | given a reference variable and a boolean, find the variable in an
+-- expression and replace it with a literal
+boolSubstitute :: Eq a => (a, Bool) -> VProp d a b -> VProp d a b
+boolSubstitute (a, b) d@(RefB x)
+  | x == a = LitB b
+  | otherwise = d
+boolSubstitute new (OpBB op l r) = OpBB op
+                                   (boolSubstitute new l)
+                                   (boolSubstitute new r)
+boolSubstitute new (OpB op e) = OpB op (boolSubstitute new e)
+boolSubstitute new (ChcB d l r) = ChcB d
+                                  (boolSubstitute new l)
+                                  (boolSubstitute new r)
+boolSubstitute _ x = x
+
+replaceMany :: Eq a => [(a, Bool)] -> VProp d a a -> VProp d a a
+replaceMany reps p = foldr boolSubstitute p reps
