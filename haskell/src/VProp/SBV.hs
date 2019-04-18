@@ -12,13 +12,20 @@ import           Prelude    hiding   (lookup,LT,EQ,GT)
 import           Data.Maybe          (fromMaybe)
 import qualified Data.Map as M       (fromList, lookup)
 import qualified Data.Set as Set     (toList)
+import Data.Text (Text,unpack)
 
 import VProp.Types
 import VProp.Core
 import SAT
 
 instance (Show a, Show b, Show d, Ord a, Ord b, Ord d) =>
-  SAT (VProp d a b) where toPredicate e = symbolicPropExpr e show show show
+  SAT (VProp d a b) where toPredicate = symbolicPropExpr show show show
+
+instance SAT (ReadableProp Text) where
+  toPredicate = symbolicPropExpr unpack unpack unpack
+
+instance (Show d, Ord d) => SAT (VProp d d d) where
+  toPredicate = symbolicPropExpr show show show
 
 -- | convert data constructors to SBV operators, note that the type is
 -- purposefully constrained to return SBools and not Boolean b => (b -> b -> b)
@@ -87,8 +94,8 @@ handleNums bf (RefD, d) = sequence $ (d, SD <$> S.sDouble (bf d))
 
 -- | Generate a symbolic predicate for a feature expression.
 symbolicPropExpr :: (Ord a, Ord b, Ord d) =>
-  VProp d a b -> (d -> String) -> (a -> String) -> (b -> String) -> S.Predicate
-symbolicPropExpr e df af bf = do
+  (d -> String) -> (a -> String) -> (b -> String) -> VProp d a b -> S.Predicate
+symbolicPropExpr df af bf e = do
     let vs = Set.toList (bvars e)
         ds = Set.toList (dimensions e)
         isType = Set.toList (ivarsWithType e)
