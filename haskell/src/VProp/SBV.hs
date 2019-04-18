@@ -18,7 +18,7 @@ import VProp.Core
 import SAT
 
 instance (Show a, Show b, Show d, Ord a, Ord b, Ord d) =>
-  SAT (VProp d a b) where toPredicate = symbolicPropExpr
+  SAT (VProp d a b) where toPredicate e = symbolicPropExpr e show show show
 
 -- | convert data constructors to SBV operators, note that the type is
 -- purposefully constrained to return SBools and not Boolean b => (b -> b -> b)
@@ -81,21 +81,21 @@ evalPropExpr' d !i !(OpII op l r)  = (nnDispatch op)
 evalPropExpr' d !i !(ChcI dim l r)
   = S.ite (d dim) (evalPropExpr' d i l) (evalPropExpr' d i r)
 
+handleNums :: (b -> String) -> (RefN, b) -> S.Symbolic (b, SNum)
+handleNums bf (RefI, i) = sequence $ (i, SI <$> S.sInt64 (bf i))
+handleNums bf (RefD, d) = sequence $ (d, SD <$> S.sDouble (bf d))
+
 -- | Generate a symbolic predicate for a feature expression.
-symbolicPropExpr :: (Show a, Show b, Show d, Ord a, Ord b, Ord d) =>
-  VProp d a b -> S.Predicate
-symbolicPropExpr e = do
+symbolicPropExpr :: (Ord a, Ord b, Ord d) =>
+  VProp d a b -> (d -> String) -> (a -> String) -> (b -> String) -> S.Predicate
+symbolicPropExpr e df af bf = do
     let vs = Set.toList (bvars e)
         ds = Set.toList (dimensions e)
         isType = Set.toList (ivarsWithType e)
 
-        helper :: Show a => (RefN, a) -> S.Symbolic (a, SNum)
-        helper (RefD, d) = sequence $ (d, SD <$> S.sDouble (show d))
-        helper (RefI, i) = sequence $ (i, SI <$> S.sInt64 (show i))
-
-    syms  <- fmap (M.fromList . zip vs) (S.sBools (show <$> vs))
-    dims  <- fmap (M.fromList . zip ds) (S.sBools (map (show . dimName) ds))
-    isyms <- M.fromList <$> traverse helper isType
+    syms  <- fmap (M.fromList . zip vs) (S.sBools (af <$> vs))
+    dims  <- fmap (M.fromList . zip ds) (S.sBools (map (df . dimName) ds))
+    isyms <- M.fromList <$> traverse (handleNums bf) isType
     let look f  = fromMaybe err  (M.lookup f syms)
         lookd d = fromMaybe errd (M.lookup d dims)
         looki i = fromMaybe erri (M.lookup i isyms)
