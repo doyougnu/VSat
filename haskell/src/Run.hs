@@ -22,6 +22,7 @@ import qualified Data.SBV.Internals as I
 import           Data.Text (unpack, pack, Text, append)
 import           Data.List (intersperse)
 import           Prelude hiding (LT, GT, EQ)
+import           Text.Show.Unicode          (ushow)
 
 import           Data.Maybe (catMaybes)
 
@@ -33,6 +34,7 @@ import           Utils
 import           Config
 import           Result
 
+import Debug.Trace
 
 -- | The satisfiable dictionary, this is actually the "state" keys are configs
 -- (an mapping from dimensions to booleans denoting selection) and values are
@@ -446,6 +448,8 @@ solveVariant go = do
 
            -- reset stack
            lift $! SC.pop 1
+           lift $ SC.io $ putStrLn "CHC: Popping"
+
            return resMap
 
 handleChc :: (Show d, Resultable d) =>
@@ -460,10 +464,12 @@ handleChc goLeft goRight d =
        Just False -> goRight >>= store
        Nothing    -> do
          --------------------- true variant -----------------------------
+         lift $ SC.io $ putStrLn "CHC: going left"
          setDim d True
          resMapT <- goLeft
 
          -------------------- false variant -----------------------------
+         lift $ SC.io $ putStrLn "CHC: going right"
          setDim d False
          resMapF <- goRight
 
@@ -498,17 +504,27 @@ handleCtx :: (Ord d, Show d, Resultable d) =>
 
   -- when we see an And we take advantage of the intrinsic "and"'ing of the
   -- insertion stack
--- handleCtx (Loc (OpBB And l r) ctx) =
---   do _ <- handleCtx $! mkLoc (l, ctx); handleCtx $! mkLoc (r, ctx)
+handleCtx (Loc (OpBB And l r) ctx) =
+
+  do
+    trace ("splitting: " ++ show l ++ " ||| " ++ show r) $ return ()
+    trace ("splitting ctx: " ++ show ctx) $ return ()
+    _ <- handleCtx $! mkLoc (l, ctx)
+    handleCtx $! mkLoc (r, ctx)
 
   -- when we have no ctx we just solve the unit clause
 handleCtx (Loc (OpIB _ _ _) _) = error "what?!?! How did you even get here! Get Jeff on the phone this isn't implemented yet!"
-handleCtx (Loc (RefB (b,name)) Empty) = return (b, pure name)
+handleCtx (Loc (RefB (b,name)) Empty) =
+  do constrain b (pure name)
+     trace ("adding: " ++ show name) $ return ()
+     return (b, pure name)
 handleCtx (Loc (LitB b) Empty) = return $! (S.literal b, pure $ toText b)
   -- when we have a context that holds only an accumulator we combine the atomic
   -- with the accum and return the result
 handleCtx (Loc (RefB (b, name)) (InBBR op (acc, accName) Empty)) =
-  return $! (bDispatch op acc b, newName)
+  do constrain b (pure name)
+     trace ("InBBR: adding: " ++ ushow name) $ return ()
+     return $! (bDispatch op acc b, newName)
   where newName = name : toText op : accName
 handleCtx (Loc (LitB b) (InBBR op (acc, accName) Empty)) =
   return $! (bDispatch op acc (S.literal b), toText b : toText op : accName)
@@ -516,7 +532,10 @@ handleCtx (Loc (LitB b) (InBBR op (acc, accName) Empty)) =
   -- When we see an atomic in a left context we add that atomic to the
   -- accumulator and recur to the rhs of the operator
 handleCtx (Loc (RefB (b, name)) (InBBL op ctx rbranch)) =
-  handleCtx $! mkLoc (rbranch, InBBR op (b, pure name) ctx)
+  do
+    constrain b (pure name)
+    trace ("InBBL: adding: " ++ ushow name) $ return ()
+    handleCtx $! mkLoc (rbranch, InBBR op (b, pure name) ctx)
 handleCtx (Loc (LitB b) (InBBL op ctx rbranch)) =
   handleCtx $! mkLoc (rbranch, InBBR op acc ctx)
   where name = pure (toText b)
@@ -564,6 +583,7 @@ handleCtx (Loc (ChcB d l r) ctx@(InBBR _ (acc, accName) _)) =
     -- before processing the choice. This allows us to cache the state before
     -- the choice
     constrain acc accName
+    trace "InBBR: got choice" $ return ()
     handleChc goLeft goRight d
     return (true, mempty)
   where !goLeft  = solveVariant (handleCtx (mkLoc (l, ctx)))
@@ -574,6 +594,7 @@ handleCtx (Loc (ChcB d l r) ctx@(InBBL _ (InBBR _ (acc, accName) _) _)) =
   do
     -- push onto assertion stack
     constrain acc accName
+    trace "InBBL: got choice" $ return ()
     handleChc goLeft goRight d
     return (true, mempty)
   where !goLeft  = solveVariant (handleCtx (mkLoc (l, ctx)))
@@ -590,7 +611,9 @@ handleCtx (Loc (ChcB d l r) (InB Not ctx)) =
   -- If we see a choice with any other context then the ctx is either empty
   -- or the choice is in the leftmost position of the ast
 handleCtx (Loc (ChcB d l r) ctx) =
-    handleChc goLeft goRight d >> return (true, mempty)
+    do
+      trace ("DEF: got choice with ctx: " ++ show ctx) $ return ()
+      handleChc goLeft goRight d >> return (true, mempty)
   where !goLeft  = solveVariant (handleCtx (mkLoc (l, ctx)))
         !goRight = solveVariant (handleCtx (mkLoc (r, ctx)))
 
@@ -602,14 +625,100 @@ handleCtx (Loc (OpB op e) ctx) = handleCtx $! mkLoc (e, InB op ctx)
 handleCtx (Loc (OpBB op l r) ctx) = handleCtx $! mkLoc (l, InBBL op ctx r)
 
 
+-- -- | The main solver algorithm. You can think of this as the sem function for
+-- -- the dsl
+-- vSMTSolve_ :: (Show d, Resultable d) =>
+--   VProp d (S.SBool, Name) SNum -> IncVSMTSolve d (S.SBool, ConstraintName)
+-- vSMTSolve_ (RefB (b,name)) = return (b, pure name)
+-- vSMTSolve_ (LitB b) = return $! (S.literal b, pure . toText $ b)
+-- vSMTSolve_ (OpB Not (OpB Not notchc)) = vSMTSolve_ notchc
+-- vSMTSolve_ (OpB Not e) = handleCtx   . Loc e $! InB Not Empty
+-- vSMTSolve_ c@(OpBB op l r) = handleCtx . Loc l $! InBBL op Empty r
+-- vSMTSolve_ (OpIB _ _ _) = error "Blame Jeff! This isn't implemented yet!"
+-- vSMTSolve_ c@(ChcB _ _ _) = handleCtx $! Loc c Empty
+
+data BValue d = B S.SBool ConstraintName
+              | C (Dim d) (BValue d) (BValue d)
+              | BVOp (BValue d) BB_B (BValue d)
+              deriving Show
+
 -- | The main solver algorithm. You can think of this as the sem function for
 -- the dsl
 vSMTSolve_ :: (Show d, Resultable d) =>
-  VProp d (S.SBool, Name) SNum -> IncVSMTSolve d (S.SBool, ConstraintName)
-vSMTSolve_ (RefB (b,name)) = return (b, pure name)
-vSMTSolve_ (LitB b) = return $! (S.literal b, pure . toText $ b)
-vSMTSolve_ (OpB Not (OpB Not notchc)) = vSMTSolve_ notchc
-vSMTSolve_ (OpB Not e) = handleCtx   . Loc e $! InB Not Empty
-vSMTSolve_ (OpBB op l r) = handleCtx . Loc l $! InBBL op Empty r
-vSMTSolve_ (OpIB _ _ _) = error "Blame Jeff! This isn't implemented yet!"
-vSMTSolve_ c@(ChcB _ _ _) = handleCtx $! Loc c Empty
+  VProp d (S.SBool, Name) SNum -> IncVSMTSolve d (S.SBool , ConstraintName)
+vSMTSolve_ p = vSMTSolve__ p >>= solveBValue
+
+vSMTSolve__ :: (Show d, Resultable d) =>
+  VProp d (S.SBool, Name) SNum -> IncVSMTSolve d (BValue d)
+vSMTSolve__ (RefB (b,name)) = return $! B b (pure name)
+vSMTSolve__ (LitB b) = return $! B (S.literal b) (pure $ toText b)
+vSMTSolve__ (OpB Not (OpB Not notchc)) = vSMTSolve__ notchc
+vSMTSolve__ (OpB Not e) = do (B b n) <- vSMTSolve__ e
+                             return $! B (bnot b)  (toText Not : n)
+
+vSMTSolve__ x@(OpBB op (ChcB d l r') r) =
+  trace ("Constructing Choice in L: " ++ ushow x ++ "\n") $
+  do br <- vSMTSolve__ r
+     bl <- vSMTSolve__ l
+     br' <- vSMTSolve__ r'
+     return $! BVOp (C d bl br') op br
+vSMTSolve__ x@(OpBB op l (ChcB d l' r)) =
+  trace ("Constructing Choice in R: " ++ ushow x ++ "\n") $
+  do bl <- vSMTSolve__ l
+     bl' <- vSMTSolve__ l'
+     br <- vSMTSolve__ r
+     return $! BVOp bl op (C d bl' br)
+
+vSMTSolve__ x@(OpBB op l r) = do
+  trace ("Recurring BB: " ++ ushow x) $ return ()
+  bvl <- vSMTSolve__ l
+  bvr <- vSMTSolve__ r
+  let bres = BVOp bvl op bvr
+  trace ("going to solve BV: " ++ ushow bres) $ return ()
+  (b,n) <- solveBValue $! bres
+  return $! B b n
+-- vSMTSolve__ (OpIB _ _ _) = error "Blame Jeff! This isn't implemented yet!"
+vSMTSolve__ (ChcB d l r) =
+  handleChc goLeft goRight d >> (return $ B true [toText "end"])
+  where goLeft = solveVariant (vSMTSolve_ l)
+        goRight = solveVariant (vSMTSolve_ r)
+
+solveBValue :: (Show d, Resultable d) =>
+  BValue d -> IncVSMTSolve d (S.SBool, ConstraintName)
+
+solveBValue x@(B b n) =
+  trace ("constraining " ++ ushow x) $
+  do constrain b n; return (b, n)
+solveBValue (C _ _ _) = error "IMPOSSIBLE!"
+
+solveBValue x@(BVOp (C d l r) op r'@(B b n)) =
+  do trace ("Got choice in left: " ++ ushow x) $ return ()
+     let goLeft = solveVariant (solveBValue $ BVOp l op r')
+     let goRight = solveVariant (solveBValue $ BVOp r op r')
+     handleChc goLeft goRight d
+
+     return (true, pure $ toText "end")
+
+solveBValue x@(BVOp l'@(B b n) op (C d l r)) =
+  do trace ("Got choice in right: " ++ ushow x) $ return ()
+     let goLeft = solveVariant (solveBValue $ BVOp l' op l)
+     let goRight = solveVariant (solveBValue $ BVOp l' op r)
+     handleChc goLeft goRight d
+
+     return (true, pure $ toText "end")
+
+solveBValue x@(BVOp (B bl ln) op (B br rn)) =
+  trace ("reducing: " ++ ushow x) $
+  do solveBValue $! B res name
+  where res = (bDispatch op bl br)
+        name = ln ++ (pure $ toText op) ++ rn
+
+solveBValue x@(BVOp l op r) =
+  trace ("recurring: " ++ ushow x) $
+  do (bl, ln) <- solveBValue l
+     (br, rn) <- solveBValue r
+     return $! ((bDispatch op bl br), ln ++ [toText op] ++ rn)
+
+foo :: [(Integer, Integer)] -> [(Integer, Integer)]
+foo [] = []
+foo ((a,b):xs) = fmap ((+) a *** (+) b) xs ++ foo xs
