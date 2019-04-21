@@ -678,10 +678,10 @@ vSMTSolve__ x@(OpBB op l r) = do
   (b,n) <- solveBValue $! bres
   return $! B b n
 -- vSMTSolve__ (OpIB _ _ _) = error "Blame Jeff! This isn't implemented yet!"
-vSMTSolve__ (ChcB d l r) =
-  handleChc goLeft goRight d >> (return $ B true [toText "end"])
-  where goLeft = solveVariant (vSMTSolve_ l)
-        goRight = solveVariant (vSMTSolve_ r)
+vSMTSolve__ x@(ChcB d l r) = do
+  l' <- vSMTSolve__ l
+  r' <- vSMTSolve__ r
+  return $! BVOp (C d l' r') And (B true [toText True])
 
 solveBValue :: (Show d, Resultable d) =>
   BValue d -> IncVSMTSolve d (S.SBool, ConstraintName)
@@ -691,7 +691,7 @@ solveBValue x@(B b n) =
   do constrain b n; return (b, n)
 solveBValue (C _ _ _) = error "IMPOSSIBLE!"
 
-solveBValue x@(BVOp (C d l r) op r'@(B b n)) =
+solveBValue x@(BVOp (C d l r) op r') =
   do trace ("Got choice in left: " ++ ushow x) $ return ()
      let goLeft = solveVariant (solveBValue $ BVOp l op r')
      let goRight = solveVariant (solveBValue $ BVOp r op r')
@@ -699,7 +699,7 @@ solveBValue x@(BVOp (C d l r) op r'@(B b n)) =
 
      return (true, pure $ toText "end")
 
-solveBValue x@(BVOp l'@(B b n) op (C d l r)) =
+solveBValue x@(BVOp l' op (C d l r)) =
   do trace ("Got choice in right: " ++ ushow x) $ return ()
      let goLeft = solveVariant (solveBValue $ BVOp l' op l)
      let goRight = solveVariant (solveBValue $ BVOp l' op r)
@@ -719,6 +719,12 @@ solveBValue x@(BVOp l op r) =
      (br, rn) <- solveBValue r
      return $! ((bDispatch op bl br), ln ++ [toText op] ++ rn)
 
-foo :: [(Integer, Integer)] -> [(Integer, Integer)]
-foo [] = []
-foo ((a,b):xs) = fmap ((+) a *** (+) b) xs ++ foo xs
+-- foo :: (a -> b -> b) ->
+--     (b -> b -> b) ->
+--   [(a,b)] ->
+--   [(b,b)] ->
+--   [(b,b)]
+-- foo _ _ [] [] = []
+-- foo _ _  _ [] = []
+-- foo _ _ [] _ = []
+-- foo f g ((a,b):xs) ys = fmap (f a *** g b) xs ++ foo f g xs ys
