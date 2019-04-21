@@ -9,7 +9,7 @@ module Run ( SatDict
            , smtInt
            ) where
 
-import           Control.Arrow (first, second, (***))
+import           Control.Arrow (first, second)
 import           Control.DeepSeq (force)
 import           Control.Monad.RWS.Strict
 import           Control.Monad.State.Strict as St
@@ -19,7 +19,7 @@ import qualified Data.Map.Strict as M
 import qualified Data.SBV as S
 import qualified Data.SBV.Control as SC
 import qualified Data.SBV.Internals as I
-import           Data.Text (unpack, pack, Text, append)
+import           Data.Text (unpack, pack, Text)
 import           Data.List (intersperse)
 import           Prelude hiding (LT, GT, EQ)
 import           Text.Show.Unicode          (ushow)
@@ -46,25 +46,6 @@ type Log = Text
 
 -- | Takes a dimension d, a type for values a, and a result r
 type Env d = RWST (SMTConf d Text Text) Log (SatDict d) IO
-
--- | A Ctx is a zipper over the VProp data type. This is used in the vsmtsolve
--- routine to maintain a context when a choice is observed. This way we always
--- have a reference to the rest of the formula we are solving during a
--- variational solve. Its a sum type over the zipper for n-ary operators like
--- And and Or, or its a zipper over binary operators like ==> <=>. For binary
--- operators we keep a prop that is the focus and a context which represents the
--- parent and adjacent child
-data Ctx d a b = InBBL BB_B  !(Ctx d a b) !(VProp d a b)
-               | InBBR BB_B !(S.SBool, ConstraintName) !(Ctx d a b)
-               | InB B_B !(Ctx d a b)
-               | Empty
-               deriving Show
-
--- | a strict tuple type
-data Loc d a b = Loc !(VProp d a b) !(Ctx d a b) deriving Show
-
-mkLoc :: (VProp d a b, Ctx d a b) -> Loc d a b
-mkLoc (x, y) = Loc x y
 
 -- | An empty reader monad environment, in the future read these from config
 -- file
@@ -486,164 +467,25 @@ handleChc goLeft goRight d =
          -- miss (B, True)
          removeDim d
 
--- | Handle a choice in the IncVSMTSolve monad, we check to make sure that if a
--- choice is already selected then the selection is maintained. If not then we
--- solve both branches by first clearing the state, recursively solving, if the
--- recursive answer is plain then we'll get back a model from the solver, if not
--- then we'll get back a variational model, if we get back a variational model
--- then we reconstruct the choice expression representing the model and store it
--- in the state. This works by having a zipper (focus, context) that tracks the
--- recurses through the proposition. When the prop is plain it will simple
--- convert everything to SBools via vSMTSolve and store that is the ctx which is
--- the constrained in runVSMTsolve. If there is a choice then we employ the
--- context to solve recursively by selecting a variant as our new focus and
--- recurring.
-handleCtx :: (Ord d, Show d, Resultable d) =>
-  Loc d (S.SBool,Name) SNum ->
-  IncVSMTSolve d (S.SBool, ConstraintName)
-
-  -- when we see an And we take advantage of the intrinsic "and"'ing of the
-  -- insertion stack
-handleCtx (Loc (OpBB And l r) ctx) =
-
-  do
-    trace ("splitting: " ++ show l ++ " ||| " ++ show r) $ return ()
-    trace ("splitting ctx: " ++ show ctx) $ return ()
-    _ <- handleCtx $! mkLoc (l, ctx)
-    handleCtx $! mkLoc (r, ctx)
-
-  -- when we have no ctx we just solve the unit clause
-handleCtx (Loc (OpIB _ _ _) _) = error "what?!?! How did you even get here! Get Jeff on the phone this isn't implemented yet!"
-handleCtx (Loc (RefB (b,name)) Empty) =
-  do constrain b (pure name)
-     trace ("adding: " ++ show name) $ return ()
-     return (b, pure name)
-handleCtx (Loc (LitB b) Empty) = return $! (S.literal b, pure $ toText b)
-  -- when we have a context that holds only an accumulator we combine the atomic
-  -- with the accum and return the result
-handleCtx (Loc (RefB (b, name)) (InBBR op (acc, accName) Empty)) =
-  do constrain b (pure name)
-     trace ("InBBR: adding: " ++ ushow name) $ return ()
-     return $! (bDispatch op acc b, newName)
-  where newName = name : toText op : accName
-handleCtx (Loc (LitB b) (InBBR op (acc, accName) Empty)) =
-  return $! (bDispatch op acc (S.literal b), toText b : toText op : accName)
-
-  -- When we see an atomic in a left context we add that atomic to the
-  -- accumulator and recur to the rhs of the operator
-handleCtx (Loc (RefB (b, name)) (InBBL op ctx rbranch)) =
-  do
-    constrain b (pure name)
-    trace ("InBBL: adding: " ++ ushow name) $ return ()
-    handleCtx $! mkLoc (rbranch, InBBR op (b, pure name) ctx)
-handleCtx (Loc (LitB b) (InBBL op ctx rbranch)) =
-  handleCtx $! mkLoc (rbranch, InBBR op acc ctx)
-  where name = pure (toText b)
-        acc = (S.literal b, name)
-handleCtx (Loc (LitB b) (InB _ ctx)) = handleCtx $! mkLoc (LitB $ bnot b, ctx)
-
-handleCtx (Loc (RefB b) (InB nOp ctx)) = handleCtx $! mkLoc (RefB b', ctx)
-  where b' = bnot *** (toText nOp `append`) $ b
-
-  -- when we are in the left side of a context and the right side of a subtree
-  -- we add the atomics to the accumulator and swap to the right side of the
-  -- parent context with the new accumulator being the result of computing the
-  -- left side
-handleCtx (Loc (RefB (b, name)) (InBBR op (acc, accName) (InBBL op' ctx r))) =
-  do (handleCtx $! mkLoc (r , InBBR op' newAcc ctx))
-  where !bAcc = bDispatch op acc b
-        !newName = name : toText op : accName
-        !newAcc = (bAcc, newName)
-
-
-handleCtx (Loc (RefB (b, name)) (InBBR op (acc, accName) ctx)) =
-  handleCtx $! mkLoc (RefB (newAcc, newAccName), ctx)
-  where !newAcc = bDispatch op acc b
-        !newAccName = mconcat . intersperse " " $ [name, toText op] ++ accName
-
-
-handleCtx (Loc (LitB b) (InBBR op (acc, accName) ctx)) =
-  -- we wrap in RefB just to get the types to work out
-  do (handleCtx $! mkLoc (RefB newAcc, ctx))
-  where !newAcc = (bDispatch op acc (S.literal b), newName)
-        !newName = mconcat $ toText b : toText op : accName
-
-  -- reduce double negations
-handleCtx (Loc fcs (InB Not (InB Not ctx))) = handleCtx $! mkLoc (fcs, ctx)
-  -- accumulate a negation
-handleCtx (Loc fcs (InB Not (InBBR op acc ctx))) =
-  handleCtx $! mkLoc (fcs, (InBBR op newAcc ctx))
-  where newAcc = bnot *** (toText Not :) $ acc
-
-  -- when we see a choice we describe the computations for each variant and
-  -- offload it to a handler function that manipulates the sbv assertion stack
-handleCtx (Loc (ChcB d l r) ctx@(InBBR _ (acc, accName) _)) =
-  do
-    -- we push onto the assertion and constrain to capture the solver state
-    -- before processing the choice. This allows us to cache the state before
-    -- the choice
-    constrain acc accName
-    trace "InBBR: got choice" $ return ()
-    handleChc goLeft goRight d
-    return (true, mempty)
-  where !goLeft  = solveVariant (handleCtx (mkLoc (l, ctx)))
-        !goRight = solveVariant (handleCtx (mkLoc (r, ctx)))
-
-  -- this handles the case when the accumulator is one parent node away
-handleCtx (Loc (ChcB d l r) ctx@(InBBL _ (InBBR _ (acc, accName) _) _)) =
-  do
-    -- push onto assertion stack
-    constrain acc accName
-    trace "InBBL: got choice" $ return ()
-    handleChc goLeft goRight d
-    return (true, mempty)
-  where !goLeft  = solveVariant (handleCtx (mkLoc (l, ctx)))
-        !goRight = solveVariant (handleCtx (mkLoc (r, ctx)))
-
-  -- When we observe the special case of a choice wrapped in a not we
-  -- distribute the not into the variants. This makes the zipper semantics
-  -- much easier because we don't have a clean way to negate the previous
-  -- accumulator in the zipper. Also such a negation would be an O(i) operation
-  -- in a hot loop. Best to avoid
-handleCtx (Loc (ChcB d l r) (InB Not ctx)) =
-    handleCtx $! Loc (ChcB d (bnot l) (bnot r)) ctx
-
-  -- If we see a choice with any other context then the ctx is either empty
-  -- or the choice is in the leftmost position of the ast
-handleCtx (Loc (ChcB d l r) ctx) =
-    do
-      trace ("DEF: got choice with ctx: " ++ show ctx) $ return ()
-      handleChc goLeft goRight d >> return (true, mempty)
-  where !goLeft  = solveVariant (handleCtx (mkLoc (l, ctx)))
-        !goRight = solveVariant (handleCtx (mkLoc (r, ctx)))
-
--- handleCtx (Loc (OpB Not e) (InB _ ctx)) = handleCtx $! mkLoc (e, ctx)
-handleCtx (Loc (OpB op e) ctx) = handleCtx $! mkLoc (e, InB op ctx)
-
-  -- when we have a subtree as our focus we recur as far left as possible until
-  -- we hit a choice or an atomic term
-handleCtx (Loc (OpBB op l r) ctx) = handleCtx $! mkLoc (l, InBBL op ctx r)
-
-
--- -- | The main solver algorithm. You can think of this as the sem function for
--- -- the dsl
--- vSMTSolve_ :: (Show d, Resultable d) =>
---   VProp d (S.SBool, Name) SNum -> IncVSMTSolve d (S.SBool, ConstraintName)
--- vSMTSolve_ (RefB (b,name)) = return (b, pure name)
--- vSMTSolve_ (LitB b) = return $! (S.literal b, pure . toText $ b)
--- vSMTSolve_ (OpB Not (OpB Not notchc)) = vSMTSolve_ notchc
--- vSMTSolve_ (OpB Not e) = handleCtx   . Loc e $! InB Not Empty
--- vSMTSolve_ c@(OpBB op l r) = handleCtx . Loc l $! InBBL op Empty r
--- vSMTSolve_ (OpIB _ _ _) = error "Blame Jeff! This isn't implemented yet!"
--- vSMTSolve_ c@(ChcB _ _ _) = handleCtx $! Loc c Empty
-
+-- | the value domain
 data BValue d = B S.SBool ConstraintName
               | C (Dim d) (BValue d) (BValue d)
               | BVOp (BValue d) BB_B (BValue d)
               deriving Show
 
 -- | The main solver algorithm. You can think of this as the sem function for
--- the dsl
+-- the dsl. This progress in two stages, we extend the value domain with a
+-- choice constructor to ensure that choices are evaluated absolutely last. If
+-- they are not evaluated last then they will lose information from the rest of
+-- the formula. For example if you have: ((c and d) and AA<-a, b>) and a and e,
+-- then if you do simple recursion you'll generate a model when you evaluate the
+-- choice, which occurs __before__ you evaluate the (a and e), therefore you'll
+-- miss a unsatisfiable model. To work around this we evaluate all expression
+-- around choices and inside the choices. When we see a choice we pause
+-- evaluation and evaluate around and inside the choice, keeping a reference to
+-- the result of the choices sibling in the AST. Once we compile down to the
+-- value level we evaluate the choices properly by manipulating the assertion
+-- stack, resulting in model generation and sbools
 vSMTSolve_ :: (Show d, Resultable d) =>
   VProp d (S.SBool, Name) SNum -> IncVSMTSolve d (S.SBool , ConstraintName)
 vSMTSolve_ p = vSMTSolve__ p >>= solveBValue
@@ -677,8 +519,8 @@ vSMTSolve__ x@(OpBB op l r) = do
   trace ("going to solve BV: " ++ ushow bres) $ return ()
   (b,n) <- solveBValue $! bres
   return $! B b n
--- vSMTSolve__ (OpIB _ _ _) = error "Blame Jeff! This isn't implemented yet!"
-vSMTSolve__ x@(ChcB d l r) = do
+vSMTSolve__ (OpIB _ _ _) = error "Blame Jeff! This isn't implemented yet!"
+vSMTSolve__ (ChcB d l r) = do
   l' <- vSMTSolve__ l
   r' <- vSMTSolve__ r
   return $! BVOp (C d l' r') And (B true [toText True])
@@ -697,7 +539,7 @@ solveBValue x@(BVOp (C d l r) op r') =
      let goRight = solveVariant (solveBValue $ BVOp r op r')
      handleChc goLeft goRight d
 
-     return (true, pure $ toText "end")
+     return (true, mempty)
 
 solveBValue x@(BVOp l' op (C d l r)) =
   do trace ("Got choice in right: " ++ ushow x) $ return ()
@@ -705,7 +547,7 @@ solveBValue x@(BVOp l' op (C d l r)) =
      let goRight = solveVariant (solveBValue $ BVOp l' op r)
      handleChc goLeft goRight d
 
-     return (true, pure $ toText "end")
+     return (true, mempty)
 
 solveBValue x@(BVOp (B bl ln) op (B br rn)) =
   trace ("reducing: " ++ ushow x) $
