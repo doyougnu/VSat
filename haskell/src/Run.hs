@@ -256,7 +256,7 @@ vSMTSolve prop configPool =
          -- grab models from choices
          (_,resSt) <- St.runStateT (solveVariational pool prop') fstSt
          if isResultNull (result resSt)
-           then St.evalStateT (vSMTSolve_ prop')  emptySt >>= solvePlain . fst
+           then trace ("RESULT NULL" ++ show resSt) $ St.evalStateT (vSMTSolve_ prop')  emptySt >>= solvePlain . fst
            else return $ result resSt
 
 solvePlain :: Resultable d => S.SBool -> SC.Query (Result d)
@@ -397,6 +397,8 @@ constrain :: S.SBool -> ConstraintName -> IncVSMTSolve d ()
 constrain b [] = S.constrain b
 constrain b !name = do
   used <- gets usedConstraints
+  -- trace ("Looking for: " ++ show name ++ "\n") $ return ()
+  -- trace ("IN: " ++ show used ++ "\n") $ return ()
   if not (isUsed usedName used)
     then do S.namedConstraint name' b; setUsed usedName
     else S.constrain b
@@ -495,8 +497,10 @@ vSMTSolve__ :: (Show d, Resultable d) =>
 vSMTSolve__ (RefB (b,name)) = return $! B b (pure name)
 vSMTSolve__ (LitB b) = return $! B (S.literal b) (pure $ toText b)
 vSMTSolve__ (OpB Not (OpB Not notchc)) = vSMTSolve__ notchc
-vSMTSolve__ (OpB Not e) = do (B b n) <- vSMTSolve__ e
-                             return $! B (bnot b)  (toText Not : n)
+vSMTSolve__ x@(OpB Not e) = do
+  trace ("Got a Not: " ++ ushow x ++ "\n") $ return ()
+  (B b n) <- vSMTSolve__ e
+  return $! B (bnot b)  (toText Not : n)
 
 vSMTSolve__ x@(OpBB op (ChcB d l r') r) =
   trace ("Constructing Choice in L: " ++ ushow x ++ "\n") $
@@ -512,11 +516,11 @@ vSMTSolve__ x@(OpBB op l (ChcB d l' r)) =
      return $! BVOp bl op (C d bl' br)
 
 vSMTSolve__ x@(OpBB op l r) = do
-  trace ("Recurring BB: " ++ ushow x) $ return ()
+  trace ("Recurring BB: " ++ ushow x ++ "\n") $ return ()
   bvl <- vSMTSolve__ l
   bvr <- vSMTSolve__ r
   let bres = BVOp bvl op bvr
-  trace ("going to solve BV: " ++ ushow bres) $ return ()
+  trace ("going to solve BV: " ++ ushow bres ++ "\n") $ return ()
   (b,n) <- solveBValue $! bres
   return $! B b n
 vSMTSolve__ (OpIB _ _ _) = error "Blame Jeff! This isn't implemented yet!"
@@ -529,7 +533,7 @@ solveBValue :: (Show d, Resultable d) =>
   BValue d -> IncVSMTSolve d (S.SBool, ConstraintName)
 
 solveBValue x@(B b n) =
-  trace ("constraining " ++ ushow x) $
+  trace ("constraining " ++ ushow x ++ "\n") $
   do constrain b n; return (b, n)
 solveBValue (C _ _ _) = error "IMPOSSIBLE!"
 
@@ -542,31 +546,25 @@ solveBValue x@(BVOp (C d l r) op r') =
      return (true, mempty)
 
 solveBValue x@(BVOp l' op (C d l r)) =
-  do trace ("Got choice in right: " ++ ushow x) $ return ()
+  do trace ("Got choice in right: " ++ ushow x ++ "\n") $ return ()
      let goLeft = solveVariant (solveBValue $ BVOp l' op l)
      let goRight = solveVariant (solveBValue $ BVOp l' op r)
      handleChc goLeft goRight d
 
      return (true, mempty)
 
+solveBValue x@(BVOp l And r) =
+  trace ("splitting And: " ++ ushow x ++ "\n") $
+  do _ <- solveBValue l; solveBValue r
+
 solveBValue x@(BVOp (B bl ln) op (B br rn)) =
-  trace ("reducing: " ++ ushow x) $
+  trace ("reducing: " ++ ushow x ++ "\n") $
   do solveBValue $! B res name
   where res = (bDispatch op bl br)
         name = ln ++ (pure $ toText op) ++ rn
 
 solveBValue x@(BVOp l op r) =
-  trace ("recurring: " ++ ushow x) $
+  trace ("recurring: " ++ ushow x ++ "\n") $
   do (bl, ln) <- solveBValue l
      (br, rn) <- solveBValue r
      return $! ((bDispatch op bl br), ln ++ [toText op] ++ rn)
-
--- foo :: (a -> b -> b) ->
---     (b -> b -> b) ->
---   [(a,b)] ->
---   [(b,b)] ->
---   [(b,b)]
--- foo _ _ [] [] = []
--- foo _ _  _ [] = []
--- foo _ _ [] _ = []
--- foo f g ((a,b):xs) ys = fmap (f a *** g b) xs ++ foo f g xs ys

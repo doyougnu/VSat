@@ -222,7 +222,7 @@ lookupRes_ :: (Eq d, Ord d) => d -> ResultMap d -> ResultProp d
 lookupRes_ k res = (M.!) (getRes res) k
 
 getResSat :: Resultable d => ResultMap d -> ResultProp d
-getResSat = lookupRes_ satKey
+getResSat = lookupRes satKey
 
 -- | O(1) is result empty
 isResultNull :: Resultable d => Result d -> Bool
