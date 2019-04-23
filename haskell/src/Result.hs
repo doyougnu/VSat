@@ -21,13 +21,16 @@ module Result ( ResultProp(..)
               , consWithOr
               , negateResultProp
               , deriveSatValues
+              , deriveModels'
               , deriveModels
+              , deriveValues'
               , deriveValues
               , getResMap
               , getUnSatMap
               ) where
 
 import           Control.DeepSeq (NFData)
+import           Control.Arrow (first)
 import           Data.Map.Internal.Debug (showTree)
 import qualified Data.Map.Strict as M
 import           Data.Maybe (fromJust, maybe,fromMaybe)
@@ -279,10 +282,17 @@ deriveSatValues m =
     let resMaps = getModelDictionary <$> allRes
     return $! fmap cvToBool <$> resMaps
 
-deriveModels :: Result Text -> IO [M.Map Text Bool]
-deriveModels (Result (satRes, _)) = fmap (M.mapKeys pack)
+deriveModels' :: Result Text -> IO [M.Map Text Bool]
+deriveModels' (Result (satRes, _)) = fmap (M.mapKeys pack)
                                     <$> deriveSatValues satRes
 
-deriveValues :: Ord d => Result d -> (M.Map d Bool) -> (M.Map d Bool)
-deriveValues (getResMap -> res) model =
+deriveModels :: Result Text -> IO [Config Text]
+deriveModels = fmap (fmap (M.mapKeys Dim)) . deriveModels'
+
+deriveValues :: Ord d => Result d -> Config d -> (M.Map d Bool)
+deriveValues (getResMap -> res) (M.toList -> model) =
+  fmap (solveLiterals . substitute (fmap (first dimName) model)) res
+
+deriveValues' :: Ord d => Result d -> M.Map d Bool -> (M.Map d Bool)
+deriveValues' (getResMap -> res) model =
   fmap (solveLiterals . substitute (M.toList model)) res
