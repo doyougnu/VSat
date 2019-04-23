@@ -551,7 +551,7 @@ vSMTSolve__ x@(OpBB op l r) =
 vSMTSolve__ (OpIB _ _ _) = error "Blame Jeff! This isn't implemented yet!"
 vSMTSolve__ x@(ChcB d l r) =
   trace ("[VDBG]: Singleton CHC: " ++ ushow x ++ "\n") $ do
-  return $! BVOp (C d l r) And (B true [toText True])
+  return $! (C d l r)
 
 
 solveBValue :: (Show d, Resultable d) => BValue d -> IncVSMTSolve d (BValue d)
@@ -616,6 +616,15 @@ doBVOp x op r = solveBValue $! BVOp x op r
 
 doChoice :: (Show d, Resultable d) => BValue d -> IncVSMTSolve d (S.SBool, ConstraintName)
 doChoice Unit = return (true, mempty)
+doChoice (C d l r) =
+  do bl <- vSMTSolve__ l
+     br <- vSMTSolve__ r
+     let goLeft = solveVariant $ solveBValue bl >>= doChoice
+         goRight = solveVariant $ solveBValue br >>= doChoice
+     handleChc goLeft goRight d
+
+     return (true, mempty)
+
 doChoice x@(BVOp (C d l r) op r') =
   do bl <- vSMTSolve__ l
      br <- vSMTSolve__ r
