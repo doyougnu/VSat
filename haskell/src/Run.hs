@@ -527,19 +527,19 @@ vSMTSolve__ x@(OpBB op l' (ChcB d l r)) =
   do bl <- vSMTSolve__ l'
      return $! BVOp bl op (C d l r)
 
-vSMTSolve__ x@(OpBB Impl l r) =
-  trace ("[VDBG]: Implication Removed: " ++ ushow x ++ "\n") $ do
-  bvl <- vSMTSolve__ (bnot l)
-  bvr <- vSMTSolve__ r
-  let bres = BVOp bvl Or bvr
-  return $! bres
+-- vSMTSolve__ x@(OpBB Impl l r) =
+--   trace ("[VDBG]: Implication Removed: " ++ ushow x ++ "\n") $ do
+--   bvl <- vSMTSolve__ (bnot l)
+--   bvr <- vSMTSolve__ r
+--   let bres = BVOp bvl Or bvr
+--   return $! bres
 
-vSMTSolve__ x@(OpBB BiImpl l r) =
-  trace ("[VDBG]: BiImpl removed: " ++ ushow x ++ "\n") $ do
-  bvl <- vSMTSolve__ (l ==> r)
-  bvr <- vSMTSolve__ (r ==> l)
-  let bres = BVOp bvl And bvr
-  return $! bres
+-- vSMTSolve__ x@(OpBB BiImpl l r) =
+--   trace ("[VDBG]: BiImpl removed: " ++ ushow x ++ "\n") $ do
+--   bvl <- vSMTSolve__ (l ==> r)
+--   bvr <- vSMTSolve__ (r ==> l)
+--   let bres = BVOp bvl And bvr
+--   return $! bres
 
 vSMTSolve__ x@(OpBB op l r) =
   trace ("[VDBG]: Reccurring: " ++ ushow x ++ "\n") $ do
@@ -585,15 +585,20 @@ solveBValue y@(BVOp x@(C _ _ _) op r) =
   trace ("[DBG]: went right got: " ++ ushow r' ++ "\n") $ return ()
   doBVOp x op r'
 
+-- solveBValue x@(BVOp l Or r) =
+--   trace ("[DBG]: LHS Splitting: " ++ ushow l ++ "\n") $
+--   trace ("[DBG]: RHS Splitting: " ++ ushow r ++ "\n") $
+--      handleOr l r
 
-solveBValue x@(BVOp l And r) =
-  trace ("[DBG]: LHS Splitting: " ++ ushow l ++ "\n") $
-  trace ("[DBG]: RHS Splitting: " ++ ushow r ++ "\n") $
-  do _ <- solveBValue l; solveBValue r
+
+-- solveBValue x@(BVOp l And r) =
+--   trace ("[DBG]: LHS Splitting: " ++ ushow l ++ "\n") $
+--   trace ("[DBG]: RHS Splitting: " ++ ushow r ++ "\n") $
+--   do _ <- solveBValue l; solveBValue r
 
 solveBValue x@(BVOp (B bl ln) op (B br rn)) =
   trace ("[DBG]: Reducing: " ++ ushow x ++ "\n") $
-  do solveBValue $! B res name
+  solveBValue $! B res name
   where res = (bDispatch op bl br)
         name = ln ++ (pure $ toText op) ++ rn
 
@@ -614,8 +619,10 @@ doBVOp c@(C _ _ _) op l@(B _ _)    = return $ BVOp c op l
 doBVOp c@(C _ _ _) op c'@(C _ _ _)   = return $ BVOp c op c'
 doBVOp x op r = solveBValue $! BVOp x op r
 
+
 doChoice :: (Show d, Resultable d) => BValue d -> IncVSMTSolve d (S.SBool, ConstraintName)
 doChoice Unit = return (true, mempty)
+doChoice (B b n) = return (b , n)
 doChoice (C d l r) =
   do bl <- vSMTSolve__ l
      br <- vSMTSolve__ r
@@ -643,3 +650,8 @@ doChoice x@(BVOp l' op (C d l r)) =
      handleChc goLeft goRight d
 
      return (true, mempty)
+
+doChoice (BVOp l op r) =
+  do (lb, ln) <- doChoice l
+     (rb, rn) <- doChoice r
+     return ((bDispatch op) lb rb, ln ++ [toText op] ++ rn)
