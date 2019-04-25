@@ -249,7 +249,8 @@ vSMTSolve prop configPool =
          -- prep assertion stack with first configs plain terms
          (_, fstSt) <-
            if not $ null pool
-           then St.runStateT (solveVariational fstConfig prop') emptySt
+           then do
+             St.runStateT (solveVariational fstConfig prop') emptySt
            else return ((), emptySt)
 
          -- solve the rest of the pool and check if models where generated. If
@@ -257,7 +258,7 @@ vSMTSolve prop configPool =
          -- grab models from choices
          (_,resSt) <- St.runStateT (solveVariational pool prop') fstSt
          if isResultNull (result resSt)
-           then St.evalStateT (vSMTSolve_ prop')  emptySt >>= solvePlain . fst
+           then St.evalStateT (vSMTSolve_ prop') resSt >>= solvePlain . fst
            else return $ result resSt
 
 solvePlain :: Resultable d => S.SBool -> SC.Query (Result d)
@@ -450,12 +451,12 @@ handleChc goLeft goRight d =
        Nothing    -> do
          --------------------- true variant -----------------------------
          setDim d True
-         trace ("[CHC] Going Left, choice: " ++ show d ++ "\n") $ return ()
+         -- trace ("[CHC] Going Left, choice: " ++ show d ++ "\n") $ return ()
          resMapT <- goLeft
 
          -------------------- false variant -----------------------------
          setDim d False
-         trace ("[CHC] Going Right, choice: " ++ show d ++ "\n") $ return ()
+         -- trace ("[CHC] Going Right, choice: " ++ show d ++ "\n") $ return ()
          resMapF <- goRight
 
          -- store results and cleanup config
@@ -495,7 +496,8 @@ data BValue d = B! S.SBool ConstraintName
 -- stack, resulting in model generation and sbools
 vSMTSolve_ :: (Show d, Resultable d) =>
   VProp d (S.SBool, Name) SNum -> IncVSMTSolve d (S.SBool , ConstraintName)
--- vSMTSolve_ p = vSMTSolve__ p >>= \x -> return $ trace (show x) $ solveBValue x
+-- vSMTSolve_ p = vSMTSolve__ p >>= \x -> return $ trace (show x) $ solveBValue
+-- x
 vSMTSolve_ p = do res <- vSMTSolve__ p
                   trace ("BVALUE: " ++ ushow res ++ "\n") $ return ()
                   r' <- solveBValue res
@@ -512,7 +514,8 @@ vSMTSolve__ (OpB Not e) = do
   return $! B (bnot b)  (toText Not : n)
 
 vSMTSolve__ x@(OpBB op (RefB (b,n)) (RefB (b',n'))) =
-  trace ("[VDBG]: Reducing: " ++ ushow x ++ "\n") $ do
+  trace ("[VDBG]: Reducing: " ++ ushow x ++ "\n") $
+  do
   let bres = (bDispatch op) b b'
       name = [n,toText op,n']
   return (B bres name)
@@ -542,7 +545,8 @@ vSMTSolve__ x@(OpBB op l' (ChcB d l r)) =
 --   return $! bres
 
 vSMTSolve__ x@(OpBB op l r) =
-  trace ("[VDBG]: Reccurring: " ++ ushow x ++ "\n") $ do
+  trace ("[VDBG]: Reccurring: " ++ ushow x ++ "\n") $
+  do
   bvl <- vSMTSolve__ l
   bvr <- vSMTSolve__ r
   let bres = BVOp bvl op bvr
@@ -550,7 +554,7 @@ vSMTSolve__ x@(OpBB op l r) =
 
 vSMTSolve__ (OpIB _ _ _) = error "Blame Jeff! This isn't implemented yet!"
 vSMTSolve__ x@(ChcB d l r) =
-  trace ("[VDBG]: Singleton CHC: " ++ ushow x ++ "\n") $ do
+  trace ("[VDBG]: Singleton CHC: " ++ ushow x ++ "\n") $
   return $! (C d l r)
 
 
@@ -613,11 +617,19 @@ doBVOp :: (Show d, Resultable d) =>
   BValue d -> BB_B -> BValue d -> IncVSMTSolve d (BValue d)
 doBVOp l    _ Unit = solveBValue l
 doBVOp Unit _ r    = solveBValue r
-doBVOp l@(B _ _) op r@(B _ _) = solveBValue $ BVOp l op r
-doBVOp l@(B _ _) op c@(C _ _ _)   = return $ BVOp l op c
-doBVOp c@(C _ _ _) op l@(B _ _)    = return $ BVOp c op l
-doBVOp c@(C _ _ _) op c'@(C _ _ _)   = return $ BVOp c op c'
-doBVOp x op r = solveBValue $! BVOp x op r
+doBVOp l@(B _ _)   op r@(B _ _) = solveBValue $ BVOp l op r
+doBVOp l@(B _ _)   op c@(C _ _ _)   = return $ BVOp l op c
+doBVOp c@(C _ _ _) op l@(B _ _)     = return $ BVOp c op l
+doBVOp c@(C _ _ _) op c'@(C _ _ _)  = return $ BVOp c op c'
+-- doBVOp c@(BVOp _ _ _) op c'@(C _ _ _) =
+--   do res <- solveBValue c; doBVOp res op c'
+-- doBVOp c@(C _ _ _) op c'@(BVOp _ _ _) =
+--   do res <- solveBValue c'; doBVOp c op res
+-- doBVOp c@(BVOp _ _ _) op c'@(B _ _) =
+--   do res <- solveBValue c; doBVOp res op c'
+-- doBVOp c@(B _ _) op c'@(BVOp _ _ _) =
+--   do res <- solveBValue c'; doBVOp c op res
+doBVOp l op r = return $ BVOp l op r
 
 
 doChoice :: (Show d, Resultable d) => BValue d -> IncVSMTSolve d (S.SBool, ConstraintName)
