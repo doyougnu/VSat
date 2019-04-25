@@ -474,9 +474,7 @@ handleChc goLeft goRight d =
 
 data BValue d = B! S.SBool ConstraintName
               | Unit
-              | C! (Dim d)
-                (VProp d (S.SBool, Name) SNum)
-                (VProp d (S.SBool, Name) SNum)
+              | C! (Dim d) (BValue d) (BValue d)
               | BVOp (BValue d) BB_B (BValue d)
               deriving Show
 
@@ -498,11 +496,13 @@ vSMTSolve_ :: (Show d, Resultable d) =>
   VProp d (S.SBool, Name) SNum -> IncVSMTSolve d (S.SBool , ConstraintName)
 -- vSMTSolve_ p = vSMTSolve__ p >>= \x -> return $ trace (show x) $ solveBValue
 -- x
-vSMTSolve_ p = do res <- vSMTSolve__ p
-                  trace ("BVALUE: " ++ ushow res ++ "\n") $ return ()
-                  r' <- solveBValue res
-                  trace ("Compacted: " ++ ushow r' ++ "\n") $ return ()
-                  doChoice r'
+vSMTSolve_ p = do
+  res <- vSMTSolve__ p
+  trace ("BVALUE: " ++ ushow res ++ "\n") $ return ()
+  r' <- solveBValue res
+  trace ("Compacted: " ++ ushow r' ++ "\n") $ return ()
+  doChoice r'
+
 
 vSMTSolve__ :: (Show d, Resultable d) =>
   VProp d (S.SBool, Name) SNum -> IncVSMTSolve d (BValue d)
@@ -514,54 +514,46 @@ vSMTSolve__ (OpB Not e) = do
   return $! B (bnot b)  (toText Not : n)
 
 vSMTSolve__ x@(OpBB op (RefB (b,n)) (RefB (b',n'))) =
-  trace ("[VDBG]: Reducing: " ++ ushow x ++ "\n") $
+  -- trace ("[VDBG]: Reducing: " ++ ushow x ++ "\n") $
   do
   let bres = (bDispatch op) b b'
-      name = [n,toText op,n']
+      name = [n, toText op, n']
   return (B bres name)
 
 vSMTSolve__ x@(OpBB op (ChcB d l r) r') =
-  trace ("[VDBG]: Chc in LHS: " ++ ushow x ++ "\n") $
+  -- trace ("[VDBG]: Chc in LHS: " ++ ushow x ++ "\n") $
   do br <- vSMTSolve__ r'
-     return $! BVOp (C d l r) op br
+     cl <- vSMTSolve__ l
+     cr <- vSMTSolve__ r
+     return $! BVOp (C d cl cr) op br
 
 vSMTSolve__ x@(OpBB op l' (ChcB d l r)) =
-  trace ("[VDBG]: Chc in RHS: " ++ ushow x ++ "\n") $
+  -- trace ("[VDBG]: Chc in RHS: " ++ ushow x ++ "\n") $
   do bl <- vSMTSolve__ l'
-     return $! BVOp bl op (C d l r)
-
--- vSMTSolve__ x@(OpBB Impl l r) =
---   trace ("[VDBG]: Implication Removed: " ++ ushow x ++ "\n") $ do
---   bvl <- vSMTSolve__ (bnot l)
---   bvr <- vSMTSolve__ r
---   let bres = BVOp bvl Or bvr
---   return $! bres
-
--- vSMTSolve__ x@(OpBB BiImpl l r) =
---   trace ("[VDBG]: BiImpl removed: " ++ ushow x ++ "\n") $ do
---   bvl <- vSMTSolve__ (l ==> r)
---   bvr <- vSMTSolve__ (r ==> l)
---   let bres = BVOp bvl And bvr
---   return $! bres
+     cl <- vSMTSolve__ l
+     cr <- vSMTSolve__ r
+     return $! BVOp bl op (C d cl cr)
 
 vSMTSolve__ x@(OpBB op l r) =
-  trace ("[VDBG]: Reccurring: " ++ ushow x ++ "\n") $
+  -- trace ("[VDBG]: Reccurring: " ++ ushow x ++ "\n") $
   do
   bvl <- vSMTSolve__ l
   bvr <- vSMTSolve__ r
-  let bres = BVOp bvl op bvr
-  return $! bres
+  return $! BVOp bvl op bvr
 
 vSMTSolve__ (OpIB _ _ _) = error "Blame Jeff! This isn't implemented yet!"
 vSMTSolve__ x@(ChcB d l r) =
-  trace ("[VDBG]: Singleton CHC: " ++ ushow x ++ "\n") $
-  return $! (C d l r)
+  -- trace ("[VDBG]: Singleton CHC: " ++ ushow x ++ "\n") $
+  do
+    cl <- vSMTSolve__ l
+    cr <- vSMTSolve__ r
+    return $! (C d cl cr)
 
 
 solveBValue :: (Show d, Resultable d) => BValue d -> IncVSMTSolve d (BValue d)
 solveBValue Unit = return Unit
 solveBValue x@(B b n) =
-  trace ("[DBG]: constraining: " ++ ushow x ++ "\n") $
+  -- trace ("[DBG]: constraining: " ++ ushow x ++ "\n") $
   do constrain b n; return Unit
 solveBValue x@(C _ _ _) = return x
 
@@ -569,24 +561,24 @@ solveBValue x@(BVOp (C _ _ _) _ (B _ _)) = return x
 solveBValue x@(BVOp (B _ _) _ (C _ _ _)) = return x
 
 solveBValue x@(BVOp Unit _ l) =
-  trace ("[DBG]: Removing Unit: " ++ ushow x ++ "\n") $
+  -- trace ("[DBG]: Removing Unit: " ++ ushow x ++ "\n") $
   solveBValue l
 solveBValue x@(BVOp l _ Unit) =
-  trace ("[DBG]: Removing Unit: " ++ ushow x ++ "\n") $
+  -- trace ("[DBG]: Removing Unit: " ++ ushow x ++ "\n") $
   solveBValue l
 
 solveBValue y@(BVOp l op x@(C _ _ _)) =
-  trace ("[DBG]: Chc in Right, Recurring Left: " ++ ushow y ++ "\n") $
+  -- trace ("[DBG]: Chc in Right, Recurring Left: " ++ ushow y ++ "\n") $
   do
   l' <- solveBValue l
-  trace ("[DBG]: went left got: " ++ ushow l' ++ "\n") $ return ()
+  -- trace ("[DBG]: went left got: " ++ ushow l' ++ "\n") $ return ()
   return $! BVOp l' op x
 
 solveBValue y@(BVOp x@(C _ _ _) op r) =
-  trace ("[DBG]: Chc in Left: " ++ ushow y ++ "\n") $
+  -- trace ("[DBG]: Chc in Left: " ++ ushow y ++ "\n") $
   do
   r' <- solveBValue r
-  trace ("[DBG]: went right got: " ++ ushow r' ++ "\n") $ return ()
+  -- trace ("[DBG]: went right got: " ++ ushow r' ++ "\n") $ return ()
   doBVOp x op r'
 
 -- solveBValue x@(BVOp l Or r) =
@@ -601,13 +593,13 @@ solveBValue y@(BVOp x@(C _ _ _) op r) =
 --   do _ <- solveBValue l; solveBValue r
 
 solveBValue x@(BVOp (B bl ln) op (B br rn)) =
-  trace ("[DBG]: Reducing: " ++ ushow x ++ "\n") $
+  -- trace ("[DBG]: Reducing: " ++ ushow x ++ "\n") $
   solveBValue $! B res name
   where res = (bDispatch op bl br)
         name = ln ++ (pure $ toText op) ++ rn
 
 solveBValue x@(BVOp l op r) =
-  trace ("[DBG]: Recurring: " ++ ushow x ++ "\n") $
+  -- trace ("[DBG]: Recurring: " ++ ushow x ++ "\n") $
 
   do bl <- solveBValue l
      br <- solveBValue r
@@ -636,29 +628,23 @@ doChoice :: (Show d, Resultable d) => BValue d -> IncVSMTSolve d (S.SBool, Const
 doChoice Unit = return (true, mempty)
 doChoice (B b n) = return (b , n)
 doChoice (C d l r) =
-  do bl <- vSMTSolve__ l
-     br <- vSMTSolve__ r
-     let goLeft = solveVariant $ solveBValue bl >>= doChoice
-         goRight = solveVariant $ solveBValue br >>= doChoice
+  do let goLeft = solveVariant $ solveBValue l >>= doChoice
+         goRight = solveVariant $ solveBValue r >>= doChoice
      handleChc goLeft goRight d
 
      return (true, mempty)
 
 doChoice x@(BVOp (C d l r) op r') =
-  do bl <- vSMTSolve__ l
-     br <- vSMTSolve__ r
-     let goLeft = solveVariant ((solveBValue $ BVOp bl op r') >>= doChoice)
-         goRight = solveVariant ((solveBValue $ BVOp br op r') >>= doChoice)
+  do let goLeft = solveVariant ((solveBValue $ BVOp l op r') >>= doChoice)
+         goRight = solveVariant ((solveBValue $ BVOp r op r') >>= doChoice)
      handleChc goLeft goRight d
 
      return (true, mempty)
 
 doChoice x@(BVOp l' op (C d l r)) =
-  trace ("[DBG]: Eval'ing Choice in RHS: " ++ ushow x ++ "\n") $
-  do bl <- vSMTSolve__ l
-     br <- vSMTSolve__ r
-     let goLeft = solveVariant ((solveBValue $ BVOp l' op bl) >>= doChoice)
-         goRight = solveVariant ((solveBValue $ BVOp l' op br) >>= doChoice)
+  -- trace ("[DBG]: Eval'ing Choice in RHS: " ++ ushow x ++ "\n") $
+  do let goLeft = solveVariant ((solveBValue $ BVOp l' op l) >>= doChoice)
+         goRight = solveVariant ((solveBValue $ BVOp l' op r) >>= doChoice)
      handleChc goLeft goRight d
 
      return (true, mempty)
