@@ -475,6 +475,7 @@ handleChc goLeft goRight d =
 data BValue d = B! S.SBool ConstraintName
               | Unit
               | C! (Dim d) (BValue d) (BValue d)
+              | BNot (BValue d)
               | BVOp (BValue d) BB_B (BValue d)
               deriving Show
 
@@ -509,9 +510,7 @@ vSMTSolve__ :: (Show d, Resultable d) =>
 vSMTSolve__ (RefB (b,name)) = return $! B b (pure name)
 vSMTSolve__ (LitB b) = return $! B (S.literal b) (pure $ toText b)
 vSMTSolve__ (OpB Not (OpB Not notchc)) = vSMTSolve__ notchc
-vSMTSolve__ (OpB Not e) = do
-  (B b n) <- vSMTSolve__ e
-  return $! B (bnot b)  (toText Not : n)
+vSMTSolve__ (OpB Not e) = BNot <$> vSMTSolve__ e
 
 vSMTSolve__ x@(OpBB op (RefB (b,n)) (RefB (b',n'))) =
   -- trace ("[VDBG]: Reducing: " ++ ushow x ++ "\n") $
@@ -555,6 +554,8 @@ solveBValue Unit = return Unit
 solveBValue x@(B b n) =
   -- trace ("[DBG]: constraining: " ++ ushow x ++ "\n") $
   do constrain b n; return Unit
+solveBValue (BNot Unit) = return Unit
+solveBValue (BNot e)    = solveBValue e >>= doBNot
 solveBValue x@(C _ _ _) = return x
 
 solveBValue x@(BVOp (C _ _ _) _ (B _ _)) = return x
@@ -604,6 +605,17 @@ solveBValue x@(BVOp l op r) =
   do bl <- solveBValue l
      br <- solveBValue r
      doBVOp bl op br
+
+doBNot :: (Show d, Resultable d) => BValue d -> IncVSMTSolve d (BValue d)
+doBNot Unit = return Unit
+doBNot (BNot e) = solveBValue e
+doBNot (B b n) = return $ B (bnot b) (toText Not : n)
+doBNot (C d l r) = do bl <- solveBValue l
+                      br <- solveBValue r
+                      return $ C d (BNot bl) (BNot br)
+doBNot x@(BVOp l op r) =
+  trace ("BNOT: Recurring with: " ++ show x) $
+  solveBValue (BVOp (BNot l) op (BNot r))
 
 doBVOp :: (Show d, Resultable d) =>
   BValue d -> BB_B -> BValue d -> IncVSMTSolve d (BValue d)
