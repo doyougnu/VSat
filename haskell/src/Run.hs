@@ -502,9 +502,9 @@ vSMTSolve_ :: (Show d, Resultable d) =>
 -- x
 vSMTSolve_ p = do
   res <- vSMTSolve__ p
-  trace ("BVALUE: " ++ ushow res ++ "\n") $ return ()
+  -- trace ("BVALUE: " ++ ushow res ++ "\n") $ return ()
   r' <- solveBValue res True
-  trace ("Compacted: " ++ ushow r' ++ "\n") $ return ()
+  -- trace ("Compacted: " ++ ushow r' ++ "\n") $ return ()
   doChoice r'
 
 
@@ -565,10 +565,10 @@ solveBValue !(BNot e)  _ =
   -- trace ("[DBG]: Solving a not with False " ++ show x) $
   do e' <- solveBValue e False
      doBNot e' False
-solveBValue !(C _ _ _) _ = return x
+solveBValue !(x@(C _ _ _)) _ = return x
 
-solveBValue !(BVOp (C _ _ _) _ (B _ _)) _ = return x
-solveBValue !(BVOp (B _ _) _ (C _ _ _)) _ = return x
+solveBValue !(x@(BVOp (C _ _ _) _ (B _ _))) _ = return x
+solveBValue !(x@(BVOp (B _ _) _ (C _ _ _))) _ = return x
 
 solveBValue !(BVOp Unit _ l) s =
   -- trace ("[DBG]: Removing Unit: " ++ ushow x ++ "\n") $
