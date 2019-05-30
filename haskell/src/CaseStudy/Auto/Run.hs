@@ -31,7 +31,7 @@ instance (Show a, Ord a) => SB.SAT (AutoLang a a) where
   toPredicate p = St.evalStateT (autoToSBool p) (mempty, mempty) >>= evalAutoExpr
 
 -- | a stack to follow what terms are on the assertion stack
-newtype Stack a = Stack {getStack :: Seq.Seq a }
+newtype Stack a = Stack { getStack :: Seq.Seq a }
   deriving (Show, Functor, Applicative, Monad)
 
 -- | simple monad stack holding a stack of pairs, a is the term we Eq on, b is
@@ -113,8 +113,9 @@ instance (SolverContext (IncSolve a b)) where
 runIncrementalSolve :: [AutoLang Text Text] -> IO (Result Text)
 runIncrementalSolve xs = runIncrementalSolve_ (toList <$> assocMaps)
   where assocList = makeAssocList xs
-        assocMaps' = correctFormulas . unions $ (fromListWith (flip $ BBinary And) <$> assocList)
-        assocMaps = St.evalStateT (mapM (autoToSBool) assocMaps') (mempty,mempty)
+        assocMaps' = unions $ (fromListWith (flip $ BBinary And) <$> assocList)
+        assocMaps = (fmap evalAutoExpr__) <$>
+                    St.evalStateT (mapM (autoToSBool) assocMaps') (mempty,mempty)
 
 -- | Make an association list. this finds a context by position, if it exists it
 -- is captured in the lhs of a tuple, if not then we create a ref called
@@ -123,7 +124,9 @@ runIncrementalSolve xs = runIncrementalSolve_ (toList <$> assocMaps)
 -- context, so the list for say evo_ctx < 1 will have _every_ formula that
 -- pretained to that context
 makeAssocList :: [AutoLang Text Text] -> [[(AutoLang Text Text, AutoLang Text Text)]]
-makeAssocList xs = L.groupBy isPlain $ L.sort $ fmap (first helper) splitCtx <$> xs
+makeAssocList xs = L.groupBy isPlain $
+                   L.sort $
+                   fmap (first helper) splitCtx <$> xs
   where helper x
           | hasCtx x = x
           | otherwise = AutoRef "__plain__"
@@ -158,18 +161,17 @@ findLessThan :: EvoContext Text -> Map [EvoContext Text] (AutoLang Text Text) ->
 findLessThan e = elems . filterWithKey (\ks _ -> any (< e) ks)
 
 
-runIncrementalSolve_ :: Symbolic [(AutoLang Text Text, AutoLang SBool SNum)] ->
+runIncrementalSolve_ :: Symbolic [(AutoLang Text Text, Query SBool)] ->
   IO (Result Text)
 runIncrementalSolve_  assocList = runSMT $
   do assocList' <- assocList
      let (Just ps) = L.lookup (AutoRef "__plain__") assocList'
          rest = L.filter ((/=(AutoRef "__plain__")) . fst) assocList'
 
-     ps' <- evalAutoExpr ps
      query $
        do
          push 1
-         constrain ps'
+         ps >>= constrain
          b <- isSat
          resMap <- if b
                    then
@@ -182,9 +184,11 @@ runIncrementalSolve_  assocList = runSMT $
 
          foldM (\acc (v, prop) ->
               do
+               trace ("solving: " ++ show v ++ "\n") $ return ()
                push 1
-               runIncrementalSolve__ prop
+               prop >>= constrain
                a <- isSat
+               trace ("isSat?: " ++ show a ++ "\n") $ return ()
                resMap' <- if a
                           then
                             do let prp = autoToResProp v
@@ -193,7 +197,9 @@ runIncrementalSolve_  assocList = runSMT $
                                  then return $! insertToSat prp pm
                                  else return mempty
                           else return mempty
-               pop 1
+               -- don't pop here so that we continue to accumulate on the
+               -- assertion stack
+               -- pop 1
                return $! acc <> resMap'
            ) resMap rest
 
