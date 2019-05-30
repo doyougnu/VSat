@@ -278,8 +278,13 @@ associativeLeft (OpB o e) = OpB o (associativeLeft e)
 associativeLeft (ChcB d l r) = (ChcB d (associativeLeft l) (associativeLeft r))
 associativeLeft (OpIB _ _ _) = error "Not implemented yet"
 associativeLeft nonRecursive = nonRecursive
--- --------------------------- Descriptors ----------------------------------------
--- | TODO fix all this redundancy by abstracting the dimensions and instancing Bifoldable
+
+renameDimensions :: (d -> d) -> VProp d a b -> VProp d a b
+renameDimensions f = trimap f id id
+
+--------------------------- Descriptors ----------------------------------------
+-- | TODO fix all this redundancy by abstracting the dimensions and instancing
+-- Bifoldable
 -- | Convert a prop into a list of Terms
 toList :: VProp d a b -> [VProp d a b]
 toList prop = go prop []
