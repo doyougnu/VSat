@@ -279,8 +279,8 @@ associativeLeft (ChcB d l r) = (ChcB d (associativeLeft l) (associativeLeft r))
 associativeLeft (OpIB _ _ _) = error "Not implemented yet"
 associativeLeft nonRecursive = nonRecursive
 
-renameDimensions :: (d -> d) -> VProp d a b -> VProp d a b
-renameDimensions f = trimap f id id
+renameDims :: (d -> d) -> VProp d a b -> VProp d a b
+renameDims f = trimap f id id
 
 --------------------------- Descriptors ----------------------------------------
 -- | TODO fix all this redundancy by abstracting the dimensions and instancing
