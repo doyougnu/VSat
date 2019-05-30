@@ -303,3 +303,31 @@ idispatch NEQL = V.NEQ
 breakOnAnd :: AutoLang a a -> [AutoLang a a]
 breakOnAnd (BBinary And l r) = Prelude.concat [breakOnAnd l, breakOnAnd r]
 breakOnAnd x = [x]
+
+-- where hasCtxForm (RBinary _ (ACtx _) _) = True
+-- (RBinary op (ACtx (AVar a)) (ALit i))
+
+-- | This is a custom function to fix a problem in the initial encoding where we
+-- are considering <=1 and <2 to different when they are in fact identical
+-- similarly for <=0 and <1
+renameCtxs :: (AutoLang a a -> AutoLang a a) -> AutoLang a a -> AutoLang a a
+renameCtxs f (AutoNot e) = AutoNot $ renameCtxs f e
+renameCtxs f (BBinary op l r) = BBinary op (renameCtxs f l) (renameCtxs f r)
+renameCtxs f x@(RBinary _ (ACtx _) (ALit _)) = f x
+renameCtxs _ nonrecursive    = nonrecursive
+
+-- | Encode that <=1 is <2 and <=0 < 1
+sameCtxs :: AutoLang a a -> AutoLang a a
+sameCtxs (RBinary LSTE x@(ACtx _) (ALit 1)) = RBinary LST x (ALit 2)
+sameCtxs (RBinary LSTE x@(ACtx _) (ALit 0)) = RBinary LST x (ALit 1)
+sameCtxs x = x
+
+-- | Given an AutoLang a a, remove conjuncted identical nodes incurred by fixing
+-- the contexts
+simplifyCtxs :: Eq a => AutoLang a a -> AutoLang a a
+simplifyCtxs (BBinary And l r)
+  | l == r = l
+  | otherwise = BBinary And (simplifyCtxs l) (simplifyCtxs r)
+simplifyCtxs (AutoNot e)      = AutoNot $ simplifyCtxs e
+simplifyCtxs (BBinary op l r) = BBinary op (simplifyCtxs l) (simplifyCtxs r)
+simplifyCtxs nonrecursive     = nonrecursive
