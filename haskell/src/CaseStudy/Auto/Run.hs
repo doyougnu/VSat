@@ -5,7 +5,7 @@ import           Data.SBV.Control
 import           Control.Arrow (first)
 import           Control.Monad (foldM)
 import           Data.Text (Text,pack)
-import qualified Data.List as L (sort, groupBy, lookup,filter)
+import qualified Data.List as L (partition, sort, groupBy, lookup,filter)
 import           Data.Map
 import           Data.SBV.Internals (SolverContext)
 import           Data.Bitraversable (bitraverse)
@@ -114,7 +114,8 @@ runIncrementalSolve :: [AutoLang Text Text] -> IO (Result Text)
 runIncrementalSolve xs = runIncrementalSolve_ (toList <$> assocMaps)
   where assocList = makeAssocList xs
         assocMaps' = unions $ (fromListWith (flip $ BBinary And) <$> assocList)
-        assocMaps = (fmap evalAutoExpr__) <$>
+        assocMaps = trace (show (fmap (countCtxs) $ keys assocMaps')) $
+                    (fmap evalAutoExpr__) <$>
                     St.evalStateT (mapM (autoToSBool) assocMaps') (mempty,mempty)
 
 -- | Make an association list. this finds a context by position, if it exists it
@@ -134,9 +135,18 @@ makeAssocList xs = L.groupBy isPlain $
 -- | a map of contexts to formulas, we abuse the types here
 type AssocMap = Map (AutoLang Text Text) (AutoLang Text Text)
 
+-- | This is a helper function for the AssocMap type. It expects to only work on
+-- the keys of the map and is only counting the number of ctxs in those keys
+countCtxs :: AutoLang Text Text -> Int
+countCtxs (RBinary _ (ACtx _) _) = 1
+countCtxs (AutoNot e) = countCtxs e
+countCtxs (BBinary _ l r) = countCtxs l + countCtxs r
+countCtxs _ = 0
+
+
 -- | this is particular to the data, we check each evolution context and
 -- convolve the ones that overlap i.e., evo_ctx <= 2, must consider the <1, <=1
--- <=0 and <0 case
+-- <=0 and <0 case, this is no handled through renaming the contexts
 correctFormulas :: AssocMap -> AssocMap
 correctFormulas m = expandedMap
   where
@@ -150,9 +160,9 @@ correctFormulas m = expandedMap
 
 getEvoCtx :: AutoLang Text Text -> [EvoContext Text]
 getEvoCtx (BBinary _
-           (RBinary op ref i)
-           (RBinary op' ref' i')) = [(op, i), (op',i')]
-getEvoCtx (RBinary op ref i) = pure (op, i)
+           (RBinary op _ i)
+           (RBinary op' _ i')) = [(op, i), (op',i')]
+getEvoCtx (RBinary op _ i) = pure (op, i)
 getEvoCtx _ = []
 
 -- | Given an evo context, find all of the formulas that correspond to evo
@@ -166,7 +176,7 @@ runIncrementalSolve_ :: Symbolic [(AutoLang Text Text, Query SBool)] ->
 runIncrementalSolve_  assocList = runSMT $
   do assocList' <- assocList
      let (Just ps) = L.lookup (AutoRef "__plain__") assocList'
-         rest = L.filter ((/=(AutoRef "__plain__")) . fst) assocList'
+         (singletons, rest) = L.partition ((<2) . countCtxs . fst) assocList'
 
      query $
        do
@@ -181,6 +191,29 @@ runIncrementalSolve_  assocList = runSMT $
                           then return $! insertToSat plainProp pm
                           else return mempty
                    else return mempty
+
+         -- run the points in time that need to not accumulate on the assertion
+         -- stack
+         foldM (\acc (v, prop) ->
+              do
+               trace ("solving: " ++ show v ++ "\n") $ return ()
+               push 1
+               prop >>= constrain
+               a <- isSat
+               trace ("isSat?: " ++ show a ++ "\n") $ return ()
+               resMap' <- if a
+                          then
+                            do let prp = autoToResProp v
+                               pm <- getResult prp
+                               if not $ isResultNull pm
+                                 then return $! insertToSat prp pm
+                                 else return mempty
+                          else return mempty
+               -- we pop here so that the assertion stack will only hold the
+               -- plains
+               pop 1
+               return $! acc <> resMap'
+           ) resMap rest
 
          foldM (\acc (v, prop) ->
               do
@@ -201,14 +234,11 @@ runIncrementalSolve_  assocList = runSMT $
                -- assertion stack
                -- pop 1
                return $! acc <> resMap'
-           ) resMap rest
+           ) resMap singletons
 
 
 runIncrementalSolve__ :: AutoLang SBool SNum -> Query ()
 runIncrementalSolve__ prop = evalAutoExpr__ prop >>= constrain
-       -- do
-       --   bs <- St.evalStateT (autoSolve prop) emptyS
-       --   constrain bs
 
 -- autoToResProp :: AutoLang a a -> ResultProp a
 autoToResProp :: AutoLang Text Text -> ResultProp Text
