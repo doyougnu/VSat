@@ -53,18 +53,20 @@ chAutoFile = "bench/AutoBench/vsat_small_chunk.json"
 sliceAndNegate n xs = fromList' (&&&) $ bnot <$> drop n xs
 
 ds :: [VProp Text String String]
-ds = bRef <$> ["D_0","D_1","D_2","D_3","D_4","D_5"]
+ds = bRef <$> ["D_0","D_2","D_4","D_5"]
+-- D_0 /\    D_2   /\     D_4   /\  D_5
+-- <0 /\ <=0 /\ <1 /\ <=1 /\ <2 /\ <= 2
 
-[d0, d1, d2, d3, d4, d5] = ds
+[d0, d2, d4, d5] = ds
 
 -- dimConf' :: VProp Text String String
 -- encoding for 6 configs that make sure the inequalities encompass each other
 dimConf = (d0 &&& fromList' (&&&) (bnot <$> tail ds)) -- <0
-          ||| ((d0 &&& d1) &&& sliceAndNegate 2 ds)   -- <0 /\ <=0
-          ||| (d0 &&& d1 &&& d4 &&& (bnot d5 &&& bnot d2 &&& bnot d3)) -- <0 /\ <=0 /\ <1
-          ||| (d0 &&& d1 &&& d4 &&& d5 &&& (bnot d2 &&& bnot d3)) -- <0 /\ <=0 /\ <1 /\ <=1
-          ||| (d0 &&& d1 &&& d2 &&& d4 &&& d5 &&& bnot d3)  -- <0 /\ <=0 /\ <1 /\ <=1 /\ <2
-          ||| fromList' (&&&) ds -- <0 /\ <=0 /\ <1 /\ <=1 /\ <2 /\ <= 2
+          ||| ((d0 &&& d2) &&& (bnot d4 &&& bnot d5))   -- <0 /\ <1
+          ||| (d0 &&& d2 &&& d4 &&& bnot d5) -- <0 /\ <1 /\
+          ||| fromList' (&&&) ds -- <0 /\ <1 /\ <2 /\ <= 2
+
+negConf = conjoin $ bnot <$> ds
 
 -- run with stack bench --profile vsat:auto --benchmark-arguments='+RTS -S -RTS --output timings.html'
 main = do
@@ -76,21 +78,38 @@ main = do
       !sCs = constraints sAuto -- looks like 4298/4299 are the culprits
       !bCs = constraints bAuto
       sPs' = parse langParser "" <$> sCs
-      sPs = rights sPs'
+      sPs = fmap (simplifyCtxs . renameCtxs sameCtxs) $ rights sPs'
 
       bPs' = parse langParser "" <$> bCs
-      bPs = rights bPs'
+      bPs = fmap (simplifyCtxs . renameCtxs sameCtxs) $ rights bPs'
 
       !sProp = (naiveEncode . autoToVSat) $ autoAndJoin sPs
       --  -- take 4500 bPs produces a solution for the plain case (all dims set to false)
-      !bProp = (naiveEncode . autoToVSat) $ autoAndJoin (take 500 bPs)
+      -- | Hardcoding equivalencies in generated dimensions to reduce number of
+      -- dimensions to 4
+      sameDims :: Text -> Text
+      sameDims d
+        | d == "D_1" = "D_2"
+        | d == "D_3" = "D_4"
+        | otherwise = d
+
+      !bProp = ((renameDims sameDims) . naiveEncode . autoToVSat) $ autoAndJoin bPs
       !bPropOpts = applyOpts defConf bProp
       autoConf = (Just $ toDimProp dimConf)
+      autoNegConf = (Just $ toDimProp negConf)
 
 
-  -- res' <- runIncrementalSolve sPs
-  -- res' <- satWithConf autoConf  emptyConf bProp
+  -- res' <- runIncrementalSolve bPs
+
+  -- putStrLn $ "Done with parse: "
+  -- mapM_ (putStrLn . show) $ (sPs)
+  -- putStrLn $ show bProp
+  -- putStrLn $ "------------------"
+  -- putStrLn $ "Solving: "
+  -- res' <- satWithConf autoNegConf emptyConf bProp
+  -- res' <- satWith emptyConf sProp
   -- print $ res'
+  -- print "done"
   -- let !p = prop 6000
   -- print $ length p
   -- -- res <- test 10
@@ -106,7 +125,7 @@ main = do
                    -- , bench "small file:Empty:Compact" . nfIO $ satWith defConf   (compactEncode sPs)
                      bench "Auto:VSolve:NoOpts"  . nfIO $ satWithConf autoConf emptyConf bProp
                    , bench "Auto:VSolve:DefOpts" . nfIO $ satWithConf autoConf emptyConf bPropOpts
-                   , bench "Auto:IncrementalBaseline:Naive" . nfIO $ runIncrementalSolve (take 500 bPs)
+                   , bench "Auto:IncrementalBaseline:Naive" . nfIO $ runIncrementalSolve bPs
                    -- bench "Auto:IncrementalBaseline:Compact" . nfIO $! satWith emptyConf (compactEncode bPs)
                   ]
     ]
