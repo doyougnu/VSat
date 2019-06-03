@@ -470,17 +470,17 @@ data BValue d = B! S.SBool ConstraintName
               | Unit
               | C! (Dim d) (SBVProp d) (SBVProp d)
               | BNot (BValue d)
-              | BVOp (BValue d) BVB_B (BValue d)
+              | BVOp (BValue d) BB_B (BValue d)
               deriving Show
 
-bbToBv :: BB_B -> BVB_B
-bbToBv And = BAnd
-bbToBv Or  = BOr
-bbToBv x   = error $ "conversion to BValue operator failed given: " ++ show x
+-- bbToBv :: BB_B -> BVB_B
+-- bbToBv And = BAnd
+-- bbToBv Or  = BOr
+-- bbToBv x   = error $ "conversion to BValue operator failed given: " ++ show x
 
-bvDispatch :: Boolean b => BVB_B -> b -> b -> b
-bvDispatch  BAnd = (&&&)
-bvDispatch  BOr  = (|||)
+-- bvDispatch :: Boolean b => BVB_B -> b -> b -> b
+-- bvDispatch  BAnd = (&&&)
+-- bvDispatch  BOr  = (|||)
 
 
 -- | The main solver algorithm. You can think of this as the sem function for
@@ -502,7 +502,7 @@ vSMTSolve_ :: (Show d, Resultable d) =>
 vSMTSolve_ p = do
   res <- vSMTSolve__ p
   -- trace ("BVALUE: " ++ ushow res ++ "\n") $ return ()
-  r' <- solveBValue res True
+  r' <- evaluate res
   -- trace ("Compacted: " ++ ushow r' ++ "\n") $ return ()
   doChoice r'
 
@@ -513,15 +513,6 @@ vSMTSolve__ !(RefB (b,name)) = return $! B b (pure name)
 vSMTSolve__ !(LitB b) = return $! B (S.literal b) (pure $ toText b)
 vSMTSolve__ !(OpB Not (OpB Not notchc)) = vSMTSolve__ notchc
 vSMTSolve__ !(OpB Not e) = BNot <$> vSMTSolve__ e
-
-vSMTSolve__ !(x@(OpBB Impl l r)) =
-  -- trace ("Removing Impl: " ++ show x ++ "\n") $
-  vSMTSolve__ (OpBB Or (bnot l) r)
-vSMTSolve__ !(x@(OpBB BiImpl l r)) =
-  -- trace ("Removing BImpl: " ++ show x ++ "\n") $
-  vSMTSolve__ (OpBB And (l ==> r) (r ==> l))
-vSMTSolve__ !(OpBB XOr l r) = vSMTSolve__ $ (l &&& (bnot r)) ||| ((bnot l) &&& r)
-
 vSMTSolve__ !(x@(OpBB op (RefB (b,n)) (RefB (b',n')))) =
   -- trace ("[VDBG]: Reducing: " ++ ushow x ++ "\n") $
   do
@@ -529,151 +520,144 @@ vSMTSolve__ !(x@(OpBB op (RefB (b,n)) (RefB (b',n')))) =
       name = [n, toText op, n']
   return (B bres name)
 
+  -- remove implications, because they are not commutative
+-- vSMTSolve__ !(OpBB Impl l r) = vSMTSolve__ (OpBB Or (bnot l) r)
+
 vSMTSolve__ !(x@(OpBB op (ChcB d l r) r')) =
   -- trace ("[VDBG]: Chc in LHS: " ++ ushow x ++ "\n") $
   do br <- vSMTSolve__ r'
-     return $! BVOp (C d l r) (bbToBv op) br
+     return $! BVOp (C d l r) op br
 
 vSMTSolve__ !(x@(OpBB op l' (ChcB d l r))) =
   -- trace ("[VDBG]: Chc in RHS: " ++ ushow x ++ "\n") $
   do bl <- vSMTSolve__ l'
-     return $! BVOp bl (bbToBv op) (C d l r)
+     return $! BVOp bl op (C d l r)
 
 vSMTSolve__ !(x@(OpBB op l r)) =
   -- trace ("[VDBG]: Reccurring: " ++ ushow x ++ "\n") $
   do
   bvl <- vSMTSolve__ l
   bvr <- vSMTSolve__ r
-  return $! BVOp bvl (bbToBv op) bvr
+  return $! BVOp bvl op bvr
 
 vSMTSolve__ (OpIB _ _ _) = error "Blame Jeff! This isn't implemented yet!"
 vSMTSolve__ x@(ChcB d l r) =
   -- trace ("[VDBG]: Singleton CHC: " ++ ushow x ++ "\n") $
   return $! (C d l r)
 
+-- | Evaluation allows communication with the solver and reduces terms to Unit
+-- values thereby representing that evaluation has taken place. Evaluation can
+-- call a switch into the accumulation mode in order to partially evaluate an
+-- expression
+evaluate :: (Show d, Resultable d) => BValue d -> IncVSMTSolve d (BValue d)
+evaluate Unit        = return Unit                             -- [Eval-Unit]
+evaluate (x@(B b n)) = do constrain b n; return Unit           -- [Eval-Term]
+evaluate (x@(BNot (BNot e))) = evaluate e
+evaluate (x@(BNot e))  =                                       -- [Eval-Neg]
+  do e' <- accumulate e; doBNot evaluate e'
+evaluate (x@(C _ _ _)) = return x                             -- [Eval-Chc]
+evaluate (x@(BVOp (C _ _ _) _ (C _ _ _))) = return x          -- [Eval-Op-ChcL]
+evaluate (x@(BVOp (C _ _ _) _ (B _ _)))   = return x          -- [Eval-Op-ChcL]
+evaluate (x@(BVOp (B _ _) _ (C _ _ _)))   = return x          -- [Eval-Op-ChcR]
 
-solveBValue :: (Show d, Resultable d) =>
-  BValue d -> Safe -> IncVSMTSolve d (BValue d)
-solveBValue Unit _ = return Unit
-solveBValue !(x@(B b n)) s
-  | s = -- trace ("[DBG]: constraining with: " ++ show s ++ " : " ++ ushow x ++ "\n") $
-        do constrain b n; return Unit
-  | otherwise = return x
-solveBValue (BNot Unit) _ = return Unit
-solveBValue !(x@(BNot (BNot e)))  s =
-  -- trace ("[DBG]: Solving a not " ++ show x) $
-  solveBValue e s
+evaluate (x@(BVOp Unit _ r)) = evaluate r                     -- [Eval-UAndR]
+evaluate (x@(BVOp l _ Unit)) = evaluate l                     -- [Eval-UAndL]
 
-solveBValue !(x@(BNot e))  _ =
-  -- trace ("[DBG]: Solving a not with False " ++ show x) $
-  do e' <- solveBValue e False
-     doBNot e' False
-solveBValue !(x@(C _ _ _)) _ = return x
+evaluate (y@(BVOp l And x@(C _ _ _))) =                       -- [Eval-And-ChcL]
+  do l' <- evaluate l; evaluate $ BVOp l' And x
 
-solveBValue !(x@(BVOp (C _ _ _) _ (B _ _))) _ = return x
-solveBValue !(x@(BVOp (B _ _) _ (C _ _ _))) _ = return x
+evaluate (y@(BVOp x@(C _ _ _) And r)) =                       -- [Eval-And-ChcR]
+  do r' <- evaluate r; evaluate $ BVOp x And r'
 
-solveBValue !(x@(BVOp Unit _ l)) s =
-  -- trace ("[DBG]: Removing Unit: " ++ ushow x ++ "\n") $
-  solveBValue l s
-solveBValue !(x@(BVOp l _ Unit)) s =
-  -- trace ("[DBG]: Removing Unit: " ++ ushow x ++ "\n") $
-  solveBValue l s
+evaluate (y@(BVOp l op x@(C _ _ _))) =
+  do l' <- accumulate l; return $ BVOp l' op x
 
-solveBValue !(y@(BVOp l BOr x@(C _ _ _))) _ =
-  -- trace ("[DBG]: Chc in Right, Recurring Left: " ++ ushow y ++ "\n") $
-  do
-  l' <- solveBValue l False
-  -- trace ("[DBG]: went left got: " ++ ushow l' ++ "\n") $ return ()
-  return $! BVOp l' BOr x
+evaluate (y@(BVOp x@(C _ _ _) op r)) =
+  do r' <- accumulate r; return $ BVOp x op r'
 
-solveBValue !(y@(BVOp x@(C _ _ _) BOr r)) _ =
-  -- trace ("[DBG]: Chc in Left: " ++ ushow y ++ "\n") $
-  do
-  r' <- solveBValue r False
-  -- trace ("[DBG]: went right got: " ++ ushow r' ++ "\n") $ return ()
-  return $! BVOp x BOr r'
-
-solveBValue !(y@(BVOp l op x@(C _ _ _))) s =
-  -- trace ("[DBG]: Chc in Right: " ++ ushow y ++ "\n") $
-  do l' <- solveBValue l s
-     return $! BVOp l' op x
-
-solveBValue !(y@(BVOp x@(C _ _ _) op r)) s =
-  -- trace ("[DBG]: Chc in Left: " ++ ushow y ++ "\n") $
-  do r' <- solveBValue r s
-     return $! BVOp x op r'
-
-solveBValue !(x@(BVOp (B bl ln) op (B br rn))) s =
-  -- trace ("[DBG]: Reducing: " ++ ushow x ++ "\n") $
-  solveBValue (B res name) s
-  where res = (bvDispatch op bl br)
+  -- evaluation of two bools
+evaluate (x@(BVOp (B bl ln) op (B br rn))) =                     -- [Eval-Bools]
+  evaluate (B res name)
+  where res = (bDispatch op bl br)
         name = ln ++ (pure $ toText op) ++ rn
 
-solveBValue !(x@(BVOp l BOr r)) s =
-  -- trace ("[DBG]: Reducing an Or: " ++ ushow x ++ "\n") $
-  do l' <- solveBValue l False
-     r' <- solveBValue r False
-     solveBValue (BVOp l' BOr r') s
+evaluate (x@(BVOp l And r)) =                                      -- [Eval-And]
+  do l' <- evaluate l
+     r' <- evaluate r
+     -- trace ("[DBG]: evaluating: " ++  ushow l ++ " : " ++ ushow r ++ "\n") $ return ()
+     -- trace ("[DBG]: To: " ++  ushow l' ++ " " ++ show And ++ " " ++ ushow r' ++ "\n") $ return ()
+     return (BVOp l' And r')
+
+evaluate (x@(BVOp l op r)) =                                         -- [Eval-Or]
+  do l' <- accumulate l
+     r' <- accumulate r
+     -- trace ("[DBG]: switching to accum: " ++  show l ++ " : " ++ show r ++ "\n") $ return ()
+     -- trace ("[DBG]: Now evaling: " ++  show l' ++ " " ++ show op ++ " " ++ show r' ++ "\n") $ return ()
+     evaluate (BVOp l' op r')
 
 
-solveBValue !(x@(BVOp l op r)) s =
-  -- trace ("[DBG]: Recurring: " ++ ushow x ++ "\n") $
-  do bl <- solveBValue l s
-     br <- solveBValue r s
-     -- solveBValue (BVOp bl op br) s
-     doBVOp bl op br s
+accumulate :: (Show d, Resultable d) => BValue d -> IncVSMTSolve d (BValue d)
+accumulate Unit          = return Unit                             -- [Acc-Unit]
+accumulate (x@(B _ _))   = return x                                -- [Acc-Term]
+accumulate (x@(C _ _ _)) = return x                                -- [Acc-Chc]
+accumulate (x@(BNot (BNot e))) = accumulate e
+accumulate (x@(BNot e))  = do                                       -- [Acc-Neg]
+  e' <- accumulate e; doBNot accumulate e'
+accumulate (x@(BVOp (C _ _ _) _ (C _ _ _))) = return x          -- [Acc-Op-ChcL]
+accumulate (x@(BVOp (C _ _ _) _ (B _ _)))   = return x          -- [Acc-Op-ChcL]
+accumulate (x@(BVOp (B _ _) _ (C _ _ _)))   = return x          -- [Acc-Op-ChcR]
 
-doBNot :: (Show d, Resultable d) => BValue d -> Safe -> IncVSMTSolve d (BValue d)
-doBNot Unit      _  = return Unit
-doBNot !(BNot e)  _ = return e
-doBNot !(B b n)   s = solveBValue (B (bnot b) (toText Not : n)) s
-doBNot !(C d l r) _ = return $ C d (bnot l) (bnot r)
-doBNot !(x@(BVOp l op r)) _ =
-  -- trace ("BVOping in BNOT: " ++ show x ++ "\n") $
-  do bl <- solveBValue l False
-     br <- solveBValue r False
-     solveBValue (BNot (BVOp bl op br)) False
--- doBNot !(BVOp l BAnd r) _ =
---   -- trace ("BNOT: Recurring with: " ++ show x) $
---   solveBValue (BVOp (BNot l) BOr (BNot r)) False
--- doBNot !(BVOp l BOr r)  s =
---   -- trace ("BNOT: Recurring with: " ++ show x) $
---   solveBValue (BVOp (BNot l) BAnd (BNot r)) s
+accumulate (x@(BVOp Unit _ r)) = accumulate r                     -- [Acc-UAndR]
+accumulate (x@(BVOp l _ Unit)) = accumulate l                     -- [Acc-UAndL]
 
-doBVOp :: (Show d, Resultable d) =>
-  BValue d -> BVB_B -> BValue d -> Safe -> IncVSMTSolve d (BValue d)
-doBVOp l    _ Unit s = solveBValue l s
-doBVOp Unit _ r    s = solveBValue r s
-doBVOp l@(B _ _)   op r@(B _ _) s     = solveBValue (BVOp l op r) s
-doBVOp l@(B _ _)   op c@(C _ _ _)   _ = return $ BVOp l op c
-doBVOp c@(C _ _ _) op l@(B _ _)     _ = return $ BVOp c op l
-doBVOp c@(C _ _ _) op c'@(C _ _ _)  _ = return $ BVOp c op c'
-doBVOp c@(BVOp _ _ _) op c'@(C _ _ _) s =
-  do res <- solveBValue c s; return $ BVOp res op c'
-doBVOp c@(C _ _ _) op c'@(BVOp _ _ _) s =
-  do res <- solveBValue c' s; return $ BVOp c' op res
-doBVOp c@(BVOp _ _ _) op c'@(B _ _) s =
-  do res <- solveBValue c s; doBVOp res op c' s
-doBVOp c@(B _ _) op c'@(BVOp _ _ _) s =
-  do res <- solveBValue c' s; doBVOp c op res s
-doBVOp l op r _ = return $ BVOp l op r
+accumulate (y@(BVOp l And x@(C _ _ _))) =                      -- [Acc-And-ChcL]
+  do l' <- accumulate l; accumulate $ BVOp l' And x
+
+accumulate (y@(BVOp x@(C _ _ _) And r)) =                      -- [Acc-And-ChcR]
+  do r' <- accumulate r; accumulate $ BVOp x And r'
+
+accumulate (y@(BVOp l op x@(C _ _ _))) =
+  do l' <- accumulate l; return $ BVOp l' op x
+
+accumulate (y@(BVOp x@(C _ _ _) op r)) =
+  do r' <- accumulate r; return $ BVOp x op r'
+
+  -- evaluation of two bools
+accumulate (x@(BVOp (B bl ln) op (B br rn))) =                    -- [Acc-Bools]
+  accumulate (B res name)
+  where res = (bDispatch op bl br)
+        name = ln ++ (pure $ toText op) ++ rn
+
+accumulate (x@(BVOp l op r)) =                                       -- [Acc-Or]
+  do l' <- accumulate l;
+     r' <- accumulate r;
+     trace ("[DBG]: accumulating: " ++  show l ++ " : " ++ show r ++ "\n") $ return ()
+     trace ("[DBG]: To: " ++  show l' ++ " " ++ show op ++ " " ++ show r' ++ "\n") $ return ()
+     return (BVOp l' op r')
+
+-- | Given a bvalue, return a symbolic reference of the negation of that bvalue
+doBNot :: (Show d, Resultable d) => (BValue d -> IncVSMTSolve d (BValue d))
+  -> BValue d -> IncVSMTSolve d (BValue d)
+doBNot _ Unit      = return Unit
+doBNot f (B b n)   = f (B (bnot b) (toText Not : n))
+doBNot f (C d l r) = f (C d (bnot l) (bnot r))                --[Acc-Neg-Chc]
+doBNot _ other     = return (BNot other)
 
 
 doChoice :: (Show d, Resultable d) => BValue d -> IncVSMTSolve d (S.SBool, ConstraintName)
 doChoice Unit = return (true, mempty)
-doChoice (BNot e) = doBNot e False >>= doChoice
+doChoice (BNot e) = doBNot evaluate e >>= doChoice
 doChoice (B b n) = return (b , n)
 doChoice (C d l r) =
   do
     let
       goLeft =
         do bl <- vSMTSolve__ l
-           solveVariant $ solveBValue bl True >>= doChoice
+           solveVariant $ evaluate bl >>= doChoice
 
       goRight =
           do br <- vSMTSolve__ r
-             solveVariant $ solveBValue br True >>= doChoice
+             solveVariant $ evaluate br >>= doChoice
     handleChc goLeft goRight d
     return (true, mempty)
 
@@ -682,11 +666,11 @@ doChoice x@(BVOp (C d l r) op r') =
     let
       goLeft =
         do bl <- vSMTSolve__ l
-           solveVariant ((solveBValue (BVOp bl op r') True) >>= doChoice)
+           solveVariant (evaluate (BVOp bl op r') >>= doChoice)
 
       goRight =
         do br <- vSMTSolve__ r
-           solveVariant ((solveBValue (BVOp br op r') True) >>= doChoice)
+           solveVariant (evaluate (BVOp br op r') >>= doChoice)
     handleChc goLeft goRight d
     return (true, mempty)
 
@@ -694,15 +678,15 @@ doChoice x@(BVOp l' op (C d l r)) =
   do let
       goLeft =
         do bl <- vSMTSolve__ l
-           solveVariant ((solveBValue (BVOp l' op bl) True) >>= doChoice)
+           solveVariant (evaluate (BVOp l' op bl) >>= doChoice)
 
       goRight =
         do br <- vSMTSolve__ r
-           solveVariant ((solveBValue (BVOp l' op br) True) >>= doChoice)
+           solveVariant (evaluate (BVOp l' op br) >>= doChoice)
      handleChc goLeft goRight d
      return (true, mempty)
 
 doChoice (BVOp l op r) =
   do (lb, ln) <- doChoice l
      (rb, rn) <- doChoice r
-     return ((bvDispatch op) lb rb, ln ++ [toText op] ++ rn)
+     return ((bDispatch op) lb rb, ln ++ [toText op] ++ rn)
