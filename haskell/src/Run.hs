@@ -548,6 +548,12 @@ evaluate (x@(BVOp (B _ _) _ (C _ _ _)))   = return x          -- [Eval-Op-ChcR]
 evaluate (x@(BVOp Unit _ r)) = evaluate r                     -- [Eval-UAndR]
 evaluate (x@(BVOp l _ Unit)) = evaluate l                     -- [Eval-UAndL]
 
+evaluate (BVOp l And x@(B _ _)) = do
+  _ <- evaluate x; evaluate l
+evaluate (BVOp x@(B _ _) And r) = do
+  _ <- evaluate x; evaluate r
+
+
 evaluate (y@(BVOp l And x@(C _ _ _))) =                       -- [Eval-And-ChcL]
   do l' <- evaluate l; evaluate $ BVOp l' And x
 
@@ -626,8 +632,23 @@ doBNot :: (Show d, Resultable d) => (BValue d -> IncVSMTSolve d (BValue d))
 doBNot _ Unit      = return Unit
 doBNot f (B b n)   = f (B (bnot b) (toText Not : n))
 doBNot f (C d l r) = f (C d (bnot l) (bnot r))                --[Acc-Neg-Chc]
-doBNot _ other     = return (BNot other)
-
+doBNot f (BNot e)   = f e
+doBNot f (BVOp l And r) = do
+  l' <- doBNot f l
+  r' <- doBNot f r
+  f (BVOp l' Or r')
+doBNot f (BVOp l Or r) = do
+  l' <- doBNot f l
+  r' <- doBNot f r
+  f (BVOp l' And r')
+doBNot f (BVOp l XOr r) = f (BVOp l BiImpl r)
+doBNot f (BVOp l Impl r) = do
+  l' <- doBNot f l
+  f (BVOp l' Or r)
+doBNot f (BVOp l BiImpl r) = do
+  l' <- doBNot f l
+  r' <- doBNot f r
+  f (BVOp (BVOp l And r') Or (BVOp r And l'))
 
 doChoice :: (Show d, Resultable d) => BValue d -> IncVSMTSolve d (S.SBool, ConstraintName)
 doChoice Unit = return (true, mempty)
@@ -645,6 +666,9 @@ doChoice (C d l r) =
              solveVariant $ evaluate br >>= doChoice
     handleChc goLeft goRight d >>= store
     return (true, mempty)
+
+doChoice (BVOp Unit _ r) = doChoice r
+doChoice (BVOp l _ Unit) = doChoice l
 
 doChoice x@(BVOp (C d l r) op r') =
   do
@@ -671,7 +695,52 @@ doChoice x@(BVOp l' op (C d l r)) =
      handleChc goLeft goRight d >>= store
      return (true, mempty)
 
-doChoice (BVOp l op r) =
-  do (lb, ln) <- doChoice l
-     (rb, rn) <- doChoice r
-     return ((bDispatch op) lb rb, ln ++ [toText op] ++ rn)
+doChoice (BVOp (BVOp (C d l r) op' r') op r'') =
+  do let
+      goLeft =
+        do bl <- vSMTSolve__ l
+           solveVariant (evaluate (BVOp (BVOp bl op' r') op r'') >>= doChoice)
+
+      goRight =
+        do br <- vSMTSolve__ r
+           solveVariant (evaluate (BVOp (BVOp br op' r') op r'') >>= doChoice)
+     handleChc goLeft goRight d >>= store
+     return (true, mempty)
+
+doChoice (BVOp (BVOp l'' op (C d l r)) op' r') =
+  do let
+      goLeft =
+        do bl <- vSMTSolve__ l
+           solveVariant (evaluate (BVOp l'' op (BVOp bl op' r')) >>= doChoice)
+
+      goRight =
+        do br <- vSMTSolve__ r
+           solveVariant (evaluate (BVOp l'' op (BVOp br op' r')) >>= doChoice)
+     handleChc goLeft goRight d >>= store
+     return (true, mempty)
+-- doChoice x = error $ "didn't get to normal form with: " ++ ushow (toVProp x)
+doChoice x = doChoice $ assocLeft x
+
+toVProp :: (BValue d) -> VProp d Text Text
+toVProp Unit = bRef (toText "unit")
+toVProp (B b t) = bRef (toText t)
+toVProp (BNot e) = OpB Not (toVProp e)
+toVProp (C d l r) = ChcB d
+                    (trimap id (\(_,y) -> toText y) (const "") l)
+                    (trimap id (\(_, y) -> toText y) (const "") r)
+toVProp (BVOp l op r) = OpBB op (toVProp l) (toVProp r)
+
+assocLeft :: Show d => BValue d -> BValue d
+assocLeft Unit = Unit
+assocLeft x@(B _ _)   = x
+assocLeft x@(C _ _ _) = x
+assocLeft (BNot e) = BNot $ assocLeft e
+assocLeft (BVOp x@(BVOp l1 op1 r1) op y)
+  | op1 == op = (BVOp l1 op (BVOp r1 op y))
+  -- | op1 == op2 &&
+  | otherwise = (BVOp (assocLeft x) op y)
+assocLeft x = trace ("stuck at: " ++ show x ++ "\n") $ x
+-- assocLeft (BVOp x@(BVOp l1 op1 r1) op y@(BVOp l2 op2 r2))
+--   | op1 == op = (BVOp l1 op (BVOp r1 op y))
+--   -- | op1 == op2 &&
+--   | otherwise = (BVOp (assocLeft x) op y)
