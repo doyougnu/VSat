@@ -428,12 +428,12 @@ handleChc :: (Show d, Resultable d) =>
   IncVSMTSolve d (Result d)
   -> IncVSMTSolve d (Result d)
   -> Dim d
-  -> IncVSMTSolve d ()
+  -> IncVSMTSolve d (Result d)
 handleChc goLeft goRight d =
   do currentCfg <- gets config
      case M.lookup d currentCfg of
-       Just True  -> goLeft >>= store
-       Just False -> goRight >>= store
+       Just True  -> goLeft
+       Just False -> goRight
        Nothing    -> do
          --------------------- true variant -----------------------------
          setDim d True
@@ -446,7 +446,7 @@ handleChc goLeft goRight d =
          resMapF <- goRight
 
          -- store results and cleanup config
-         store $! resMapT <> resMapF
+         let result = resMapT <> resMapF
 
          -- we remove the Dim from the config so that when the recursion
          -- completes the last false branch of the last choice is not
@@ -457,14 +457,9 @@ handleChc goLeft goRight d =
          -- therefore on the (A, False) branch of the recursion it'll
          -- miss (B, True)
          removeDim d
+         return result
 
-data BVB_B = BAnd | BOr
-type Safe  = Bool
 type SBVProp d = VProp d (S.SBool, Name) SNum
-
-instance Show BVB_B where
-  show BAnd = "∧"
-  show BOr  = "∨"
 
 data BValue d = B! S.SBool ConstraintName
               | Unit
@@ -472,16 +467,6 @@ data BValue d = B! S.SBool ConstraintName
               | BNot (BValue d)
               | BVOp (BValue d) BB_B (BValue d)
               deriving Show
-
--- bbToBv :: BB_B -> BVB_B
--- bbToBv And = BAnd
--- bbToBv Or  = BOr
--- bbToBv x   = error $ "conversion to BValue operator failed given: " ++ show x
-
--- bvDispatch :: Boolean b => BVB_B -> b -> b -> b
--- bvDispatch  BAnd = (&&&)
--- bvDispatch  BOr  = (|||)
-
 
 -- | The main solver algorithm. You can think of this as the sem function for
 -- the dsl. This progress in two stages, we extend the value domain with a
@@ -631,8 +616,8 @@ accumulate (x@(BVOp (B bl ln) op (B br rn))) =                    -- [Acc-Bools]
 accumulate (x@(BVOp l op r)) =                                       -- [Acc-Or]
   do l' <- accumulate l;
      r' <- accumulate r;
-     trace ("[DBG]: accumulating: " ++  show l ++ " : " ++ show r ++ "\n") $ return ()
-     trace ("[DBG]: To: " ++  show l' ++ " " ++ show op ++ " " ++ show r' ++ "\n") $ return ()
+     -- trace ("[DBG]: accumulating: " ++  show l ++ " : " ++ show r ++ "\n") $ return ()
+     -- trace ("[DBG]: To: " ++  show l' ++ " " ++ show op ++ " " ++ show r' ++ "\n") $ return ()
      return (BVOp l' op r')
 
 -- | Given a bvalue, return a symbolic reference of the negation of that bvalue
@@ -658,7 +643,7 @@ doChoice (C d l r) =
       goRight =
           do br <- vSMTSolve__ r
              solveVariant $ evaluate br >>= doChoice
-    handleChc goLeft goRight d
+    handleChc goLeft goRight d >>= store
     return (true, mempty)
 
 doChoice x@(BVOp (C d l r) op r') =
@@ -671,7 +656,7 @@ doChoice x@(BVOp (C d l r) op r') =
       goRight =
         do br <- vSMTSolve__ r
            solveVariant (evaluate (BVOp br op r') >>= doChoice)
-    handleChc goLeft goRight d
+    handleChc goLeft goRight d >>= store
     return (true, mempty)
 
 doChoice x@(BVOp l' op (C d l r)) =
@@ -683,7 +668,7 @@ doChoice x@(BVOp l' op (C d l r)) =
       goRight =
         do br <- vSMTSolve__ r
            solveVariant (evaluate (BVOp l' op br) >>= doChoice)
-     handleChc goLeft goRight d
+     handleChc goLeft goRight d >>= store
      return (true, mempty)
 
 doChoice (BVOp l op r) =
