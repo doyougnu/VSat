@@ -61,10 +61,10 @@ ds = bRef <$> ["D_0","D_2","D_4","D_5"]
 
 -- dimConf' :: VProp Text String String
 -- encoding for 6 configs that make sure the inequalities encompass each other
-dimConf = (d0 &&& fromList' (&&&) (bnot <$> tail ds)) -- <0
-          ||| ((d0 &&& d2) &&& (bnot d4 &&& bnot d5))   -- <0 /\ <1
-          ||| (d0 &&& d2 &&& d4 &&& bnot d5) -- <0 /\ <1 /\
-          ||| fromList' (&&&) ds -- <0 /\ <1 /\ <2 /\ <= 2
+dimConf = -- (d0 &&& fromList' (&&&) (bnot <$> tail ds)) -- <0
+          ((d0 &&& d2) &&& (bnot d4 &&& bnot d5))   -- <0 /\ <1
+          -- ||| (d0 &&& d2 &&& d4 &&& bnot d5) -- <0 /\ <1 /\
+          -- ||| fromList' (&&&) ds -- <0 /\ <1 /\ <2 /\ <= 2
 
 negConf = conjoin $ bnot <$> ds
 
@@ -81,7 +81,8 @@ main = do
       sPs = fmap (simplifyCtxs . renameCtxs sameCtxs) $ rights sPs'
 
       bPs' = parse langParser "" <$> bCs
-      bPs = fmap (simplifyCtxs . renameCtxs sameCtxs) $ rights bPs'
+      bPsSimp = fmap (simplifyCtxs . renameCtxs sameCtxs) $ rights bPs'
+      bPs = rights bPs'
 
       -- | Hardcoding equivalencies in generated dimensions to reduce number of
       -- dimensions to 4
@@ -93,7 +94,7 @@ main = do
 
       !sProp = ((renameDims sameDims) . naiveEncode . autoToVSat) $ autoAndJoin sPs
       --  -- take 4500 bPs produces a solution for the plain case (all dims set to false)
-      !bProp = ((renameDims sameDims) . naiveEncode . autoToVSat) $ autoAndJoin bPs
+      !bProp = ((renameDims sameDims) . naiveEncode . autoToVSat) $ autoAndJoin (take 3000 bPs)
       !bPropOpts = applyOpts defConf bProp
       autoConf = (Just $ toDimProp dimConf)
       autoNegConf = (Just $ toDimProp negConf)
@@ -103,10 +104,10 @@ main = do
 
   -- putStrLn $ "Done with parse: "
   -- mapM_ (putStrLn . show) $ (sPs)
-  -- putStrLn $ show bProp
+  -- putStrLn $! show bProp
   -- putStrLn $ "------------------"
   -- putStrLn $ "Solving: "
-  res' <- satWithConf autoNegConf emptyConf sProp
+  res' <- satWithConf autoConf emptyConf bProp
   -- res' <- satWith emptyConf sProp
   print $ res'
   -- print "done"
