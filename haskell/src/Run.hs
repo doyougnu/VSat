@@ -530,6 +530,9 @@ vSMTSolve__ x@(ChcB d l r) =
   -- trace ("[VDBG]: Singleton CHC: " ++ ushow x ++ "\n") $
   return $! (C d l r)
 
+dbg :: (Show a, Monad m) => String -> a -> m ()
+dbg s a = trace (s ++ " : " ++ show a ++ " \n") $ return ()
+
 -- | Evaluation allows communication with the solver and reduces terms to Unit
 -- values thereby representing that evaluation has taken place. Evaluation can
 -- call a switch into the accumulation mode in order to partially evaluate an
@@ -555,10 +558,10 @@ evaluate (BVOp x@(B _ _) And r) = do
 
 
 evaluate (y@(BVOp l And x@(C _ _ _))) =                       -- [Eval-And-ChcL]
-  do l' <- evaluate l; evaluate $ BVOp l' And x
+  do l' <- evaluate l; return $ BVOp l' And x
 
 evaluate (y@(BVOp x@(C _ _ _) And r)) =                       -- [Eval-And-ChcR]
-  do r' <- evaluate r; evaluate $ BVOp x And r'
+  do r' <- evaluate r; return $ BVOp x And r'
 
 evaluate (y@(BVOp l op x@(C _ _ _))) =
   do l' <- accumulate l; return $ BVOp l' op x
@@ -575,16 +578,22 @@ evaluate (x@(BVOp (B bl ln) op (B br rn))) =                     -- [Eval-Bools]
 evaluate (x@(BVOp l And r)) =                                      -- [Eval-And]
   do l' <- evaluate l
      r' <- evaluate r
+     let res = (BVOp l' And r')
+     if isValue l' || isValue r'
+       then evaluate res
+       else return res
      -- trace ("[DBG]: evaluating: " ++  ushow l ++ " : " ++ ushow r ++ "\n") $ return ()
      -- trace ("[DBG]: To: " ++  ushow l' ++ " " ++ show And ++ " " ++ ushow r' ++ "\n") $ return ()
-     return (BVOp l' And r')
 
 evaluate (x@(BVOp l op r)) =                                         -- [Eval-Or]
   do l' <- accumulate l
      r' <- accumulate r
+     let res = (BVOp l' op r')
+     if isValue l' && isValue r'
+       then evaluate res
+       else return res
      -- trace ("[DBG]: switching to accum: " ++  show l ++ " : " ++ show r ++ "\n") $ return ()
      -- trace ("[DBG]: Now evaling: " ++  show l' ++ " " ++ show op ++ " " ++ show r' ++ "\n") $ return ()
-     evaluate (BVOp l' op r')
 
 
 accumulate :: (Show d, Resultable d) => BValue d -> IncVSMTSolve d (BValue d)
@@ -602,10 +611,18 @@ accumulate (x@(BVOp Unit _ r)) = accumulate r                     -- [Acc-UAndR]
 accumulate (x@(BVOp l _ Unit)) = accumulate l                     -- [Acc-UAndL]
 
 accumulate (y@(BVOp l And x@(C _ _ _))) =                      -- [Acc-And-ChcL]
-  do l' <- accumulate l; accumulate $ BVOp l' And x
+  do l' <- accumulate l
+     let res = BVOp l' And x
+     if isValue l'
+       then evaluate res
+       else return res
 
 accumulate (y@(BVOp x@(C _ _ _) And r)) =                      -- [Acc-And-ChcR]
-  do r' <- accumulate r; accumulate $ BVOp x And r'
+  do r' <- accumulate r
+     let res = BVOp x And r'
+     if isValue r'
+       then evaluate res
+       else return res
 
 accumulate (y@(BVOp l op x@(C _ _ _))) =
   do l' <- accumulate l; return $ BVOp l' op x
@@ -615,16 +632,17 @@ accumulate (y@(BVOp x@(C _ _ _) op r)) =
 
   -- evaluation of two bools
 accumulate (x@(BVOp (B bl ln) op (B br rn))) =                    -- [Acc-Bools]
-  accumulate (B res name)
+  return (B res name)
   where res = (bDispatch op bl br)
         name = ln ++ (pure $ toText op) ++ rn
 
 accumulate (x@(BVOp l op r)) =                                       -- [Acc-Or]
   do l' <- accumulate l;
      r' <- accumulate r;
-     -- trace ("[DBG]: accumulating: " ++  show l ++ " : " ++ show r ++ "\n") $ return ()
-     -- trace ("[DBG]: To: " ++  show l' ++ " " ++ show op ++ " " ++ show r' ++ "\n") $ return ()
-     return (BVOp l' op r')
+     let res = (BVOp l' op r')
+     if isValue l' && isValue r'
+       then accumulate res
+       else return res
 
 -- | Given a bvalue, return a symbolic reference of the negation of that bvalue
 doBNot :: (Show d, Resultable d) => (BValue d -> IncVSMTSolve d (BValue d))
@@ -649,6 +667,11 @@ doBNot f (BVOp l BiImpl r) = do
   l' <- doBNot f l
   r' <- doBNot f r
   f (BVOp (BVOp l And r') Or (BVOp r And l'))
+
+isValue :: BValue d -> Bool
+isValue Unit    = True
+isValue (B _ _) = True
+isValue _       = False
 
 doChoice :: (Show d, Resultable d) => BValue d -> IncVSMTSolve d (S.SBool, ConstraintName)
 doChoice Unit = return (true, mempty)
@@ -723,7 +746,7 @@ doChoice x = doChoice $ assocLeft x
 
 toVProp :: (BValue d) -> VProp d Text Text
 toVProp Unit = bRef (toText "unit")
-toVProp (B b t) = bRef (toText t)
+toVProp (B _ t) = bRef (toText t)
 toVProp (BNot e) = OpB Not (toVProp e)
 toVProp (C d l r) = ChcB d
                     (trimap id (\(_,y) -> toText y) (const "") l)
