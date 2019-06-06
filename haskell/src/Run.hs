@@ -237,7 +237,7 @@ vSMTSolve :: (Show d, Resultable d) =>
 vSMTSolve prop configPool =
   do prop' <- prop
      S.setOption $ SC.ProduceUnsatCores True
-     trace ("Solving with configPool: " ++ show configPool) $ return ()
+     -- trace ("Solving with configPool: " ++ show configPool) $ return ()
      SC.query $
        do
          -- partially evaluate the prop
@@ -528,103 +528,110 @@ handleValue f v
 -- call a switch into the accumulation mode in order to partially evaluate an
 -- expression
 evaluate :: (Show d, Resultable d) => BValue d -> IncVSMTSolve d (BValue d)
-evaluate Unit        = trace "Eval Unit" $ return Unit                             -- [Eval-Unit]
-evaluate (B b n) =
-  trace "Eval Bool" $
+evaluate Unit        = return Unit                             -- [Eval-Unit]
+evaluate !(B b n) =
   do constrain b n; return Unit           -- [Eval-Term]
-evaluate (BNot (BNot e)) = trace "DNot" $ evaluate e
-evaluate (BNot e)  =                                       -- [Eval-Neg]
-  trace ("Eval Not") $
+evaluate !(BNot (BNot e)) = evaluate e
+evaluate !(BNot e)  =                                       -- [Eval-Neg]
+  -- trace ("Eval Not") $
   do e' <- accumulate e; doBNot evaluate e'
-evaluate (x@(C _ _ _)) = trace "Eval Singleton Chc" $ return x                             -- [Eval-Chc]
+evaluate !(x@(C _ _ _)) = return x                             -- [Eval-Chc]
 -- evaluate (BVOp Unit _ Unit) = trace "double unit" $ return Unit                     -- [Eval-UAndR]
-evaluate (BVOp Unit _ r) = trace "LUnit" $ evaluate r                     -- [Eval-UAndR]
-evaluate (BVOp l _ Unit) = trace "RUNIT" $ evaluate l                     -- [Eval-UAndL]
+evaluate !(BVOp Unit _ r) = evaluate r                     -- [Eval-UAndR]
+evaluate !(BVOp l _ Unit) = evaluate l                     -- [Eval-UAndL]
 
-evaluate (BVOp l And x@(B _ _)) = trace ("RAnd: \n") $ do _ <- evaluate x; evaluate l
-evaluate (BVOp x@(B _ _) And r) = trace ("LANd: \n") $ do _ <- evaluate x; evaluate r
+evaluate !(BVOp l And x@(B _ _)) = do _ <- evaluate x; evaluate l
+evaluate !(BVOp x@(B _ _) And r) = do _ <- evaluate x; evaluate r
 
-evaluate (BVOp l op x@(C _ _ _)) =
-  trace ("recursive RChc with: \n") $
+evaluate !(BVOp l op x@(C _ _ _)) =
+  -- trace ("recursive RChc with: \n") $
   do l' <- accumulate l
-     let res = BVOp l' op x
+     let !res = BVOp l' op x
      if isValue l' && op == And
-       then trace "Recursive RCHC: Evaling" $ evaluate res
+       then evaluate res
        else return res
 
-evaluate (BVOp x@(C _ _ _) op r) =
-  trace ("recursive LChc \n") $
+evaluate !(BVOp x@(C _ _ _) op r) =
+  -- trace ("recursive LChc \n") $
   do r' <- accumulate r
-     let res = BVOp x op r'
+     let !res = BVOp x op r'
      if isValue r' && op == And
-       then trace ("recuring in LCHC with: \n") $ evaluate res
-       else trace ("returning in LCHC: \n") $ return res
+       then evaluate res
+       else return res
 
   -- evaluation of two bools, the case that does the actual work
-evaluate x@(BVOp (B bl ln) op (B br rn)) =                     -- [Eval-Bools]
-  trace "contracting" $
+evaluate !(BVOp (B bl ln) op (B br rn)) =                     -- [Eval-Bools]
+  -- trace "contracting" $
   evaluate (B res name)
-  where res = (bDispatch op bl br)
-        name = ln ++ (pure $ toText op) ++ rn
+  where !res = (bDispatch op bl br)
+        !name = ln ++ (pure $ toText op) ++ rn
 
-evaluate x@(BVOp l And r) =                                      -- [Eval-And]
-  trace ("recursive AND case: \n") $
+evaluate !(BVOp l And r) =                                      -- [Eval-And]
+  -- trace ("recursive AND case: \n") $
   do l' <- evaluate l
      r' <- evaluate r
-     let res = (BVOp l' And r')
-     trace ("recursive AND case GOT RES:\n") $ return ()
+     let !res = (BVOp l' And r')
+     -- trace ("recursive AND case GOT RES:\n") $ return ()
      if isValue l' || isValue r'
-       then trace "Choosing to eval" $ evaluate res
-       else trace "Choosing to return" $ return res
+       then evaluate res
+       else return res
 
-evaluate x@(BVOp l op r) =                                         -- [Eval-Or]
-  trace ("recursive GEn case: \n") $
+evaluate !(BVOp l op r) =                                         -- [Eval-Or]
+  -- trace ("recursive GEn case: \n") $
   do l' <- accumulate l
      r' <- accumulate r
-     let res = (BVOp l' op r')
-     trace ("recursive GEN case: \n") $ return ()
+     let !res = (BVOp l' op r')
+     -- trace ("recursive GEN case: \n") $ return ()
      if isValue l' && isValue r'
        then evaluate res
        else return res
 
 
 accumulate :: (Show d, Resultable d) => BValue d -> IncVSMTSolve d (BValue d)
-accumulate Unit          = return Unit                             -- [Acc-Unit]
-accumulate (x@(B _ _))   = trace "singleton bool" $ return x                                -- [Acc-Term]
-accumulate (x@(C _ _ _)) = trace "Ac: singleton chc" $ return x                                -- [Acc-Chc]
-accumulate (BNot (BNot e)) = trace "Ac DNot" $ accumulate e
-accumulate (BNot e)  =
-  trace "Ac not:" $
+accumulate !Unit          = return Unit                             -- [Acc-Unit]
+accumulate !(x@(B _ _))   = return x                                -- [Acc-Term]
+accumulate !(x@(C _ _ _)) =
+  -- trace "Ac: singleton chc" $
+  return x                                -- [Acc-Chc]
+accumulate !(BNot (BNot e)) =
+  -- trace "Ac DNot" $
+  accumulate e
+accumulate !(BNot e)  =
+  -- trace "Ac not:" $
   do                                       -- [Acc-Neg]
-  e' <- accumulate e; trace "Ac Not" $ doBNot accumulate e'
-accumulate (x@(BVOp (C _ _ _) _ (C _ _ _))) = trace "Ac double chc" $ return x          -- [Acc-Op-ChcL]
-accumulate (x@(BVOp (C _ _ _) _ (B _ _)))   = trace "LChc and Bool " $ return x          -- [Acc-Op-ChcL]
-accumulate (x@(BVOp (B _ _) _ (C _ _ _)))   = trace "RChc and Bool"  $ return x          -- [Acc-Op-ChcR]
+  e' <- accumulate e; doBNot accumulate e'
+accumulate !(x@(BVOp (C _ _ _) _ (C _ _ _))) =  return x          -- [Acc-Op-ChcL]
+accumulate !(x@(BVOp (C _ _ _) _ (B _ _)))   =  return x          -- [Acc-Op-ChcL]
+accumulate !(x@(BVOp (B _ _) _ (C _ _ _)))   =  return x          -- [Acc-Op-ChcR]
 
 -- accumulate (BVOp Unit _ Unit) = trace "double unit" $ return Unit
-accumulate (BVOp Unit _ r) = trace ("AC LUNIT") $ accumulate r                     -- [Acc-UAndR]
-accumulate (BVOp l _ Unit) = trace ("Ac RUnit") $ accumulate l                     -- [Acc-UAndL]
+accumulate !(BVOp Unit _ r) =
+  -- trace ("AC LUNIT") $
+  accumulate r                     -- [Acc-UAndR]
+accumulate !(BVOp l _ Unit) =
+  -- trace ("Ac RUnit") $
+  accumulate l                     -- [Acc-UAndL]
 
-accumulate (BVOp l op x@(C _ _ _)) =
-  trace "AC RCHC" $
-  do l' <- accumulate l; return $ BVOp l' op x
+accumulate !(BVOp l op x@(C _ _ _)) =
+  -- trace "AC RCHC" $
+  do l' <- accumulate l; return $! BVOp l' op x
 
-accumulate (BVOp x@(C _ _ _) op r) =
-  trace "AC LCHC" $
-  do r' <- accumulate r; return $ BVOp x op r'
+accumulate !(BVOp x@(C _ _ _) op r) =
+  -- trace "AC LCHC" $
+  do r' <- accumulate r; return $! BVOp x op r'
 
   -- accumulation of two bools
-accumulate (BVOp (B bl ln) op (B br rn)) =                    -- [Acc-Bools]
-  trace "Ac: Contracting bools" $
+accumulate !(BVOp (B bl ln) op (B br rn)) =                    -- [Acc-Bools]
+  -- trace "Ac: Contracting bools" $
   return (B res name)
-  where res = (bDispatch op bl br)
-        name = ln ++ (pure $ toText op) ++ rn
+  where !res = (bDispatch op bl br)
+        !name = ln ++ (pure $ toText op) ++ rn
 
-accumulate (BVOp l op r) =                                       -- [Acc-Or]
-  trace ("Accum recursive case") $
+accumulate !(BVOp l op r) =                                       -- [Acc-Or]
+  -- trace ("Accum recursive case") $
   do l' <- accumulate l;
      r' <- accumulate r;
-     let res = (BVOp l' op r')
+     let !res = (BVOp l' op r')
      if isValue l' && isValue r'
        then accumulate res
        else return res
@@ -632,23 +639,23 @@ accumulate (BVOp l op r) =                                       -- [Acc-Or]
 -- | Given a bvalue, return a symbolic reference of the negation of that bvalue
 doBNot :: (Show d, Resultable d) => (BValue d -> IncVSMTSolve d (BValue d))
   -> BValue d -> IncVSMTSolve d (BValue d)
-doBNot _ Unit      = return Unit
-doBNot f (B b n)   = f (B (bnot b) (toText Not : n))
-doBNot f (C d l r) = f (C d (bnot l) (bnot r))                --[Acc-Neg-Chc]
-doBNot f (BNot e)   = f e
-doBNot f (BVOp l And r) = do
+doBNot _ !Unit      = return Unit
+doBNot f !(B b n)   = f (B (bnot b) (toText Not : n))
+doBNot f !(C d l r) = f (C d (bnot l) (bnot r))                --[Acc-Neg-Chc]
+doBNot f !(BNot e)   = f e
+doBNot f !(BVOp l And r) = do
   l' <- doBNot f l
   r' <- doBNot f r
   f (BVOp l' Or r')
-doBNot f (BVOp l Or r) = do
+doBNot f !(BVOp l Or r) = do
   l' <- doBNot f l
   r' <- doBNot f r
   f (BVOp l' And r')
-doBNot f (BVOp l XOr r) = f (BVOp l BiImpl r)
-doBNot f (BVOp l Impl r) = do
+doBNot f !(BVOp l XOr r) = f (BVOp l BiImpl r)
+doBNot f !(BVOp l Impl r) = do
   l' <- doBNot f l
   f (BVOp l' Or r)
-doBNot f (BVOp l BiImpl r) = do
+doBNot f !(BVOp l BiImpl r) = do
   l' <- doBNot f l
   r' <- doBNot f r
   f (BVOp (BVOp l And r') Or (BVOp r And l'))
@@ -661,11 +668,11 @@ isValue _       = False
 doChoice :: (Show d, Resultable d) => BValue d -> IncVSMTSolve d (S.SBool, ConstraintName)
 doChoice Unit = return (true, mempty)
 doChoice (BNot e) =
-  trace "doChoice BNot" $
+  -- trace "doChoice BNot" $
   doBNot evaluate e >>= doChoice
 doChoice (B b n) = return (b , n)
 doChoice (C d l r) =
-  trace "Do Choice Singleton Chc" $
+  -- trace "Do Choice Singleton Chc" $
   do let
       bl = toBValue l
       goLeft = solveVariant $ evaluate bl >>= doChoice
@@ -680,7 +687,7 @@ doChoice (BVOp Unit _ r) = doChoice r
 doChoice (BVOp l _ Unit) = doChoice l
 
 doChoice (BVOp (C d l r) op r') =
-  trace "doC LCHC" $
+  -- trace "doC LCHC" $
   do let
       bl = toBValue l
       goLeft = solveVariant (evaluate (BVOp bl op r') >>= doChoice)
@@ -692,7 +699,7 @@ doChoice (BVOp (C d l r) op r') =
      return (true, mempty)
 
 doChoice (BVOp l' op (C d l r)) =
-  trace "doC RCHC" $
+  -- trace "doC RCHC" $
   do let
       bl = toBValue l
       goLeft = solveVariant (evaluate (BVOp l' op bl) >>= doChoice)
@@ -704,7 +711,7 @@ doChoice (BVOp l' op (C d l r)) =
      return (true, mempty)
 
 doChoice (BVOp (BVOp (C d l r) op' r') op r'') =
-  trace "doC LLCHC" $
+  -- trace "doC LLCHC" $
   do let
       bl = toBValue l
       goLeft = solveVariant
@@ -718,7 +725,7 @@ doChoice (BVOp (BVOp (C d l r) op' r') op r'') =
      return (true, mempty)
 
 doChoice (BVOp (BVOp l'' op (C d l r)) op' r') =
-  trace "doC RLCHC" $
+  -- trace "doC RLCHC" $
   do let
       bl = toBValue l
       goLeft = solveVariant

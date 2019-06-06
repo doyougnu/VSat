@@ -61,10 +61,18 @@ ds = bRef <$> ["D_0","D_2","D_4","D_5"]
 
 -- dimConf' :: VProp Text String String
 -- encoding for 6 configs that make sure the inequalities encompass each other
-dimConf = -- (d0 &&& fromList' (&&&) (bnot <$> tail ds)) -- <0
-          ((bnot d0) &&& d2 &&& (bnot d4 &&& bnot d5))   -- <0 /\ <1
-          -- ||| (d0 &&& d2 &&& d4 &&& bnot d5) -- <0 /\ <1 /\
-          -- ||| fromList' (&&&) ds -- <0 /\ <1 /\ <2 /\ <= 2
+sumConf = (d0 &&& fromList' (&&&) (bnot <$> tail ds)) -- <0
+          ||| ((bnot d0) &&& d2 &&& (bnot d4 &&& bnot d5))   -- <0 /\ <1
+          ||| ((bnot d0)&&& (bnot d2) &&& d4 &&& bnot d5) -- <0 /\ <1 /\
+          ||| ((bnot d0)&&& (bnot d2) &&& (bnot d4) &&& d5) -- <0 /\ <1 /\
+
+d0Conf = (d0 &&& fromList' (&&&) (bnot <$> tail ds)) -- <0
+
+d2Conf = ((bnot d0) &&& d2 &&& (bnot d4 &&& bnot d5))   -- <0 /\ <1
+
+d4Conf = ((bnot d0)&&& (bnot d2) &&& d4 &&& bnot d5) -- <0 /\ <1 /\
+
+d5Conf = ((bnot d0)&&& (bnot d2) &&& (bnot d4) &&& d5) -- <0 /\ <1 /\
 
 negConf = conjoin $ bnot <$> ds
 
@@ -96,7 +104,7 @@ main = do
       --  -- take 4500 bPs produces a solution for the plain case (all dims set to false)
       !bProp = ((renameDims sameDims) . naiveEncode . autoToVSat) $ autoAndJoin (bPs)
       !bPropOpts = applyOpts defConf bProp
-      autoConf = (Just $ toDimProp dimConf)
+      toAutoConf = Just . toDimProp
       autoNegConf = (Just $ toDimProp negConf)
 
 
@@ -107,12 +115,12 @@ main = do
   -- putStrLn $! show bProp
   -- putStrLn $ "------------------"
   -- putStrLn $ "Solving: "
-  res' <- satWithConf autoNegConf emptyConf bProp
+  -- res' <- satWithConf (toAutoConf d0Conf) emptyConf bProp
   -- res' <- ad id bProp
   -- res' <- satWithConf autoConf emptyConf (bRef "a" &&& bRef "c")
   -- res' <- satWith emptyConf sProp
-  putStrLn "DONE!"
-  print $ res'
+  -- putStrLn "DONE!"
+  -- print $ res'
   -- print "done"
   -- let !p = prop 6000
   -- print $ length p
@@ -122,14 +130,18 @@ main = do
   -- putStrLn "Running Good:\n"
   -- goodRes <- testS goodS 1000
 
-  -- defaultMain
-  --   [
-  --   bgroup "vsat" [--  bench "small file:NoOpts"  . nfIO $ satWithConf Nothing emptyConf sProp
-  --                  -- bench "small file:DefOpts" . nfIO $ satWith defConf   sProp
-  --                  -- , bench "small file:Empty:Compact" . nfIO $ satWith defConf   (compactEncode sPs)
-  --                    bench "Auto:VSolve:NoOpts"  . nfIO $ satWithConf autoConf emptyConf bProp
-  --                  , bench "Auto:VSolve:DefOpts" . nfIO $ satWithConf autoConf emptyConf bPropOpts
-  --                  , bench "Auto:IncrementalBaseline:Naive" . nfIO $ runIncrementalSolve bPs
-  --                  -- bench "Auto:IncrementalBaseline:Compact" . nfIO $! satWith emptyConf (compactEncode bPs)
-  --                 ]
-  --   ]
+  defaultMain
+    [
+    bgroup "vsat" [--  bench "small file:NoOpts"  . nfIO $ satWithConf Nothing emptyConf sProp
+                   -- bench "small file:DefOpts" . nfIO $ satWith defConf   sProp
+                   -- , bench "small file:Empty:Compact" . nfIO $ satWith defConf   (compactEncode sPs)
+                     bench "Auto:VSolve:V1"  . nfIO $ satWithConf (toAutoConf d0Conf) emptyConf bProp
+                   , bench "Auto:VSolve:V2"  . nfIO $ satWithConf (toAutoConf d2Conf) emptyConf bProp
+                   , bench "Auto:VSolve:V3"  . nfIO $ satWithConf (toAutoConf d4Conf) emptyConf bProp
+                   , bench "Auto:VSolve:V4"  . nfIO $ satWithConf (toAutoConf d5Conf) emptyConf bProp
+                   , bench "Auto:VSolve:Sum"  . nfIO $ satWithConf (toAutoConf sumConf) emptyConf bProp
+                   -- , bench "Auto:VSolve:DefOpts" . nfIO $ satWithConf autoConf emptyConf bPropOpts
+                   -- , bench "Auto:IncrementalBaseline:Naive" . nfIO $ runIncrementalSolve bPs
+                   -- bench "Auto:IncrementalBaseline:Compact" . nfIO $! satWith emptyConf (compactEncode bPs)
+                  ]
+    ]
