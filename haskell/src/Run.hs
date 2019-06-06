@@ -468,11 +468,11 @@ handleChc goLeft goRight d =
 
 type SBVProp d = VProp d (S.SBool, Name) SNum
 
-data BValue d = B! S.SBool ConstraintName
+data BValue d = B !S.SBool !ConstraintName
               | Unit
-              | C! (Dim d) (SBVProp d) (SBVProp d)
-              | BNot! (BValue d)
-              | BVOp! (BValue d) BB_B (BValue d)
+              | C !(Dim d) !(SBVProp d) !(SBVProp d)
+              | BNot !(BValue d)
+              | BVOp !(BValue d) !BB_B !(BValue d)
 
 instance Show d => Show (BValue d) where
   show (B _ _) = "B"
