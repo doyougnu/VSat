@@ -251,7 +251,7 @@ vSMTSolve prop configPool =
          -- plain formula as input. This means that the result of
          -- evaluation/accumulation will be a single symbolic boolean reference
          if isResultNull (result resSt)
-           then St.evalStateT (pprop >>= doChoice) resSt >>= solvePlain . fst
+           then St.evalStateT (pprop >>= doChoice . assocLeft) resSt >>= solvePlain . fst
            else return $ result resSt
 
 solvePlain :: Resultable d => S.SBool -> SC.Query (Result d)
@@ -265,7 +265,7 @@ solveVariational :: (Show d, Resultable d) =>
                     ConfigPool d ->
                     BValue d ->
                     IncVSMTSolve d ()
-solveVariational []        p    = do _ <- doChoice p; return ()
+solveVariational []        p    = do _ <- doChoice . assocLeft $ p; return ()
 solveVariational [x]       p    = do setConfig x
                                      -- trace ("Result of Eval: " ++ ushow p ++ "\n") $ return ()
                                      _ <- doChoice (assocLeft p)
@@ -473,7 +473,14 @@ data BValue d = B! S.SBool ConstraintName
               | C! (Dim d) (SBVProp d) (SBVProp d)
               | BNot! (BValue d)
               | BVOp! (BValue d) BB_B (BValue d)
-              deriving Show
+
+instance Show d => Show (BValue d) where
+  show (B _ _) = "B"
+  show Unit    = "Unit"
+  show (C d _ _) = "C_" ++ show d
+  show (BNot e)  = "not (" ++ show e ++ ")"
+  show (BVOp l op r) = "\t(" ++ show op ++ "\nLeft:\n\t" ++ show l ++  "\nRight:\n\t " ++ show r ++ ")\n"
+
 
 -- | The main solver algorithm. You can think of this as the sem function for
 -- the dsl. This progress in two stages, we extend the value domain with a
@@ -498,8 +505,8 @@ toBValue (OpBB op (RefB (b,n)) (RefB (b',n'))) = (B bres name)
   where bres = (bDispatch op) b b'
         name = [n, toText op, n']
 
-  -- remove implications, because they are not commutative
--- toBValue !(OpBB Impl l r) = toBValue (OpBB Or (bnot l) r)
+  -- remove implications, because they are not commutative, or associative
+toBValue !(OpBB Impl l r) = toBValue (OpBB Or (bnot l) r)
 
 toBValue (OpBB op (ChcB d l r) r') = BVOp (C d l r) op (toBValue r')
 toBValue (OpBB op l' (ChcB d l r)) = BVOp (toBValue l') op (C d l r)
@@ -565,10 +572,10 @@ evaluate x@(BVOp l And r) =                                      -- [Eval-And]
   do l' <- evaluate l
      r' <- evaluate r
      let res = (BVOp l' And r')
-     trace ("recursive AND case GOT RES: \n") $ return ()
+     trace ("recursive AND case GOT RES:\n") $ return ()
      if isValue l' || isValue r'
        then trace "Choosing to eval" $ evaluate res
-       else return res
+       else trace "Choosing to return" $ return res
 
 evaluate x@(BVOp l op r) =                                         -- [Eval-Or]
   trace ("recursive GEn case: \n") $
@@ -723,8 +730,8 @@ doChoice (BVOp (BVOp l'' op (C d l r)) op' r') =
 
      handleChc goLeft goRight d >>= store
      return (true, mempty)
-doChoice x = error $ "didn't get to normal form with: " ++ ushow (toVProp x)
--- doChoice x = doChoice $ assocLeft x
+-- doChoice x = error $ "didn't get to normal form with: " ++ ushow x
+doChoice x = doChoice $ assocLeft x
 
 toVProp :: (BValue d) -> VProp d Text Text
 toVProp Unit = bRef (toText ("unit" :: String))
