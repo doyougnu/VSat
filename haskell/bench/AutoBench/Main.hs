@@ -61,8 +61,8 @@ ds = bRef <$> ["D_0","D_2","D_4","D_5"]
 
 -- dimConf' :: VProp Text String String
 -- encoding for 6 configs that make sure the inequalities encompass each other
-dimConf = -- (d0 &&& fromList' (&&&) (bnot <$> tail ds)) -- <0
-          ((d0 &&& d2) &&& (bnot d4 &&& bnot d5))   -- <0 /\ <1
+dimConf = (d0 &&& fromList' (&&&) (bnot <$> tail ds)) -- <0
+          -- (d0 &&& (bnot d2) &&& (bnot d4 &&& bnot d5))   -- <0 /\ <1
           -- ||| (d0 &&& d2 &&& d4 &&& bnot d5) -- <0 /\ <1 /\
           -- ||| fromList' (&&&) ds -- <0 /\ <1 /\ <2 /\ <= 2
 
@@ -94,7 +94,7 @@ main = do
 
       !sProp = ((renameDims sameDims) . naiveEncode . autoToVSat) $ autoAndJoin sPs
       --  -- take 4500 bPs produces a solution for the plain case (all dims set to false)
-      !bProp = ((renameDims sameDims) . naiveEncode . autoToVSat) $ autoAndJoin (take 3000 bPs)
+      !bProp = ((renameDims sameDims) . naiveEncode . autoToVSat) $ autoAndJoin (drop 1000 bPs)
       !bPropOpts = applyOpts defConf bProp
       autoConf = (Just $ toDimProp dimConf)
       autoNegConf = (Just $ toDimProp negConf)
@@ -107,8 +107,11 @@ main = do
   -- putStrLn $! show bProp
   -- putStrLn $ "------------------"
   -- putStrLn $ "Solving: "
-  res' <- satWithConf autoConf emptyConf bProp
+  res' <- satWithConf autoNegConf emptyConf bProp
+  -- res' <- ad id bProp
+  -- res' <- satWithConf autoConf emptyConf (bRef "a" &&& bRef "c")
   -- res' <- satWith emptyConf sProp
+  putStrLn "DONE!"
   print $ res'
   -- print "done"
   -- let !p = prop 6000

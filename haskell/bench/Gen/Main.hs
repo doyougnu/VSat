@@ -1,5 +1,3 @@
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE ExtendedDefaultRules #-}
 module Main where
 
 import           Control.Arrow           (first, second)
@@ -8,14 +6,13 @@ import           Criterion.Main.Options
 import           Criterion.Types         (Config (..))
 import           Data.Aeson              (decodeStrict)
 import           Control.Monad           (replicateM, foldM, liftM2)
-import           Test.Tasty.QuickCheck
 import           Data.Bifunctor          (bimap)
 import           Data.Bitraversable      (bimapM)
 import qualified Data.ByteString         as BS (readFile)
 import           Data.Either             (lefts, rights)
 import           Data.Foldable           (foldr',foldl')
 import           Data.List               (sort,splitAt,intersperse,foldl1')
-import           Data.Map                (size, Map)
+import           Data.Map                (size, Map, toList)
 import qualified Data.SBV                as S
 import qualified Data.SBV.Control        as SC
 import qualified Data.SBV.Internals      as SI
@@ -23,6 +20,7 @@ import           Data.Text               (pack, unpack,Text,cons,append,singleto
 import qualified Data.Text.IO            as T (writeFile)
 import           System.IO
 import           Text.Megaparsec         (parse)
+import           Text.Show.Unicode          (ushow)
 
 import           Api
 import           CaseStudy.Auto.Auto
@@ -37,6 +35,7 @@ import           VProp.Core
 import           VProp.Gen
 import           VProp.SBV               (toPredicate)
 import           VProp.Types
+import           VProp.Boolean
 
 import           CaseStudy.Auto.Run
 
@@ -163,16 +162,32 @@ main = do
       interleaveProps x y  = concat $ zipWith (\x y -> [x,y]) x y
       props = interleaveProps propsEM propsOEM
       -- testProp = (bChc "AA" (bRef "a" &&& bRef "d") (bRef "b")) &&& (bChc "BB" (bRef "a" &&& bRef "d") (bRef "a"))
-      testProp = ((bChc ("AA" :: Text) (bRef "a") (bRef "b")) &&& bRef "c") &&& ((bRef "a") &&& (bRef "c"))
-      -- testProp = (bRef "a") &&& (bRef "b") &&& (bnot (bRef "a"))
+      testProp :: ReadableProp Text
+      -- testProp = (bChc ("AA" :: Text) (bRef "a") (bRef "b"))  &&& (bnot (bRef "a") &&& (bRef "c")) &&& (bChc "DD" (bnot (bRef "b")) (bRef "f"))
+      -- testProp = (bChc ("AA" :: Text) (bChc "DD" (bRef "a") (bRef "b")) (bRef "b"))  &&& (bnot (bRef "a") &&& (bRef "c")) &&& (bChc "DD" (bnot (bRef "b")) (bRef "f"))
+      testProp = (bChc ("AA" :: Text) (bChc "DD" (bRef "a") (bRef "b")) (bRef "b")) <=> ((bRef "c") &&& (bnot (bRef "c")))
       testDimConf = toDimProp $ (bRef "AA" &&& bRef "BB")
 
 
 
   putStrLn $ show testProp
-  res <- satWith emptyConf testProp
-  -- res <- satWithConf (Just $ testDimConf) emptyConf testProp
-  putStrLn $ show res
+  -- res <- satWith emptyConf testProp
+  res <- satWithConf (Just $ testDimConf) emptyConf testProp
+  putStrLn $ ushow res
+  -- models <- deriveModels res
+
+  -- putStrLn "Models: "
+  -- putStrLn $ show models
+  -- let resMap = getResMap res
+  --     m' = first pack <$> m
+  -- let valLists = deriveValues res <$> models
+
+  -- let lits = (flip substitute testProp . Data.Map.toList <$> valLists)
+  --     res = selectVariant <$> models <*> lits
+
+  -- putStrLn $ "valLists: " ++  show valLists
+  -- putStrLn $ "Literals: " ++ show lits
+  -- putStrLn $ "props " ++ show res
   -- putStrLn ""
   -- putStrLn $ "[Mid]: " ++ show propM
   -- -- putStrLn $ "[MidS]: " ++ show (propR < propM)
