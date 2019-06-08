@@ -80,13 +80,15 @@ type ReadableProp d = VProp d Readable Readable
 
 -- | This Design taken from Eric Walkingshaw with great respect :)
 
--- | Boolean expressions with choices
+-- | Boolean expressions with choices, value and spine strict
 data VProp a b c
    = LitB !Bool
    | RefB !b
-   | OpB  B_B  (VProp a b c)
-   | OpBB BB_B (VProp a b c) (VProp a b c)
-   | OpIB NN_B (VIExpr a c)  (VIExpr a c)
+   | OpB  B_B  !(VProp a b c)
+   | OpBB BB_B !(VProp a b c) !(VProp a b c)
+   | OpIB NN_B !(VIExpr a c)  !(VIExpr a c)
+   -- we leave choices to be lazy for performance in selection. It may be the
+   -- case that one alternative is never selected for
    | ChcB !(Dim a) (VProp a b c) (VProp a b c)
   deriving (Eq,Generic,Typeable,Functor,Traversable,Foldable,Ord)
 
@@ -94,15 +96,15 @@ data VProp a b c
 data VIExpr a b
   = LitI !NPrim
   | Ref !RefN !b
-  | OpI  !N_N  (VIExpr a b)
-  | OpII !NN_N (VIExpr a b) (VIExpr a b)
+  | OpI  !N_N  !(VIExpr a b)
+  | OpII !NN_N !(VIExpr a b) !(VIExpr a b)
   | ChcI !(Dim a)  (VIExpr a b) (VIExpr a b)
   deriving (Eq,Generic,Typeable,Functor,Traversable,Foldable,Ord)
 
 -- | Mirroring NPrim with Symbolic types for the solver
 data SNum = SI !S.SInt64
           | SD !S.SDouble
-          deriving (Eq, Show)
+          deriving (Eq, Show, Generic)
 
 -- | data constructor for Numeric operations
 data NPrim = I {-# UNPACK #-} !Int | D {-# UNPACK #-} !Double
