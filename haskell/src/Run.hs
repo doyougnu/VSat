@@ -251,7 +251,7 @@ vSMTSolve prop configPool =
          -- plain formula as input. This means that the result of
          -- evaluation/accumulation will be a single symbolic boolean reference
          if isResultNull (result resSt)
-           then St.evalStateT (pprop >>= doChoice . assocLeft) resSt >>= solvePlain . fst
+           then St.evalStateT (pprop >>= doChoice . assocLeft) resSt >>= solvePlain
            else return $ result resSt
 
 solvePlain :: Resultable d => S.SBool -> SC.Query (Result d)
@@ -406,7 +406,7 @@ toText :: Show a => a -> Text
 toText = pack . show
 
 solveVariant :: (Resultable d, Show d) =>
-  IncVSMTSolve d (I.SBool, ConstraintName) -> IncVSMTSolve d (Result d)
+  IncVSMTSolve d I.SBool -> IncVSMTSolve d (Result d)
 solveVariant go = do
            setModelNotGenD
 
@@ -468,14 +468,14 @@ handleChc goLeft goRight d =
 
 type SBVProp d = VProp d (S.SBool, Name) SNum
 
-data BValue d = B! S.SBool ConstraintName
+data BValue d = B! S.SBool
               | Unit
               | C! (Dim d) (SBVProp d) (SBVProp d)
               | BNot! (BValue d)
               | BVOp! (BValue d) BB_B (BValue d)
 
 instance Show d => Show (BValue d) where
-  show (B _ _) = "B"
+  show (B _) = "B"
   show Unit    = "Unit"
   show (C d _ _) = "C_" ++ show d
   show (BNot e)  = "not (" ++ show e ++ ")"
@@ -497,13 +497,13 @@ instance Show d => Show (BValue d) where
 -- stack, resulting in model generation and sbools
 toBValue :: (Show d, Resultable d) =>
   VProp d (S.SBool, Name) SNum -> BValue d
-toBValue (RefB (b,name)) = B b (pure name)
-toBValue (LitB b) = B (S.literal b) (pure $ toText b)
+toBValue (RefB (b,name)) = B b
+toBValue (LitB b) = B (S.literal b)
 toBValue (OpB Not (OpB Not notchc)) = toBValue notchc
 toBValue (OpB Not e) = BNot $ toBValue e
-toBValue (OpBB op (RefB (b,n)) (RefB (b',n'))) = (B bres name)
+toBValue (OpBB op (RefB (b,n)) (RefB (b',n'))) = (B bres)
   where bres = (bDispatch op) b b'
-        name = [n, toText op, n']
+        -- name = [n, toText op, n']
 
   -- remove implications, because they are not commutative, or associative
 toBValue !(OpBB Impl l r) = toBValue (OpBB Or (bnot l) r)
@@ -529,8 +529,8 @@ handleValue f v
 -- expression
 evaluate :: (Show d, Resultable d) => BValue d -> IncVSMTSolve d (BValue d)
 evaluate Unit        = return Unit                             -- [Eval-Unit]
-evaluate !(B b n) =
-  do constrain b n; return Unit           -- [Eval-Term]
+evaluate !(B b) =
+  do S.constrain b; return Unit           -- [Eval-Term]
 evaluate !(BNot (BNot e)) = evaluate e
 evaluate !(BNot e)  =                                       -- [Eval-Neg]
   -- trace ("Eval Not") $
@@ -540,8 +540,8 @@ evaluate !(x@(C _ _ _)) = return x                             -- [Eval-Chc]
 evaluate !(BVOp Unit _ r) = evaluate r                     -- [Eval-UAndR]
 evaluate !(BVOp l _ Unit) = evaluate l                     -- [Eval-UAndL]
 
-evaluate !(BVOp l And x@(B _ _)) = do _ <- evaluate x; evaluate l
-evaluate !(BVOp x@(B _ _) And r) = do _ <- evaluate x; evaluate r
+evaluate !(BVOp l And x@(B _)) = do _ <- evaluate x; evaluate l
+evaluate !(BVOp x@(B _) And r) = do _ <- evaluate x; evaluate r
 
 evaluate !(BVOp l op x@(C _ _ _)) =
   -- trace ("recursive RChc with: \n") $
@@ -560,11 +560,11 @@ evaluate !(BVOp x@(C _ _ _) op r) =
        else return res
 
   -- evaluation of two bools, the case that does the actual work
-evaluate !(BVOp (B bl ln) op (B br rn)) =                     -- [Eval-Bools]
+evaluate !(BVOp (B bl) op (B br)) =                     -- [Eval-Bools]
   -- trace "contracting" $
-  evaluate (B res name)
+  evaluate (B res)
   where !res = (bDispatch op bl br)
-        !name = ln ++ (pure $ toText op) ++ rn
+        -- !name = ln ++ (pure $ toText op) ++ rn
 
 evaluate !(BVOp l And r) =                                      -- [Eval-And]
   -- trace ("recursive AND case: \n") $
@@ -589,7 +589,7 @@ evaluate !(BVOp l op r) =                                         -- [Eval-Or]
 
 accumulate :: (Show d, Resultable d) => BValue d -> IncVSMTSolve d (BValue d)
 accumulate !Unit          = return Unit                             -- [Acc-Unit]
-accumulate !(x@(B _ _))   = return x                                -- [Acc-Term]
+accumulate !(x@(B _))   = return x                                -- [Acc-Term]
 accumulate !(x@(C _ _ _)) =
   -- trace "Ac: singleton chc" $
   return x                                -- [Acc-Chc]
@@ -601,8 +601,8 @@ accumulate !(BNot e)  =
   do                                       -- [Acc-Neg]
   e' <- accumulate e; doBNot accumulate e'
 accumulate !(x@(BVOp (C _ _ _) _ (C _ _ _))) =  return x          -- [Acc-Op-ChcL]
-accumulate !(x@(BVOp (C _ _ _) _ (B _ _)))   =  return x          -- [Acc-Op-ChcL]
-accumulate !(x@(BVOp (B _ _) _ (C _ _ _)))   =  return x          -- [Acc-Op-ChcR]
+accumulate !(x@(BVOp (C _ _ _) _ (B _)))   =  return x          -- [Acc-Op-ChcL]
+accumulate !(x@(BVOp (B _) _ (C _ _ _)))   =  return x          -- [Acc-Op-ChcR]
 
 -- accumulate (BVOp Unit _ Unit) = trace "double unit" $ return Unit
 accumulate !(BVOp Unit _ r) =
@@ -621,11 +621,11 @@ accumulate !(BVOp x@(C _ _ _) op r) =
   do r' <- accumulate r; return $! BVOp x op r'
 
   -- accumulation of two bools
-accumulate !(BVOp (B bl ln) op (B br rn)) =                    -- [Acc-Bools]
+accumulate !(BVOp (B bl) op (B br)) =                    -- [Acc-Bools]
   -- trace "Ac: Contracting bools" $
-  return (B res name)
+  return (B res)
   where !res = (bDispatch op bl br)
-        !name = ln ++ (pure $ toText op) ++ rn
+        -- !name = ln ++ (pure $ toText op) ++ rn
 
 accumulate !(BVOp l op r) =                                       -- [Acc-Or]
   -- trace ("Accum recursive case") $
@@ -640,7 +640,7 @@ accumulate !(BVOp l op r) =                                       -- [Acc-Or]
 doBNot :: (Show d, Resultable d) => (BValue d -> IncVSMTSolve d (BValue d))
   -> BValue d -> IncVSMTSolve d (BValue d)
 doBNot _ !Unit      = return Unit
-doBNot f !(B b n)   = f (B (bnot b) (toText Not : n))
+doBNot f !(B b)   = f (B (bnot b))
 doBNot f !(C d l r) = f (C d (bnot l) (bnot r))                --[Acc-Neg-Chc]
 doBNot f !(BNot e)   = f e
 doBNot f !(BVOp l And r) = do
@@ -661,16 +661,16 @@ doBNot f !(BVOp l BiImpl r) = do
   f (BVOp (BVOp l And r') Or (BVOp r And l'))
 
 isValue :: BValue d -> Bool
-isValue (B _ _) = True
+isValue (B _) = True
 isValue Unit    = True
 isValue _       = False
 
-doChoice :: (Show d, Resultable d) => BValue d -> IncVSMTSolve d (S.SBool, ConstraintName)
-doChoice Unit = return (true, mempty)
+doChoice :: (Show d, Resultable d) => BValue d -> IncVSMTSolve d S.SBool
+doChoice Unit = return true
 doChoice (BNot e) =
   -- trace "doChoice BNot" $
   doBNot evaluate e >>= doChoice
-doChoice (B b n) = return (b , n)
+doChoice (B b) = return b
 doChoice (C d l r) =
   -- trace "Do Choice Singleton Chc" $
   do let
@@ -681,7 +681,7 @@ doChoice (C d l r) =
       goRight = solveVariant $ evaluate br >>= doChoice
 
      handleChc goLeft goRight d >>= store
-     return (true, mempty)
+     return true
 
 doChoice (BVOp Unit _ r) = doChoice r
 doChoice (BVOp l _ Unit) = doChoice l
@@ -696,7 +696,7 @@ doChoice (BVOp (C d l r) op r') =
       goRight = solveVariant (evaluate (BVOp br op r') >>= doChoice)
 
      handleChc goLeft goRight d >>= store
-     return (true, mempty)
+     return true
 
 doChoice (BVOp l' op (C d l r)) =
   -- trace "doC RCHC" $
@@ -708,7 +708,7 @@ doChoice (BVOp l' op (C d l r)) =
       goRight = solveVariant (evaluate (BVOp l' op br) >>= doChoice)
 
      handleChc goLeft goRight d >>= store
-     return (true, mempty)
+     return true
 
 doChoice (BVOp (BVOp (C d l r) op' r') op r'') =
   -- trace "doC LLCHC" $
@@ -722,7 +722,7 @@ doChoice (BVOp (BVOp (C d l r) op' r') op r'') =
            (evaluate (BVOp (BVOp br op' r') op r'') >>= doChoice)
 
      handleChc goLeft goRight d >>= store
-     return (true, mempty)
+     return true
 
 doChoice (BVOp (BVOp l'' op (C d l r)) op' r') =
   -- trace "doC RLCHC" $
@@ -736,22 +736,22 @@ doChoice (BVOp (BVOp l'' op (C d l r)) op' r') =
         (evaluate (BVOp l'' op (BVOp br op' r')) >>= doChoice)
 
      handleChc goLeft goRight d >>= store
-     return (true, mempty)
+     return true
 -- doChoice x = error $ "didn't get to normal form with: " ++ ushow x
 doChoice x = doChoice $ assocLeft x
 
-toVProp :: (BValue d) -> VProp d Text Text
-toVProp Unit = bRef (toText ("unit" :: String))
-toVProp (B _ t) = bRef (toText t)
-toVProp (BNot e) = OpB Not (toVProp e)
-toVProp (C d l r) = ChcB d
-                    (trimap id (\(_,y) -> toText y) (const "") l)
-                    (trimap id (\(_, y) -> toText y) (const "") r)
-toVProp (BVOp l op r) = OpBB op (toVProp l) (toVProp r)
+-- toVProp :: (BValue d) -> VProp d Text Text
+-- toVProp Unit = bRef (toText ("unit" :: String))
+-- toVProp (B _) = bRef (toText t)
+-- toVProp (BNot e) = OpB Not (toVProp e)
+-- toVProp (C d l r) = ChcB d
+--                     (trimap id (\(_,y) -> toText y) (const "") l)
+--                     (trimap id (\(_, y) -> toText y) (const "") r)
+-- toVProp (BVOp l op r) = OpBB op (toVProp l) (toVProp r)
 
 assocLeft :: Show d => BValue d -> BValue d
 assocLeft Unit = Unit
-assocLeft x@(B _ _)   = x
+assocLeft x@(B _)   = x
 assocLeft x@(C _ _ _) = x
 assocLeft (BNot e) = BNot $ assocLeft e
 assocLeft (BVOp l Impl r) = BVOp (assocLeft l) Impl (assocLeft r)
