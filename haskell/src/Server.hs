@@ -43,7 +43,7 @@ instance (FromJSON a, FromJSONKey a) => FromJSONKey (Dim a)
 instance (FromJSON d, FromJSON a, FromJSON b) => FromJSON (Request d a b)
 instance (ToJSON d, ToJSON a, ToJSON b) => ToJSON (Request d a b)
 
-app :: (SAT (VProp Var Text Text)) => Api ()
+app :: (SAT (ReadableProp Var)) => Api ()
 app = do
   middleware logStdout
   post "satWith" satWithHandler

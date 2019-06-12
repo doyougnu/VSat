@@ -21,7 +21,7 @@ instance ToJSON SMTResult where
   toJSON (SatExtField conf model) =
     object [("extModel" :: Text) .= showModel conf model]
   toJSON (Unknown _ msg) = object [("Unknown Error" :: Text) .= msg]
-  toJSON (ProofError _ msg) = object [("Prover Error" :: Text) .= msg]
+  toJSON (ProofError _ _ msg) = object [("Prover Error" :: Text) .= msg]
 
 instance ToJSON SMTReasonUnknown
 instance ToJSON SatResult where toJSON (SatResult x) = toJSON x

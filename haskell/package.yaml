@@ -75,6 +75,23 @@ executables:
     - vsat
 
 benchmarks:
+  sbv:
+    main:                Main.hs
+    source-dirs:
+      - bench/SBV
+      - src
+    ghc-options:
+    - -O2
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    # - -with-rtsopts=-A1G
+    dependencies:
+    - sbv >= 8.4
+    - criterion
+    default-extensions:
+    - OverloadedStrings
+
   gen:
     main:                Main.hs
     source-dirs:
@@ -101,7 +118,7 @@ benchmarks:
     - -O2
     - -threaded
     - -rtsopts
-    - -with-rtsopts=-N
+    - -with-rtsopts=-s
     dependencies:
     - criterion
     - vsat
