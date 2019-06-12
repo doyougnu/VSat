@@ -26,7 +26,7 @@ dependencies:
 - genifunctors >= 0.4
 # sbv forces us to use LTS-11.22 ghc 8.2.2
 # - sbvFix # my custom version
-- sbv >= 8.4
+- sbv >= 8.3
 - cassava
 - bytestring
 - text
@@ -87,7 +87,7 @@ benchmarks:
     - -with-rtsopts=-N
     # - -with-rtsopts=-A1G
     dependencies:
-    - sbv >= 8.4
+    - sbv >= 8.3
     - criterion
     default-extensions:
     - OverloadedStrings

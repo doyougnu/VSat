@@ -1,11 +1,11 @@
 flags: {}
 packages:
   - '.'
-  - /home/doyougnu/Research/VSat/haskell/lib/sbv
+  # - /home/doyougnu/Research/VSat/haskell/lib/sbv
 # system-ghc: false
 extra-deps:
   - genifunctors-0.4
-  # - sbv-8.0
+  - sbv-8.3
   # spock dependencies
   # - Spock-0.13.0.0
   # - Spock-core-0.13.0.0
