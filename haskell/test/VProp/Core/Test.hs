@@ -59,7 +59,7 @@ qcProps = testGroup "QuickChecked Properties"
 
 
 
-selectionToPlain :: ReadableProp -> Property
+selectionToPlain :: ReadableProp Var -> Property
 selectionToPlain x = isVariational x QC.==>
   do
     let dims = dimensions' x

@@ -83,6 +83,9 @@ isChc _            = False
 isPlain :: VProp a b c -> Bool
 isPlain = null . trifoldMap (:[]) mempty mempty
 
+isVariational :: VProp a b c -> Bool
+isVariational = not . isPlain
+
 -- | Does the prop contain choices
 hasChc :: VProp a b c -> Bool
 hasChc = not . isPlain

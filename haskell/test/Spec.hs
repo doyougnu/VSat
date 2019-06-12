@@ -16,7 +16,7 @@ main = do
                                  -- R.unitTests
                                 -- , R.specTests
                                 -- , CAP.unitTests
-                                -- R.runProperties
-                                O.properties
+                                R.runProperties
+                                -- O.properties
           -- VC.qcProps
                                 ]

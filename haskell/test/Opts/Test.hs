@@ -35,7 +35,7 @@ optsUnitTest = testGroup "Optimizations Unit Tests" $ []
 atomizationMinimizes =
   QC.testProperty "atomization increases plain terms" atomizationMinimizes'
 
-atomizationMinimizes' x = onlyBools (x :: ReadableProp) QC.==>
+atomizationMinimizes' x = onlyBools (x :: VarProp) QC.==>
                           numPlain x >= (numPlain $ atomize x)
 
 -- atomTst = H.testCase "Atomization drives choices as far down as possible" $

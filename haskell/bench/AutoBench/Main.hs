@@ -136,10 +136,10 @@ main = do
                    -- bench "small file:DefOpts" . nfIO $ satWith defConf   sProp
                    -- , bench "small file:Empty:Compact" . nfIO $ satWith defConf   (compactEncode sPs)
                      bench "Auto:VSolve:V1"  . nfIO $ satWithConf (toAutoConf d0Conf) emptyConf bProp
-                   , bench "Auto:VSolve:V2"  . nfIO $ satWithConf (toAutoConf d2Conf) emptyConf bProp
-                   , bench "Auto:VSolve:V3"  . nfIO $ satWithConf (toAutoConf d4Conf) emptyConf bProp
-                   , bench "Auto:VSolve:V4"  . nfIO $ satWithConf (toAutoConf d5Conf) emptyConf bProp
-                   , bench "Auto:VSolve:Sum"  . nfIO $ satWithConf (toAutoConf sumConf) emptyConf bProp
+                   -- , bench "Auto:VSolve:V2"  . nfIO $ satWithConf (toAutoConf d2Conf) emptyConf bProp
+                   -- , bench "Auto:VSolve:V3"  . nfIO $ satWithConf (toAutoConf d4Conf) emptyConf bProp
+                   -- , bench "Auto:VSolve:V4"  . nfIO $ satWithConf (toAutoConf d5Conf) emptyConf bProp
+                   -- , bench "Auto:VSolve:Sum"  . nfIO $ satWithConf (toAutoConf sumConf) emptyConf bProp
                    -- , bench "Auto:VSolve:DefOpts" . nfIO $ satWithConf autoConf emptyConf bPropOpts
                    -- , bench "Auto:IncrementalBaseline:Naive" . nfIO $ runIncrementalSolve bPs
                    -- bench "Auto:IncrementalBaseline:Compact" . nfIO $! satWith emptyConf (compactEncode bPs)
