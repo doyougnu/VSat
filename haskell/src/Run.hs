@@ -194,7 +194,7 @@ data IncState d =
                                         -- sbv
            } deriving (Eq,Show)
 
-emptySt :: (Resultable d, Monoid d) => IncState d
+emptySt :: (Resultable d) => IncState d
 emptySt = IncState{ result=mempty
                   , config=mempty
                   , processed=False
@@ -536,6 +536,7 @@ handleValue f v
 evaluate :: (Show d, Resultable d) => BValue d -> IncVSMTSolve d (BValue d)
 evaluate Unit        = return Unit                             -- [Eval-Unit]
 evaluate !(B b) =
+  -- trace "Eval B" $
   do S.constrain b; return Unit           -- [Eval-Term]
 evaluate !(BNot (BNot e)) = evaluate e
 evaluate !(BNot e)  =                                       -- [Eval-Neg]
@@ -594,7 +595,7 @@ evaluate !(BVOp l op r) =                                         -- [Eval-Or]
 
 
 accumulate :: (Show d, Resultable d) => BValue d -> IncVSMTSolve d (BValue d)
-accumulate !Unit          = return Unit                             -- [Acc-Unit]
+accumulate !Unit        = return Unit                             -- [Acc-Unit]
 accumulate !(x@(B _))   = return x                                -- [Acc-Term]
 accumulate !(x@(C _ _ _)) =
   -- trace "Ac: singleton chc" $
