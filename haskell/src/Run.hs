@@ -7,6 +7,11 @@ module Run ( SatDict
            , IncPack
            , smtBoolWith
            , smtInt
+           , BValue(..)
+           , evaluate
+           , toBValue
+           , propToSBool
+           , emptySt
            ) where
 
 import           Control.Arrow (first, second)
@@ -473,6 +478,7 @@ data BValue d = B! S.SBool
               | C! (Dim d) (SBVProp d) (SBVProp d)
               | BNot! (BValue d)
               | BVOp! (BValue d) BB_B (BValue d)
+              deriving Eq
 
 instance Show d => Show (BValue d) where
   show (B _) = "B"

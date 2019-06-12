@@ -24,6 +24,9 @@ instance SAT (VProp String String String) where
 instance SAT (ReadableProp Text) where
   toPredicate = symbolicPropExpr unpack unpack unpack
 
+instance SAT (ReadableProp Var) where
+  toPredicate = symbolicPropExpr (unpack . varName) unpack unpack
+
 -- | convert data constructors to SBV operators, note that the type is
 -- purposefully constrained to return SBools and not Boolean b => (b -> b -> b)
 -- because we want to ensure that we are translating to the SBV domain
