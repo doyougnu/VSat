@@ -44,7 +44,7 @@ genConfigPool :: (Resultable d, Show d, Ord d) =>
   DimProp d -> IO [(M.Map (Dim d) Bool)]
 genConfigPool p =
   do
-    S.AllSatResult (_,_,allRes) <- S.allSat $ toPredicate p
+    S.AllSatResult (_,_,_,allRes) <- S.allSat $ toPredicate p
     let resMaps = S.getModelDictionary <$> allRes
     return $!
       M.foldMapWithKey (\k a -> M.singleton (Dim $ fromString k) (cvToBool a)) <$> resMaps
