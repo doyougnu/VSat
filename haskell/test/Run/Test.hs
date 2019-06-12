@@ -257,9 +257,9 @@ vsat_matches_BF_plain' x =
 eval_always_unit' x =
   (onlyBools x && isPlain x) QC.==> QCM.monadicIO
   $ do
-     prop' <- lift $ runSMT $! St.evalStateT (propToSBool (x :: ReadableProp Var)) (mempty, mempty)
-     -- res <- lift . S.runSMTWith (conf cnf) $! vSMTSolve prop' configPool
-     a <- lift $ runSMT $ query $ St.evalStateT (evaluate (toBValue prop')) emptySt
+     let prop' = St.evalStateT (propToSBool (x :: ReadableProp Var)) (mempty, mempty)
+     let ev e = query $ St.evalStateT (evaluate $ toBValue e) emptySt
+     a <- QCM.run . runSMT $ prop' >>= ev
      QCM.assert (a == Unit)
 
 -- ad_terminates x = onlyInts x QC.==> QCM.monadicIO
