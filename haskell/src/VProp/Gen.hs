@@ -15,6 +15,7 @@ import           VProp.Types
 type VarProp = VProp Var Var Var
 type ReadableExpr = VIExpr Var Var
 
+instance Arbitrary Readable where arbitrary = genAlphaNumStr
 instance Arbitrary Var where arbitrary = Var <$> genAlphaNumStr
 instance Arbitrary NPrim where arbitrary = genPrim
 instance Arbitrary RefN where arbitrary  = genRefN
@@ -30,6 +31,14 @@ instance Arbitrary ReadableExpr where
 
 -- | arbritrary instance for the generator monad
 instance Arbitrary VarProp where
+  arbitrary = sized $ arbVProp genSharedDim arbitrary (repeat 3, repeat 3)
+  shrink (ChcB _ l r) = [l, r]
+  shrink (OpIB _ _ _) = []
+  shrink (OpBB _ l r) = [l, r]
+  shrink (OpB _ r)    = pure r
+  shrink x            = pure x
+
+instance Arbitrary (ReadableProp Var) where
   arbitrary = sized $ arbVProp genSharedDim arbitrary (repeat 3, repeat 3)
   shrink (ChcB _ l r) = [l, r]
   shrink (OpIB _ _ _) = []
