@@ -114,7 +114,7 @@ runIncrementalSolve :: [AutoLang Text Text] -> IO (Result Text)
 runIncrementalSolve xs = runIncrementalSolve_ (toList <$> assocMaps)
   where assocList = makeAssocList xs
         assocMaps' = unions $ (fromListWith (flip $ BBinary And) <$> assocList)
-        assocMaps = trace (show (fmap (countCtxs) $ keys assocMaps')) $
+        assocMaps = trace (show (keys assocMaps')) $
                     (fmap evalAutoExpr__) <$>
                     St.evalStateT (mapM (autoToSBool) assocMaps') (mempty,mempty)
 
