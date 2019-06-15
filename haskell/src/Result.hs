@@ -293,6 +293,6 @@ deriveValues :: Ord d => Result d -> Config d -> (M.Map d Bool)
 deriveValues (getResMap -> res) (M.toList -> model) =
   fmap (solveLiterals . substitute (fmap (first dimName) model)) res
 
-deriveValues' :: Ord d => Result d -> M.Map d Bool -> (M.Map d Bool)
+deriveValues' :: Result Text -> M.Map Text Bool -> (M.Map Text Bool)
 deriveValues' (getResMap -> res) model =
   fmap (solveLiterals . substitute (M.toList model)) res
