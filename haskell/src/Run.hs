@@ -70,7 +70,7 @@ runEnv :: (ReadableProp d -> Env d (Result d)) ->
           ReadableProp d ->
           IO (Result d, SatDict d, Log)
 runEnv f conf x = _runEnv (f x') conf _emptySt
-  where x' = foldr' ($) x (opts conf)
+  where x' = foldr' ($!) x (opts conf)
 
 runAD :: (Show d, Resultable d) =>
          SMTConf d Text Text
@@ -80,24 +80,24 @@ runAD :: (Show d, Resultable d) =>
 runAD os p f = fst' <$> runEnv (flip runAndDecomp f) os p
 
 runBF :: (Show d, Resultable d) =>
-         SMTConf d Text Text
-      -> ReadableProp d
-      -> IO (Result d)
-runBF os p = fst' <$> runEnv runBruteForce os p
+         ConfigPool d        ->
+         SMTConf d Text Text ->
+         ReadableProp d      ->
+         IO (Result d)
+runBF pool os p = fst' <$> runEnv (runBruteForce pool os) os p
 
 -- | Run the VSMT solver given a list of optimizations and a prop
 runVSMT :: (Show d, Resultable d) =>
            ConfigPool d        ->
            SMTConf d Text Text ->
-
            ReadableProp d      ->
            IO (Result d, SatDict d, Log)
 runVSMT = runEnv . runVSMTSolve
 
 -- | Given a VProp a term generate the satisfiability map
-initSt :: Ord d => VProp d a a -> SatDict d
-initSt prop = sats
-  where sats = M.fromList . fmap (\x -> (x, False)) $ choices prop
+initSt :: Ord d => ConfigPool d -> VProp d a a -> SatDict d
+initSt []   prop = M.fromList . fmap (\x -> (x, False)) $ choices prop
+initSt pool prop = M.fromList $ zip pool (repeat False)
 
 -- | Some logging functions
 _logBaseline :: (Show a, MonadWriter [Char] m) => a -> m ()
@@ -122,14 +122,17 @@ runForDict x = S.runSMT $
 -- run them to the sat solver
 runBruteForce ::
   (MonadTrans t, Show d, Resultable d , MonadState (SatDict d) (t IO)) =>
-  ReadableProp d -> t IO (Result d)
-runBruteForce prop = lift $ flip evalStateT (initSt prop) $
+  ConfigPool d        ->
+  SMTConf d Text Text ->
+  ReadableProp d      ->
+  t IO (Result d)
+runBruteForce pool conf prop = lift $ flip evalStateT (initSt pool prop) $
   do
   _confs <- get
   let confs = M.keys _confs
       plainProps = if null confs
         then [Just (M.empty, prop)]
-        else (\y -> sequence $ (y, selectVariant y prop)) <$> confs
+        else (\y -> sequence $! (y, selectVariant y prop)) <$> confs
   plainMs <- lift $
              mapM (bitraverse
                    (pure . configToResultProp)
@@ -250,13 +253,13 @@ vSMTSolve prop configPool =
 
          -- now we avoid redundent computation by solving on the evaluated
          -- proposition instead of the input proposition
-         (_,resSt) <- St.runStateT (pprop >>= solveVariational configPool) emptySt
+         (b,resSt) <- St.runStateT (pprop >>= solveVariational configPool) emptySt
 
          -- check if no models were generated, if that is the case then we had a
          -- plain formula as input. This means that the result of
          -- evaluation/accumulation will be a single symbolic boolean reference
          if isResultNull (result resSt)
-           then St.evalStateT (pprop >>= doChoice . assocLeft) resSt >>= solvePlain
+           then solvePlain b
            else return $ result resSt
 
 solvePlain :: Resultable d => S.SBool -> SC.Query (Result d)
@@ -269,13 +272,12 @@ solvePlain b = do S.constrain b
 solveVariational :: (Show d, Resultable d) =>
                     ConfigPool d ->
                     BValue d ->
-                    IncVSMTSolve d ()
-solveVariational []        p    = do _ <- doChoice . assocLeft $ p; return ()
+                    IncVSMTSolve d (S.SBool)
+solveVariational []        p    = doChoice . assocLeft $ p
 solveVariational [x]       p    = do setConfig x
                                      -- trace ("Result of Eval: " ++ ushow p ++ "\n") $ return ()
-                                     _ <- doChoice (assocLeft p)
-                                     return ()
-solveVariational cs prop = mapM_ step cs
+                                     doChoice (assocLeft p)
+solveVariational cs prop = do mapM_ step cs; return true
   where step cfg = do lift $ SC.push 1
                       -- trace ("Result of Eval: " ++ ushow prop ++ "\n") $ return ()
                       setConfig cfg
@@ -383,10 +385,10 @@ hasGenDModel :: IncVSMTSolve d Bool
 hasGenDModel = gets processed
 
 setModelGenD :: IncVSMTSolve d ()
-setModelGenD = St.modify' $ onProcessed (const True)
+setModelGenD = St.modify' $! onProcessed (const True)
 
 setModelNotGenD :: IncVSMTSolve d ()
-setModelNotGenD = St.modify' $ onProcessed (const False)
+setModelNotGenD = St.modify' $! onProcessed (const False)
 
 setUsed :: UsedConstraint -> IncVSMTSolve d ()
 setUsed = St.modify' . insertUsed
@@ -427,7 +429,7 @@ solveVariant go = do
            resMap <- if not bd
                      then do prop <- gets (configToResultProp . config)
                              setModelGenD
-                             lift $ getResult prop
+                             lift $! getResult prop
                       else -- not sat or have gen'd a model so ignore
                        return mempty
 
