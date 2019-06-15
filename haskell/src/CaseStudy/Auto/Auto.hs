@@ -54,6 +54,10 @@ autoToVSat :: (IsString a, Show a, Eq a, Ord a, Monoid a) =>
   AutoLang a a -> V.VProp Text a a
 autoToVSat = fst . runAutoToVSat'
 
+getDimMap :: (IsString a, Show a, Eq a, Ord a, Monoid a) =>
+  AutoLang a a -> DimMap a Text
+getDimMap = fst . snd. runAutoToVSat'
+
 runAutoToVSat' :: (IsString a, Show a, Eq a, Ord a, Monoid a) =>
   AutoLang a a -> (V.VProp Text a a, (DimMap a Text, Integer))
 runAutoToVSat' = flip S.runState (M.empty, 0) . autoToVSat_
