@@ -123,6 +123,20 @@ benchmarks:
     - criterion
     - vsat
 
+  fin:
+    main:                Main.hs
+    source-dirs:
+      - bench/Financial
+      - src
+    ghc-options:
+    - -O2
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - criterion
+    - vsat
+
   linux:
     main:                Main.hs
     source-dirs:
