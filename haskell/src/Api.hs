@@ -92,10 +92,19 @@ satWithConf (Just dimConfig) conf prop =
     fst' <$> runVSMT configPool conf prop
 
 
+bfWithConf :: (Show d, Resultable d)
+  => Maybe (DimProp d) -> ReadableSMTConf d -> ReadableProp d -> IO (Result d)
+bfWithConf Nothing          conf prop = runBF mempty conf prop
+bfWithConf (Just dimConfig) conf prop =
+  do
+    configPool <- genConfigPool dimConfig
+    -- mapM_ (putStrLn . show) configPool
+    -- putStrLn . show $ (length configPool)
+    runBF configPool conf prop
 
-bfWith :: (Show d, Resultable d)
-  => ReadableSMTConf d -> ReadableProp d -> IO (Result d)
-bfWith = runBF
+bfWith :: (Show d, Resultable d) =>
+ ReadableSMTConf d -> ReadableProp d -> IO (Result d)
+bfWith = bfWithConf Nothing
 
 
 bf :: (Show d, Resultable d, SAT (ReadableProp d)) =>
