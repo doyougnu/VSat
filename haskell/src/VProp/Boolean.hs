@@ -25,8 +25,8 @@ substitute reps p = foldr boolSubstitute p reps
 
 solveLiterals :: VProp d a b -> Bool
 solveLiterals (LitB b) = b
+solveLiterals (OpB op e) = not $ solveLiterals e
 solveLiterals (OpBB op l r) = solveLiterals l `op'` solveLiterals r
   where op' = bDispatch op
-solveLiterals (OpB op e) = not $ solveLiterals e
 solveLiterals (ChcB _ _ _) = error "got a choice when solving literals! Incorrect usage, all choices should be resolved"
 solveLiterals _ = error "got a reference, this function should only be applied to props with literals"

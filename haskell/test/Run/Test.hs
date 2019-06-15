@@ -55,6 +55,7 @@ runProperties = testGroup "Run Properties" [
                                            -- ad_term
                                            -- , qcProps
   eval_always_unit
+  -- solver_is_correct
                                            ]
 
 unitTests :: TestTree
@@ -78,7 +79,7 @@ unitTests = testGroup "Unit Tests"
   -- , bimpl_w_false_is_sat
   -- , bimpl_w_false_chc_is_sat
   -- , mixed_and_impl_is_sat
-  -- , chces_not_in_model
+  chces_not_in_model
   ]
 
 specTests :: TestTree
@@ -112,6 +113,10 @@ hspecTest = HS.describe "hs describe" $ do
 eval_always_unit = QC.testProperty
   "Evaluate/Accumulate, on a plain term will always result in a unit value"
   eval_always_unit'
+
+-- solver_is_correct = QC.testProperty
+--   "Given a variational Model, upon substituting that model back into the formula we get a SAT. That is, the solver is correct"
+--   solver_is_correct'
 
 -- dim_homo' = H.testCase
 --             "dim homomorphism for simplest nested case"
@@ -261,6 +266,14 @@ eval_always_unit' x =
      let ev e = query $ St.evalStateT (evaluate $ toBValue e) emptySt
      a <- QCM.run . runSMT $ prop' >>= ev
      QCM.assert (a == Unit)
+
+-- solver_is_correct' :: (ReadableProp Var) -> QC.Property
+-- solver_is_correct' x =
+--   (onlyBools x && isVariational x) QC.==> QCM.monadicIO
+--   $ do liftIO . putStrLn $ "[PROP]: \n" ++ show x
+--        a <- QCM.run $ (satWith emptyConf) x
+--        liftIO . putStrLn $ "[Model]: \n" ++ show a
+--        QCM.assert (True)
 
 -- ad_terminates x = onlyInts x QC.==> QCM.monadicIO
 --   $ do -- liftIO $ print $ "prop: " ++ show (x :: VProp Var Var)

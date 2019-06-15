@@ -8,6 +8,7 @@ import qualified Test.Tasty.HUnit as H
 import qualified Data.ByteString         as BS (readFile)
 import Control.Monad.Trans (liftIO)
 import qualified Test.QuickCheck.Monadic as QCM
+import qualified Data.Map as M
 import           Data.Either             (lefts, rights)
 import           CaseStudy.Auto.Auto
 import           CaseStudy.Auto.Parser   (langParser)
@@ -17,6 +18,9 @@ import           VProp.SBV               (toPredicate)
 import           VProp.Types
 import           Text.Megaparsec         (parse)
 import           Data.Aeson              (decodeStrict)
+
+import Result
+import VProp.Boolean
 
 --------------------------- Constants -----------------------------------------
 autoFileBool :: FilePath
@@ -51,8 +55,12 @@ auto_model_correct' =
         | d == "D_3" = "D_4"
         | otherwise = d
 
-      bProp = ((renameDims sameDims) . naiveEncode . autoToVSat) $ autoAndJoin (Prelude.take 100 bPs)
+      bProp = ((renameDims sameDims) . naiveEncode . autoToVSat) $ autoAndJoin (Prelude.take 2000 bPs)
 
     model <- satWith emptyConf bProp
-    liftIO . putStrLn $ "[VSAT]: \n" ++ show model
-    H.assertBool "fail" False
+    cfgs <- deriveModels model
+    let getRes c = solveLiterals $ substitute (M.toList $ deriveValues model c) (selectVariantTotal c bProp)
+        -- values = deriveValues model cfg
+        res = getRes <$> (Prelude.take 1 cfgs)
+    liftIO . putStrLn $ "[VSAT]: \n" ++ show res
+    H.assertBool ("Failed with") (Prelude.all (==True) res)
