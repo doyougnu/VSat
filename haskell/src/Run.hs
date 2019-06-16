@@ -12,12 +12,14 @@ module Run ( SatDict
            , toBValue
            , propToSBool
            , emptySt
+           , runPonV
            ) where
 
 import           Control.Arrow (first, second)
 import           Control.DeepSeq (force)
 import           Control.Monad.RWS.Strict
 import           Control.Monad.State.Strict as St
+import Control.Monad.IO.Class (MonadIO)
 import           Data.Foldable (foldr')
 import           Data.HashSet (HashSet, member, insert)
 import qualified Data.Map.Strict as M
@@ -84,7 +86,11 @@ runBF :: (Show d, Resultable d) =>
          SMTConf d Text Text ->
          ReadableProp d      ->
          IO (Result d)
-runBF pool os p = fst' <$> runEnv (runBruteForce pool os) os p
+runBF pool os p = fst' <$> runEnv (runBruteForce pool) os p
+
+-- runPonV :: (Show d, Resultable d) => ConfigPool d -> ReadableProp d
+--         -> IO (Result d, SatDict d, Log)
+runPonV pool prop = runEnv (runPlainOnVSat pool) emptyConf prop
 
 -- | Run the VSMT solver given a list of optimizations and a prop
 runVSMT :: (Show d, Resultable d) =>
@@ -123,10 +129,9 @@ runForDict x = S.runSMT $
 runBruteForce ::
   (MonadTrans t, Show d, Resultable d , MonadState (SatDict d) (t IO)) =>
   ConfigPool d        ->
-  SMTConf d Text Text ->
   ReadableProp d      ->
   t IO (Result d)
-runBruteForce pool conf prop = lift $ flip evalStateT (initSt pool prop) $
+runBruteForce pool prop = lift $ flip evalStateT (initSt pool prop) $
   do
   _confs <- get
   let confs = M.keys _confs
@@ -141,6 +146,28 @@ runBruteForce pool conf prop = lift $ flip evalStateT (initSt pool prop) $
   where
         helper c as =  insertToSat c as
 
+
+-- | Run plain terms on vsat, that is, perform selection for each dimension, and
+-- then run on the vsat solver. We know that this will always become a Unit, and
+-- will always hit solvePlain.
+runPlainOnVSat
+  :: (Show d, Resultable d, MonadIO m,
+      MonadReader (SMTConf d a a) m) =>
+     ConfigPool d -> ReadableProp d -> m (Result d)
+runPlainOnVSat pool prop = flip evalStateT (initSt pool prop) $
+ do
+  _confs <- get
+  let confs = M.keys _confs
+      plainProps = if null confs
+        then [Just (M.empty, prop)]
+        else (\y -> sequence $! (y, selectVariant y prop)) <$> confs
+  plainMs <- mapM (bitraverse
+                   (pure . configToResultProp)
+                   (runVSMTSolve mempty)) $ catMaybes plainProps
+  return $ foldMap (uncurry helper) plainMs
+  where
+        helper c as =  insertToSat c as
+
 -- | Run the and decomposition baseline case, that is deconstruct every choice
 -- and then run the sat solver
 runAndDecomp :: (Show d, Resultable d, MonadTrans t, Monad (t IO)) =>
@@ -149,17 +176,17 @@ runAndDecomp prop f =
   lift $ runForDict $ symbolicPropExpr show show show $ andDecomp prop (f . dimName)
 
 runVSMTSolve ::
-  (Show d, MonadTrans t, Resultable d , MonadReader (SMTConf d a a) (t IO)) =>
+  (Show d, MonadIO m, Resultable d , MonadReader (SMTConf d a a) m) =>
   ConfigPool d ->
   ReadableProp d ->
-  t IO (Result d)
+  m (Result d)
 runVSMTSolve configPool prop =
   do cnf <- ask
      -- convert all refs to SBools
      let prop' = St.evalStateT (propToSBool prop) (mempty, mempty)
      -- run the inner driver
-     res <- lift . S.runSMTWith (conf cnf) $! vSMTSolve prop' configPool
-     lift . return $ res
+     res <- liftIO $! S.runSMTWith (conf cnf) $! vSMTSolve prop' configPool
+     return $! res
 
 -- | wrapper around map to keep track of the variable references we've seen, a,
 -- and their symbolic type, b, which is eta reduced here
@@ -239,7 +266,7 @@ type IncVSMTSolve d = St.StateT (IncState d) SC.Query
 -- | Top level wrapper around engine and monad stack, this sets options for the
 -- underlying solver, inspects the results to see if they were variational or
 -- not, if not then it gets the plain model
-vSMTSolve :: (Show d, Resultable d) =>
+vSMTSolve :: Resultable d =>
   S.Symbolic (VProp d (S.SBool, Name) SNum) ->
   ConfigPool d -> S.Symbolic (Result d)
 vSMTSolve prop configPool =
@@ -269,7 +296,7 @@ solvePlain b = do S.constrain b
                     then getResultWith (toResultProp . LitB)
                     else return mempty
 
-solveVariational :: (Show d, Resultable d) =>
+solveVariational :: (Resultable d) =>
                     ConfigPool d ->
                     BValue d ->
                     IncVSMTSolve d (S.SBool)
@@ -412,7 +439,7 @@ constrain b !name = do
 toText :: Show a => a -> Text
 toText = pack . show
 
-solveVariant :: (Resultable d, Show d) =>
+solveVariant :: Resultable d =>
   IncVSMTSolve d I.SBool -> IncVSMTSolve d (Result d)
 solveVariant go = do
            setModelNotGenD
@@ -438,7 +465,7 @@ solveVariant go = do
 
            return resMap
 
-handleChc :: (Show d, Resultable d) =>
+handleChc :: Resultable d =>
   IncVSMTSolve d (Result d)
   -> IncVSMTSolve d (Result d)
   -> Dim d
@@ -503,8 +530,7 @@ instance Show d => Show (BValue d) where
 -- the result of the choices sibling in the AST. Once we compile down to the
 -- value level we evaluate the choices properly by manipulating the assertion
 -- stack, resulting in model generation and sbools
-toBValue :: (Show d, Resultable d) =>
-  VProp d (S.SBool, Name) SNum -> BValue d
+toBValue :: Resultable d => VProp d (S.SBool, Name) SNum -> BValue d
 toBValue (RefB (b,name)) = B b
 toBValue (LitB b) = B (S.literal b)
 toBValue (OpB Not (OpB Not notchc)) = toBValue notchc
@@ -535,7 +561,7 @@ handleValue f v
 -- values thereby representing that evaluation has taken place. Evaluation can
 -- call a switch into the accumulation mode in order to partially evaluate an
 -- expression
-evaluate :: (Show d, Resultable d) => BValue d -> IncVSMTSolve d (BValue d)
+evaluate :: (Resultable d) => BValue d -> IncVSMTSolve d (BValue d)
 evaluate Unit        = return Unit                             -- [Eval-Unit]
 evaluate !(B b) =
   -- trace "Eval B" $
@@ -596,7 +622,7 @@ evaluate !(BVOp l op r) =                                         -- [Eval-Or]
        else return res
 
 
-accumulate :: (Show d, Resultable d) => BValue d -> IncVSMTSolve d (BValue d)
+accumulate :: Resultable d => BValue d -> IncVSMTSolve d (BValue d)
 accumulate !Unit        = return Unit                             -- [Acc-Unit]
 accumulate !(x@(B _))   = return x                                -- [Acc-Term]
 accumulate !(x@(C _ _ _)) =
@@ -646,7 +672,7 @@ accumulate !(BVOp l op r) =                                       -- [Acc-Or]
        else return res
 
 -- | Given a bvalue, return a symbolic reference of the negation of that bvalue
-doBNot :: (Show d, Resultable d) => (BValue d -> IncVSMTSolve d (BValue d))
+doBNot :: Resultable d => (BValue d -> IncVSMTSolve d (BValue d))
   -> BValue d -> IncVSMTSolve d (BValue d)
 doBNot _ !Unit      = return Unit
 doBNot f !(B b)   = f (B (bnot b))
@@ -674,7 +700,7 @@ isValue (B _) = True
 isValue Unit    = True
 isValue _       = False
 
-doChoice :: (Show d, Resultable d) => BValue d -> IncVSMTSolve d S.SBool
+doChoice :: Resultable d => BValue d -> IncVSMTSolve d S.SBool
 doChoice Unit = return true
 doChoice (BNot e) =
   -- trace "doChoice BNot" $
@@ -758,7 +784,7 @@ doChoice x = doChoice $ assocLeft x
 --                     (trimap id (\(_, y) -> toText y) (const "") r)
 -- toVProp (BVOp l op r) = OpBB op (toVProp l) (toVProp r)
 
-assocLeft :: Show d => BValue d -> BValue d
+assocLeft :: BValue d -> BValue d
 assocLeft Unit = Unit
 assocLeft x@(B _)   = x
 assocLeft x@(C _ _ _) = x
@@ -768,7 +794,7 @@ assocLeft (BVOp x@(BVOp l1 op1 r1) op y)
   | op1 == op = (BVOp l1 op (BVOp r1 op y))
   -- | op1 == op2 &&
   | otherwise = (BVOp (assocLeft x) op y)
-assocLeft x = trace ("stuck at: " ++ show x ++ "\n") $ x
+assocLeft x = x
 -- assocLeft (BVOp x@(BVOp l1 op1 r1) op y@(BVOp l2 op2 r2))
 --   | op1 == op = (BVOp l1 op (BVOp r1 op y))
 --   -- | op1 == op2 &&

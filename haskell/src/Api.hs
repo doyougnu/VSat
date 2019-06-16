@@ -2,11 +2,13 @@ module Api ( sat
            , satWith
            , satWithConf
            , bfWith
+           , bfWithConf
            , bf
            , adWith
            , ad
            , DimProp(..)
            , toDimProp
+           , pOnVWithConf
            ) where
 
 import qualified Data.Map           as M
@@ -101,6 +103,16 @@ bfWithConf (Just dimConfig) conf prop =
     -- mapM_ (putStrLn . show) configPool
     -- putStrLn . show $ (length configPool)
     runBF configPool conf prop
+
+-- pOnVWithConf :: (Show d, Resultable d, SAT (ReadableProp d)) =>
+--   Maybe (DimProp d) -> ReadableProp d -> IO (Result d)
+pOnVWithConf Nothing          prop = fst' <$> runPonV mempty prop
+pOnVWithConf (Just dimConfig) prop =
+  do
+    configPool <- genConfigPool dimConfig
+    -- mapM_ (putStrLn . show) configPool
+    -- putStrLn . show $ (length configPool)
+    fst' <$> runPonV configPool prop
 
 bfWith :: (Show d, Resultable d) =>
  ReadableSMTConf d -> ReadableProp d -> IO (Result d)

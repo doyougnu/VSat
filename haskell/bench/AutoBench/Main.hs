@@ -68,11 +68,15 @@ sumConf = (d0 &&& fromList' (&&&) (bnot <$> tail ds)) -- <0
 
 d0Conf = (d0 &&& fromList' (&&&) (bnot <$> tail ds)) -- <0
 
+d02Conf = (d0 &&& d2 &&& (bnot d4 &&& bnot d5))   -- <0 /\ <1
+
+d024Conf = (d0 &&& d2 &&& d4 &&& bnot d5) -- <0 /\ <1 /\
+
+dAllConf = (d0 &&& d2 &&& d4 &&& d5) -- <0 /\ <1 /\
+
 d2Conf = ((bnot d0) &&& d2 &&& (bnot d4 &&& bnot d5))   -- <0 /\ <1
 
-d4Conf = ((bnot d0)&&& (bnot d2) &&& d4 &&& bnot d5) -- <0 /\ <1 /\
-
-d5Conf = ((bnot d0)&&& (bnot d2) &&& (bnot d4) &&& d5) -- <0 /\ <1 /\
+d4Conf = ((bnot d0) &&& (bnot d2) &&& d4 &&& bnot d5) -- <0 /\ <1 /\
 
 negConf = conjoin $ bnot <$> ds
 
@@ -117,10 +121,10 @@ main = do
   -- putStrLn $ "Solving: "
   -- res' <- satWithConf (toAutoConf d0Conf) emptyConf bProp
   -- res' <- ad id bProp
-  -- res' <- satWithConf autoConf emptyConf (bRef "a" &&& bRef "c")
+  -- res' <- bfWithConf (toAutoConf d0Conf) emptyConf bProp
   -- res' <- satWith emptyConf sProp
   -- putStrLn "DONE!"
-  -- print $ res'
+  -- print $ (length $ show res')
   -- print "done"
   -- let !p = prop 6000
   -- print $ length p
@@ -132,16 +136,20 @@ main = do
 
   defaultMain
     [
-    bgroup "vsat" [--  bench "small file:NoOpts"  . nfIO $ satWithConf Nothing emptyConf sProp
-                   -- bench "small file:DefOpts" . nfIO $ satWith defConf   sProp
+    bgroup "vsat" [
                    -- , bench "small file:Empty:Compact" . nfIO $ satWith defConf   (compactEncode sPs)
-                     bench "Auto:VSolve:V1"  . nfIO $ satWithConf (toAutoConf d0Conf) emptyConf bProp
-                   -- , bench "Auto:VSolve:V2"  . nfIO $ satWithConf (toAutoConf d2Conf) emptyConf bProp
-                   -- , bench "Auto:VSolve:V3"  . nfIO $ satWithConf (toAutoConf d4Conf) emptyConf bProp
-                   -- , bench "Auto:VSolve:V4"  . nfIO $ satWithConf (toAutoConf d5Conf) emptyConf bProp
-                   -- , bench "Auto:VSolve:Sum"  . nfIO $ satWithConf (toAutoConf sumConf) emptyConf bProp
-                   -- , bench "Auto:VSolve:DefOpts" . nfIO $ satWithConf autoConf emptyConf bPropOpts
-                   -- , bench "Auto:IncrementalBaseline:Naive" . nfIO $ runIncrementalSolve bPs
-                   -- bench "Auto:IncrementalBaseline:Compact" . nfIO $! satWith emptyConf (compactEncode bPs)
+
+                   --   bench "Auto:VSolve:V1"  . nfIO $ satWithConf (toAutoConf d0Conf) emptyConf bProp
+                   -- , bench "Auto:VSolve:V1+V2"  . nfIO $ satWithConf (toAutoConf d02Conf) emptyConf bProp
+                   -- , bench "Auto:VSolve:V1+V2+V3"  . nfIO $ satWithConf (toAutoConf d024Conf) emptyConf bProp
+                   -- , bench "Auto:VSolve:V1+V2+V3+V4"  . nfIO $ satWithConf (toAutoConf dAllConf) emptyConf bProp
+                     bench "Auto:VSolve:NoConf"  . nfIO $ satWithConf Nothing emptyConf bProp
+                   , bench "Auto:PonV:NoConf"  . nfIO $ pOnVWithConf Nothing bProp
+                   , bench "Auto:BF:NoConf"  . nfIO $ bfWith emptyConf bProp
+                   --   bench "Auto:PlainOnVSat:V1"  . nfIO $ pOnVWithConf (toAutoConf d0Conf) emptyConf bProp
+                   -- , bench "Auto:PlainOnVSat:V1+V2"  . nfIO $ pOnVWithConf (toAutoConf d02Conf) emptyConf bProp
+                   -- , bench "Auto:PlainOnVSat:V1+V2+V3"  . nfIO $ pOnVWithConf (toAutoConf d024Conf) emptyConf bProp
+                   -- , bench "Auto:PlainOnVSat:V1+V2+V3+V4"  . nfIO $ pOnVWithConf (toAutoConf dAllConf) emptyConf bProp
+                     -- bench "Auto:BruteForce:V1"  . nfIO $ bfWithConf (toAutoConf d0Conf) emptyConf bProp
                   ]
     ]

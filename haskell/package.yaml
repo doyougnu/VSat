@@ -118,7 +118,7 @@ benchmarks:
     - -O2
     - -threaded
     - -rtsopts
-    - -with-rtsopts=-s
+    - -with-rtsopts=-N
     dependencies:
     - criterion
     - vsat
