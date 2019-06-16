@@ -242,7 +242,7 @@ runIncrementalSolve__ prop = evalAutoExpr__ prop >>= constrain
 
 -- autoToResProp :: AutoLang a a -> ResultProp a
 autoToResProp :: AutoLang Text Text -> ResultProp Text
-autoToResProp = ResultProp . Just . UniformProp . helper
+autoToResProp = ResultProp . UniformProp . helper
   where helper (RBinary op (ACtx (AVar a)) (ALit i))
           = OpIB (idispatch op) (Ref RefI a) (LitI $ I (fromInteger i))
         helper (BBinary op l r) = OpBB (rdispatch' op) (helper l) (helper r)
