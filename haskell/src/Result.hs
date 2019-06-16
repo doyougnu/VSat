@@ -44,7 +44,7 @@ import           GHC.Generics (Generic)
 import           SAT
 import           VProp.SBV()
 import           VProp.Boolean
-import           VProp.Core (toList, dimToVar)
+import           VProp.Core (dimToVar)
 import           VProp.Types             (BB_B (..), B_B (..), Config,
                                           VProp (..), Var, Dim(..))
 
@@ -63,7 +63,14 @@ instance Show d => Show (UniformProp d) where
 -- monoid where mempty in Nothing, and mappend is logical Or. Think of this as a
 -- list
 newtype ResultProp d = ResultProp {getProp :: Maybe (UniformProp d)}
-  deriving (Eq,Ord,Generic,Semigroup,Monoid)
+  deriving (Eq,Ord,Generic)
+
+instance Eq d => Semigroup (ResultProp d) where
+  (<>) l r = if l == r then r else l <> r
+
+instance (Eq d, Semigroup d) => Monoid (ResultProp d) where
+  mempty = ResultProp (Just false)
+  mappend = (<>)
 
 instance Show d => Show (ResultProp d) where
   show rp = maybe mempty show $ getProp rp
@@ -81,7 +88,7 @@ negateResultProp = ResultProp . fmap (UniformProp . OpB Not . uniProp) . getProp
 consWith :: (UniformProp d -> UniformProp d -> UniformProp d)
          -> UniformProp d -> ResultProp d -> ResultProp d
 consWith f x xs = ResultProp $ do xs' <- getProp xs
-                                  let res = f x xs'
+                                  let !res = f x xs'
                                   return res
 
 -- | cons the first resultProp onto the second with an Or, if the first is
@@ -116,12 +123,13 @@ infixr 5 |:>
 instance NFData d => NFData (UniformProp d)
 instance NFData d => NFData (ResultProp d)
 
--- | define semigroup for uniform props with an Or. The order here is important
+-- | define semigroup for uniform props with an And. The order here is important
 -- so that we avoid essentially cons'ing onto the end of a list. This operation
 -- and mappend will prioritize the first argument, x, over y, so if |x| > |y|
 -- you'll have an O(n) cons
-instance Semigroup (UniformProp d) where
-  (<>) x y = UniformProp $! OpBB And (uniProp x) (uniProp y)
+instance Eq d => Semigroup (UniformProp d) where
+  (<>) x y | x == y = y
+           | otherwise = UniformProp $! OpBB And (uniProp x) (uniProp y)
 
 instance Resultable Var
 instance Resultable String
@@ -129,7 +137,7 @@ instance Resultable Text
 
 -- | almost the same as configtoProp in VProp.Core but this is hand written for
 -- better asymptotic performance
-configToResultProp :: Config a -> ResultProp a
+configToResultProp :: (Eq a, Semigroup a) => Config a -> ResultProp a
 configToResultProp = M.foldMapWithKey step
   where step :: Dim a -> Bool -> ResultProp a
         step d b
@@ -193,16 +201,20 @@ satKey :: Resultable d => d
 satKey = fromString "__Sat"
 
 instance (Resultable d) => Semigroup (ResultMap d) where
-  x <> y = ResultMap $ M.unionWith helper (getRes x) (getRes y)
-    where helper m1 m2 = consWithOr' m1 m2
-          consWithOr' p rp =  p' `consWithOr` rp
+  (getRes -> x) <> (getRes -> y) =
+    ResultMap $! M.unionWith helper x y
+    where helper !m1 !m2
+            | m1 == m2 = m2
+            | otherwise = consWithOr' m1 m2
+          consWithOr' !p !rp =  p' `consWithOr` rp
             where p' = fromMaybe (UniformProp $ LitB False) $ getProp p
 
 insertWith :: (Eq d, Ord d) => (ResultProp d -> ResultProp d -> ResultProp d) ->
   d -> ResultProp d -> ResultMap d -> ResultMap d
 insertWith f k v = ResultMap . M.insertWith f k v . getRes
 
--- | O(log n + O(1)) insert a resultProp into a result. Uses the Monoid instance of ResultProp i.e. x <> y = x && y
+-- | O(log n) insert a resultProp into a result. Uses the Monoid instance
+-- of ResultProp i.e. x <> y = x && y
 insertToResult :: Resultable d => d -> ResultProp d -> Result d -> Result d
 insertToResult d prop = onResMap (insertWith (<>) d prop)
 
@@ -217,7 +229,7 @@ insertToSat = onResMap . insertWith helper satKey
 
 
 -- | O(log n) given a key lookup the result prop
-lookupRes :: (Eq d, Ord d) => d -> ResultMap d -> ResultProp d
+lookupRes :: (Eq d, Ord d, Semigroup d) => d -> ResultMap d -> ResultProp d
 lookupRes k res = fromMaybe mempty $ M.lookup k (getRes res)
 
 -- | unsafe O(log n) lookup Res
@@ -265,11 +277,12 @@ getResultWith !f =
     toResMap = ResultMap . M.foldMapWithKey
                (\k a -> M.singleton (fromString k) (f $! cvToBool a))
 
-
+-- | Give a result proposition, dispatch on a boolean that SBV returns, If the
+-- boolean is true then just return the result prop, if not then negate it
+-- because the variable was not true in the context represented by the result
+-- prop
 dispatchProp :: ResultProp d -> Bool -> ResultProp d
-dispatchProp !p !x = if x
-                     then p
-                     else negateResultProp p
+dispatchProp !p !x = if x then p else (ResultProp $ Just $ UniformProp $ LitB x)
 
 getResult :: Resultable d => ResultProp d -> Query (Result d)
 getResult = getResultWith . dispatchProp
@@ -282,17 +295,23 @@ deriveSatValues m =
     let resMaps = getModelDictionary <$> allRes
     return $! fmap cvToBool <$> resMaps
 
+-- | Given a result get the variational models from it
 deriveModels' :: Result Text -> IO [M.Map Text Bool]
 deriveModels' (Result (satRes, _)) = fmap (M.mapKeys pack)
                                     <$> deriveSatValues satRes
 
+-- | Given a result get the variational models from it
 deriveModels :: Result Text -> IO [Config Text]
 deriveModels = fmap (fmap (M.mapKeys Dim)) . deriveModels'
 
+-- | Given a result and a mapping from dimensions to boolean values, make the
+-- boolean values for plain terms
 deriveValues :: Ord d => Result d -> Config d -> (M.Map d Bool)
 deriveValues (getResMap -> res) (M.toList -> model) =
   fmap (solveLiterals . substitute (fmap (first dimName) model)) res
 
+-- | Given a result and a mapping from dimensions to boolean values, make the
+-- boolean values for plain terms
 deriveValues' :: Result Text -> M.Map Text Bool -> (M.Map Text Bool)
 deriveValues' (getResMap -> res) model =
   fmap (solveLiterals . substitute (M.toList model)) res
