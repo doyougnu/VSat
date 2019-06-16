@@ -118,14 +118,14 @@ main = do
   -- mapM_ (putStrLn . show) $ (sPs)
   -- putStrLn $ "------------------"
   -- putStrLn $ "Solving: "
-  -- res' <- satWithConf (toAutoConf d0Conf) emptyConf bProp
+  res' <- satWithConf (toAutoConf evoAwareConf) emptyConf bProp
   -- res' <- ad id bProp
   -- res' <- satWithConf autoConf emptyConf (bRef "a" &&& bRef "c")
   -- res' <- satWith emptyConf sProp
   -- putStrLn "DONE!"
   -- mapM_ (putStrLn . show) $ confs
   -- putStrLn $ show evoAwareConf
-  -- print "done"
+  print $ length (show res')
   -- let !p = prop 6000
   -- -- res <- test 10
   -- res <- S.runSMT $ do p' <- mapM S.sBool p
@@ -133,21 +133,21 @@ main = do
   -- putStrLn "Running Good:\n"
   -- goodRes <- testS goodS 1000
 
-  defaultMain
-    [
-    bgroup "vsat" [
-                     bench "Fin:VSolve:V1"  . nfIO $ satWithConf (toAutoConf d0Conf) emptyConf bProp
-                   , bench "Fin:VSolve:V2"  . nfIO $ satWithConf (toAutoConf d1Conf) emptyConf bProp
-                   , bench "Fin:VSolve:V3"  . nfIO $ satWithConf (toAutoConf d17Conf) emptyConf bProp
-                   , bench "Fin:VSolve:V4"  . nfIO $ satWithConf (toAutoConf d13Conf) emptyConf bProp
-                   , bench "Fin:VSolve:V5"  . nfIO $ satWithConf (toAutoConf d7Conf) emptyConf bProp
-                   , bench "Fin:VSolve:V6"  . nfIO $ satWithConf (toAutoConf d3Conf) emptyConf bProp
-                   , bench "Fin:VSolve:V7"  . nfIO $ satWithConf (toAutoConf d11Conf) emptyConf bProp
-                   , bench "Fin:VSolve:V8"  . nfIO $ satWithConf (toAutoConf d5Conf) emptyConf bProp
-                   , bench "Fin:VSolve:V9"  . nfIO $ satWithConf (toAutoConf d9Conf) emptyConf bProp
-                   , bench "Fin:VSolve:V10"  . nfIO $ satWithConf (toAutoConf d15Conf) emptyConf bProp
-                   , bench "Fin:VSolve:Evo-Aware" . nfIO $ satWithConf (toAutoConf evoAwareConf) emptyConf bProp
-                  ]
-    ]
+  -- defaultMain
+  --   [
+  --   bgroup "vsat" [
+  --                    bench "Fin:VSolve:V1"  . nfIO $ satWithConf (toAutoConf d0Conf) emptyConf bProp
+  --                  , bench "Fin:VSolve:V2"  . nfIO $ satWithConf (toAutoConf d1Conf) emptyConf bProp
+  --                  , bench "Fin:VSolve:V3"  . nfIO $ satWithConf (toAutoConf d17Conf) emptyConf bProp
+  --                  , bench "Fin:VSolve:V4"  . nfIO $ satWithConf (toAutoConf d13Conf) emptyConf bProp
+  --                  , bench "Fin:VSolve:V5"  . nfIO $ satWithConf (toAutoConf d7Conf) emptyConf bProp
+  --                  , bench "Fin:VSolve:V6"  . nfIO $ satWithConf (toAutoConf d3Conf) emptyConf bProp
+  --                  , bench "Fin:VSolve:V7"  . nfIO $ satWithConf (toAutoConf d11Conf) emptyConf bProp
+  --                  , bench "Fin:VSolve:V8"  . nfIO $ satWithConf (toAutoConf d5Conf) emptyConf bProp
+  --                  , bench "Fin:VSolve:V9"  . nfIO $ satWithConf (toAutoConf d9Conf) emptyConf bProp
+  --                  , bench "Fin:VSolve:V10"  . nfIO $ satWithConf (toAutoConf d15Conf) emptyConf bProp
+  --                  , bench "Fin:VSolve:Evo-Aware" . nfIO $ satWithConf (toAutoConf evoAwareConf) emptyConf bProp
+  --                 ]
+  --   ]
 
 -- [d0Conf, d1Conf, d17Conf, d13Conf, d7Conf, d3Conf, d11Conf, d5Conf, d9Conf, d15Conf] = confs

@@ -5,6 +5,7 @@ import Data.SBV (SMTConfig(..),z3,yices,mathSAT,boolector,abc,cvc4)
 import GHC.Generics (Generic)
 import Data.Foldable (foldr')
 import Data.Text (Text)
+import Control.Monad.Reader.Class
 
 import VProp.Types
 import Opts
