@@ -55,12 +55,15 @@ auto_model_correct' =
         | d == "D_3" = "D_4"
         | otherwise = d
 
-      bProp = ((renameDims sameDims) . naiveEncode . autoToVSat) $ autoAndJoin (Prelude.take 2000 bPs)
+      bProp = ((renameDims sameDims) . naiveEncode . autoToVSat) $ autoAndJoin (Prelude.take 20 bPs)
 
     model <- satWith emptyConf bProp
     cfgs <- deriveModels model
-    let getRes c = solveLiterals $ substitute (M.toList $ deriveValues model c) (selectVariantTotal c bProp)
+    let getRes c = solveLiterals $ substitute' (deriveValues model c) (selectVariantTotal c bProp)
+    let getRes' c = substitute' (deriveValues model c) (selectVariantTotal c bProp)
         -- values = deriveValues model cfg
         res = getRes <$> (Prelude.take 1 cfgs)
-    liftIO . putStrLn $ "[VSAT]: \n" ++ show res
+    liftIO . putStrLn $ "[config]: \n" ++ show (Prelude.take 1 cfgs)
+    liftIO . putStrLn $ "[model]: \n" ++ show (model)
+    liftIO . putStrLn $ "[values]: \n" ++ show (getRes' (Prelude.head cfgs))
     H.assertBool ("Failed with") (Prelude.all (==True) res)

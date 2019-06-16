@@ -1,6 +1,7 @@
 module VProp.Boolean where
 
 import VProp.Types
+import qualified Data.Map as M ((!), lookup, Map)
 
 import VProp.SBV
 
@@ -22,6 +23,14 @@ boolSubstitute _ x = x
 
 substitute :: Eq a => [(a, Bool)] -> VProp d a a -> VProp d a a
 substitute reps p = foldr boolSubstitute p reps
+
+substitute' :: (Ord a, Eq a) => (M.Map a Bool) -> VProp d a a -> VProp d a a
+substitute' reps (RefB x)      = LitB $! reps M.! x
+substitute' reps (OpB op e)    = OpB op $ substitute' reps e
+substitute' reps (OpBB op l r) = OpBB op (substitute' reps l) (substitute' reps r)
+substitute' reps (ChcB d l r)  = ChcB d (substitute' reps l) (substitute' reps r)
+substitute' _ (OpIB _ _ _)     = error "Not implememented yet!"
+substitute' _ x                = x
 
 solveLiterals :: VProp d a b -> Bool
 solveLiterals (LitB b) = b
