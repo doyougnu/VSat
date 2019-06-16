@@ -59,37 +59,46 @@ instance SAT (UniformProp Text) where toPredicate = toPredicate . uniProp
 instance Show d => Show (UniformProp d) where
   show = show . uniProp
 
+-- | define semigroup for uniform props with an And. The order here is important
+-- so that we avoid essentially cons'ing onto the end of a list. This operation
+-- and mappend will prioritize the first argument, x, over y, so if |x| > |y|
+-- you'll have an O(n) cons. Ideally we could do a x == y check, but because
+-- there are no constraints and this may be called in a hot looop we do not want
+-- to incur an O (min(x, y)) check
+instance Eq d => Semigroup (UniformProp d) where
+  (<>) x y = UniformProp $! OpBB And (uniProp x) (uniProp y)
+
 -- | a wrapper adding Nothing to UniformProp. This is essentially building a
 -- monoid where mempty in Nothing, and mappend is logical Or. Think of this as a
 -- list
-newtype ResultProp d = ResultProp {getProp :: Maybe (UniformProp d)}
-  deriving (Eq,Ord,Generic)
-
-instance Eq d => Semigroup (ResultProp d) where
-  (<>) l r = if l == r then r else l <> r
+newtype ResultProp d = ResultProp {getProp :: UniformProp d}
+  deriving (Eq,Ord,Generic,Semigroup)
 
 instance (Eq d, Semigroup d) => Monoid (ResultProp d) where
-  mempty = ResultProp (Just false)
-  mappend = (<>)
+  mempty = ResultProp false
+  mappend x y =
+    if x == mempty
+    then y
+    else if y == mempty
+         then x
+         else ResultProp $! (getProp x) ||| (getProp y)
 
 instance Show d => Show (ResultProp d) where
-  show rp = maybe mempty show $ getProp rp
+  show rp = show $ getProp rp
 
 
 -- | construct a result prop from a uniformprop, this is just used for a nice
 -- api interface
 toResultProp :: VProp d d d -> ResultProp d
-toResultProp = ResultProp . Just . UniformProp
+toResultProp = ResultProp . UniformProp
 
 negateResultProp :: ResultProp d -> ResultProp d
-negateResultProp = ResultProp . fmap (UniformProp . OpB Not . uniProp) . getProp
+negateResultProp = ResultProp . UniformProp . OpB Not . uniProp . getProp
 
 -- | internal only, allows for more flexibility in cons'ing onto a resultProp
 consWith :: (UniformProp d -> UniformProp d -> UniformProp d)
          -> UniformProp d -> ResultProp d -> ResultProp d
-consWith f x xs = ResultProp $ do xs' <- getProp xs
-                                  let !res = f x xs'
-                                  return res
+consWith f x (getProp -> xs) = ResultProp $! f x xs
 
 -- | cons the first resultProp onto the second with an Or, if the first is
 -- larger than the second then this will be O(i). O(1) in the case where the
@@ -123,28 +132,24 @@ infixr 5 |:>
 instance NFData d => NFData (UniformProp d)
 instance NFData d => NFData (ResultProp d)
 
--- | define semigroup for uniform props with an And. The order here is important
--- so that we avoid essentially cons'ing onto the end of a list. This operation
--- and mappend will prioritize the first argument, x, over y, so if |x| > |y|
--- you'll have an O(n) cons
-instance Eq d => Semigroup (UniformProp d) where
-  (<>) x y | x == y = y
-           | otherwise = UniformProp $! OpBB And (uniProp x) (uniProp y)
-
 instance Resultable Var
 instance Resultable String
 instance Resultable Text
 
 -- | almost the same as configtoProp in VProp.Core but this is hand written for
 -- better asymptotic performance
-configToResultProp :: (Eq a, Semigroup a) => Config a -> ResultProp a
-configToResultProp = M.foldMapWithKey step
-  where step :: Dim a -> Bool -> ResultProp a
-        step d b
-          | b = toResultProp prop
-          | otherwise = negateResultProp . toResultProp $ prop
+configToResultProp' :: Eq a => Config a -> UniformProp a
+configToResultProp' = M.foldrWithKey' step true
+  where step :: Eq a => Dim a -> Bool -> UniformProp a -> UniformProp a
+        step d b !acc
+          | b = UniformProp prop <> acc
+          | otherwise = (UniformProp . bnot $ prop) <> acc
           where prop = dimToVar d
 
+-- | almost the same as configtoProp in VProp.Core but this is hand written for
+-- better asymptotic performance
+configToResultProp :: Eq a => Config a -> ResultProp a
+configToResultProp = ResultProp . configToResultProp'
 
 -- | a type class synonym for constraints required to produce a result
 class (IsString a, Eq a, Ord a, Monoid a) => Resultable a
@@ -188,7 +193,7 @@ unSatToResult r u = onUnSatRes (const uSatRes) mempty
   where uSatRes = UnSatResult $ M.singleton r u
 
 getResMap :: Result d -> M.Map d (VProp d d d)
-getResMap (Result x) = fmap (uniProp . fromJust . getProp) . getRes $ fst x
+getResMap (Result x) = fmap (uniProp . getProp) . getRes $ fst x
 
 getUnSatMap :: Result d -> UnSatResult d
 getUnSatMap (Result x) = snd x
@@ -202,12 +207,10 @@ satKey = fromString "__Sat"
 
 instance (Resultable d) => Semigroup (ResultMap d) where
   (getRes -> x) <> (getRes -> y) =
-    ResultMap $! M.unionWith helper x y
-    where helper !m1 !m2
-            | m1 == m2 = m2
-            | otherwise = consWithOr' m1 m2
-          consWithOr' !p !rp =  p' `consWithOr` rp
-            where p' = fromMaybe (UniformProp $ LitB False) $ getProp p
+    ResultMap $! M.unionWith mappend x y
+    -- where helper !m1 !m2 = consWithOr' m1 m2
+          -- consWithOr' !p !rp =  p' `consWithOr` rp
+          --   where p' = fromMaybe (UniformProp $ LitB False) $ getProp p
 
 insertWith :: (Eq d, Ord d) => (ResultProp d -> ResultProp d -> ResultProp d) ->
   d -> ResultProp d -> ResultMap d -> ResultMap d
@@ -216,16 +219,11 @@ insertWith f k v = ResultMap . M.insertWith f k v . getRes
 -- | O(log n) insert a resultProp into a result. Uses the Monoid instance
 -- of ResultProp i.e. x <> y = x && y
 insertToResult :: Resultable d => d -> ResultProp d -> Result d -> Result d
-insertToResult d prop = onResMap (insertWith (<>) d prop)
+insertToResult d prop = onResMap (insertWith mappend d prop)
 
 -- | O(1) insert a result prop into the result entry for special Sat variable
 insertToSat :: Resultable d => ResultProp d -> Result d -> Result d
-insertToSat = onResMap . insertWith helper satKey
-  where
-    helper :: ResultProp d -> ResultProp d -> ResultProp d
-    helper (getProp -> Nothing)    y = y
-    helper (getProp -> Just uprop) y = consWithOr uprop y
-    helper _                       _ = ResultProp Nothing
+insertToSat = onResMap . insertWith mappend satKey
 
 
 -- | O(log n) given a key lookup the result prop
@@ -282,7 +280,7 @@ getResultWith !f =
 -- because the variable was not true in the context represented by the result
 -- prop
 dispatchProp :: ResultProp d -> Bool -> ResultProp d
-dispatchProp !p !x = if x then p else (ResultProp $ Just $ UniformProp $ LitB x)
+dispatchProp !p !x = if x then p else (ResultProp $ UniformProp $ LitB x)
 
 getResult :: Resultable d => ResultProp d -> Query (Result d)
 getResult = getResultWith . dispatchProp
@@ -290,7 +288,7 @@ getResult = getResultWith . dispatchProp
 deriveSatValues :: ResultMap Text -> IO [M.Map String Bool]
 deriveSatValues m =
   do
-    let prop = fromMaybe true (getProp $ getResSat m)
+    let prop = getProp $ getResSat m
     AllSatResult (_,_,_,allRes) <- allSat $ toPredicate prop
     let resMaps = getModelDictionary <$> allRes
     return $! fmap cvToBool <$> resMaps
