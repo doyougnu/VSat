@@ -53,6 +53,19 @@ ds :: [VProp Text String String]
 ds = bRef <$> ["D_0", "D_1", "D_17", "D_13", "D_7", "D_3", "D_11", "D_5", "D_9", "D_15"]
 
 [d0, d1, d17, d13, d7, d3, d11, d5, d9, d15] = ds
+
+mkCascadeConf n xs = conjoin $ (take n xs) ++ (bnot <$> drop n xs)
+
+-- d0Conf = mkCascadeConf 1 ds
+d01Conf = mkCascadeConf 2 ds
+d012Conf = mkCascadeConf 3 ds
+d0123Conf = mkCascadeConf 4 ds
+d01234Conf = mkCascadeConf 5 ds
+d012345Conf = mkCascadeConf 6 ds
+d0123456Conf = mkCascadeConf 7 ds
+d01234567Conf = mkCascadeConf 8 ds
+d012345678Conf = mkCascadeConf 9 ds
+d0123456789Conf = mkCascadeConf 10 ds
 -- ((<,0), = "D_0"})
 -- ((<,1), = "D_16"})
 -- ((<,2), = "D_12"})
@@ -111,21 +124,44 @@ main = do
       !bPropOpts = applyOpts defConf bProp
       toAutoConf = Just . toDimProp
 
+  [ppV1]         <- genConfigPool d0Conf
+  [ppV12]        <- genConfigPool d01Conf
+  [ppV123]       <- genConfigPool d012Conf
+  [ppV1234]      <- genConfigPool d0123Conf
+  [ppV12345]     <- genConfigPool d01234Conf
+  [ppV123456]    <- genConfigPool d012345Conf
+  [ppV1234567]   <- genConfigPool d0123456Conf
+  [ppV12345678]  <- genConfigPool d01234567Conf
+  [ppV123456789] <- genConfigPool d012345678Conf
+  [ppVAll]       <- genConfigPool d0123456789Conf
+
+  let
+    !bPropV1         = selectVariantTotal ppV1 bProp
+    !bPropV12        = selectVariantTotal ppV12 bProp
+    !bPropV123       = selectVariantTotal ppV123 bProp
+    !bPropV1234      = selectVariantTotal ppV1234 bProp
+    !bPropV12345     = selectVariantTotal ppV12345 bProp
+    !bPropV123456    = selectVariantTotal ppV123456 bProp
+    !bPropV1234567   = selectVariantTotal ppV1234567 bProp
+    !bPropV12345678  = selectVariantTotal ppV12345678 bProp
+    !bPropV123456789 = selectVariantTotal ppV123456789 bProp
+    !bPropVAll       = selectVariantTotal ppVAll bProp
 
   -- res' <- runIncrementalSolve bPs
 
   -- putStrLn $ "Done with parse: "
   -- mapM_ (putStrLn . show) $ (sPs)
   -- putStrLn $ "------------------"
-  -- putStrLn $ "Solving: "
-  res' <- satWithConf (toAutoConf evoAwareConf) emptyConf bProp
+  -- putStrLn $ (show bProp)
+  -- res' <- satWithConf (toAutoConf d0Conf) emptyConf bProp
   -- res' <- ad id bProp
   -- res' <- satWithConf autoConf emptyConf (bRef "a" &&& bRef "c")
   -- res' <- satWith emptyConf sProp
   -- putStrLn "DONE!"
   -- mapM_ (putStrLn . show) $ confs
   -- putStrLn $ show evoAwareConf
-  print $ length (show res')
+  -- print $ res'
+  -- print $ length (show res')
   -- let !p = prop 6000
   -- -- res <- test 10
   -- res <- S.runSMT $ do p' <- mapM S.sBool p
@@ -133,21 +169,74 @@ main = do
   -- putStrLn "Running Good:\n"
   -- goodRes <- testS goodS 1000
 
-  -- defaultMain
-  --   [
-  --   bgroup "vsat" [
-  --                    bench "Fin:VSolve:V1"  . nfIO $ satWithConf (toAutoConf d0Conf) emptyConf bProp
-  --                  , bench "Fin:VSolve:V2"  . nfIO $ satWithConf (toAutoConf d1Conf) emptyConf bProp
-  --                  , bench "Fin:VSolve:V3"  . nfIO $ satWithConf (toAutoConf d17Conf) emptyConf bProp
-  --                  , bench "Fin:VSolve:V4"  . nfIO $ satWithConf (toAutoConf d13Conf) emptyConf bProp
-  --                  , bench "Fin:VSolve:V5"  . nfIO $ satWithConf (toAutoConf d7Conf) emptyConf bProp
-  --                  , bench "Fin:VSolve:V6"  . nfIO $ satWithConf (toAutoConf d3Conf) emptyConf bProp
-  --                  , bench "Fin:VSolve:V7"  . nfIO $ satWithConf (toAutoConf d11Conf) emptyConf bProp
-  --                  , bench "Fin:VSolve:V8"  . nfIO $ satWithConf (toAutoConf d5Conf) emptyConf bProp
-  --                  , bench "Fin:VSolve:V9"  . nfIO $ satWithConf (toAutoConf d9Conf) emptyConf bProp
-  --                  , bench "Fin:VSolve:V10"  . nfIO $ satWithConf (toAutoConf d15Conf) emptyConf bProp
-  --                  , bench "Fin:VSolve:Evo-Aware" . nfIO $ satWithConf (toAutoConf evoAwareConf) emptyConf bProp
-  --                 ]
-  --   ]
+  defaultMain
+    [
+    bgroup "vsat" [ bench "Fin:VSolve:V1"  . nfIO $ satWithConf (toAutoConf d0Conf) emptyConf bProp
+                  , bench "Fin:VSolve:V1+V2" . nfIO $ satWithConf (toAutoConf d01Conf) emptyConf bProp
+                  , bench "Fin:VSolve:V1+V2+V3" . nfIO $ satWithConf (toAutoConf d012Conf) emptyConf bProp
+                  , bench "Fin:VSolve:V1+V2+V3+V4" . nfIO $ satWithConf (toAutoConf d0123Conf) emptyConf bProp
+                  , bench "Fin:VSolve:V1+V2+V3+V4+V5" . nfIO $ satWithConf (toAutoConf d01234Conf) emptyConf bProp
+                  , bench "Fin:VSolve:V1+V2+V3+V4+V5+V6" . nfIO $ satWithConf (toAutoConf d012345Conf) emptyConf bProp
+                  , bench "Fin:VSolve:V1+V2+V3+V4+V5+V6+V7" . nfIO $ satWithConf (toAutoConf d0123456Conf) emptyConf bProp
+                  , bench "Fin:VSolve:V1+V2+V3+V4+V5+V6+V7+V8" . nfIO $ satWithConf (toAutoConf d01234567Conf) emptyConf bProp
+                  , bench "Fin:VSolve:V1+V2+V3+V4+V5+V6+V7+V8+V9" . nfIO $ satWithConf (toAutoConf d012345678Conf) emptyConf bProp
+                  , bench "Fin:VSolve:V1+V2+V3+V4+V5+V6+V7+V8+V9+V10" . nfIO $ satWithConf (toAutoConf d0123456789Conf) emptyConf bProp
 
--- [d0Conf, d1Conf, d17Conf, d13Conf, d7Conf, d3Conf, d11Conf, d5Conf, d9Conf, d15Conf] = confs
+                  , bench "Fin:PlainOnVSAT:V1"  . nfIO $ pOnVWithConf  Nothing bPropV1
+                  , bench "Fin:PlainOnVSAT:V1+V2" . nfIO $ pOnVWithConf  Nothing bPropV12
+                  , bench "Fin:PlainOnVSAT:V1+V2+V3" . nfIO $ pOnVWithConf  Nothing bPropV123
+                  , bench "Fin:PlainOnVSAT:V1+V2+V3+V4" . nfIO $ pOnVWithConf  Nothing bPropV1234
+                  , bench "Fin:PlainOnVSAT:V1+V2+V3+V4+V5" . nfIO $ pOnVWithConf  Nothing bPropV12345
+                  , bench "Fin:PlainOnVSAT:V1+V2+V3+V4+V5+V6" . nfIO $ pOnVWithConf  Nothing bPropV123456
+                  , bench "Fin:PlainOnVSAT:V1+V2+V3+V4+V5+V6+V7" . nfIO $ pOnVWithConf  Nothing bPropV1234567
+                  , bench "Fin:PlainOnVSAT:V1+V2+V3+V4+V5+V6+V7+V8" . nfIO $ pOnVWithConf  Nothing bPropV12345678
+                  , bench "Fin:PlainOnVSAT:V1+V2+V3+V4+V5+V6+V7+V8+V9" . nfIO $ pOnVWithConf  Nothing bPropV123456789
+                  , bench "Fin:PlainOnVSAT:V1+V2+V3+V4+V5+V6+V7+V8+V9+V10" . nfIO $ pOnVWithConf  Nothing bPropVAll
+
+                  , bench "Fin:BruteForce:V1"  . nfIO $ bfWith  emptyConf bPropV1
+                  , bench "Fin:BruteForce:V1+V2" . nfIO $ bfWith  emptyConf bPropV12
+                  , bench "Fin:BruteForce:V1+V2+V3" . nfIO $ bfWith  emptyConf bPropV123
+                  , bench "Fin:BruteForce:V1+V2+V3+V4" . nfIO $ bfWith  emptyConf bPropV1234
+                  , bench "Fin:BruteForce:V1+V2+V3+V4+V5" . nfIO $ bfWith  emptyConf bPropV12345
+                  , bench "Fin:BruteForce:V1+V2+V3+V4+V5+V6" . nfIO $ bfWith  emptyConf bPropV123456
+                  , bench "Fin:BruteForce:V1+V2+V3+V4+V5+V6+V7" . nfIO $ bfWith  emptyConf bPropV1234567
+                  , bench "Fin:BruteForce:V1+V2+V3+V4+V5+V6+V7+V8" . nfIO $ bfWith  emptyConf bPropV12345678
+                  , bench "Fin:BruteForce:V1+V2+V3+V4+V5+V6+V7+V8+V9" . nfIO $ bfWith  emptyConf bPropV123456789
+                  , bench "Fin:BruteForce:V1+V2+V3+V4+V5+V6+V7+V8+V9+V10" . nfIO $ bfWith  emptyConf bPropVAll
+
+                  , bench "Fin:VariationalOnPlain:V1"  . nfIO $ bfWithConf (toAutoConf d0Conf) emptyConf bProp
+                  , bench "Fin:VariationalOnPlain:V1+V2" . nfIO $ bfWithConf (toAutoConf d01Conf) emptyConf bProp
+                  , bench "Fin:VariationalOnPlain:V1+V2+V3" . nfIO $ bfWithConf (toAutoConf d012Conf) emptyConf bProp
+                  , bench "Fin:VariationalOnPlain:V1+V2+V3+V4" . nfIO $ bfWithConf (toAutoConf d0123Conf) emptyConf bProp
+                  , bench "Fin:VariationalOnPlain:V1+V2+V3+V4+V5" . nfIO $ bfWithConf (toAutoConf d01234Conf) emptyConf bProp
+                  , bench "Fin:VariationalOnPlain:V1+V2+V3+V4+V5+V6" . nfIO $ bfWithConf (toAutoConf d012345Conf) emptyConf bProp
+                  , bench "Fin:VariationalOnPlain:V1+V2+V3+V4+V5+V6+V7" . nfIO $ bfWithConf (toAutoConf d0123456Conf) emptyConf bProp
+                  , bench "Fin:VariationalOnPlain:V1+V2+V3+V4+V5+V6+V7+V8" . nfIO $ bfWithConf (toAutoConf d01234567Conf) emptyConf bProp
+                  , bench "Fin:VariationalOnPlain:V1+V2+V3+V4+V5+V6+V7+V8+V9" . nfIO $ bfWithConf (toAutoConf d012345678Conf) emptyConf bProp
+                  , bench "Fin:VariationalOnPlain:V1+V2+V3+V4+V5+V6+V7+V8+V9+V10" . nfIO $ bfWithConf (toAutoConf d0123456789Conf) emptyConf bProp
+
+                  -- , bench "Fin:VSolve:V2" . nfIO $ satWithConf (toAutoConf d1Conf) emptyConf bProp
+                  -- , bench "Fin:VSolve:V3" . nfIO $ satWithConf (toAutoConf d17Conf) emptyConf bProp
+                  -- , bench "Fin:VSolve:V4" . nfIO $ satWithConf (toAutoConf d13Conf) emptyConf bProp
+                  -- , bench "Fin:VSolve:V5" . nfIO $ satWithConf (toAutoConf d7Conf) emptyConf bProp
+                  -- , bench "Fin:VSolve:V6" . nfIO $ satWithConf (toAutoConf d3Conf) emptyConf bProp
+                  -- , bench "Fin:VSolve:V7" . nfIO $ satWithConf (toAutoConf d11Conf) emptyConf bProp
+                  -- , bench "Fin:VSolve:V8" . nfIO $ satWithConf (toAutoConf d5Conf) emptyConf bProp
+                  -- , bench "Fin:VSolve:V9" . nfIO $ satWithConf (toAutoConf d9Conf) emptyConf bProp
+                  -- , bench "Fin:VSolve:V10"  . nfIO $ satWithConf (toAutoConf d15Conf) emptyConf bProp
+                  -- , bench "Fin:VSolve:Evo-Aware" . nfIO $ satWithConf (toAutoConf evoAwareConf) emptyConf bProp
+                  ]
+    ]
+
+-- -- [d0Conf, d1Conf, d17Conf, d13Conf, d7Conf, d3Conf, d11Conf, d5Conf, d9Conf, d15Conf] = confs
+
+-- d0Conf = mkCascadeConf 1 ds
+-- d1Conf = mkCascadeConf 2 ds
+-- d2Conf = mkCascadeConf 3 ds
+-- d3Conf = mkCascadeConf 4 ds
+-- d4Conf = mkCascadeConf 5 ds
+-- d5Conf = mkCascadeConf 6 ds
+-- d6Conf = mkCascadeConf 7 ds
+-- d7Conf = mkCascadeConf 8 ds
+-- d8Conf = mkCascadeConf 9 ds
+-- d9Conf = mkCascadeConf 10 ds
