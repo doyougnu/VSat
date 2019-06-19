@@ -4,7 +4,7 @@ using Query  # Tidyverse
 using Plots  # for plotting
 
 ### get the data in a data frame
-dataFile = "../data/fin_timings.csv"
+dataFile = "../data/auto_timings.csv"
 df = CSV.File(dataFile) |> DataFrame
 
 ### helper functions
