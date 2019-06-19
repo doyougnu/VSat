@@ -118,6 +118,13 @@ runIncrementalSolve xs = runIncrementalSolve_ (toList <$> assocMaps)
                     (fmap evalAutoExpr__) <$>
                     St.evalStateT (mapM (autoToSBool) assocMaps') (mempty,mempty)
 
+makeAssocMap :: [AutoLang Text Text] -> Symbolic (Map (AutoLang Text Text) (Query SBool))
+makeAssocMap xs = assocMaps
+  where assocList = makeAssocList xs
+        assocMaps' = unions $ (fromListWith (flip $ BBinary And) <$> assocList)
+        assocMaps = (fmap evalAutoExpr__) <$>
+                    St.evalStateT (mapM (autoToSBool) assocMaps') (mempty,mempty)
+
 -- | Make an association list. this finds a context by position, if it exists it
 -- is captured in the lhs of a tuple, if not then we create a ref called
 -- "__plain__", then we sort and group on these split terms. This results in a
@@ -131,6 +138,10 @@ makeAssocList xs = L.groupBy isPlain $
   where helper x
           | hasCtx x = x
           | otherwise = AutoRef "__plain__"
+
+-- | a constant that denotes the key which describes plain terms in an assoc map
+plainHandle :: AutoLang Text Text
+plainHandle = AutoRef "__plain__"
 
 -- | a map of contexts to formulas, we abuse the types here
 type AssocMap = Map (AutoLang Text Text) (AutoLang Text Text)
