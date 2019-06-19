@@ -303,7 +303,9 @@ numTerms = getSum . trifoldMap f f f
   where f = const 1
 
 compressionRatio :: (Ord d, Fractional c) => VProp d a b -> c
-compressionRatio prop = ((fromIntegral numerator) / (fromIntegral total))
+compressionRatio prop
+  | fromIntegral total == 0 = 0
+  | otherwise = ((fromIntegral numerator) / (fromIntegral total))
   where numerator = length $ toList prop
         configs = choices prop
         total = sum $ (length . toList . flip selectVariantTotal prop) <$> configs

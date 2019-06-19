@@ -25,6 +25,9 @@ import VProp.Boolean
 --------------------------- Constants -----------------------------------------
 autoFileBool :: FilePath
 autoFileBool = "bench/AutoBench/Automotive02_merged_evolution_history_boolean.json"
+
+dataFile :: FilePath
+dataFile = "bench/Financial/financial_merged.json"
 --------------------------- Constants -----------------------------------------
 
 unitTests :: TestTree
@@ -40,7 +43,7 @@ auto_model_correct = H.testCase
 auto_model_correct' :: H.Assertion
 auto_model_correct' =
   do
-    bJsn <- BS.readFile autoFileBool
+    bJsn <- BS.readFile dataFile
     let
       (Just bAuto) = decodeStrict bJsn :: Maybe Auto
       !bCs = constraints bAuto
@@ -55,7 +58,7 @@ auto_model_correct' =
         | d == "D_3" = "D_4"
         | otherwise = d
 
-      bProp = ((renameDims sameDims) . naiveEncode . autoToVSat) $ autoAndJoin (Prelude.take 20 bPs)
+      bProp = ((renameDims sameDims) . naiveEncode . autoToVSat) $ autoAndJoin bPs
 
     model <- satWith emptyConf bProp
     cfgs <- deriveModels model
@@ -63,7 +66,7 @@ auto_model_correct' =
     let getRes' c = substitute' (deriveValues model c) (selectVariantTotal c bProp)
         -- values = deriveValues model cfg
         res = getRes <$> (Prelude.take 1 cfgs)
-    liftIO . putStrLn $ "[config]: \n" ++ show (Prelude.take 1 cfgs)
-    liftIO . putStrLn $ "[model]: \n" ++ show (model)
-    liftIO . putStrLn $ "[values]: \n" ++ show (getRes' (Prelude.head cfgs))
+    -- liftIO . putStrLn $ "[config]: \n" ++ show (Prelude.take 1 cfgs)
+    -- liftIO . putStrLn $ "[model]: \n" ++ show (model)
+    -- liftIO . putStrLn $ "[values]: \n" ++ show (getRes' (Prelude.head cfgs))
     H.assertBool ("Failed with") (Prelude.all (==True) res)

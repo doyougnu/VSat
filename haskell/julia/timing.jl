@@ -4,7 +4,7 @@ using Query  # Tidyverse
 using Plots  # for plotting
 
 ### get the data in a data frame
-dataFile = "../data/smallTimings.csv"
+dataFile = "../data/fin_timings.csv"
 df = CSV.File(dataFile) |> DataFrame
 
 ### helper functions
@@ -17,9 +17,11 @@ function genCol(df, colName, index, f)
     df
 end
 
+function addData(df) genCol(df, :DataSet, 1, x->x) end
+
 function addAlg(df) genCol(df, :Algorithm, 2, x->x) end
 
-function addNumPlain(df) genCol(df, :PlainCount, 9, x->parse(Float64, x)) end
+function addNumPlain(df) genCol(df, :PlainCount, 7, x->parse(Float64, x)) end
 
 function addConf(df) genCol(df, :Config, 3, id) end
 
@@ -33,20 +35,23 @@ function addNumVariant(df) genCol(df, :VariantSize, 7, x->parse(Int,x)) end
 
 function addType(df) genCol(df, :FormulaType, 12, id) end
 
-function addComp(df) genCol(df, :CompressionRatio, 11, x->parse(Float64,x)) end
+function addComp(df) genCol(df, :CompressionRatio, 9, x->parse(Float64,x)) end
 
 # mutate the data by splitting on the name column
+# function mungeDF!(df::DataFrame)
+#     df |>
+#         addNumPlain |>
+#         addAlg |>
+#         # addNumPlain |>
+#         addConf |>
+#         addNumChc |>
+#         addChc |>
+#         addVariantSize |>
+#         addNumVariant |>
+#         addComp |> addType
+# end
 function mungeDF!(df::DataFrame)
-    df |>
-        addNumPlain |>
-        addAlg |>
-        # addNumPlain |>
-        addConf |>
-        addNumChc |>
-        addChc |>
-        addVariantSize |>
-        addNumVariant |>
-        addComp |> addType
+    df |> addData |> addAlg |> addConf |> addNumChc |> addNumPlain |> addComp
 end
 
 ## perform the mutation
