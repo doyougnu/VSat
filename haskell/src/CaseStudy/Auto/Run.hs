@@ -180,7 +180,7 @@ runIncrementalSolve_  assocList = runSMT $
 
      query $
        do
-         push 1
+         -- push 1
          ps >>= constrain
          b <- isSat
          resMap <- if b
