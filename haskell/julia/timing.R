@@ -10,4 +10,4 @@ ggplot(data, mapping = aes(x=Config, y=Mean, color=Algorithm, group=Algorithm)) 
 ## +
 ##   facet_grid(Config ~ .)
 
-ggsave("financial_cascade",device = "png")
+ggsave("../plots/financial_cascade",device = "png")
