@@ -10,7 +10,7 @@ import qualified Data.ByteString         as BS (readFile)
 import           Data.Either             (lefts, rights)
 import           Data.Foldable           (foldr')
 import           Data.List               (sort,delete,intersperse)
-import           Data.Map                (size, Map)
+import           Data.Map                (size, Map, (!))
 import qualified Data.SBV                as S
 import qualified Data.SBV.Control        as SC
 import qualified Data.SBV.Internals      as SI
@@ -21,6 +21,7 @@ import           Text.Megaparsec         (parse)
 
 import           Api
 import           CaseStudy.Auto.Auto
+import           CaseStudy.Auto.Lang
 import           CaseStudy.Auto.Parser   (langParser)
 import           CaseStudy.Auto.Run
 import           CaseStudy.Auto.CompactEncode
@@ -80,21 +81,22 @@ d4Conf = ((bnot d0) &&& (bnot d2) &&& d4 &&& bnot d5) -- <0 /\ <1 /\
 
 negConf = conjoin $ bnot <$> ds
 
+baselineSolve :: [AutoLang Text Text] -> IO S.SatResult
+baselineSolve props = S.runSMT $
+  do assocMap <- makeAssocMap props
+     SC.query $
+       do
+         (assocMap ! plainHandle) >>= S.constrain
+         fmap S.SatResult SC.getSMTResult
+
 -- run with stack bench --profile vsat:auto --benchmark-arguments='+RTS -S -RTS --output timings.html'
 main = do
   -- readfile is strict
-  sJsn <- BS.readFile smAutoFile
   bJsn <- BS.readFile autoFileBool
-  let (Just sAuto) = decodeStrict sJsn :: Maybe Auto
   let (Just bAuto) = decodeStrict bJsn :: Maybe Auto
-      !sCs = constraints sAuto -- looks like 4298/4299 are the culprits
       !bCs = constraints bAuto
-      sPs' = parse langParser "" <$> sCs
-      sPs = fmap (simplifyCtxs . renameCtxs sameCtxs) $ rights sPs'
-
       bPs' = parse langParser "" <$> bCs
-      bPsSimp = fmap (simplifyCtxs . renameCtxs sameCtxs) $ rights bPs'
-      bPs = rights bPs'
+      bPs = fmap (simplifyCtxs . renameCtxs sameCtxs) $ rights bPs'
 
       -- | Hardcoding equivalencies in generated dimensions to reduce number of
       -- dimensions to 4
@@ -104,8 +106,6 @@ main = do
         | d == "D_3" = "D_4"
         | otherwise = d
 
-      !sProp = ((renameDims sameDims) . naiveEncode . autoToVSat) $ autoAndJoin sPs
-      --  -- take 4500 bPs produces a solution for the plain case (all dims set to false)
       !bProp = ((renameDims sameDims) . naiveEncode . autoToVSat) $ autoAndJoin (bPs)
       !bPropOpts = applyOpts defConf bProp
       toAutoConf = Just . toDimProp
@@ -134,6 +134,8 @@ main = do
 
   -- res' <- runIncrementalSolve bPs
 
+  mdl <- baselineSolve bPs
+  print mdl
   -- putStrLn $ "Done with parse: "
   -- mapM_ (putStrLn . show) $ (sPs)
   -- putStrLn $! show bProp
@@ -154,34 +156,34 @@ main = do
   -- putStrLn "Running Good:\n"
   -- goodRes <- testS goodS 1000
 
-  defaultMain
-    [
-    bgroup "Auto" [
-        -- v - v
-                     mkBench "VSolve" "V1"  (satWithConf (toAutoConf d0Conf) emptyConf) bProp
-                   , mkBench "VSolve" "V1+V2"  (satWithConf (toAutoConf d02Conf) emptyConf) bProp
-                   , mkBench "VSolve" "V1+V2+V3"  (satWithConf (toAutoConf d024Conf) emptyConf) bProp
-                   , mkBench "VSolve" "V1+V2+V3+V4"  (satWithConf (toAutoConf dAllConf) emptyConf) bProp
-                   -- p - v
-                   , mkBench "PlainOnVSat" "V1"  (pOnVWithConf Nothing) bPropV1
-                   , mkBench "PlainOnVSat" "V1+V2"  (pOnVWithConf Nothing) bPropV12
-                   , mkBench "PlainOnVSat" "V1+V2+V3"  (pOnVWithConf Nothing) bPropV124
-                   , mkBench "PlainOnVSat" "V1+V2+V3+V4"  (pOnVWithConf Nothing) bPropVAll
+  -- defaultMain
+  --   [
+  --   bgroup "Auto" [
+  --       -- v - v
+  --                    mkBench "VSolve" "V1"  (satWithConf (toAutoConf d0Conf) emptyConf) bProp
+  --                  , mkBench "VSolve" "V1+V2"  (satWithConf (toAutoConf d02Conf) emptyConf) bProp
+  --                  , mkBench "VSolve" "V1+V2+V3"  (satWithConf (toAutoConf d024Conf) emptyConf) bProp
+  --                  , mkBench "VSolve" "V1+V2+V3+V4"  (satWithConf (toAutoConf dAllConf) emptyConf) bProp
+  --                  -- p - v
+  --                  , mkBench "PlainOnVSat" "V1"  (pOnVWithConf Nothing) bPropV1
+  --                  , mkBench "PlainOnVSat" "V1+V2"  (pOnVWithConf Nothing) bPropV12
+  --                  , mkBench "PlainOnVSat" "V1+V2+V3"  (pOnVWithConf Nothing) bPropV124
+  --                  , mkBench "PlainOnVSat" "V1+V2+V3+V4"  (pOnVWithConf Nothing) bPropVAll
 
-                   -- p - p
-                   , mkBench "BruteForce" "V1"  (bfWith emptyConf) bPropV1
-                   , mkBench "BruteForce" "V1+V2"  (bfWith emptyConf) bPropV12
-                   , mkBench "BruteForce" "V1+V2+V3"  (bfWith emptyConf) bPropV124
-                   , mkBench "BruteForce" "V1+V2+V3+V4"  (bfWith emptyConf) bPropVAll
+  --                  -- p - p
+  --                  , mkBench "BruteForce" "V1"  (bfWith emptyConf) bPropV1
+  --                  , mkBench "BruteForce" "V1+V2"  (bfWith emptyConf) bPropV12
+  --                  , mkBench "BruteForce" "V1+V2+V3"  (bfWith emptyConf) bPropV124
+  --                  , mkBench "BruteForce" "V1+V2+V3+V4"  (bfWith emptyConf) bPropVAll
 
-                   -- v - p
-                   , mkBench "VariationalOnPlain" "V1"  (bfWithConf (toAutoConf d0Conf) emptyConf) bProp
-                   , mkBench "VariationalOnPlain" "V1+V2"  (bfWithConf (toAutoConf d02Conf) emptyConf) bProp
-                   , mkBench "VariationalOnPlain" "V1+V2+V3"  (bfWithConf (toAutoConf d024Conf) emptyConf) bProp
-                   , mkBench "VariationalOnPlain" "V1+V2+V3+V4"  (bfWithConf (toAutoConf dAllConf) emptyConf) bProp
-                  ]
-    ]
+  --                  -- v - p
+  --                  , mkBench "VariationalOnPlain" "V1"  (bfWithConf (toAutoConf d0Conf) emptyConf) bProp
+  --                  , mkBench "VariationalOnPlain" "V1+V2"  (bfWithConf (toAutoConf d02Conf) emptyConf) bProp
+  --                  , mkBench "VariationalOnPlain" "V1+V2+V3"  (bfWithConf (toAutoConf d024Conf) emptyConf) bProp
+  --                  , mkBench "VariationalOnPlain" "V1+V2+V3+V4"  (bfWithConf (toAutoConf dAllConf) emptyConf) bProp
+  --                 ]
+  --   ]
 
-                   --   bench "Auto:VSolve:NoConf"  . nfIO $ satWithConf Nothing emptyConf bProp
-                   -- , bench "Auto:PonV:NoConf"  . nfIO $ pOnVWithConf Nothing bProp
-                   -- , bench "Auto:BF:NoConf"  . nfIO $ bfWith emptyConf bProp
+  --                  --   bench "Auto:VSolve:NoConf"  . nfIO $ satWithConf Nothing emptyConf bProp
+  --                  -- , bench "Auto:PonV:NoConf"  . nfIO $ pOnVWithConf Nothing bProp
+  --                  -- , bench "Auto:BF:NoConf"  . nfIO $ bfWith emptyConf bProp

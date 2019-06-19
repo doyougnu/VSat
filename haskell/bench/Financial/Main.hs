@@ -161,7 +161,8 @@ main = do
   -- res' <- runIncrementalSolve bPs
 
   -- putStrLn $ "Done with parse: "
-  -- mapM_ (putStrLn . show) $ (sPs)
+  mapM_ (putStrLn . show . second numTerms) $
+    zip [1..] [bPropV1, bPropV12, bPropV123, bPropV1234, bPropV12345, bPropV123456, bPropV123456, bPropV1234567, bPropV12345678, bPropV123456789, bPropVAll]
   -- putStrLn $ "------------------"
   -- putStrLn $ (show bProp)
   -- res' <- satWithConf (toAutoConf d0Conf) emptyConf bProp
@@ -180,53 +181,53 @@ main = do
   -- putStrLn "Running Good:\n"
   -- goodRes <- testS goodS 1000
 
-  defaultMain
-    [
-    bgroup "Fin" [ mkBench "VSolve" "V1+V2" (satWithConf (toAutoConf d0Conf) emptyConf) bProp
+  -- defaultMain
+  --   [
+  --   bgroup "Fin" [ mkBench "VSolve" "V1+V2" (satWithConf (toAutoConf d0Conf) emptyConf) bProp
 
-                  , mkBench "VSolve" "V1" (satWithConf (toAutoConf d0Conf) emptyConf) bProp
-                  , mkBench "VSolve" "V1+V2" (satWithConf (toAutoConf d01Conf) emptyConf) bProp
-                  , mkBench "VSolve" "V1+V2+V3" (satWithConf (toAutoConf d012Conf) emptyConf) bProp
-                  , mkBench "VSolve" "V1+V2+V3+V4" (satWithConf (toAutoConf d0123Conf) emptyConf) bProp
-                  , mkBench "VSolve" "V1+V2+V3+V4+V5" (satWithConf (toAutoConf d01234Conf) emptyConf) bProp
-                  , mkBench "VSolve" "V1+V2+V3+V4+V5+V6" (satWithConf (toAutoConf d012345Conf) emptyConf) bProp
-                  , mkBench "VSolve" "V1+V2+V3+V4+V5+V6+V7" (satWithConf (toAutoConf d0123456Conf) emptyConf) bProp
-                  , mkBench "VSolve" "V1+V2+V3+V4+V5+V6+V7+V8" (satWithConf (toAutoConf d01234567Conf) emptyConf) bProp
-                  , mkBench "VSolve" "V1+V2+V3+V4+V5+V6+V7+V8+V9" (satWithConf (toAutoConf d012345678Conf) emptyConf) bProp
-                  , mkBench "VSolve" "V1+V2+V3+V4+V5+V6+V7+V8+V9+V10" (satWithConf (toAutoConf d0123456789Conf) emptyConf) bProp
+  --                 , mkBench "VSolve" "V1" (satWithConf (toAutoConf d0Conf) emptyConf) bProp
+  --                 , mkBench "VSolve" "V1+V2" (satWithConf (toAutoConf d01Conf) emptyConf) bProp
+  --                 , mkBench "VSolve" "V1+V2+V3" (satWithConf (toAutoConf d012Conf) emptyConf) bProp
+  --                 , mkBench "VSolve" "V1+V2+V3+V4" (satWithConf (toAutoConf d0123Conf) emptyConf) bProp
+  --                 , mkBench "VSolve" "V1+V2+V3+V4+V5" (satWithConf (toAutoConf d01234Conf) emptyConf) bProp
+  --                 , mkBench "VSolve" "V1+V2+V3+V4+V5+V6" (satWithConf (toAutoConf d012345Conf) emptyConf) bProp
+  --                 , mkBench "VSolve" "V1+V2+V3+V4+V5+V6+V7" (satWithConf (toAutoConf d0123456Conf) emptyConf) bProp
+  --                 , mkBench "VSolve" "V1+V2+V3+V4+V5+V6+V7+V8" (satWithConf (toAutoConf d01234567Conf) emptyConf) bProp
+  --                 , mkBench "VSolve" "V1+V2+V3+V4+V5+V6+V7+V8+V9" (satWithConf (toAutoConf d012345678Conf) emptyConf) bProp
+  --                 , mkBench "VSolve" "V1+V2+V3+V4+V5+V6+V7+V8+V9+V10" (satWithConf (toAutoConf d0123456789Conf) emptyConf) bProp
 
-                  , mkBench "PlainOnVSAT" "V1"  (pOnVWithConf  Nothing) bPropV1
-                  , mkBench "PlainOnVSAT" "V1+V2" (pOnVWithConf  Nothing) bPropV12
-                  , mkBench "PlainOnVSAT" "V1+V2+V3" (pOnVWithConf  Nothing) bPropV123
-                  , mkBench "PlainOnVSAT" "V1+V2+V3+V4" (pOnVWithConf  Nothing) bPropV1234
-                  , mkBench "PlainOnVSAT" "V1+V2+V3+V4+V5" (pOnVWithConf  Nothing) bPropV12345
-                  , mkBench "PlainOnVSAT" "V1+V2+V3+V4+V5+V6" (pOnVWithConf  Nothing) bPropV123456
-                  , mkBench "PlainOnVSAT" "V1+V2+V3+V4+V5+V6+V7" (pOnVWithConf  Nothing) bPropV1234567
-                  , mkBench "PlainOnVSAT" "V1+V2+V3+V4+V5+V6+V7+V8" (pOnVWithConf  Nothing) bPropV12345678
-                  , mkBench "PlainOnVSAT" "V1+V2+V3+V4+V5+V6+V7+V8+V9" (pOnVWithConf  Nothing) bPropV123456789
-                  , mkBench "PlainOnVSAT" "V1+V2+V3+V4+V5+V6+V7+V8+V9+V10" (pOnVWithConf  Nothing) bPropVAll
+  --                 , mkBench "PlainOnVSAT" "V1"  (pOnVWithConf  Nothing) bPropV1
+  --                 , mkBench "PlainOnVSAT" "V1+V2" (pOnVWithConf  Nothing) bPropV12
+  --                 , mkBench "PlainOnVSAT" "V1+V2+V3" (pOnVWithConf  Nothing) bPropV123
+  --                 , mkBench "PlainOnVSAT" "V1+V2+V3+V4" (pOnVWithConf  Nothing) bPropV1234
+  --                 , mkBench "PlainOnVSAT" "V1+V2+V3+V4+V5" (pOnVWithConf  Nothing) bPropV12345
+  --                 , mkBench "PlainOnVSAT" "V1+V2+V3+V4+V5+V6" (pOnVWithConf  Nothing) bPropV123456
+  --                 , mkBench "PlainOnVSAT" "V1+V2+V3+V4+V5+V6+V7" (pOnVWithConf  Nothing) bPropV1234567
+  --                 , mkBench "PlainOnVSAT" "V1+V2+V3+V4+V5+V6+V7+V8" (pOnVWithConf  Nothing) bPropV12345678
+  --                 , mkBench "PlainOnVSAT" "V1+V2+V3+V4+V5+V6+V7+V8+V9" (pOnVWithConf  Nothing) bPropV123456789
+  --                 , mkBench "PlainOnVSAT" "V1+V2+V3+V4+V5+V6+V7+V8+V9+V10" (pOnVWithConf  Nothing) bPropVAll
 
-                  , mkBench "BruteForce" "V1"  (bfWith  emptyConf) bPropV1
-                  , mkBench "BruteForce" "V1+V2" (bfWith  emptyConf) bPropV12
-                  , mkBench "BruteForce" "V1+V2+V3" (bfWith  emptyConf) bPropV123
-                  , mkBench "BruteForce" "V1+V2+V3+V4" (bfWith  emptyConf) bPropV1234
-                  , mkBench "BruteForce" "V1+V2+V3+V4+V5" (bfWith  emptyConf) bPropV12345
-                  , mkBench "BruteForce" "V1+V2+V3+V4+V5+V6" (bfWith  emptyConf) bPropV123456
-                  , mkBench "BruteForce" "V1+V2+V3+V4+V5+V6+V7" (bfWith  emptyConf) bPropV1234567
-                  , mkBench "BruteForce" "V1+V2+V3+V4+V5+V6+V7+V8" (bfWith  emptyConf) bPropV12345678
-                  , mkBench "BruteForce" "V1+V2+V3+V4+V5+V6+V7+V8+V9" (bfWith  emptyConf) bPropV123456789
-                  , mkBench "BruteForce" "V1+V2+V3+V4+V5+V6+V7+V8+V9+V10" (bfWith  emptyConf) bPropVAll
+  --                 , mkBench "BruteForce" "V1"  (bfWith  emptyConf) bPropV1
+  --                 , mkBench "BruteForce" "V1+V2" (bfWith  emptyConf) bPropV12
+  --                 , mkBench "BruteForce" "V1+V2+V3" (bfWith  emptyConf) bPropV123
+  --                 , mkBench "BruteForce" "V1+V2+V3+V4" (bfWith  emptyConf) bPropV1234
+  --                 , mkBench "BruteForce" "V1+V2+V3+V4+V5" (bfWith  emptyConf) bPropV12345
+  --                 , mkBench "BruteForce" "V1+V2+V3+V4+V5+V6" (bfWith  emptyConf) bPropV123456
+  --                 , mkBench "BruteForce" "V1+V2+V3+V4+V5+V6+V7" (bfWith  emptyConf) bPropV1234567
+  --                 , mkBench "BruteForce" "V1+V2+V3+V4+V5+V6+V7+V8" (bfWith  emptyConf) bPropV12345678
+  --                 , mkBench "BruteForce" "V1+V2+V3+V4+V5+V6+V7+V8+V9" (bfWith  emptyConf) bPropV123456789
+  --                 , mkBench "BruteForce" "V1+V2+V3+V4+V5+V6+V7+V8+V9+V10" (bfWith  emptyConf) bPropVAll
 
-                  , mkBench "VariationalOnPlain" "V1"  (bfWithConf (toAutoConf d0Conf) emptyConf) bProp
-                  , mkBench "VariationalOnPlain" "V1+V2" (bfWithConf (toAutoConf d01Conf) emptyConf) bProp
-                  , mkBench "VariationalOnPlain" "V1+V2+V3" (bfWithConf (toAutoConf d012Conf) emptyConf) bProp
-                  , mkBench "VariationalOnPlain" "V1+V2+V3+V4" (bfWithConf (toAutoConf d0123Conf) emptyConf) bProp
-                  , mkBench "VariationalOnPlain" "V1+V2+V3+V4+V5" (bfWithConf (toAutoConf d01234Conf) emptyConf) bProp
-                  , mkBench "VariationalOnPlain" "V1+V2+V3+V4+V5+V6" (bfWithConf (toAutoConf d012345Conf) emptyConf) bProp
-                  , mkBench "VariationalOnPlain" "V1+V2+V3+V4+V5+V6+V7" (bfWithConf (toAutoConf d0123456Conf) emptyConf) bProp
-                  , mkBench "VariationalOnPlain" "V1+V2+V3+V4+V5+V6+V7+V8" (bfWithConf (toAutoConf d01234567Conf) emptyConf) bProp
-                  , mkBench "VariationalOnPlain" "V1+V2+V3+V4+V5+V6+V7+V8+V9" (bfWithConf (toAutoConf d012345678Conf) emptyConf) bProp
-                  , mkBench "VariationalOnPlain" "V1+V2+V3+V4+V5+V6+V7+V8+V9+V10" (bfWithConf (toAutoConf d0123456789Conf) emptyConf) bProp
+  --                 , mkBench "VariationalOnPlain" "V1"  (bfWithConf (toAutoConf d0Conf) emptyConf) bProp
+  --                 , mkBench "VariationalOnPlain" "V1+V2" (bfWithConf (toAutoConf d01Conf) emptyConf) bProp
+  --                 , mkBench "VariationalOnPlain" "V1+V2+V3" (bfWithConf (toAutoConf d012Conf) emptyConf) bProp
+  --                 , mkBench "VariationalOnPlain" "V1+V2+V3+V4" (bfWithConf (toAutoConf d0123Conf) emptyConf) bProp
+  --                 , mkBench "VariationalOnPlain" "V1+V2+V3+V4+V5" (bfWithConf (toAutoConf d01234Conf) emptyConf) bProp
+  --                 , mkBench "VariationalOnPlain" "V1+V2+V3+V4+V5+V6" (bfWithConf (toAutoConf d012345Conf) emptyConf) bProp
+  --                 , mkBench "VariationalOnPlain" "V1+V2+V3+V4+V5+V6+V7" (bfWithConf (toAutoConf d0123456Conf) emptyConf) bProp
+  --                 , mkBench "VariationalOnPlain" "V1+V2+V3+V4+V5+V6+V7+V8" (bfWithConf (toAutoConf d01234567Conf) emptyConf) bProp
+  --                 , mkBench "VariationalOnPlain" "V1+V2+V3+V4+V5+V6+V7+V8+V9" (bfWithConf (toAutoConf d012345678Conf) emptyConf) bProp
+  --                 , mkBench "VariationalOnPlain" "V1+V2+V3+V4+V5+V6+V7+V8+V9+V10" (bfWithConf (toAutoConf d0123456789Conf) emptyConf) bProp
 
                   -- , bench "Fin:VSolve:V2" . nfIO $ satWithConf (toAutoConf d1Conf) emptyConf bProp
                   -- , bench "Fin:VSolve:V3" . nfIO $ satWithConf (toAutoConf d17Conf) emptyConf bProp
@@ -238,8 +239,8 @@ main = do
                   -- , bench "Fin:VSolve:V9" . nfIO $ satWithConf (toAutoConf d9Conf) emptyConf bProp
                   -- , bench "Fin:VSolve:V10"  . nfIO $ satWithConf (toAutoConf d15Conf) emptyConf bProp
                   -- , bench "Fin:VSolve:Evo-Aware" . nfIO $ satWithConf (toAutoConf evoAwareConf) emptyConf bProp
-                  ]
-    ]
+                  -- ]
+    -- ]
 
 -- -- [d0Conf, d1Conf, d17Conf, d13Conf, d7Conf, d3Conf, d11Conf, d5Conf, d9Conf, d15Conf] = confs
 
