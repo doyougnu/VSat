@@ -69,10 +69,16 @@ mkMultConf n xs = conjoin (bnot <$> drop n xs)
 -- d0123456789Conf = mkCascadeConf 10 ds
 
 -- | Choice preserving confs
-justD0Conf = conjoin $ bnot <$> delete d0 ds
-justD1Conf = conjoin $ bnot <$> delete d2 ds
-justD2Conf = conjoin $ bnot <$> delete d17 ds
-justD3Conf = conjoin $ bnot <$> delete d13 ds
+-- justD0Conf = conjoin $ bnot <$> delete d0 ds
+-- justD1Conf = conjoin $ bnot <$> delete d1 ds
+-- justD2Conf = conjoin $ bnot <$> delete d17 ds
+-- justD3Conf = conjoin $ bnot <$> delete d13 ds
+-- justD4Conf = conjoin $ bnot <$> delete d1 ds
+-- justD5Conf = conjoin $ bnot <$> delete d17 ds
+-- justD6Conf = conjoin $ bnot <$> delete d13 ds
+-- justD7Conf = conjoin $ bnot <$> delete d1 ds
+-- justD8Conf = conjoin $ bnot <$> delete d17 ds
+-- justD9Conf = conjoin $ bnot <$> delete d13 ds
 justD01Conf = mkMultConf 2 ds
 justD012Conf = mkMultConf 3 ds
 justD0123Conf = mkMultConf 4 ds
@@ -142,10 +148,10 @@ main = do
       toAutoConf = Just . toDimProp
 
   -- | convert choice preserving fmfs to actual confs
-  [justV1]         <- genConfigPool justD0Conf
-  [justV2]         <- genConfigPool justD1Conf
-  [justV3]         <- genConfigPool justD2Conf
-  [justV4]         <- genConfigPool justD3Conf
+  -- [justV1]         <- genConfigPool justD0Conf
+  -- [justV2]         <- genConfigPool justD1Conf
+  -- [justV3]         <- genConfigPool justD2Conf
+  -- [justV4]         <- genConfigPool justD3Conf
   [justV12]        <- genConfigPool justD01Conf
   [justV123]       <- genConfigPool justD012Conf
   [justV1234]      <- genConfigPool justD0123Conf
@@ -169,20 +175,21 @@ main = do
 
   let
     -- | choice preserving props
-    (Just bPropV1)         = selectVariant justV1 bProp
-    (Just bPropV2)         = selectVariant justV2 bProp
-    (Just bPropV3)         = selectVariant justV3 bProp
-    (Just bPropV4)         = selectVariant justV4 bProp
-    (Just bPropV12)        = selectVariant justV12 bProp
-    (Just bPropV123)       = selectVariant justV123 bProp
-    (Just bPropV1234)      = selectVariant justV1234 bProp
-    (Just bPropV12345)     = selectVariant justV12345 bProp
-    (Just bPropV123456)    = selectVariant justV123456 bProp
-    (Just bPropV1234567)   = selectVariant justV1234567 bProp
-    (Just bPropV12345678)  = selectVariant justV12345678 bProp
-    (Just bPropV123456789) = selectVariant justV123456789 bProp
+    -- (Just justbPropV1)         = selectVariant justV1 bProp
+    -- (Just justbPropV2)         = selectVariant justV2 bProp
+    -- (Just justbPropV3)         = selectVariant justV3 bProp
+    -- (Just justbPropV4)         = selectVariant justV4 bProp
+    (Just justbPropV12)        = selectVariant justV12 bProp
+    (Just justbPropV123)       = selectVariant justV123 bProp
+    (Just justbPropV1234)      = selectVariant justV1234 bProp
+    (Just justbPropV12345)     = selectVariant justV12345 bProp
+    (Just justbPropV123456)    = selectVariant justV123456 bProp
+    (Just justbPropV1234567)   = selectVariant justV1234567 bProp
+    (Just justbPropV12345678)  = selectVariant justV12345678 bProp
+    (Just justbPropV123456789) = selectVariant justV123456789 bProp
 
     -- | single version props
+    !bPropV1  = selectVariantTotal ppV1  bProp
     !bPropV2  = selectVariantTotal ppV2  bProp
     !bPropV3  = selectVariantTotal ppV3  bProp
     !bPropV4  = selectVariantTotal ppV4  bProp
@@ -241,17 +248,17 @@ main = do
                   , mkBench "v-->v" "V10" (satWithConf (toAutoConf d9Conf) emptyConf) bProp
                   , mkBench "v-->v" "EvolutionAware" (satWithConf (toAutoConf evoAwareConf) emptyConf) bProp
 
-                  , mkBench "v-->v" "V1*V2"                          (satWith emptyConf) bPropV12
-                  , mkBench "v-->v" "V1*V2*V3"                       (satWith emptyConf) bPropV123
-                  , mkBench "v-->v" "V1*V2*V3*V4"                    (satWith emptyConf) bPropV1234
-                  , mkBench "v-->v" "V1*V2*V3*V4*V5"                 (satWith emptyConf) bPropV12345
-                  , mkBench "v-->v" "V1*V2*V3*V4*V5*V6"              (satWith emptyConf) bPropV123456
-                  , mkBench "v-->v" "V1*V2*V3*V4*V5*V6*V7"           (satWith emptyConf) bPropV1234567
-                  , mkBench "v-->v" "V1*V2*V3*V4*V5*V6*V7*V8"        (satWith emptyConf) bPropV12345678
-                  , mkBench "v-->v" "V1*V2*V3*V4*V5*V6*V7*V8*V9"     (satWith emptyConf) bPropV123456789
+                  , mkBench "v-->v" "V1*V2"                          (satWith emptyConf) justbPropV12
+                  , mkBench "v-->v" "V1*V2*V3"                       (satWith emptyConf) justbPropV123
+                  , mkBench "v-->v" "V1*V2*V3*V4"                    (satWith emptyConf) justbPropV1234
+                  , mkBench "v-->v" "V1*V2*V3*V4*V5"                 (satWith emptyConf) justbPropV12345
+                  , mkBench "v-->v" "V1*V2*V3*V4*V5*V6"              (satWith emptyConf) justbPropV123456
+                  , mkBench "v-->v" "V1*V2*V3*V4*V5*V6*V7"           (satWith emptyConf) justbPropV1234567
+                  , mkBench "v-->v" "V1*V2*V3*V4*V5*V6*V7*V8"        (satWith emptyConf) justbPropV12345678
+                  , mkBench "v-->v" "V1*V2*V3*V4*V5*V6*V7*V8*V9"     (satWith emptyConf) justbPropV123456789
                   , mkBench "v-->v" "V1*V2*V3*V4*V5*V6*V7*V8*V9*V10" (satWith emptyConf) bProp
   -- p - v
-                    mkBench "p-->v" "V1" (pOnVWithConf  Nothing) bPropV1
+                  , mkBench "p-->v" "V1" (pOnVWithConf  Nothing) bPropV1
                   , mkBench "p-->v" "V2" (pOnVWithConf  Nothing) bPropV2
                   , mkBench "p-->v" "V3" (pOnVWithConf  Nothing) bPropV3
                   , mkBench "p-->v" "V4" (pOnVWithConf  Nothing) bPropV4
@@ -273,7 +280,7 @@ main = do
                   , mkBench "p-->p" "V8" (bfWith  emptyConf) bPropV8
                   , mkBench "p-->p" "V9" (bfWith  emptyConf) bPropV9
                   , mkBench "p-->p" "V10" (bfWith  emptyConf) bPropV10
-                  , mkBench "p-->p" "EvolutionAware" (bfWithConf (toAutoConf evoAwareConf) emptyConf) bProp
+                  -- , mkBench "p-->p" "EvolutionAware" (bfWithConf (toAutoConf evoAwareConf) emptyConf) bProp
  -- v - p
                   , mkBench "v-->p" "V1" (bfWithConf (toAutoConf d0Conf) emptyConf) bProp
                   , mkBench "v-->p" "V2" (bfWithConf (toAutoConf d1Conf) emptyConf) bProp
@@ -287,14 +294,15 @@ main = do
                   , mkBench "v-->p" "V10" (bfWithConf (toAutoConf d9Conf) emptyConf) bProp
                   , mkBench "v-->p" "EvolutionAware" (bfWithConf (toAutoConf evoAwareConf) emptyConf) bProp
 
-                  , mkBench "v-->p" "V1*V2"                          (bfWith emptyConf) bPropV12
-                  , mkBench "v-->p" "V1*V2*V3"                       (bfWith emptyConf) bPropV123
-                  , mkBench "v-->p" "V1*V2*V3*V4"                    (bfWith emptyConf) bPropV1234
-                  , mkBench "v-->p" "V1*V2*V3*V4*V5"                 (bfWith emptyConf) bPropV12345
-                  , mkBench "v-->p" "V1*V2*V3*V4*V5*V6"              (bfWith emptyConf) bPropV123456
-                  , mkBench "v-->p" "V1*V2*V3*V4*V5*V6*V7"           (bfWith emptyConf) bPropV1234567
-                  , mkBench "v-->p" "V1*V2*V3*V4*V5*V6*V7*V8"        (bfWith emptyConf) bPropV12345678
-                  , mkBench "v-->p" "V1*V2*V3*V4*V5*V6*V7*V8*V9"     (bfWith emptyConf) bPropV123456789
+                  , mkBench "v-->p" "V1*V2"                          (bfWith emptyConf) justbPropV12
+                  , mkBench "v-->p" "V1*V2*V3"                       (bfWith emptyConf) justbPropV123
+                  , mkBench "v-->p" "V1*V2*V3*V4"                    (bfWith emptyConf) justbPropV1234
+                  , mkBench "v-->p" "V1*V2*V3*V4*V5"                 (bfWith emptyConf) justbPropV12345
+                  , mkBench "v-->p" "V1*V2*V3*V4*V5*V6"              (bfWith emptyConf) justbPropV123456
+                  , mkBench "v-->p" "V1*V2*V3*V4*V5*V6*V7"           (bfWith emptyConf) justbPropV1234567
+                  , mkBench "v-->p" "V1*V2*V3*V4*V5*V6*V7*V8"        (bfWith emptyConf) justbPropV12345678
+                  , mkBench "v-->p" "V1*V2*V3*V4*V5*V6*V7*V8*V9"     (bfWith emptyConf) justbPropV123456789
+
                   , mkBench "v-->p" "V1*V2*V3*V4*V5*V6*V7*V8*V9*V10" (bfWith emptyConf) bProp
                   -- , bench "VSolve:V2" . nfIO $ satWithConf (toAutoConf d1Conf) emptyConf bProp
                   -- , bench "VSolve:V3" . nfIO $ satWithConf (toAutoConf d17Conf) emptyConf bProp
@@ -307,7 +315,7 @@ main = do
                   -- , bench "VSolve:V10"  . nfIO $ satWithConf (toAutoConf d15Conf) emptyConf bProp
                   -- , bench "VSolve:Evo-Aware" . nfIO $ satWithConf (toAutoConf evoAwareConf) emptyConf bProp
                   ]
-    -- ]
+    ]
 
 -- -- [d0Conf, d1Conf, d17Conf, d13Conf, d7Conf, d3Conf, d11Conf, d5Conf, d9Conf, d15Conf] = confs
 
