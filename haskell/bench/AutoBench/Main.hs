@@ -196,6 +196,7 @@ main = do
                    , mkBench "p-->v" "V2"  (pOnVWithConf Nothing) bPropV2
                    , mkBench "p-->v" "V3"  (pOnVWithConf Nothing) bPropV3
                    , mkBench "p-->v" "V4"  (pOnVWithConf Nothing) bPropV4
+                   , mkBench "p-->v" "EvolutionAware" (pOnVWithConf (toAutoConf sumConf)) bProp
 
                    -- p - p
                    , mkBench "p-->p" "V1"  (bfWith emptyConf) bPropV1
@@ -208,7 +209,7 @@ main = do
                    , mkBench "v-->p" "V2"  (bfWithConf (toAutoConf d2Conf) emptyConf) bProp
                    , mkBench "v-->p" "V3"  (bfWithConf (toAutoConf d3Conf) emptyConf) bProp
                    , mkBench "v-->p" "V4"  (bfWithConf (toAutoConf d4Conf) emptyConf) bProp
-                   , mkBench "v-->p" "V4"  (bfWithConf (toAutoConf sumConf) emptyConf) bProp
+                   , mkBench "v-->p" "EvolutionAware"  (bfWithConf (toAutoConf sumConf) emptyConf) bProp
                    , mkBench "v-->p" "V1*V2"        (bfWith emptyConf) bPropJustV12
                    , mkBench "v-->p" "V1*V2*V3"     (bfWith emptyConf) bPropJustV123
                    , mkBench "v-->p" "V1*V2*V3*V4"  (bfWith emptyConf) bProp
