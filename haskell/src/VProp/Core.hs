@@ -320,7 +320,12 @@ numChc = toInteger . length . trifoldMap (:[]) mempty mempty
 
 -- | Count the plain values in a tree
 numPlain :: VProp d a b -> Integer
-numPlain = toInteger . length . filter isPlain . toList
+numPlain (LitB _) = 1
+numPlain (RefB _) = 1
+numPlain (OpB _ e) = numPlain e
+numPlain (OpBB _ l r) = numPlain l + numPlain r
+-- numPlain (OpIB _ l r) = numPlain' l + numPlain' r
+numPlain _            = 0
 
 -- | Given a vprop how many shared dimensions were there
 numSharedDims :: (Eq d) => VProp d a b -> Integer
