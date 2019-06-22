@@ -74,14 +74,14 @@ runEnv :: (ReadableProp d -> Env d (Result d)) ->
 runEnv f conf x = _runEnv (f x') conf _emptySt
   where x' = foldr' ($!) x (opts conf)
 
-runAD :: (Show d, Resultable d) =>
+runAD :: (Show d, Resultable d, SAT (ReadableProp d)) =>
          SMTConf d Text Text
       -> ReadableProp d
       -> (d -> Text)
       -> IO (Result d)
 runAD os p f = fst' <$> runEnv (flip runAndDecomp f) os p
 
-runBF :: (Show d, Resultable d) =>
+runBF :: (Show d, Resultable d, SAT (ReadableProp d)) =>
          ConfigPool d        ->
          SMTConf d Text Text ->
          ReadableProp d      ->
@@ -117,17 +117,24 @@ _logResult x = tell $ "Got result: " ++ show x
 
 -- | run the sat solver, when we get a satisafiable call get the assignments
 -- directly
-runForDict :: Resultable d => S.Predicate -> IO (Result d)
-runForDict x = S.runSMT $
-  do x' <- x
-     SC.query $
-       do S.constrain x'
-          getResultWith (toResultProp . LitB)
+runForDict :: (Resultable d, SAT (ReadableProp d)) =>
+  ReadableProp d -> IO (Result d)
+runForDict x = S.runSMTWith S.z3{S.verbose=True} $
+  do
+    x' <- toPredicate x
+    SC.query $
+      do S.constrain x'
+         res <- getResultWith (toResultProp . LitB)
+         SC.resetAssertions
+         SC.exit
+         return res
+
 
 -- | Run the brute force baseline case, that is select every plain variant and
 -- run them to the sat solver
 runBruteForce ::
-  (MonadTrans t, Show d, Resultable d , MonadState (SatDict d) (t IO)) =>
+  (MonadTrans t, Show d, Resultable d , MonadState (SatDict d) (t IO)
+  , SAT (ReadableProp d)) =>
   ConfigPool d        ->
   ReadableProp d      ->
   t IO (Result d)
@@ -136,13 +143,13 @@ runBruteForce pool prop = lift $ flip evalStateT (initSt pool prop) $
   _confs <- get
   let confs = M.keys _confs
       plainProps = if null confs
-        then [Just (M.empty, prop)]
-        else (\y -> sequence $! (y, selectVariant y prop)) <$> confs
+        then pure (M.empty, prop)
+        else (\y -> (y, selectVariantTotal y prop)) <$> confs
   plainMs <- lift $
              mapM (bitraverse
                    (pure . configToResultProp)
-                   (runForDict . symbolicPropExpr show show show)) $ catMaybes plainProps
-  return $ foldMap (uncurry helper) plainMs
+                   runForDict) $ plainProps
+  return $ mconcat (fmap (\(c, as) -> insertToSat c as) plainMs)
   where
         helper c as =  insertToSat c as
 
@@ -170,10 +177,9 @@ runPlainOnVSat pool prop = flip evalStateT (initSt pool prop) $
 
 -- | Run the and decomposition baseline case, that is deconstruct every choice
 -- and then run the sat solver
-runAndDecomp :: (Show d, Resultable d, MonadTrans t, Monad (t IO)) =>
+runAndDecomp :: (Show d, Resultable d, MonadTrans t, Monad (t IO), SAT (ReadableProp d)) =>
   ReadableProp d -> (d -> Text) -> t IO (Result d)
-runAndDecomp prop f =
-  lift $ runForDict $ symbolicPropExpr show show show $ andDecomp prop (f . dimName)
+runAndDecomp prop f = lift $ runForDict $ andDecomp prop (f . dimName)
 
 runVSMTSolve ::
   (Show d, MonadIO m, Resultable d , MonadReader (SMTConf d a a) m) =>
@@ -185,7 +191,7 @@ runVSMTSolve configPool prop =
      -- convert all refs to SBools
      let prop' = St.evalStateT (propToSBool prop) (mempty, mempty)
      -- run the inner driver
-     res <- liftIO $! S.runSMTWith (conf cnf) $! vSMTSolve prop' configPool
+     res <- liftIO $! S.runSMTWith (conf cnf){S.verbose=True} $! vSMTSolve prop' configPool
      return $! res
 
 -- | wrapper around map to keep track of the variable references we've seen, a,
@@ -276,7 +282,7 @@ vSMTSolve prop configPool =
      SC.query $
        do
          -- partially evaluate the prop
-         let !pprop = evaluate . toBValue $! prop'
+         let !pprop = fmap assocLeft . evaluate . toBValue $! prop'
 
          -- now we avoid redundent computation by solving on the evaluated
          -- proposition instead of the input proposition
@@ -290,25 +296,18 @@ vSMTSolve prop configPool =
            else return $ result resSt
 
 solvePlain :: Resultable d => S.SBool -> SC.Query (Result d)
-solvePlain b = do S.constrain b
-                  b' <- isSat
-                  if b'
-                    then getResultWith (toResultProp . LitB)
-                    else return mempty
+solvePlain b = do S.constrain b; getResultWith (toResultProp . LitB)
 
 solveVariational :: (Resultable d) =>
                     ConfigPool d ->
                     BValue d ->
                     IncVSMTSolve d (S.SBool)
-solveVariational []        p    = doChoice . assocLeft $ p
-solveVariational [x]       p    = do setConfig x
-                                     -- trace ("Result of Eval: " ++ ushow p ++ "\n") $ return ()
-                                     doChoice (assocLeft p)
+solveVariational []        p    = doChoice p
 solveVariational cs prop = do mapM_ step cs; return true
   where step cfg = do lift $ SC.push 1
                       -- trace ("Result of Eval: " ++ ushow prop ++ "\n") $ return ()
                       setConfig cfg
-                      _ <- doChoice (assocLeft prop)
+                      _ <- doChoice prop
                       lift $ SC.pop 1
 
 -- | The name of a reference
@@ -487,7 +486,7 @@ handleChc goLeft goRight d =
          resMapF <- goRight
 
          -- store results and cleanup config
-         let result = resMapT <> resMapF
+         let !result = resMapT <> resMapF
 
          -- we remove the Dim from the config so that when the recursion
          -- completes the last false branch of the last choice is not
