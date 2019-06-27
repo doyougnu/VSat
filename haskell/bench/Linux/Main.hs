@@ -9,7 +9,7 @@ import           Data.Bitraversable      (bimapM)
 import qualified Data.ByteString         as BS (readFile)
 import           Data.Either             (lefts, rights)
 import           Data.Foldable           (foldr')
-import           Data.List               (sort,delete)
+import           Data.List               (sort,delete,intersperse)
 import           Data.Map                (size, Map)
 import qualified Data.SBV                as S
 import qualified Data.SBV.Control        as SC
@@ -33,58 +33,128 @@ import           VProp.Core
 import           VProp.SBV               (toPredicate)
 import           VProp.Types
 
--- | a different file that represents a possible json
-linuxFileOne :: FilePath
-linuxFileOne = "bench/Linux/data/2016-01-07.json"
+linuxPaths :: FilePath
+linuxPaths = "bench/Linux/"
+
+linuxFiles = [ "2016-01-07.json"
+             , "2016-01-09.json"
+             , "2016-01-11.json"
+             , "2016-01-12.json"
+             , "2016-01-13.json"
+             , "2016-01-14.json"
+             , "2016-01-15.json"
+             ]
+
+files = fmap ((++) linuxPaths) linuxFiles
 
 -- main :: IO (V String (Maybe ThmResult))
 
 -- run with stack bench --profile vsat:auto --benchmark-arguments='+RTS -S -RTS --output timings.html'
 main = do
   -- readfile is strict
-  l1 <- BS.readFile linuxFileOne
-  let (Just sl1) = decodeStrict' l1 :: Maybe Auto
-      !l1Constraints = constraints sl1 -- looks like 4298/4299 are the culprits
-      l1Lang = parse langParser "" <$> l1Constraints
-      l1Right = rights l1Lang
-      l1Left =  lefts l1Lang
+  ls' <- traverse BS.readFile files
+  let (Just ls) = (traverse decodeStrict' ls') :: Maybe [Auto]
+      !lConstraints = constraints <$> ls
+      l1Lang = fmap (parse langParser "") <$> lConstraints
+      l1Right = rights <$> l1Lang
+      l1Left =  lefts <$> l1Lang
 
-      !l1Prop = (naiveEncode . autoToVSat) $ autoAndJoin l1Right
-      dimensions = bRef <$> ["D_0","D_1","D_2","D_3","D_4","D_5"]
-      -- dimConf' :: VProp Text String String
-      dimConf' = xorList dimensions
-      xorList xs = fromList' (|||) $ fmap (fromList' (&&&)) (go xs)
+      !lProps = ((naiveEncode . autoToVSat) . autoAndJoin) <$> l1Right
+      !lProp  = conjoin lProps
+
+      run !desc !f prop = bench desc $! nfIO (f prop)
+
+      mkBench alg conf !f prop = run desc f prop
         where
-          go :: [VProp Text String String] -> [[VProp Text String String]]
-          go [] = []
-          go (x:xs) = (x : fmap ((<+>) x) (delete x dimensions)) : go xs
-      dimConf = toDimProp dimConf'
+          !desc' = ["Chc",show nChc , "numPlain", show nPln , "Compression", show ratio]
+          !desc = mconcat $ intersperse "/" $ pure alg ++ pure conf ++ desc'
+          !nPln = numPlain prop
+          !nChc = numChc prop
+          ratio :: Double
+          !ratio = fromRational $ compressionRatio prop
 
-  putStrLn (show l1Constraints)
-  -- putStrLn "--------------"
-  -- putStrLn (show l1Right)
-  -- print dimConf'
-  -- res' <- runIncrementalSolve sPs
-  -- T.writeFile "testoutputSAT" (pack . show $ res)
-  -- T.writeFile "testoutputInc" (pack . show $ res')
-  -- res' <- satWithConf (Just (bnot dimConf)) emptyConf bProp
-  -- print $ res'
-  -- let !p = prop 6000
-  -- print $ length p
-  -- -- res <- test 10
-  -- res <- S.runSMT $ do p' <- mapM S.sBool p
-  --                      SC.query $! test' p'
-  -- putStrLn "Running Good:\n"
-  -- goodRes <- testS goodS 1000
+  -- res <- satWith emptyConf l1Prop
+  print $ dimensions lProp
 
-  -- defaultMain
-  --   [
-  --   bgroup "vsat" [  bench "small file:NoOpts"  . nfIO $ satWithConf Nothing emptyConf sProp
-  --                  -- , bench "small file:DefOpts" . nfIO $ satWith defConf   sProp
-  --                  -- , bench "small file:Empty:Compact" . nfIO $ satWith defConf   (compactEncode sPs)
-  --                  --   bench "Auto:VSolve:NoOpts"  . nfIO $ satWith emptyConf bProp
-  --                  -- -- , bench "Auto:VSolve:DefOpts" . nfIO $ satWith defConf   bProp
-  --                  -- bench "Auto:IncrementalBaseline:Naive" . nfIO $ runIncrementalSolve bPs
-  --                  -- bench "Auto:IncrementalBaseline:Compact" . nfIO $! satWith emptyConf (compactEncode bPs)
-  --                 ]
-  --   ]
+ --  defaultMain
+ --    [
+ --      bgroup "Linux" [ mkBench "v-->v" "V1" (satWith emptyConf) l1Prop
+ --                     -- , mkBench "v-->v" "V2" (satWithConf (toAutoConf d1Conf) emptyConf) bProp
+ --                     -- , mkBench "v-->v" "V3" (satWithConf (toAutoConf d2Conf) emptyConf) bProp
+ --                     -- , mkBench "v-->v" "V4" (satWithConf (toAutoConf d3Conf) emptyConf) bProp
+ --                     -- , mkBench "v-->v" "V5" (satWithConf (toAutoConf d4Conf) emptyConf) bProp
+ --                     -- , mkBench "v-->v" "V6" (satWithConf (toAutoConf d5Conf) emptyConf) bProp
+ --                     -- , mkBench "v-->v" "V7" (satWithConf (toAutoConf d6Conf) emptyConf) bProp
+ --                     -- , mkBench "v-->v" "V8" (satWithConf (toAutoConf d7Conf) emptyConf) bProp
+ --                     -- , mkBench "v-->v" "V9" (satWithConf (toAutoConf d8Conf) emptyConf) bProp
+ --                     -- , mkBench "v-->v" "V10" (satWithConf (toAutoConf d9Conf) emptyConf) bProp
+ --                     -- , mkBench "v-->v" "EvolutionAware" (satWithConf (toAutoConf evoAwareConf) emptyConf) bProp
+
+ --                  -- , mkBench "v-->v" "V1*V2"                          (satWith emptyConf) justbPropV12
+ --                  -- , mkBench "v-->v" "V1*V2*V3"                       (satWith emptyConf) justbPropV123
+ --                  -- , mkBench "v-->v" "V1*V2*V3*V4"                    (satWith emptyConf) justbPropV1234
+ --                  -- , mkBench "v-->v" "V1*V2*V3*V4*V5"                 (satWith emptyConf) justbPropV12345
+ --                  -- , mkBench "v-->v" "V1*V2*V3*V4*V5*V6"              (satWith emptyConf) justbPropV123456
+ --                  -- , mkBench "v-->v" "V1*V2*V3*V4*V5*V6*V7"           (satWith emptyConf) justbPropV1234567
+ --                  -- , mkBench "v-->v" "V1*V2*V3*V4*V5*V6*V7*V8"        (satWith emptyConf) justbPropV12345678
+ --                  -- , mkBench "v-->v" "V1*V2*V3*V4*V5*V6*V7*V8*V9"     (satWith emptyConf) justbPropV123456789
+ --                  -- , mkBench "v-->v" "V1*V2*V3*V4*V5*V6*V7*V8*V9*V10" (satWith emptyConf) bProp
+ --  -- p - v
+ --                  -- , mkBench "p-->v" "V1" (pOnVWithConf  Nothing) bPropV1
+ --                  -- , mkBench "p-->v" "V2" (pOnVWithConf  Nothing) bPropV2
+ --                  -- , mkBench "p-->v" "V3" (pOnVWithConf  Nothing) bPropV3
+ --                  -- , mkBench "p-->v" "V4" (pOnVWithConf  Nothing) bPropV4
+ --                  -- , mkBench "p-->v" "V5" (pOnVWithConf  Nothing) bPropV5
+ --                  -- , mkBench "p-->v" "V6" (pOnVWithConf  Nothing) bPropV6
+ --                  -- , mkBench "p-->v" "V7" (pOnVWithConf  Nothing) bPropV7
+ --                  -- , mkBench "p-->v" "V8" (pOnVWithConf  Nothing) bPropV8
+ --                  -- , mkBench "p-->v" "V9" (pOnVWithConf  Nothing) bPropV9
+ --                  -- , mkBench "p-->v" "V10" (pOnVWithConf  Nothing) bPropV10
+ --                  -- , mkBench "p-->v" "EvolutionAware" (pOnVWithConf (toAutoConf evoAwareConf)) bProp
+ --  -- p - p
+ --                  -- , mkBench "p-->p" "V1" (bfWith  emptyConf) bPropV1
+ --                  -- , mkBench "p-->p" "V2" (bfWith  emptyConf) bPropV2
+ --                  -- , mkBench "p-->p" "V3" (bfWith  emptyConf) bPropV3
+ --                  -- , mkBench "p-->p" "V4" (bfWith  emptyConf) bPropV4
+ --                  -- , mkBench "p-->p" "V5" (bfWith  emptyConf) bPropV5
+ --                  -- , mkBench "p-->p" "V6" (bfWith  emptyConf) bPropV6
+ --                  -- , mkBench "p-->p" "V7" (bfWith  emptyConf) bPropV7
+ --                  -- , mkBench "p-->p" "V8" (bfWith  emptyConf) bPropV8
+ --                  -- , mkBench "p-->p" "V9" (bfWith  emptyConf) bPropV9
+ --                  -- , mkBench "p-->p" "V10" (bfWith  emptyConf) bPropV10
+ --                  -- , mkBench "p-->p" "EvolutionAware" (bfWithConf (toAutoConf evoAwareConf) emptyConf) bProp
+ -- -- v - p
+ --                  -- , mkBench "v-->p" "V1" (bfWithConf (toAutoConf d0Conf) emptyConf) bProp
+ --                  -- , mkBench "v-->p" "V2" (bfWithConf (toAutoConf d1Conf) emptyConf) bProp
+ --                  -- , mkBench "v-->p" "V3" (bfWithConf (toAutoConf d2Conf) emptyConf) bProp
+ --                  -- , mkBench "v-->p" "V4" (bfWithConf (toAutoConf d3Conf) emptyConf) bProp
+ --                  -- , mkBench "v-->p" "V5" (bfWithConf (toAutoConf d4Conf) emptyConf) bProp
+ --                  -- , mkBench "v-->p" "V6" (bfWithConf (toAutoConf d5Conf) emptyConf) bProp
+ --                  -- , mkBench "v-->p" "V7" (bfWithConf (toAutoConf d6Conf) emptyConf) bProp
+ --                  -- , mkBench "v-->p" "V8" (bfWithConf (toAutoConf d7Conf) emptyConf) bProp
+ --                  -- , mkBench "v-->p" "V9" (bfWithConf (toAutoConf d8Conf) emptyConf) bProp
+ --                  -- , mkBench "v-->p" "V10" (bfWithConf (toAutoConf d9Conf) emptyConf) bProp
+ --                  -- , mkBench "v-->p" "EvolutionAware" (bfWithConf (toAutoConf evoAwareConf) emptyConf) bProp
+
+ --                  -- , mkBench "v-->p" "V1*V2"                          (bfWith emptyConf) justbPropV12
+ --                  -- , mkBench "v-->p" "V1*V2*V3"                       (bfWith emptyConf) justbPropV123
+ --                  -- , mkBench "v-->p" "V1*V2*V3*V4"                    (bfWith emptyConf) justbPropV1234
+ --                  -- , mkBench "v-->p" "V1*V2*V3*V4*V5"                 (bfWith emptyConf) justbPropV12345
+ --                  -- , mkBench "v-->p" "V1*V2*V3*V4*V5*V6"              (bfWith emptyConf) justbPropV123456
+ --                  -- , mkBench "v-->p" "V1*V2*V3*V4*V5*V6*V7"           (bfWith emptyConf) justbPropV1234567
+ --                  -- , mkBench "v-->p" "V1*V2*V3*V4*V5*V6*V7*V8"        (bfWith emptyConf) justbPropV12345678
+ --                  -- , mkBench "v-->p" "V1*V2*V3*V4*V5*V6*V7*V8*V9"     (bfWith emptyConf) justbPropV123456789
+
+ --                  -- , mkBench "v-->p" "V1*V2*V3*V4*V5*V6*V7*V8*V9*V10" (bfWith emptyConf) bProp
+ --                  -- , bench "VSolve:V2" . nfIO $ satWithConf (toAutoConf d1Conf) emptyConf bProp
+ --                  -- , bench "VSolve:V3" . nfIO $ satWithConf (toAutoConf d2Conf) emptyConf bProp
+ --                  -- , bench "VSolve:V4" . nfIO $ satWithConf (toAutoConf d3Conf) emptyConf bProp
+ --                  -- , bench "VSolve:V5" . nfIO $ satWithConf (toAutoConf d4Conf) emptyConf bProp
+ --                  -- , bench "VSolve:V6" . nfIO $ satWithConf (toAutoConf d5Conf) emptyConf bProp
+ --                  -- , bench "VSolve:V7" . nfIO $ satWithConf (toAutoConf d6Conf) emptyConf bProp
+ --                  -- , bench "VSolve:V8" . nfIO $ satWithConf (toAutoConf d7Conf) emptyConf bProp
+ --                  -- , bench "VSolve:V9" . nfIO $ satWithConf (toAutoConf d8Conf) emptyConf bProp
+ --                  -- , bench "VSolve:V10"  . nfIO $ satWithConf (toAutoConf d15Conf) emptyConf bProp
+ --                  -- , bench "VSolve:Evo-Aware" . nfIO $ satWithConf (toAutoConf evoAwareConf) emptyConf bProp
+ --                  ]
+ --    ]
