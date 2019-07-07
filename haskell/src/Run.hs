@@ -509,7 +509,6 @@ type SBVProp d = VProp d (S.SBool, Name) SNum
 data BValue d = B! S.SBool
               | Unit
               | C! (Dim d) (SBVProp d) (SBVProp d)
-              | BNot! (BValue d)
               | BVOp! (BValue d) BB_B (BValue d)
               deriving Eq
 
@@ -517,7 +516,6 @@ instance Show d => Show (BValue d) where
   show (B _) = "B"
   show Unit    = "Unit"
   show (C d _ _) = "C_" ++ show d
-  show (BNot e)  = "not (" ++ show e ++ ")"
   show (BVOp l op r) = "\t(" ++ show op ++ "\nLeft:\n\t" ++ show l ++  "\nRight:\n\t " ++ show r ++ ")\n"
 
 
@@ -538,7 +536,7 @@ toBValue :: Resultable d => VProp d (S.SBool, Name) SNum -> BValue d
 toBValue (RefB (b,name)) = B b
 toBValue (LitB b) = B (S.literal b)
 toBValue (OpB Not (OpB Not notchc)) = toBValue notchc
-toBValue (OpB Not e) = BNot $ toBValue e
+toBValue (OpB Not e) = driveNotDown e
 toBValue (OpBB op (RefB (b,n)) (RefB (b',n'))) = (B bres)
   where bres = (bDispatch op) b b'
         -- name = [n, toText op, n']
@@ -570,10 +568,6 @@ evaluate Unit        = return Unit                             -- [Eval-Unit]
 evaluate !(B b) =
   -- trace "Eval B" $
   do S.constrain b; return Unit           -- [Eval-Term]
-evaluate !(BNot (BNot e)) = evaluate e
-evaluate !(BNot e)  =                                       -- [Eval-Neg]
-  -- trace ("Eval Not") $
-  do e' <- accumulate e; doBNot evaluate e'
 evaluate !(x@(C _ _ _)) = return x                             -- [Eval-Chc]
 -- evaluate (BVOp Unit _ Unit) = trace "double unit" $ return Unit                     -- [Eval-UAndR]
 evaluate !(BVOp Unit _ r) = evaluate r                     -- [Eval-UAndR]
@@ -632,13 +626,6 @@ accumulate !(x@(B _))   = return x                                -- [Acc-Term]
 accumulate !(x@(C _ _ _)) =
   -- trace "Ac: singleton chc" $
   return x                                -- [Acc-Chc]
-accumulate !(BNot (BNot e)) =
-  -- trace "Ac DNot" $
-  accumulate e
-accumulate !(BNot e)  =
-  -- trace "Ac not:" $
-  do                                       -- [Acc-Neg]
-  e' <- accumulate e; doBNot accumulate e'
 accumulate !(x@(BVOp (C _ _ _) _ (C _ _ _))) =  return x          -- [Acc-Op-ChcL]
 accumulate !(x@(BVOp (C _ _ _) _ (B _)))   =  return x          -- [Acc-Op-ChcL]
 accumulate !(x@(BVOp (B _) _ (C _ _ _)))   =  return x          -- [Acc-Op-ChcR]
@@ -676,28 +663,24 @@ accumulate !(BVOp l op r) =                                       -- [Acc-Or]
        else return res
 
 -- | Given a bvalue, return a symbolic reference of the negation of that bvalue
-doBNot :: Resultable d => (BValue d -> IncVSMTSolve d (BValue d))
-  -> BValue d -> IncVSMTSolve d (BValue d)
-doBNot _ !Unit      = return Unit
-doBNot f !(B b)   = f (B (bnot b))
-doBNot f !(C d l r) = f (C d (bnot l) (bnot r))                --[Acc-Neg-Chc]
-doBNot f !(BNot e)   = f e
-doBNot f !(BVOp l And r) = do
-  l' <- doBNot f l
-  r' <- doBNot f r
-  f (BVOp l' Or r')
-doBNot f !(BVOp l Or r) = do
-  l' <- doBNot f l
-  r' <- doBNot f r
-  f (BVOp l' And r')
-doBNot f !(BVOp l XOr r) = f (BVOp l BiImpl r)
-doBNot f !(BVOp l Impl r) = do
-  l' <- doBNot f l
-  f (BVOp l' Or r)
-doBNot f !(BVOp l BiImpl r) = do
-  l' <- doBNot f l
-  r' <- doBNot f r
-  f (BVOp (BVOp l And r') Or (BVOp r And l'))
+driveNotDown :: Resultable d => VProp d (S.SBool, Name) SNum -> BValue d
+driveNotDown (LitB b)       =  (B . bnot . S.literal $ b)
+driveNotDown (RefB (b,_))   =  (B $! bnot b)
+driveNotDown (ChcB d l r)   = (C d (bnot l) (bnot r))                --[Acc-Neg-Chc]
+driveNotDown (OpB Not e)    = toBValue e
+driveNotDown (OpBB And l r) = BVOp l' Or r'
+  where l' = driveNotDown l
+        r' = driveNotDown r
+driveNotDown (OpBB Or l r) = BVOp l' And r'
+  where l' = driveNotDown l
+        r' = driveNotDown r
+driveNotDown (OpBB XOr l r)  = toBValue (OpBB BiImpl l r)
+driveNotDown (OpBB Impl l r) = toBValue (OpBB Or l' r)
+  where l' = OpB Not l
+driveNotDown (OpBB BiImpl l r) = BVOp (BVOp l' And r') Or (BVOp r' And l')
+  where l' = toBValue l
+        r' = toBValue r
+
 
 isValue :: BValue d -> Bool
 isValue (B _) = True
