@@ -34,7 +34,7 @@ substitute' _ x                = x
 
 solveLiterals :: VProp d a b -> Bool
 solveLiterals (LitB b) = b
-solveLiterals (OpB op e) = not $ solveLiterals e
+solveLiterals (OpB _ e) = not $ solveLiterals e
 solveLiterals (OpBB op l r) = solveLiterals l `op'` solveLiterals r
   where op' = bDispatch op
 solveLiterals (ChcB _ _ _) = error "got a choice when solving literals! Incorrect usage, all choices should be resolved"
