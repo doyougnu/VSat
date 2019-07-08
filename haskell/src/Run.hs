@@ -40,7 +40,6 @@ import           Utils
 import           Config
 import           Result
 
-import Debug.Trace
 import           Text.Show.Unicode          (ushow)
 
 -- | The satisfiable dictionary, this is actually the "state" keys are configs
@@ -273,7 +272,7 @@ type IncVSMTSolve d = St.StateT (IncState d) SC.Query
 -- | Top level wrapper around engine and monad stack, this sets options for the
 -- underlying solver, inspects the results to see if they were variational or
 -- not, if not then it gets the plain model
-vSMTSolve :: Resultable d =>
+vSMTSolve :: (Show d, Resultable d) =>
   S.Symbolic (VProp d (S.SBool, Name) SNum) ->
   ConfigPool d -> S.Symbolic (Result d)
 vSMTSolve prop configPool =
@@ -299,7 +298,7 @@ vSMTSolve prop configPool =
 solvePlain :: Resultable d => S.SBool -> SC.Query (Result d)
 solvePlain b = do S.constrain b; getResultWith (toResultProp . LitB)
 
-solveVariational :: (Resultable d) =>
+solveVariational :: (Show d, Resultable d) =>
                     ConfigPool d ->
                     BValue d ->
                     IncVSMTSolve d (S.SBool)
@@ -465,7 +464,7 @@ solveVariant go = do
 
            return resMap
 
-handleChc :: Resultable d =>
+handleChc :: (Show d, Resultable d) =>
   IncVSMTSolve d (Result d)
   -> IncVSMTSolve d (Result d)
   -> Dim d
@@ -510,14 +509,7 @@ data BValue d = B! S.SBool
               | Unit
               | C! (Dim d) (SBVProp d) (SBVProp d)
               | BVOp! (BValue d) BB_B (BValue d)
-              deriving Eq
-
-instance Show d => Show (BValue d) where
-  show (B _) = "B"
-  show Unit    = "Unit"
-  show (C d _ _) = "C_" ++ show d
-  show (BVOp l op r) = "\t(" ++ show op ++ "\nLeft:\n\t" ++ show l ++  "\nRight:\n\t " ++ show r ++ ")\n"
-
+              deriving (Eq, Show)
 
 -- | The main solver algorithm. You can think of this as the sem function for
 -- the dsl. This progress in two stages, we extend the value domain with a
@@ -539,25 +531,14 @@ toBValue (OpB Not (OpB Not notchc)) = toBValue notchc
 toBValue (OpB Not e) = driveNotDown e
 toBValue (OpBB op (RefB (b,n)) (RefB (b',n'))) = (B bres)
   where bres = (bDispatch op) b b'
-        -- name = [n, toText op, n']
-
-  -- remove implications, because they are not commutative, or associative
-toBValue !(OpBB Impl l r) = toBValue (OpBB Or (bnot l) r)
-
 toBValue (OpBB op (ChcB d l r) r') = BVOp (C d l r) op (toBValue r')
 toBValue (OpBB op l' (ChcB d l r)) = BVOp (toBValue l') op (C d l r)
 toBValue (OpBB op l r) = BVOp (toBValue l) op (toBValue r)
 toBValue (OpIB _ _ _) = error "Blame Jeff! This isn't implemented yet!"
 toBValue (ChcB d l r) = C d l r
 
-dbg :: (Show a, Monad m) => String -> a -> m ()
-dbg s a = trace (s ++ " : " ++ show a ++ " \n") $ return ()
-
-
-handleValue :: Monad m => (BValue d -> m (BValue d)) ->  BValue d -> m (BValue d)
-handleValue f v
-  | isValue v = f v
-  | otherwise = return v
+-- dbg :: (Show a, Monad m) => String -> a -> m ()
+-- dbg s a = trace (s ++ " : " ++ show a ++ " \n") $ return ()
 
 -- | Evaluation allows communication with the solver and reduces terms to Unit
 -- values thereby representing that evaluation has taken place. Evaluation can
@@ -664,8 +645,8 @@ accumulate !(BVOp l op r) =                                       -- [Acc-Or]
 
 -- | Given a bvalue, return a symbolic reference of the negation of that bvalue
 driveNotDown :: Resultable d => VProp d (S.SBool, Name) SNum -> BValue d
-driveNotDown (LitB b)       =  (B . bnot . S.literal $ b)
-driveNotDown (RefB (b,_))   =  (B $! bnot b)
+driveNotDown (LitB b)       = (B . bnot . S.literal $ b)
+driveNotDown (RefB (b,_))   = (B $! bnot b)
 driveNotDown (ChcB d l r)   = (C d (bnot l) (bnot r))                --[Acc-Neg-Chc]
 driveNotDown (OpB Not e)    = toBValue e
 driveNotDown (OpBB And l r) = BVOp l' Or r'
@@ -674,12 +655,13 @@ driveNotDown (OpBB And l r) = BVOp l' Or r'
 driveNotDown (OpBB Or l r) = BVOp l' And r'
   where l' = driveNotDown l
         r' = driveNotDown r
-driveNotDown (OpBB XOr l r)  = toBValue (OpBB BiImpl l r)
-driveNotDown (OpBB Impl l r) = toBValue (OpBB Or l' r)
+driveNotDown (OpBB XOr l r)  = driveNotDown prop
+  where prop = OpBB Or (OpBB And l (bnot r)) (OpBB And (bnot l) r)
+driveNotDown (OpBB Impl l r) = driveNotDown (OpBB Or l' r)
   where l' = OpB Not l
-driveNotDown (OpBB BiImpl l r) = BVOp (BVOp l' And r') Or (BVOp r' And l')
-  where l' = toBValue l
-        r' = toBValue r
+driveNotDown (OpBB BiImpl l r) = driveNotDown prop
+  where prop = (OpBB Or (OpBB And l r) (OpBB And (bnot l) (bnot r)))
+driveNotDown (OpIB _ _ _) = error "Not implemented yet!"
 
 
 isValue :: BValue d -> Bool
@@ -692,142 +674,101 @@ isValue _       = False
 data Ctx d = InL (Ctx d) BB_B (BValue d)
            | InR !S.SBool BB_B (Ctx d)
            | Top
+           deriving Show
 
 type Loc d = (BValue d, Ctx d)
 
-doChoice :: Resultable d => Loc d -> IncVSMTSolve d S.SBool
-doChoice (B b, Top)                = return b
-doChoice (Unit, Top)               = return true
-doChoice (C d l r, Top)            =
+doChoice :: (Show d, Resultable d) => Loc d -> IncVSMTSolve d S.SBool
+doChoice (b@(B b'), Top)                =
+  -- trace ("Bool" ++ show b ++ "\n") $
+  do _ <- evaluate b
+     return b'
+doChoice (Unit, Top)               =
+  -- trace ("Unit Top \n") $
+  return true
+doChoice x@(C d l r, Top)            =
+  -- trace ("Choice Top"  ++ show x ++ "\n") $
   do let
       bl = toBValue l
-      goLeft = solveVariant $ evaluate bl >>= doChoice . mkTop
+      goLeft = solveVariant $ doChoice (bl, Top)
 
       br = toBValue r
-      goRight = solveVariant $ evaluate br >>= doChoice . mkTop
+      goRight = solveVariant $ doChoice (br, Top)
 
      handleChc goLeft goRight d >>= store
      return true
 
-doChoice (Unit, InL parent op r)   = doChoice (r, parent)
-doChoice (Unit, InR acc op parent) = doChoice (B acc, parent)
+doChoice (Unit, c@(InL parent op r))   =
+  -- trace ("Unit L " ++ show c ++ "\n") $
+  doChoice (r, parent)
+doChoice (Unit, c@(InR acc op parent)) =
+  -- trace ("Unit R " ++ show c ++ "\n") $
+  doChoice (B acc, parent)
 
   -- when we see two bools we can evaluate them and climb the tree
 doChoice (bl@(B _), InL parent op br@(B _)) =
-  evaluate (BVOp bl op br) >>= doChoice . mkCtx parent
+  -- trace ("Accumulate case L \n") $
+  accumulate (BVOp bl op br) >>= doChoice . mkCtx parent
+
+doChoice (br@(B _), InR acc op parent) =
+  -- trace ("Accumulate case R \n") $
+  accumulate (BVOp (B acc) op br) >>= doChoice . mkCtx parent
   -- when we reach a bool leaf we set it as the accumulate and switch to the
   -- right fold
-doChoice (B bl, InL parent op r) = doChoice (r, InR bl op parent)
+doChoice (B bl, InL parent op r) =
+  -- trace ("Changing to fold case\n") $
+  doChoice (r, InR bl op parent)
 
   -- when we find a choice we solve it recursively
-doChoice (C d l r, ctx@(InL _ _ _)) =
+doChoice x@(C d l r, ctx@(InL _ _ _)) =
+  -- trace ("Got here L " ++ show x ++ "\n") $
   do let
-      bl = toBValue l
-      goLeft = solveVariant $ evaluate bl >>= doChoice . mkCtx ctx
+      goLeft = do
+        -- bl <- evaluate (toBValue l)
+        solveVariant $! doChoice (toBValue l, ctx)
 
-      br = toBValue r
-      goRight = solveVariant $ evaluate br >>= doChoice . mkCtx ctx
+      goRight = do
+        -- br <- evaluate (toBValue r)
+        solveVariant $! doChoice (toBValue r, ctx)
 
      handleChc goLeft goRight d >>= store
      return true
 
-doChoice (C d l r, ctx@(InR _ _ _)) =
+doChoice x@(C d l r, ctx@(InR _ _ _)) =
+  -- trace ("Got here R" ++ show x ++ "\n") $
   do let
       bl = toBValue l
-      goLeft = solveVariant $ evaluate bl >>= doChoice . mkCtx ctx
+      goLeft = solveVariant $ doChoice (bl, ctx)
 
       br = toBValue r
-      goRight = solveVariant $ evaluate br >>= doChoice . mkCtx ctx
+      goRight = solveVariant $ doChoice (br, ctx)
 
      handleChc goLeft goRight d >>= store
      return true
 
   -- we recur to the left in order to fold to the right
-doChoice (BVOp l op r, ctx@(InL _ _ _)) = doChoice (l, InL ctx op r)
--- doChoice (BNot e) =
---   -- trace "doChoice BNot" $
---   doBNot evaluate e >>= doChoice
--- doChoice (B b) = return b
--- doChoice (C d l r) =
---   -- trace "Do Choice Singleton Chc" $
---   do let
---       bl = toBValue l
---       goLeft = solveVariant $ evaluate bl >>= doChoice
-
---       br = toBValue r
---       goRight = solveVariant $ evaluate br >>= doChoice
-
---      handleChc goLeft goRight d >>= store
---      return true
-
--- doChoice (BVOp Unit _ r) = doChoice r
--- doChoice (BVOp l _ Unit) = doChoice l
-
--- doChoice (BVOp (C d l r) op r') =
---   -- trace "doC LCHC" $
---   do let
---       bl = toBValue l
---       goLeft = solveVariant (evaluate (BVOp bl op r') >>= doChoice)
-
---       br = toBValue r
---       goRight = solveVariant (evaluate (BVOp br op r') >>= doChoice)
-
---      handleChc goLeft goRight d >>= store
---      return true
-
--- doChoice (BVOp l' op (C d l r)) =
---   -- trace "doC RCHC" $
---   do let
---       bl = toBValue l
---       goLeft = solveVariant (evaluate (BVOp l' op bl) >>= doChoice)
-
---       br = toBValue r
---       goRight = solveVariant (evaluate (BVOp l' op br) >>= doChoice)
-
---      handleChc goLeft goRight d >>= store
---      return true
-
--- doChoice (BVOp (BVOp (C d l r) op' r') op r'') =
---   -- trace "doC LLCHC" $
---   do let
---       bl = toBValue l
---       goLeft = solveVariant
---         (evaluate (BVOp (BVOp bl op' r') op r'') >>= doChoice)
-
---       br = toBValue r
---       goRight = solveVariant
---            (evaluate (BVOp (BVOp br op' r') op r'') >>= doChoice)
-
---      handleChc goLeft goRight d >>= store
---      return true
-
--- doChoice (BVOp (BVOp l'' op (C d l r)) op' r') =
---   -- trace "doC RLCHC" $
---   do let
---       bl = toBValue l
---       goLeft = solveVariant
---         (evaluate (BVOp l'' op (BVOp bl op' r')) >>= doChoice)
-
---       br = toBValue r
---       goRight = solveVariant
---         (evaluate (BVOp l'' op (BVOp br op' r')) >>= doChoice)
-
---      handleChc goLeft goRight d >>= store
---      return true
--- -- doChoice x = error $ "didn't get to normal form with: " ++ ushow x
--- doChoice x = doChoice $ assocLeft x
-
--- toVProp :: (BValue d) -> VProp d Text Text
--- toVProp Unit = bRef (toText ("unit" :: String))
--- toVProp (B _) = bRef (toText t)
--- toVProp (BNot e) = OpB Not (toVProp e)
--- toVProp (C d l r) = ChcB d
---                     (trimap id (\(_,y) -> toText y) (const "") l)
---                     (trimap id (\(_, y) -> toText y) (const "") r)
--- toVProp (BVOp l op r) = OpBB op (toVProp l) (toVProp r)
+doChoice (BVOp l op r, ctx) =
+  -- trace ("Recursive match\n") $
+  doChoice (l, InL ctx op r)
 
 mkTop :: BValue d -> Loc d
 mkTop = mkCtx Top
 
 mkCtx :: Ctx d -> BValue d -> Loc d
 mkCtx = flip (,)
+
+getFocus :: S.SBool -> Ctx d -> Loc d
+getFocus b Top                     = (B b, Top)
+getFocus b (InL parent op rbranch) = (rbranch, InR b op parent)
+getFocus b (InR acc op Top)        = (B $! bDispatch op acc b, Top)
+getFocus b (InR acc op (InL parent op' rbranch)) = (rbranch, InR res op' parent)
+  where !res = bDispatch op acc b
+getFocus b (InR acc op (InR acc' op' parent)) = (B res', parent)
+  where !res = bDispatch op acc b
+        !res' = bDispatch op' acc' res
+
+
+
+-- data Ctx d = InL (Ctx d) BB_B (BValue d)
+--            | InR !S.SBool BB_B (Ctx d)
+--            | Top

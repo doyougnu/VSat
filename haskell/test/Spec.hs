@@ -11,15 +11,15 @@ import           VProp.Json.Test
 
 main :: IO ()
 main = do
-  setEnv "TASTY_QUICKCHECK_TESTS" "3"
+  setEnv "TASTY_QUICKCHECK_TESTS" "1000"
   defaultMain tests
   where tests = testGroup "All" [ -- jsonProperties
                                  -- R.unitTests
                                 -- , R.specTests
                                 -- , CAP.unitTests
-                                CAR.unitTests
+                                -- CAR.unitTests
                                 -- , CAP.unitTests
-                                -- R.runProperties
+                                R.runProperties
                                 -- O.properties
           -- VC.qcProps
                                 ]

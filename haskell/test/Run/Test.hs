@@ -24,17 +24,18 @@ import           Control.Monad.State.Strict as St
 import Data.Maybe (maybe, isJust, catMaybes)
 import Data.Map   (keys, Map)
 import Data.Char  (isLower)
+import Data.Text
 import Data.Set   (Set)
 
 import VProp.Types
 import VProp.Core
 import VProp.SBV
 import VProp.Gen
+import VProp.Boolean
 import Config (defConf, allOptsConf, emptyConf)
 import Run
 import Result
 import Api
-import qualified V as V
 
 import Debug.Trace (trace)
 
@@ -54,32 +55,14 @@ runProperties = testGroup "Run Properties" [
                                            -- ad_term2
                                            -- ad_term
                                            -- , qcProps
-  eval_always_unit
-  -- solver_is_correct
+  -- eval_always_unit
+  solver_is_correct
                                            ]
 
 unitTests :: TestTree
 unitTests = testGroup "Unit Tests"
   [
-  --   sat_error
-  -- , sat_error2
-  -- , sat_error4
-  -- andDecomp_duplicate
-  -- , andDecomp_duplicateChc
-  -- , dim_homo'
-  -- , dupDimensions
-  -- , not_is_handled
-  -- , singleton_is_sat
-  -- , not_mult_is_handled
-  -- , chc_singleton_is_sat
-  -- , chc_not_singleton_is_sat
-  -- , chc_unbalanced_is_sat
-  -- chc_balanced_is_sat
-  -- , chc_2_nested_is_sat
-  -- , bimpl_w_false_is_sat
-  -- , bimpl_w_false_chc_is_sat
-  -- , mixed_and_impl_is_sat
-  chces_not_in_model
+    xor_fail
   ]
 
 specTests :: TestTree
@@ -114,9 +97,9 @@ eval_always_unit = QC.testProperty
   "Evaluate/Accumulate, on a plain term will always result in a unit value"
   eval_always_unit'
 
--- solver_is_correct = QC.testProperty
---   "Given a variational Model, upon substituting that model back into the formula we get a SAT. That is, the solver is correct"
---   solver_is_correct'
+solver_is_correct = QC.testProperty
+  "Given a variational Model, upon substituting that model back into the formula we get a SAT. That is, the solver is correct"
+  solver_is_correct'
 
 -- dim_homo' = H.testCase
 --             "dim homomorphism for simplest nested case"
@@ -145,6 +128,8 @@ eval_always_unit = QC.testProperty
 -- sat_error4 = H.testCase
 --            "The solver doesn't run out of memory"
 --            sat_error_unit4
+
+xor_fail = xor_fail'
 
 not_is_handled = H.testCase
                  "Negation doesn't immediately cause unsat for vsat routine"
@@ -213,6 +198,23 @@ chces_not_in_model = H.testCase
 --     prop :: ReadableProp Var
 --     prop = ChcB "D" (bRef "c" &&& bRef "d") (bRef "a") &&& ChcB "D" (bRef "a") (bRef "c")
 
+xor_fail' = H.testCase
+  "Xor" $
+     do model <- satWith emptyConf prop
+        cfgs <- deriveModels model
+        let getRes c = solveLiterals
+                         $ substitute' (deriveValues model c) (selectVariantTotal c prop)
+            res = getRes <$> cfgs
+        -- liftIO $ putStrLn $ "[CFGS]: " ++ (show $ cfgs)
+        -- liftIO $ putStrLn $ "[MODEL]: " ++ (show $ model)
+        -- liftIO $ putStrLn $ "[PROP]: " ++ (show $ prop)
+        -- liftIO $ putStrLn $ "[RES]: " ++ (show $ res)
+
+        H.assertBool "this should pass" (Prelude.all (==True) res)
+          where
+            prop :: ReadableProp Text
+            prop = (bChc "AA" true (bRef "xxx")) <+> (bChc "CC" true true)
+
 -- andDecomp_terminatesSh_ = QCM.monadicIO $
 --   do
 --     let gen = genVPropAtShare 5 $ vPropShare (repeat 4)
@@ -235,22 +237,6 @@ vsat_matches_BF' x =  onlyBools x QC.==> QCM.monadicIO
        liftIO . putStrLn $ "[VSAT]: \n" ++ show b
        QCM.assert (a == b)
 
-noDimsInModel :: V.V d (Maybe SatResult) -> Bool
-noDimsInModel res = all (strIsLower) resultVars
-  where
-    resultModels = V.values' $ (fmap (keys . getModelDictionary)) <$> res
-
-    resultVars :: [String]
-    resultVars = mconcat $ catMaybes resultModels
-
-    strIsLower :: String -> Bool
-    strIsLower = all isLower
-
--- no_dims_in_model_prop x =  onlyBools x QC.==> QCM.monadicIO
---   $ do a <- QCM.run . (bfWith emptyConf) $ (x :: ReadableProp Var)
---        -- liftIO . putStrLn $ "[BF]:   \n" ++ show a'
---        QCM.assert (mempty == getResSat a)
-
 vsat_matches_BF_plain' x =
   (onlyBools x && isPlain x) QC.==> QCM.monadicIO
   $ do a <- QCM.run . (bfWith emptyConf) $ (x :: ReadableProp Var)
@@ -267,13 +253,20 @@ eval_always_unit' x =
      a <- QCM.run . runSMT $ prop' >>= ev
      QCM.assert (a == Unit)
 
--- solver_is_correct' :: (ReadableProp Var) -> QC.Property
--- solver_is_correct' x =
---   (onlyBools x && isVariational x) QC.==> QCM.monadicIO
---   $ do liftIO . putStrLn $ "[PROP]: \n" ++ show x
---        a <- QCM.run $ (satWith emptyConf) x
---        liftIO . putStrLn $ "[Model]: \n" ++ show a
---        QCM.assert (True)
+solver_is_correct' :: (ReadableProp Var) -> QC.Property
+solver_is_correct' (trimap varName id id -> prop) =
+  (onlyBools prop && isVariational prop) QC.==> QCM.monadicIO
+  $ do model <- QCM.run $ (satWith emptyConf) prop
+       cfgs <- lift $ deriveModels model
+       let getRes c = solveLiterals
+                      $ substitute' (deriveValues model c) (selectVariantTotal c prop)
+           res = getRes <$> cfgs
+       -- liftIO $ putStrLn $ "[CFGS]: " ++ (show $ cfgs)
+       -- liftIO $ putStrLn $ "[MODEL]: " ++ (show $ model)
+       -- liftIO $ putStrLn $ "[PROP]: " ++ (show $ prop)
+       -- liftIO $ putStrLn $ "[RES]: " ++ (show $ res)
+
+       QCM.assert $ Prelude.all (==True) res
 
 -- ad_terminates x = onlyInts x QC.==> QCM.monadicIO
 --   $ do -- liftIO $ print $ "prop: " ++ show (x :: VProp Var Var)
