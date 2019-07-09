@@ -255,7 +255,7 @@ eval_always_unit' x =
 
 solver_is_correct' :: (ReadableProp Var) -> QC.Property
 solver_is_correct' (trimap varName id id -> prop) =
-  (onlyBools prop && isVariational prop) QC.==> QCM.monadicIO
+  (onlyBools prop) QC.==> QCM.monadicIO
   $ do model <- QCM.run $ (satWith emptyConf) prop
        cfgs <- lift $ deriveModels model
        let getRes c = solveLiterals
