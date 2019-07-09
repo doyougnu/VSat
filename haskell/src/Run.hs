@@ -502,14 +502,18 @@ handleChc goLeft goRight d =
 -- | type synonym to simplify the BValue type
 type SBVProp d = VProp d (S.SBool, Name) SNum
 
--- | A BValue is a type to represent the AST of the symbolic execution on the
--- query formula. This means we need a unit value to represent terms that have
--- been partially evaluated already
-data BValue d = B! S.SBool
+data BValue d = B !S.SBool !ConstraintName
               | Unit
-              | C! (Dim d) (SBVProp d) (SBVProp d)
-              | BVOp! (BValue d) BB_B (BValue d)
-              deriving (Eq, Show)
+              | C !(Dim d) !(SBVProp d) !(SBVProp d)
+              | BNot !(BValue d)
+              | BVOp !(BValue d) !BB_B !(BValue d)
+
+instance Show d => Show (BValue d) where
+  show (B _ _) = "B"
+  show Unit    = "Unit"
+  show (C d _ _) = "C_" ++ show d
+  show (BNot e)  = "not (" ++ show e ++ ")"
+  show (BVOp l op r) = "\t(" ++ show op ++ "\nLeft:\n\t" ++ show l ++  "\nRight:\n\t " ++ show r ++ ")\n"
 
 -- | The main solver algorithm. You can think of this as the sem function for
 -- the dsl. This progress in two stages, we extend the value domain with a
