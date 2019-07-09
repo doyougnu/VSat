@@ -282,7 +282,7 @@ vSMTSolve prop configPool =
      SC.query $
        do
          -- partially evaluate the prop
-         let !pprop = evaluate . toBValue $! prop'
+         let !pprop = (findPrincipleChoice . mkTop) <$> (evaluate . toBValue $! prop')
 
          -- now we avoid redundent computation by solving on the evaluated
          -- proposition instead of the input proposition
@@ -300,14 +300,14 @@ solvePlain b = do S.constrain b; getResultWith (toResultProp . LitB)
 
 solveVariational :: (Show d, Resultable d) =>
                     ConfigPool d ->
-                    BValue d ->
+                    Loc d ->
                     IncVSMTSolve d (S.SBool)
-solveVariational []        p    = doChoice $ mkTop p
+solveVariational []        p    = doChoice p
 solveVariational cs prop = do mapM_ step cs; return true
   where step cfg = do lift $ SC.push 1
                       -- trace ("Result of Eval: " ++ ushow prop ++ "\n") $ return ()
                       setConfig cfg
-                      _ <- doChoice . mkTop $ prop
+                      _ <- doChoice prop
                       lift $ SC.pop 1
 
 -- | The name of a reference
@@ -772,3 +772,15 @@ getFocus b (InR acc op (InR acc' op' parent)) = (B res', parent)
 -- data Ctx d = InL (Ctx d) BB_B (BValue d)
 --            | InR !S.SBool BB_B (Ctx d)
 --            | Top
+
+-- | Given a Loc find the first choice by crawling down the left hand of the zipper
+findPrincipleChoice :: Loc d -> Loc d
+  -- base casee
+findPrincipleChoice x@(C _ _ _, _)   = x
+  -- terminal cases we want to avoid
+findPrincipleChoice (BVOp (B x) op r, ctx) = findPrincipleChoice (r, InR x op ctx)
+findPrincipleChoice (BVOp Unit op r, ctx) = findPrincipleChoice (r, InR true op ctx)
+  -- recursive cases
+findPrincipleChoice (BVOp l op r, ctx) = findPrincipleChoice (l, InL ctx op r)
+  -- totalize over the context if all these fail and let doChoice handle it
+findPrincipleChoice x = x
