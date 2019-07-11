@@ -47,20 +47,50 @@ linuxFiles = [ "2016-01-07.json"
 
 files = fmap ((++) linuxPaths) linuxFiles
 
+ds :: [VProp Text String String]
+ds = bRef <$> ["D_0", "D_1", "D_2", "D_3", "D_4", "D_5", "D_6"]
+
+[d0, d1, d2, d3, d4, d5, d6] = ds
+
+-- | V1+V2
+mkCascadeConf n xs = conjoin $ (take n xs) ++ (bnot <$> drop n xs)
+
+-- | V1**V2
+mkMultConf n xs = conjoin (bnot <$> drop n xs)
+
+-- mkConf :: Int -> [VProp Text String String] -> VProp Text String String
+-- mkConf n xs = conjoin $ (xs !! n) : (bnot <$> delete d xs)
+--   where d = xs !! n
+
+evoAwareConf = disjoin confs
+
+mkConf x xs = x &&& (conjoin $ bnot <$> (delete x xs))
+
+confs = fmap (flip mkConf ds) ds
+
+d0Conf = mkConf d0 ds
+d1Conf = mkConf d1 ds
+d2Conf = mkConf d2 ds
+d3Conf = mkConf d3 ds
+d4Conf = mkConf d4 ds
+d5Conf = mkConf d5 ds
+d6Conf = mkConf d6 ds
+
 -- main :: IO (V String (Maybe ThmResult))
 
+toAutoConf = Just . toDimProp
 -- run with stack bench --profile vsat:auto --benchmark-arguments='+RTS -S -RTS --output timings.html'
 main = do
   -- readfile is strict
   ls' <- traverse BS.readFile files
   let (Just ls) = (traverse decodeStrict' ls') :: Maybe [Auto]
       !lConstraints = constraints <$> ls
-      l1Lang = fmap (parse langParser "") <$> lConstraints
-      l1Right = rights <$> l1Lang
-      l1Left =  lefts <$> l1Lang
+      lLang = fmap (parse langParser "") <$> lConstraints
+      lRight = concat $ rights <$> lLang
+      lLeft =  lefts <$> lLang
 
-      !lProps = ((naiveEncode . autoToVSat) . autoAndJoin) <$> l1Right
-      !lProp  = conjoin lProps
+      !lProps = ((naiveEncode . autoToVSat) . autoAndJoin) $ lRight
+      !lProp  = lProps
 
       run !desc !f prop = bench desc $! nfIO (f prop)
 
@@ -73,8 +103,9 @@ main = do
           ratio :: Double
           !ratio = fromRational $ compressionRatio prop
 
+  res <- (bfWithConf (toAutoConf evoAwareConf) emptyConf) lProp
+  writeFile "LinuxRes" (show res)
   -- res <- satWith emptyConf l1Prop
-  print $ dimensions lProp
 
  --  defaultMain
  --    [
