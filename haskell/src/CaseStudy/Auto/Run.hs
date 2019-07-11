@@ -162,10 +162,10 @@ correctFormulas :: AssocMap -> AssocMap
 correctFormulas m = expandedMap
   where
     ctxs = mapKeys getEvoCtx m
-    m' = mapWithKey (\k v -> (autoAndJoin' $ v : concatMap (flip findLessThan  ctxs) k)) ctxs
+    m' = mapWithKey (\k v -> (autoAndJoin $ v : concatMap (flip findLessThan  ctxs) k)) ctxs
     expandedMap = mapKeys helper m'
       where helper []  = AutoRef "__plain__"
-            helper xs = autoAndJoin' $ reconstruct <$> xs
+            helper xs = autoAndJoin $ reconstruct <$> xs
             reconstruct (op, i) = (RBinary op (ACtx (AVar (pack "evo_ctx"))) i)
 
 

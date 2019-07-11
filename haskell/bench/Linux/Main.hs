@@ -11,6 +11,7 @@ import           Data.Either             (lefts, rights)
 import           Data.Foldable           (foldr')
 import           Data.List               (sort,delete,intersperse)
 import           Data.Map                (size, Map)
+import qualified Data.Set                as Set
 import qualified Data.SBV                as S
 import qualified Data.SBV.Control        as SC
 import qualified Data.SBV.Internals      as SI
@@ -86,11 +87,10 @@ main = do
   let (Just ls) = (traverse decodeStrict' ls') :: Maybe [Auto]
       !lConstraints = constraints <$> ls
       lLang = fmap (parse langParser "") <$> lConstraints
-      lRight = concat $ rights <$> lLang
+      lRight = rights <$> lLang
       lLeft =  lefts <$> lLang
 
-      !lProps = ((naiveEncode . autoToVSat) . autoAndJoin) $ lRight
-      !lProp  = lProps
+      !lProp = ((naiveEncode . autoToVSat) . autoAndJoin) $ (concat lRight)
 
       run !desc !f prop = bench desc $! nfIO (f prop)
 
@@ -103,9 +103,10 @@ main = do
           ratio :: Double
           !ratio = fromRational $ compressionRatio prop
 
-  res <- (bfWithConf (toAutoConf evoAwareConf) emptyConf) lProp
-  writeFile "LinuxRes" (show res)
+  -- res <- (satWithConf (toAutoConf evoAwareConf) emptyConf) lProp
+  -- writeFile "LinuxRes" (show res)
   -- res <- satWith emptyConf l1Prop
+  print $ take 100 (Set.toList $ bvars lProp)
 
  --  defaultMain
  --    [

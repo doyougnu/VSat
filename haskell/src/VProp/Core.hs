@@ -400,22 +400,22 @@ vars = trifoldMap mempty Set.singleton Set.singleton
 
 --------------------------- Constructors -----------------------------------------
 conjoin :: [VProp d a b] -> VProp d a b
-conjoin = fromList' $ OpBB And
+conjoin = fromList $ OpBB And
 
 disjoin :: [VProp d a b] -> VProp d a b
-disjoin = fromList' $ OpBB Or
+disjoin = fromList $ OpBB Or
 
 xOrJoin :: [VProp d a b] -> VProp d a b
-xOrJoin = fromList' $ OpBB XOr
+xOrJoin = fromList $ OpBB XOr
 
 atMost1 :: (Boolean b, Eq b) => [b] -> b
 atMost1 [] = error "empty list on input of atMost1"
 atMost1 [x] = x
-atMost1 xs = cs &&& fromList' (&&&) disjuncs
+atMost1 xs = cs &&& fromList (&&&) disjuncs
   where disjuncs = [(bnot x ||| bnot y) | (x, i) <- labeled
                                         , (y, j) <- labeled
                                         , i < j
                                         ]
 
         labeled = zip xs [1..]
-        cs = fromList' (|||) xs
+        cs = fromList (|||) xs
