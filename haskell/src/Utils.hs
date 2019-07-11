@@ -23,28 +23,10 @@ onSnd f (a,b,c) = (a, f b, c)
 onThd :: (c -> d) -> (a,b,c) -> (a,b,d)
 onThd f (a,b,c) = (a, b, f c)
 
--- we construct a balanced binary tree given a binary operator. We find the
--- middle point of the list and recur down to leaves.
--- TODO this should become a
--- traversable t, but need to define take and drop for traversable
-fromList :: (a -> a -> a) -> [a] -> a
-fromList cnstr ps = go m ps
-  where
-    m = Prelude.length ps
-    go 0 xs = go (Prelude.length xs) xs
-    go _ [x]  = x
-    go _ (x:y:[]) = cnstr x y
-    go !n !xs = cnstr (go n' xs') (go n' ys)
-      where
-        n' = (n `div` 2)
-        xs' = Prelude.take n' xs
-        ys =  if even n
-              then Prelude.drop n' xs
-              else Prelude.drop (n' + 1) xs
 
-fromList' :: (a -> a -> a) -> [a] -> a
-fromList' _ [] = error "Empty List in fromList'"
-fromList' f xs = foldl1' f xs
+fromList :: (a -> a -> a) -> [a] -> a
+fromList _ [] = error "Empty List in fromList'"
+fromList f xs = foldl1' f xs
 
 -- | given a list of stuff, generate a list of those things tagged with every
 -- possible boolean combination. i.e. booleanCombinations [1..3] = [[(1, True),

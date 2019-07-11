@@ -47,7 +47,7 @@ dataFile = "bench/Financial/financial_merged.json"
         -- d == "D_8" = "D_5"
         -- d == "D_14" = "D_9"
 
-sliceAndNegate n xs = fromList' (&&&) $ bnot <$> drop n xs
+sliceAndNegate n xs = fromList (&&&) $ bnot <$> drop n xs
 
 ds :: [VProp Text String String]
 ds = bRef <$> ["D_0", "D_1", "D_17", "D_13", "D_7", "D_3", "D_11", "D_5", "D_9", "D_15"]
