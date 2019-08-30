@@ -8,7 +8,6 @@ import Data.SBV.Internals (showModel)
 import Data.Text
 import Data.Aeson hiding (json)
 
-import V (V(..))
 import VProp.Types
 import qualified Result as R
 import Opts
@@ -38,14 +37,6 @@ instance (R.Resultable d, FromJSONKey d, FromJSON d) => FromJSON (R.Result d)
 instance (R.Resultable d, FromJSONKey d, FromJSON d) => FromJSON (R.ResultMap d)
 instance FromJSON d => FromJSON (R.UniformProp d)
 instance ToJSON d => ToJSON (R.UniformProp d)
-
-instance (Show d, Show a, ToJSON a, ToJSON d) => ToJSON (V a d) where
-  toJSON (Plain x) = toJSON x
-  toJSON (VChc d l r) = object [ (pack (show d) :: Text) .=
-                                 object [ ("L" :: Text) .= toJSON l
-                                        , ("R" :: Text) .= toJSON r
-                                        ]
-                               ]
 
 -- Just keeping this for reference on writing a manual instance if needed later
 -- | VIExpr instances for FromJSON
@@ -84,6 +75,8 @@ instance ToJSONKey Var
 
 instance (ToJSON a, ToJSON d) => ToJSON (VIExpr d a)
 instance (ToJSON d, ToJSON a, ToJSON b) => ToJSON (VProp d a b)
+instance ToJSON (R.Result d)
+
 
 instance ToJSON Opts
 instance FromJSON Opts
