@@ -35,15 +35,15 @@ import           VProp.SBV               (toPredicate)
 import           VProp.Types
 
 linuxPaths :: FilePath
-linuxPaths = "bench/Linux/"
+linuxPaths = "bench/Linux/data/"
 
 linuxFiles = [ "2016-01-07.json"
-             , "2016-01-09.json"
-             , "2016-01-11.json"
-             , "2016-01-12.json"
-             , "2016-01-13.json"
-             , "2016-01-14.json"
-             , "2016-01-15.json"
+             -- , "2016-01-09.json"
+             -- , "2016-01-11.json"
+             -- , "2016-01-12.json"
+             -- , "2016-01-13.json"
+             -- , "2016-01-14.json"
+             -- , "2016-01-15.json"
              ]
 
 files = fmap ((++) linuxPaths) linuxFiles
@@ -90,7 +90,7 @@ main = do
       lRight = rights <$> lLang
       lLeft =  lefts <$> lLang
 
-      !lProp = ((naiveEncode . autoToVSat) . autoAndJoin) $ (concat lRight)
+      !lProp = ((naiveEncode . autoToVSat) . autoAndJoin) $ (concat (take 10 lRight))
 
       run !desc !f prop = bench desc $! nfIO (f prop)
 
@@ -106,7 +106,8 @@ main = do
   -- res <- (satWithConf (toAutoConf evoAwareConf) emptyConf) lProp
   -- writeFile "LinuxRes" (show res)
   -- res <- satWith emptyConf l1Prop
-  print $ take 100 (Set.toList $ bvars lProp)
+  -- print $ take 100 (Set.toList $ bvars lProp)
+  print lProp
 
  --  defaultMain
  --    [
