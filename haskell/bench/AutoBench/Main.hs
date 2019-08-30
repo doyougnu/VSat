@@ -51,7 +51,7 @@ chAutoFile = "bench/AutoBench/vsat_small_chunk.json"
 
 -- main :: IO (V String (Maybe ThmResult))
 
-sliceAndNegate n xs = fromList' (&&&) $ bnot <$> drop n xs
+sliceAndNegate n xs = fromList (&&&) $ bnot <$> drop n xs
 
 ds :: [VProp Text String String]
 ds = bRef <$> ["D_0","D_2","D_4","D_5"]
@@ -62,13 +62,13 @@ ds = bRef <$> ["D_0","D_2","D_4","D_5"]
 
 -- dimConf' :: VProp Text String String
 -- encoding for 6 configs that make sure the inequalities encompass each other
-sumConf = (d0 &&& fromList' (&&&) (bnot <$> tail ds)) -- <0
+sumConf = (d0 &&& fromList (&&&) (bnot <$> tail ds)) -- <0
           ||| ((bnot d0) &&& d2 &&& (bnot d4 &&& bnot d5))   -- <0 /\ <1
           ||| ((bnot d0)&&& (bnot d2) &&& d4 &&& bnot d5) -- <0 /\ <1 /\
           ||| ((bnot d0)&&& (bnot d2) &&& (bnot d4) &&& d5) -- <0 /\ <1 /\
 
 -- | Configs that select only one version
-d0Conf = (d0 &&& fromList' (&&&) (bnot <$> tail ds)) -- <0
+d0Conf = (d0 &&& fromList (&&&) (bnot <$> tail ds)) -- <0
 d2Conf = ((bnot d0) &&& d2 &&& (bnot d4 &&& bnot d5))   -- <0 /\ <1
 d3Conf = ((bnot d0) &&& (bnot d2) &&& d4 &&& bnot d5) -- <0 /\ <1 /\
 d4Conf = ((bnot d0) &&& (bnot d2) &&& (bnot d4) &&& d5) -- <0 /\ <1 /\
@@ -154,6 +154,41 @@ main = do
       (Just bPropJustV12) = selectVariant justV12 bProp
       (Just bPropJustV123) = selectVariant justV123 bProp
 
+      benches :: ReadableSMTConf Text -> [Benchmark]
+      benches solverConf = [
+        -- v - v
+        mkBench "v-->v" "V1"  (satWithConf (toAutoConf d0Conf) solverConf) bProp
+        , mkBench "v-->v" "V2"  (satWithConf (toAutoConf d2Conf) solverConf) bProp
+        , mkBench "v-->v" "V3"  (satWithConf (toAutoConf d3Conf) solverConf) bProp
+        , mkBench "v-->v" "V4"  (satWithConf (toAutoConf d4Conf) solverConf) bProp
+        , mkBench "v-->v" "EvolutionAware" (satWithConf (toAutoConf sumConf) solverConf) bProp
+        , mkBench "v-->v" "V1*V2"        (satWith solverConf) bPropJustV12
+        , mkBench "v-->v" "V1*V2*V3"     (satWith solverConf) bPropJustV123
+        , mkBench "v-->v" "V1*V2*V3*V4"  (satWith solverConf) bProp
+
+          -- p - v
+        , mkBench "p-->v" "V1"  (pOnVWithConf Nothing solverConf) bPropV1
+        , mkBench "p-->v" "V2"  (pOnVWithConf Nothing solverConf) bPropV2
+        , mkBench "p-->v" "V3"  (pOnVWithConf Nothing solverConf) bPropV3
+        , mkBench "p-->v" "V4"  (pOnVWithConf Nothing solverConf) bPropV4
+        , mkBench "p-->v" "EvolutionAware" (pOnVWithConf (toAutoConf sumConf) solverConf) bProp
+
+                   -- p - p
+        , mkBench "p-->p" "V1"  (bfWith solverConf) bPropV1
+        , mkBench "p-->p" "V2"  (bfWith solverConf) bPropV2
+        , mkBench "p-->p" "V3"  (bfWith solverConf) bPropV3
+        , mkBench "p-->p" "V4"  (bfWith solverConf) bPropV4
+
+                   -- v - p
+        , mkBench "v-->p" "V1"  (bfWithConf (toAutoConf d0Conf) solverConf) bProp
+        , mkBench "v-->p" "V2"  (bfWithConf (toAutoConf d2Conf) solverConf) bProp
+        , mkBench "v-->p" "V3"  (bfWithConf (toAutoConf d3Conf) solverConf) bProp
+        , mkBench "v-->p" "V4"  (bfWithConf (toAutoConf d4Conf) solverConf) bProp
+        , mkBench "v-->p" "EvolutionAware"  (bfWithConf (toAutoConf sumConf) solverConf) bProp
+        , mkBench "v-->p" "V1*V2"        (bfWith solverConf) bPropJustV12
+        , mkBench "v-->p" "V1*V2*V3"     (bfWith solverConf) bPropJustV123
+        , mkBench "v-->p" "V1*V2*V3*V4"  (bfWith solverConf) bProp
+        ]
   -- res' <- runIncrementalSolve bPs
 
   -- mdl <- baselineSolve bPs
@@ -179,43 +214,8 @@ main = do
   -- goodRes <- testS goodS 1000
 
   defaultMain
-    [
-    bgroup "Auto" [
-        -- v - v
-                     mkBench "v-->v" "V1"  (satWithConf (toAutoConf d0Conf) emptyConf) bProp
-                   , mkBench "v-->v" "V2"  (satWithConf (toAutoConf d2Conf) emptyConf) bProp
-                   , mkBench "v-->v" "V3"  (satWithConf (toAutoConf d3Conf) emptyConf) bProp
-                   , mkBench "v-->v" "V4"  (satWithConf (toAutoConf d4Conf) emptyConf) bProp
-                   , mkBench "v-->v" "EvolutionAware" (satWithConf (toAutoConf sumConf) emptyConf) bProp
-                   , mkBench "v-->v" "V1*V2"        (satWith emptyConf) bPropJustV12
-                   , mkBench "v-->v" "V1*V2*V3"     (satWith emptyConf) bPropJustV123
-                   , mkBench "v-->v" "V1*V2*V3*V4"  (satWith emptyConf) bProp
-
-                   -- p - v
-                   , mkBench "p-->v" "V1"  (pOnVWithConf Nothing) bPropV1
-                   , mkBench "p-->v" "V2"  (pOnVWithConf Nothing) bPropV2
-                   , mkBench "p-->v" "V3"  (pOnVWithConf Nothing) bPropV3
-                   , mkBench "p-->v" "V4"  (pOnVWithConf Nothing) bPropV4
-                   , mkBench "p-->v" "EvolutionAware" (pOnVWithConf (toAutoConf sumConf)) bProp
-
-                   -- p - p
-                   , mkBench "p-->p" "V1"  (bfWith emptyConf) bPropV1
-                   , mkBench "p-->p" "V2"  (bfWith emptyConf) bPropV2
-                   , mkBench "p-->p" "V3"  (bfWith emptyConf) bPropV3
-                   , mkBench "p-->p" "V4"  (bfWith emptyConf) bPropV4
-
-                   -- v - p
-                   , mkBench "v-->p" "V1"  (bfWithConf (toAutoConf d0Conf) emptyConf) bProp
-                   , mkBench "v-->p" "V2"  (bfWithConf (toAutoConf d2Conf) emptyConf) bProp
-                   , mkBench "v-->p" "V3"  (bfWithConf (toAutoConf d3Conf) emptyConf) bProp
-                   , mkBench "v-->p" "V4"  (bfWithConf (toAutoConf d4Conf) emptyConf) bProp
-                   , mkBench "v-->p" "EvolutionAware"  (bfWithConf (toAutoConf sumConf) emptyConf) bProp
-                   , mkBench "v-->p" "V1*V2"        (bfWith emptyConf) bPropJustV12
-                   , mkBench "v-->p" "V1*V2*V3"     (bfWith emptyConf) bPropJustV123
-                   , mkBench "v-->p" "V1*V2*V3*V4"  (bfWith emptyConf) bProp
-                  ]
+    [ bgroup "Z3" (benches z3DefConf)
+    , bgroup "CVC4" (benches cvc4DefConf)
+    , bgroup "Yices" (benches yicesDefConf)
+    , bgroup "Boolector" (benches boolectorDefConf)
     ]
-
-                   --   bench "Auto:VSolve:NoConf"  . nfIO $ satWithConf Nothing emptyConf bProp
-                   -- , bench "Auto:PonV:NoConf"  . nfIO $ pOnVWithConf Nothing bProp
-                   -- , bench "Auto:BF:NoConf"  . nfIO $ bfWith emptyConf bProp

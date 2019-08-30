@@ -89,7 +89,7 @@ runBF pool os p = fst' <$> runEnv (runBruteForce pool) os p
 
 -- runPonV :: (Show d, Resultable d) => ConfigPool d -> ReadableProp d
 --         -> IO (Result d, SatDict d, Log)
-runPonV pool prop = runEnv (runPlainOnVSat pool) emptyConf prop
+runPonV pool conf prop = runEnv (runPlainOnVSat pool) conf prop
 
 -- | Run the VSMT solver given a list of optimizations and a prop
 runVSMT :: (Show d, Resultable d) =>

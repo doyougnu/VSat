@@ -110,15 +110,14 @@ bfWithConf (Just dimConfig) conf prop =
     -- putStrLn . show $ (length configPool)
     runBF configPool conf prop
 
--- pOnVWithConf :: (Show d, Resultable d, SAT (ReadableProp d)) =>
---   Maybe (DimProp d) -> ReadableProp d -> IO (Result d)
-pOnVWithConf Nothing          prop = fst' <$> runPonV mempty prop
-pOnVWithConf (Just dimConfig) prop =
+pOnVWithConf :: (Resultable d, Show d) => Maybe (DimProp d) -> ReadableSMTConf d -> ReadableProp d -> IO (Result d)
+pOnVWithConf Nothing          conf prop = fst' <$> runPonV mempty conf prop
+pOnVWithConf (Just dimConfig) conf prop =
   do
     configPool <- genConfigPool' dimConfig
     -- mapM_ (putStrLn . show) configPool
     -- putStrLn . show $ (length configPool)
-    fst' <$> runPonV configPool prop
+    fst' <$> runPonV configPool conf prop
 
 bfWith :: (Show d, Resultable d,SAT (ReadableProp d)) =>
  ReadableSMTConf d -> ReadableProp d -> IO (Result d)

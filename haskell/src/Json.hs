@@ -29,7 +29,6 @@ instance FromJSON d => FromJSON (R.ResultProp d)
 instance ToJSON d => ToJSON (R.ResultProp d)
 instance (FromJSON d, FromJSONKey d) => FromJSONKey (R.ResultProp d)
 instance (ToJSON d, ToJSONKey d) => ToJSONKey (R.ResultProp d)
-instance (R.Resultable d, ToJSONKey d, ToJSON d) => ToJSON (R.Result d)
 instance (R.Resultable d, ToJSONKey d, ToJSON d) => ToJSON (R.ResultMap d)
 instance (R.Resultable d, ToJSONKey d, ToJSON d) => ToJSON (R.UnSatResult d)
 instance (R.Resultable d, FromJSONKey d, FromJSON d) => FromJSON (R.UnSatResult d)
@@ -75,7 +74,7 @@ instance ToJSONKey Var
 
 instance (ToJSON a, ToJSON d) => ToJSON (VIExpr d a)
 instance (ToJSON d, ToJSON a, ToJSON b) => ToJSON (VProp d a b)
-instance ToJSON (R.Result d)
+instance (ToJSON d, ToJSONKey d, R.Resultable d) => ToJSON (R.Result d)
 
 
 instance ToJSON Opts

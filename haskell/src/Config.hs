@@ -5,7 +5,6 @@ import Data.SBV (SMTConfig(..),z3,yices,mathSAT,boolector,abc,cvc4)
 import GHC.Generics (Generic)
 import Data.Foldable (foldr')
 import Data.Text (Text)
-import Control.Monad.Reader.Class
 
 import VProp.Types
 import Opts
@@ -111,3 +110,22 @@ convertOpts Prune     = prune
 -- convertOpts CNF       = toCNF
 convertOpts Atomize   = atomize
 convertOpts _         = id
+
+
+z3DefConf :: (SAT (VProp d a b), Ord a,Ord b,Ord d) => SMTConf d a b
+z3DefConf = setSolver Z3 defConf
+
+yicesDefConf :: (SAT (VProp d a b), Ord a,Ord b,Ord d) => SMTConf d a b
+yicesDefConf = setSolver Yices defConf
+
+mathSatDefConf :: (SAT (VProp d a b), Ord a,Ord b,Ord d) => SMTConf d a b
+mathSatDefConf = setSolver MathSat defConf
+
+boolectorDefConf :: (SAT (VProp d a b), Ord a,Ord b,Ord d) => SMTConf d a b
+boolectorDefConf = setSolver Boolector defConf
+
+cvc4DefConf :: (SAT (VProp d a b), Ord a,Ord b,Ord d) => SMTConf d a b
+cvc4DefConf = setSolver Cvc4 defConf
+
+abcDefConf :: (SAT (VProp d a b), Ord a,Ord b,Ord d) => SMTConf d a b
+abcDefConf = setSolver Abc defConf
