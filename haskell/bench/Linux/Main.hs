@@ -2,11 +2,11 @@ import           Control.Arrow           (first, second)
 import           Criterion.Main
 import           Criterion.Main.Options
 import           Criterion.Types         (Config (..))
-import           Data.Aeson              (decodeStrict')
+import           Data.Aeson              (decodeStrict', decode)
 import           Control.Monad           (replicateM, foldM, liftM2)
 import           Data.Bifunctor          (bimap)
 import           Data.Bitraversable      (bimapM)
-import qualified Data.ByteString         as BS (readFile)
+import qualified Data.ByteString.Lazy    as BS (readFile)
 import           Data.Either             (lefts, rights)
 import           Data.Foldable           (foldr')
 import           Data.List               (sort,delete,intersperse)
@@ -35,9 +35,9 @@ import           VProp.SBV               (toPredicate)
 import           VProp.Types
 
 linuxPaths :: FilePath
-linuxPaths = "bench/Linux/data/"
+linuxPaths = "bench/Linux/"
 
-linuxFiles = [ "2016-01-07.json"
+linuxFiles = [  "2016-01-07.json"
              -- , "2016-01-09.json"
              -- , "2016-01-11.json"
              -- , "2016-01-12.json"
@@ -84,13 +84,13 @@ toAutoConf = Just . toDimProp
 main = do
   -- readfile is strict
   ls' <- traverse BS.readFile files
-  let (Just ls) = (traverse decodeStrict' ls') :: Maybe [Auto]
-      !lConstraints = constraints <$> ls
+  let (Just ls) = (traverse decode ls') :: Maybe [Auto]
+      lConstraints = constraints <$> ls
       lLang = fmap (parse langParser "") <$> lConstraints
       lRight = rights <$> lLang
       lLeft =  lefts <$> lLang
 
-      !lProp = ((naiveEncode . autoToVSat) . autoAndJoin) $ (concat (take 10 lRight))
+      lProp = ((naiveEncode . autoToVSat) . autoAndJoin) $ (concat (take 1 lRight))
 
       run !desc !f prop = bench desc $! nfIO (f prop)
 
@@ -106,8 +106,8 @@ main = do
   -- res <- (satWithConf (toAutoConf evoAwareConf) emptyConf) lProp
   -- writeFile "LinuxRes" (show res)
   -- res <- satWith emptyConf l1Prop
-  -- print $ take 100 (Set.toList $ bvars lProp)
-  print lProp
+  print $ take 100 (Set.toList $ bvars lProp)
+  -- print lProp
 
  --  defaultMain
  --    [

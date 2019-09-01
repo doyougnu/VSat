@@ -300,7 +300,7 @@ main = do
   -- mapM_ (putStrLn . show . second numTerms) $
   --   zip [1..] [bPropV1, bPropV12, bPropV123, bPropV1234, bPropV12345, bPropV123456, bPropV123456, bPropV1234567, bPropV12345678, bPropV123456789, bPropVAll]
   -- putStrLn $ "------------------"
-  -- putStrLn $ (show bProp)
+  --  utStrLn $ (show bProp)
   -- res' <- satWithConf (toAutoConf d0Conf) emptyConf bProp
   -- res' <- ad id bProp
   -- res' <- satWithConf autoConf emptyConf (bRef "a" &&& bRef "c")
@@ -318,9 +318,10 @@ main = do
   -- goodRes <- testS goodS 1000
 
   defaultMain
-    [ bgroup "Z3" (benches z3DefConf)
+    [ -- bgroup "ABC" (benches abcDefConf)
+      bgroup "Yices" (benches yicesDefConf)
     , bgroup "CVC4" (benches cvc4DefConf)
-    , bgroup "Yices" (benches yicesDefConf)
+    , bgroup "Z3" (benches z3DefConf)
     , bgroup "Boolector" (benches boolectorDefConf)
     ]
 
