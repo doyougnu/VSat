@@ -18,7 +18,7 @@ extra-deps:
 nix:
   enable: true
   pure: false
-  packages: [ z3, pkgconfig, zlib, cvc4, yices, boolector ]
+  packages: [ z3, pkgconfig, zlib, abc-verifier, cvc4, yices, boolector ]
 
 # resolver: lts-11.22
 resolver: lts-12.25
