@@ -387,11 +387,12 @@ isSat = do cs <- SC.checkSat
 -- | type class needed to avoid lifting for constraints in the IncSolve monad
 instance (Monad m, I.SolverContext m) =>
   I.SolverContext (StateT (IncState d) m) where
-  constrain = lift . (force S.constrain)
+  constrain = lift . S.constrain
   namedConstraint = (lift .) . S.namedConstraint
   setOption = lift . S.setOption
   softConstrain = lift . I.softConstrain
   constrainWithAttribute = (lift .) . I.constrainWithAttribute
+  contextState = lift I.contextState
 
 
 -- Helper functions for solve routine
