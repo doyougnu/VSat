@@ -41,6 +41,7 @@ import           Config
 import           Result
 
 import           Text.Show.Unicode          (ushow)
+import Debug.Trace
 
 -- | The satisfiable dictionary, this is actually the "state" keys are configs
 -- (an mapping from dimensions to booleans denoting selection) and values are
@@ -118,13 +119,12 @@ _logResult x = tell $ "Got result: " ++ show x
 -- directly
 runForDict :: (Resultable d, SAT (ReadableProp d)) =>
   ReadableProp d -> IO (Result d)
-runForDict x = S.runSMT $
+runForDict x = trace ("CONSTRAINING: " ++ show x ++ "\n") $ S.runSMT $
   do
     x' <- toPredicate x
     SC.query $
       do S.constrain x'
          res <- getResultWith (toResultProp . LitB)
-         SC.resetAssertions
          SC.exit
          return res
 
@@ -140,17 +140,17 @@ runBruteForce ::
 runBruteForce pool prop = lift $ flip evalStateT (initSt pool prop) $
   do
   _confs <- get
+  -- dbg "PROP" prop
   let confs = M.keys _confs
       plainProps = if null confs
         then pure (M.empty, prop)
         else (\y -> (y, selectVariantTotal y prop)) <$> confs
   plainMs <- lift $
-             mapM (bitraverse
-                   (pure . configToResultProp)
-                   runForDict) $ plainProps
-  return $ mconcat (fmap (\(c, as) -> insertToSat c as) plainMs)
+             mapM (bitraverse (pure . configToResultProp) runForDict) $ plainProps
+  -- dbg "Models" plainMs
+  return $ combineResults plainMs
   where
-        helper c as =  insertToSat c as
+    helper c as =  insertToSat c as
 
 
 -- | Run plain terms on vsat, that is, perform selection for each dimension, and
@@ -537,8 +537,8 @@ toBValue (OpBB op l r) = BVOp (toBValue l) op (toBValue r)
 toBValue (OpIB _ _ _) = error "Blame Jeff! This isn't implemented yet!"
 toBValue (ChcB d l r) = C d l r
 
--- dbg :: (Show a, Monad m) => String -> a -> m ()
--- dbg s a = trace (s ++ " : " ++ show a ++ " \n") $ return ()
+dbg :: (Show a, Monad m) => String -> a -> m ()
+dbg s a = trace (s ++ " : " ++ show a ++ " \n") $ return ()
 
 -- | Evaluation allows communication with the solver and reduces terms to Unit
 -- values thereby representing that evaluation has taken place. Evaluation can
