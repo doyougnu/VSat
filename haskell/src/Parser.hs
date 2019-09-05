@@ -67,13 +67,13 @@ bExpr :: Parser (ReadableProp T.Text)
 bExpr = makeExprParser bTerm bOperators
 
 bTerm :: Parser (ReadableProp T.Text)
-bTerm = (dbg "paren" (parens bExpr))
-        <|> (dbg "Chc" choiceTerm)
-        <|> (dbg "At" atMost1Expr)
+bTerm = (parens bExpr)
+        <|> choiceTerm
+        <|> try atMost1Expr
         <|> LitB True <$ reserved "true"
         <|> LitB False <$ reserved "false"
-        <|> dbg "R" rExpr
-        <|> try (dbg "B" boolRef)
+        <|> try rExpr
+        <|> try boolRef
 
 
 aTerm :: Parser (VIExpr T.Text T.Text)
@@ -126,17 +126,18 @@ bOperators =
     , InfixL (OpBB Or     <$ reserved "or")
     , InfixR (OpBB Impl   <$ reserved "impl")
     , InfixN (OpBB BiImpl <$ reserved "iff")
+    , InfixN (OpBB XOr    <$ reserved "xor")
     ]
   ]
 
 aOperators :: [[Operator Parser (VIExpr a b)]]
 aOperators =
-  [ [ Prefix (OpI Neg <$ dotSymbol "-")]
+  [ [ Prefix (OpI Neg   <$ dotSymbol "-")]
   , [ InfixL (OpII Mult <$ dotSymbol "*")
-    , InfixL (OpII Div <$  dotSymbol "/")
-    , InfixL (OpII Add <$  dotSymbol "+")
-    , InfixL (OpII Sub <$  dotSymbol "-")
-    , InfixL (OpII Mod <$  dotSymbol "%")
+    , InfixL (OpII Div  <$ dotSymbol "/")
+    , InfixL (OpII Add  <$ dotSymbol "+")
+    , InfixL (OpII Sub  <$ dotSymbol "-")
+    , InfixL (OpII Mod  <$ dotSymbol "%")
     ]
   ]
 
