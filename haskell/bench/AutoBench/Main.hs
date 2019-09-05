@@ -153,7 +153,7 @@ main = do
         , mkBench "v-->v" "V2" d2Conf (satWithConf (toDimProp d2Conf) solverConf) bProp
         , mkBench "v-->v" "V3" d3Conf (satWithConf (toDimProp d3Conf) solverConf) bProp
         , mkBench "v-->v" "V4" d4Conf (satWithConf (toDimProp d4Conf) solverConf) bProp
-        , mkBench "v-->v" "EvolutionAware" sumConf (satWithConf (toDimProp sumConf) solverConf) bProp
+        , mkBench' "v-->v" "EvolutionAware" (satWithConf (toDimProp sumConf) solverConf) bProp
         -- , mkBench "v-->v" "V1*V2"        (satWith solverConf) bPropJustV12
         -- , mkBench "v-->v" "V1*V2*V3"     (satWith solverConf) bPropJustV123
         -- , mkBench "v-->v" "V1*V2*V3*V4"  (satWith solverConf) bProp
@@ -163,7 +163,7 @@ main = do
         -- , mkBench "p-->v" "V2"  (pOnVWithConf Nothing solverConf) bPropV2
         -- , mkBench "p-->v" "V3"  (pOnVWithConf Nothing solverConf) bPropV3
         -- , mkBench "p-->v" "V4"  (pOnVWithConf Nothing solverConf) bPropV4
-        -- , mkBench "p-->v" "EvolutionAware" (pOnVWithConf (toDimProp sumConf) solverConf) bProp
+        -- , mkBench' "p-->v" "EvolutionAware" (pOnVWithConf (toDimProp sumConf) solverConf) bProp
 
         --            -- p - p
         -- , mkBench "p-->p" "V1"  (bfWith solverConf) bPropV1
@@ -176,7 +176,7 @@ main = do
         -- , mkBench "v-->p" "V2"  (bfWithConf (toDimProp d2Conf) solverConf) bProp
         -- , mkBench "v-->p" "V3"  (bfWithConf (toDimProp d3Conf) solverConf) bProp
         -- , mkBench "v-->p" "V4"  (bfWithConf (toDimProp d4Conf) solverConf) bProp
-        -- , mkBench "v-->p" "EvolutionAware"  (bfWithConf (toDimProp sumConf) solverConf) bProp
+        -- , mkBench' "v-->p" "EvolutionAware"  (bfWithConf (toDimProp sumConf) solverConf) bProp
         -- , mkBench "v-->p" "V1*V2"        (bfWith solverConf) bPropJustV12
         -- , mkBench "v-->p" "V1*V2*V3"     (bfWith solverConf) bPropJustV123
         -- , mkBench "v-->p" "V1*V2*V3*V4"  (bfWith solverConf) bProp

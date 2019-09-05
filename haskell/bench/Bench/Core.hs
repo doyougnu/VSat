@@ -71,7 +71,26 @@ mkBench
 mkBench alg confDesc conf !f prop = run desc f prop
   where
     [confPool] = unsafePerformIO $ genConfigPool conf --just call out to the
-    prop' = selectVariantTotal confPool prop
-    desc = mkDescription alg confDesc prop'
                                                       --solver, this should
                                                       --always be safe
+    (Just prop') = selectVariant confPool prop -- some confs will never be
+                                               -- total, so we use select
+                                               -- variant here
+    desc = mkDescription alg confDesc prop'
+
+-- | a version of mkBench that doesn't require the actual configuration. This is
+-- used for instances where the proposition under consideration will be solved
+-- projected to a plain term many times, such as in the case of running an
+-- evolution aware solution. That is, a variational prop will be fully selected
+-- to a plain prop which means that the compression ratio statistics will be
+-- meaningless because they only make sense with variational terms.
+mkBench'
+  :: (NFData a1, Resultable d) =>
+     String
+     -> String
+     -> (VProp d a2 b -> IO a1)
+     -> VProp d a2 b
+     -> Benchmark
+mkBench' alg confDesc !f prop = run desc f prop
+  where
+    desc = mkDescription alg confDesc prop
