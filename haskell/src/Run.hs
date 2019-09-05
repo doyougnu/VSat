@@ -81,7 +81,7 @@ runAD :: (Show d, Resultable d, SAT (ReadableProp d)) =>
       -> IO (Result d)
 runAD os p f = fst' <$> runEnv (flip runAndDecomp f) os p
 
-runBF :: (Show d, Resultable d, SAT (ReadableProp d)) =>
+runBF :: (Resultable d, SAT (ReadableProp d)) =>
          ConfigPool d        ->
          SMTConf d Text Text ->
          ReadableProp d      ->
@@ -117,27 +117,35 @@ _logResult x = tell $ "Got result: " ++ show x
 
 -- | run the sat solver, when we get a satisafiable call get the assignments
 -- directly
-runForDict :: (Resultable d, SAT (ReadableProp d)) =>
-  ReadableProp d -> IO (Result d)
-runForDict x = S.runSMT $
-  do
-    x' <- toPredicate x
-    SC.query $
-      do S.constrain x'
-         res <- getResultWith (toResultProp . LitB)
-         SC.exit
-         return res
+runForDict :: ( Resultable d
+              , MonadIO m
+              , MonadReader (SMTConf d a a) m
+              , SAT (ReadableProp d)) =>
+  ReadableProp d -> m (Result d)
+runForDict x = do
+  cnf <- ask
+  liftIO $ S.runSMTWith (conf cnf) $
+    do
+      x' <- toPredicate x
+      SC.query $
+        do S.constrain x'
+           res <- getResultWith (toResultProp . LitB)
+           SC.exit
+           return res
 
 
 -- | Run the brute force baseline case, that is select every plain variant and
 -- run them to the sat solver
 runBruteForce ::
-  (MonadTrans t, Show d, Resultable d , MonadState (SatDict d) (t IO)
+  ( MonadIO m
+  , Resultable d
+  , MonadState (SatDict d) m
+  , MonadReader (SMTConf d a a) m
   , SAT (ReadableProp d)) =>
   ConfigPool d        ->
   ReadableProp d      ->
-  t IO (Result d)
-runBruteForce pool prop = lift $ flip evalStateT (initSt pool prop) $
+  m (Result d)
+runBruteForce pool prop = flip evalStateT (initSt pool prop) $
   do
   _confs <- get
   -- dbg "PROP" prop
@@ -149,8 +157,6 @@ runBruteForce pool prop = lift $ flip evalStateT (initSt pool prop) $
              mapM (bitraverse (pure . configToResultProp) runForDict) $ plainProps
   -- dbg "Models" plainMs
   return $ combineResults plainMs
-  where
-    helper c as =  insertToSat c as
 
 
 -- | Run plain terms on vsat, that is, perform selection for each dimension, and
@@ -176,9 +182,13 @@ runPlainOnVSat pool prop = flip evalStateT (initSt pool prop) $
 
 -- | Run the and decomposition baseline case, that is deconstruct every choice
 -- and then run the sat solver
-runAndDecomp :: (Show d, Resultable d, MonadTrans t, Monad (t IO), SAT (ReadableProp d)) =>
-  ReadableProp d -> (d -> Text) -> t IO (Result d)
-runAndDecomp prop f = lift $ runForDict $ andDecomp prop (f . dimName)
+runAndDecomp :: ( Resultable d
+                , MonadIO m
+                , Monad m
+                , MonadReader (SMTConf d a a) m
+                , SAT (ReadableProp d)) =>
+  ReadableProp d -> (d -> Text) -> m (Result d)
+runAndDecomp prop f = runForDict $ andDecomp prop (f . dimName)
 
 runVSMTSolve ::
   (Show d, MonadIO m, Resultable d , MonadReader (SMTConf d a a) m) =>
