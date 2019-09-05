@@ -1,3 +1,5 @@
+module Main where
+
 import Control.Monad
 -- import Control.DeepSeq (force)
 import Data.SBV
