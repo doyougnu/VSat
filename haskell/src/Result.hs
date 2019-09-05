@@ -33,10 +33,9 @@ module Result ( ResultProp(..)
 
 import           Control.DeepSeq (NFData)
 import           Control.Arrow (first)
-import           Data.Map.Internal.Debug (showTree)
 import qualified Data.Map.Strict as M
-import           Data.Maybe (fromJust, maybe,fromMaybe)
-import           Data.SBV (sat, allSat, AllSatResult(..), SMTResult(..), getModelDictionary)
+import           Data.Maybe (fromMaybe)
+import           Data.SBV (allSat, AllSatResult(..), SMTResult(..), getModelDictionary)
 import           Data.SBV.Control (Query, getSMTResult)
 import           Data.SBV.Internals (cvToBool)
 import           Data.String (IsString, fromString)
@@ -167,7 +166,7 @@ newtype ResultMap d = ResultMap {getRes :: M.Map d (ResultProp d)}
   deriving (Eq,Generic,Monoid)
 
 instance Show d => Show (ResultMap d) where
-  show = showTree . getRes
+  show = show . getRes
 
 instance NFData d => NFData (ResultMap d)
 instance NFData d => NFData (UnSatResult d)
@@ -205,14 +204,6 @@ getUnSatMap (Result x) = snd x
 
 hasUnsatResult :: Result d -> Bool
 hasUnsatResult (Result (_, UnSatResult m)) = M.null m
-
--- | special helper function just for brute force routine. Given a list of
--- configs and a singleton results construct a final result
-combineResults :: Resultable d => [(ResultProp d, Result d)] -> Result d
-combineResults = foldr go mempty
-  where go (p, r) acc | hasUnsatResult r = insertToUnSat p mempty acc
-                      | otherwise        = insertToSat p acc
-
 
 -- | a bad form global variable for this module, this probably should be a type
 -- family. Used as a special variable for the result map to accumulate
