@@ -50,8 +50,6 @@ import           VProp.Core (dimToVar)
 import           VProp.Types             (BB_B (..), B_B (..), Config,
                                           VProp (..), Var, Dim(..))
 
-import Debug.Trace
-
 -- | A custom type whose only purpose is to define a monoid instance over VProp
 -- with logical or as the concat operation and false as unit. We constrain all
 -- variable references to be the same just for the ResultMap type

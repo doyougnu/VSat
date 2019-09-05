@@ -119,7 +119,7 @@ _logResult x = tell $ "Got result: " ++ show x
 -- directly
 runForDict :: (Resultable d, SAT (ReadableProp d)) =>
   ReadableProp d -> IO (Result d)
-runForDict x = trace ("CONSTRAINING: " ++ show x ++ "\n") $ S.runSMT $
+runForDict x = S.runSMT $
   do
     x' <- toPredicate x
     SC.query $
@@ -601,7 +601,6 @@ evaluate !(BVOp l op r) =                                         -- [Eval-Or]
        then evaluate res
        else return res
 
-
 accumulate :: Resultable d => BValue d -> IncVSMTSolve d (BValue d)
 accumulate !Unit        = return Unit                             -- [Acc-Unit]
 accumulate !(x@(B _))   = return x                                -- [Acc-Term]
@@ -663,7 +662,6 @@ driveNotDown (OpBB Impl l r) = driveNotDown (OpBB Or l' r)
 driveNotDown (OpBB BiImpl l r) = driveNotDown prop
   where prop = (OpBB Or (OpBB And l r) (OpBB And (bnot l) (bnot r)))
 driveNotDown (OpIB _ _ _) = error "Not implemented yet!"
-
 
 isValue :: BValue d -> Bool
 isValue (B _) = True
