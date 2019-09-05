@@ -78,6 +78,7 @@ benchmarks:
   sbv:
     main:                Main.hs
     source-dirs:
+      - bench/Bench
       - bench/SBV
       - src
     ghc-options:
@@ -92,26 +93,10 @@ benchmarks:
     default-extensions:
     - OverloadedStrings
 
-  gen:
-    main:                Main.hs
-    source-dirs:
-      - bench/Gen
-      - src
-    ghc-options:
-    - -O2
-    - -threaded
-    - -rtsopts
-    - -with-rtsopts=-N
-    dependencies:
-    - criterion
-    - vsat
-    default-extensions:
-    - OverloadedStrings
-
-
   auto:
     main:                Main.hs
     source-dirs:
+      - bench/Bench
       - bench/AutoBench
       - src
     ghc-options:
@@ -130,7 +115,8 @@ benchmarks:
   fin:
     main:                Main.hs
     source-dirs:
-      - bench
+      - bench/Bench
+      - bench/Financial
       - src
     ghc-options:
     - -O2
@@ -148,6 +134,7 @@ benchmarks:
   linux:
     main:                Main.hs
     source-dirs:
+      - bench/Bench
       - bench/Linux
       - src
     ghc-options:

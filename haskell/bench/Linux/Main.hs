@@ -1,3 +1,5 @@
+module Main where
+
 import           Control.Arrow           (first, second)
 import           Criterion.Main
 import           Criterion.Main.Options
@@ -37,13 +39,15 @@ import           VProp.Types
 linuxPaths :: FilePath
 linuxPaths = "bench/Linux/"
 
-linuxFiles = [  "2016-01-07.json"
-             -- , "2016-01-09.json"
-             -- , "2016-01-11.json"
-             -- , "2016-01-12.json"
-             -- , "2016-01-13.json"
-             -- , "2016-01-14.json"
-             -- , "2016-01-15.json"
+-- linux data has 7 dimensions
+-- 449017 unique boolean variables
+linuxFiles = ["2016-01-07.json"
+             , "2016-01-09.json"
+             , "2016-01-11.json"
+             , "2016-01-12.json"
+             , "2016-01-13.json"
+             , "2016-01-14.json"
+             , "2016-01-15.json"
              ]
 
 files = fmap ((++) linuxPaths) linuxFiles
@@ -90,7 +94,9 @@ main = do
       lRight = rights <$> lLang
       lLeft =  lefts <$> lLang
 
-      lProp = ((naiveEncode . autoToVSat) . autoAndJoin) $ (concat (take 1 lRight))
+      -- bug of missing variables occurs take 39
+      lProp = ((naiveEncode . autoToVSat) . autoAndJoin) $ (concat lRight)
+      lProps = ((naiveEncode . autoToVSat) . autoAndJoin) <$> lRight
 
       run !desc !f prop = bench desc $! nfIO (f prop)
 
@@ -103,11 +109,12 @@ main = do
           ratio :: Double
           !ratio = fromRational $ compressionRatio prop
 
-  -- res <- (satWithConf (toAutoConf evoAwareConf) emptyConf) lProp
-  -- writeFile "LinuxRes" (show res)
-  -- res <- satWith emptyConf l1Prop
-  print $ take 100 (Set.toList $ bvars lProp)
-  -- print lProp
+  -- print (fmap length lConstraints)
+  -- res <- (bfWith emptyConf) lProp
+  -- res <- satWith emptyConf lProp
+  -- print $ (Set.toList $ dimensions lProp)
+  print $ length (bvars lProp)
+  -- mapM_ (putStrLn . show . dimensions) lProps
 
  --  defaultMain
  --    [
