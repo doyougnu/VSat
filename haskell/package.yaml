@@ -104,10 +104,6 @@ benchmarks:
     - -threaded
     - -rtsopts
     - -with-rtsopts=-N
-    # - -funfolding-use-threshold=16
-    # - -optc-O3
-    # - -fexcess-precision
-    # - -optc-ffast-math
     dependencies:
     - criterion
     - vsat
@@ -123,10 +119,6 @@ benchmarks:
     - -threaded
     - -rtsopts
     - -with-rtsopts=-N
-    - -funfolding-use-threshold=16
-    - -optc-O3
-    - -fexcess-precision
-    - -optc-ffast-math
     dependencies:
     - criterion
     - vsat
