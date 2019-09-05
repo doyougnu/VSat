@@ -121,15 +121,15 @@ runForDict :: ( Resultable d
               , MonadIO m
               , MonadReader (SMTConf d a a) m
               , SAT (ReadableProp d)) =>
-  ReadableProp d -> m (Result d)
-runForDict x = do
+  (Config d, ReadableProp d) -> m (Result d)
+runForDict (configToResultProp -> c, x) = do
   cnf <- ask
   liftIO $ S.runSMTWith (conf cnf) $
     do
       x' <- toPredicate x
       SC.query $
         do S.constrain x'
-           res <- getResultWith (toResultProp . LitB)
+           res <- getResultWith (\a -> if a then c else negateResultProp c)
            SC.exit
            return res
 
@@ -153,10 +153,8 @@ runBruteForce pool prop = flip evalStateT (initSt pool prop) $
       plainProps = if null confs
         then pure (M.empty, prop)
         else (\y -> (y, selectVariantTotal y prop)) <$> confs
-  plainMs <- lift $
-             mapM (bitraverse (pure . configToResultProp) runForDict) $ plainProps
-  -- dbg "Models" plainMs
-  return $ combineResults plainMs
+  plainMs <- lift $ mapM runForDict $ plainProps
+  return $! mconcat plainMs
 
 
 -- | Run plain terms on vsat, that is, perform selection for each dimension, and
@@ -188,7 +186,7 @@ runAndDecomp :: ( Resultable d
                 , MonadReader (SMTConf d a a) m
                 , SAT (ReadableProp d)) =>
   ReadableProp d -> (d -> Text) -> m (Result d)
-runAndDecomp prop f = runForDict $ andDecomp prop (f . dimName)
+runAndDecomp prop f = runForDict $ (mempty, andDecomp prop (f . dimName))
 
 runVSMTSolve ::
   (Show d, MonadIO m, Resultable d , MonadReader (SMTConf d a a) m) =>
