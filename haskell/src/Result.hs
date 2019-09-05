@@ -230,6 +230,7 @@ instance (Resultable d) => Semigroup (ResultMap d) where
 insertWith :: (Eq d, Ord d) => (ResultProp d -> ResultProp d -> ResultProp d) ->
   d -> ResultProp d -> ResultMap d -> ResultMap d
 insertWith f k v = ResultMap . M.insertWith f k v . getRes
+{-# INLINE insertWith #-}
 
 insertToUnSatWith :: (Eq d, Ord d) => (UnSatCore -> UnSatCore -> UnSatCore) ->
   ResultProp d -> UnSatCore -> UnSatResult d -> UnSatResult d
@@ -237,23 +238,28 @@ insertToUnSatWith f k v = UnSatResult . M.insertWith f k v . getUnRes
   where
     getUnRes :: UnSatResult d -> M.Map (ResultProp d) UnSatCore
     getUnRes (UnSatResult m) = m
+{-# INLINE insertToUnSatWith #-}
 
 -- | O(log n) insert a resultProp into a result. Uses the Monoid instance
 -- of ResultProp i.e. x <> y = x && y
 insertToResult :: Resultable d => d -> ResultProp d -> Result d -> Result d
 insertToResult d prop = onResMap (insertWith mappend d prop)
+{-# INLINE insertToResult #-}
 
 -- | O(1) insert a result prop into the result entry for special Sat variable
 insertToSat :: Resultable d => ResultProp d -> Result d -> Result d
 insertToSat = onResMap . insertWith mappend satKey
+{-# INLINE insertToSat #-}
 
 -- | O(1) insert an unsat result given a configuration and an unsat core. The core can be empty
 insertToUnSat :: Resultable d => ResultProp d -> UnSatCore -> Result d -> Result d
 insertToUnSat config core = onUnSatRes (insertToUnSatWith mappend config core)
+{-# INLINE insertToUnSat #-}
 
 -- | O(log n) given a key lookup the result prop
 lookupRes :: (Eq d, Ord d, Semigroup d) => d -> ResultMap d -> ResultProp d
 lookupRes k res = fromMaybe mempty $ M.lookup k (getRes res)
+{-# INLINE lookupRes #-}
 
 -- | unsafe O(log n) lookup Res
 lookupRes_ :: (Eq d, Ord d) => d -> ResultMap d -> ResultProp d
@@ -306,9 +312,11 @@ getResultWith !f =
 -- prop
 dispatchProp :: ResultProp d -> Bool -> ResultProp d
 dispatchProp !p !x = if x then p else (ResultProp $ UniformProp $ LitB x)
+{-# INLINE dispatchProp #-}
 
 getResult :: Resultable d => ResultProp d -> Query (Result d)
 getResult = getResultWith . dispatchProp
+{-# INLINE getResult #-}
 
 deriveSatValues :: ResultMap Text -> IO [M.Map String Bool]
 deriveSatValues m =
