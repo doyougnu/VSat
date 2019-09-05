@@ -36,6 +36,7 @@ bDispatch Or     = (|||)
 bDispatch Impl   = (==>)
 bDispatch BiImpl = (<=>)
 bDispatch XOr    = (<+>)
+{-# INLINE bDispatch #-}
 
 nbDispatch :: Prim b n => NN_B -> n -> n -> b
 nbDispatch LT  = (.<)
@@ -44,6 +45,7 @@ nbDispatch GT  = (.>)
 nbDispatch GTE = (.>=)
 nbDispatch EQ  = (.==)
 nbDispatch NEQ = (./=)
+{-# INLINE nbDispatch #-}
 
 nnDispatch :: PrimN a => NN_N -> a -> a -> a
 nnDispatch Add  = (+)
@@ -51,11 +53,13 @@ nnDispatch Sub  = (-)
 nnDispatch Mult = (*)
 nnDispatch Div  = (./)
 nnDispatch Mod  = (.%)
+{-# INLINE nnDispatch #-}
 
 nDispatch :: PrimN a => N_N -> a -> a
 nDispatch Neg  = negate
 nDispatch Sign = signum
 nDispatch Abs  = abs
+{-# INLINE nDispatch #-}
 
 -- | Evaluate a feature expression against a configuration.
 evalPropExpr :: DimBool d

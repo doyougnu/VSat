@@ -54,6 +54,11 @@ instance Boolean SBool where
   (&&&) = (.&&)
   (|||) = (.||)
   (<=>) = (.<=>)
+  {-# INLINE true #-}
+  {-# INLINE false #-}
+  {-# INLINE (&&&) #-}
+  {-# INLINE (|||) #-}
+  {-# INLINE (<=>) #-}
 
 instance Boolean Bool where
   true  =  True
@@ -61,7 +66,11 @@ instance Boolean Bool where
   bnot  = not
   (&&&) = (&&)
   (|||) = (||)
-
+  {-# INLINE true  #-}
+  {-# INLINE false #-}
+  {-# INLINE bnot  #-}
+  {-# INLINE (&&&) #-}
+  {-# INLINE (|||) #-}
 
 
 instance Boolean b => Boolean (Symbolic b) where
@@ -70,6 +79,11 @@ instance Boolean b => Boolean (Symbolic b) where
   bnot  = fmap bnot
   (&&&) = liftM2 (&&&)
   (|||) = liftM2 (|||)
+  {-# INLINE true  #-}
+  {-# INLINE false #-}
+  {-# INLINE bnot  #-}
+  {-# INLINE (&&&) #-}
+  {-# INLINE (|||) #-}
 
 instance SAT SBool where
   toPredicate = return
