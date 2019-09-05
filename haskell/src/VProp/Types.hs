@@ -143,24 +143,31 @@ infixl 7 ./, .%
 -- using String the most
 iRef :: IsString a => a -> VIExpr d a
 iRef = Ref RefI
+{-# INLINE iRef #-}
 
 iLit :: Int -> VIExpr d a
 iLit = LitI . I
+{-# INLINE iLit #-}
 
 dLit :: Double -> VIExpr d a
 dLit = LitI . D
+{-# INLINE dLit #-}
 
 dRef :: IsString a => a -> VIExpr d a
 dRef = Ref RefD
+{-# INLINE dRef #-}
 
 bRef :: IsString a => a -> VProp d a b
 bRef = RefB
+{-# INLINE bRef #-}
 
 bChc :: IsString d => d -> VProp d a b -> VProp d a b -> VProp d a b
 bChc = ChcB . Dim
+{-# INLINE bChc #-}
 
 iChc :: IsString d => d -> VIExpr d a -> VIExpr d a -> VIExpr d a
 iChc = ChcI . Dim
+{-# INLINE iChc #-}
 
 toReadable :: Show a => a -> Readable
 toReadable = pack . show

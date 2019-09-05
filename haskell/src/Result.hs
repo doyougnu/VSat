@@ -99,15 +99,18 @@ negateResultProp = ResultProp . UniformProp . OpB Not . uniProp . getProp
 consWith :: (UniformProp d -> UniformProp d -> UniformProp d)
          -> UniformProp d -> ResultProp d -> ResultProp d
 consWith f x (getProp -> xs) = ResultProp $! f x xs
+{-# INLINE consWith #-}
 
 -- | cons the first resultProp onto the second with an Or, if the first is
 -- larger than the second then this will be O(i). O(1) in the case where the
 -- first is a singleton
 consWithOr :: UniformProp d -> ResultProp d -> ResultProp d
 consWithOr = consWith (|||)
+{-# INLINE consWithOr #-}
 
 consWithAnd :: UniformProp d -> ResultProp d -> ResultProp d
 consWithAnd = consWith (&&&)
+{-# INLINE consWithAnd #-}
 
 -- | O(1) cons result prop infix form with a logical And. Note that this proper
 -- use is x :&> y, where |y| << |x| and will result in [y,x]. This is purposeful
