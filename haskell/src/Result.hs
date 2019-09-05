@@ -27,6 +27,8 @@ module Result ( ResultProp(..)
               , deriveValues
               , getResMap
               , getUnSatMap
+              , insertToUnSat
+              , combineResults
               ) where
 
 import           Control.DeepSeq (NFData)
@@ -155,7 +157,7 @@ configToResultProp :: Eq a => Config a -> ResultProp a
 configToResultProp = ResultProp . configToResultProp'
 
 -- | a type class synonym for constraints required to produce a result
-class (IsString a, Eq a, Ord a, Monoid a) => Resultable a
+class (Show a, IsString a, Eq a, Ord a, Monoid a) => Resultable a
 
 -- | a result is a map of propositions where SAT is a boolean formula on
 -- dimensions, the rest of the keys are variables of the prop to boolean
@@ -201,6 +203,16 @@ getResMap (Result x) = fmap (uniProp . getProp) . getRes $ fst x
 getUnSatMap :: Result d -> UnSatResult d
 getUnSatMap (Result x) = snd x
 
+hasUnsatResult :: Result d -> Bool
+hasUnsatResult (Result (_, UnSatResult m)) = M.null m
+
+-- | special helper function just for brute force routine. Given a list of
+-- configs and a singleton results construct a final result
+combineResults :: Resultable d => [(ResultProp d, Result d)] -> Result d
+combineResults = foldr go mempty
+  where go (p, r) acc | hasUnsatResult r = insertToUnSat p mempty acc
+                      | otherwise        = insertToSat p acc
+
 
 -- | a bad form global variable for this module, this probably should be a type
 -- family. Used as a special variable for the result map to accumulate
@@ -219,6 +231,13 @@ insertWith :: (Eq d, Ord d) => (ResultProp d -> ResultProp d -> ResultProp d) ->
   d -> ResultProp d -> ResultMap d -> ResultMap d
 insertWith f k v = ResultMap . M.insertWith f k v . getRes
 
+insertToUnSatWith :: (Eq d, Ord d) => (UnSatCore -> UnSatCore -> UnSatCore) ->
+  ResultProp d -> UnSatCore -> UnSatResult d -> UnSatResult d
+insertToUnSatWith f k v = UnSatResult . M.insertWith f k v . getUnRes
+  where
+    getUnRes :: UnSatResult d -> M.Map (ResultProp d) UnSatCore
+    getUnRes (UnSatResult m) = m
+
 -- | O(log n) insert a resultProp into a result. Uses the Monoid instance
 -- of ResultProp i.e. x <> y = x && y
 insertToResult :: Resultable d => d -> ResultProp d -> Result d -> Result d
@@ -228,6 +247,9 @@ insertToResult d prop = onResMap (insertWith mappend d prop)
 insertToSat :: Resultable d => ResultProp d -> Result d -> Result d
 insertToSat = onResMap . insertWith mappend satKey
 
+-- | O(1) insert an unsat result given a configuration and an unsat core. The core can be empty
+insertToUnSat :: Resultable d => ResultProp d -> UnSatCore -> Result d -> Result d
+insertToUnSat config core = onUnSatRes (insertToUnSatWith mappend config core)
 
 -- | O(log n) given a key lookup the result prop
 lookupRes :: (Eq d, Ord d, Semigroup d) => d -> ResultMap d -> ResultProp d

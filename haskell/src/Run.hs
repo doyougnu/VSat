@@ -41,6 +41,7 @@ import           Config
 import           Result
 
 import           Text.Show.Unicode          (ushow)
+import Debug.Trace
 
 -- | The satisfiable dictionary, this is actually the "state" keys are configs
 -- (an mapping from dimensions to booleans denoting selection) and values are
@@ -124,7 +125,6 @@ runForDict x = S.runSMT $
     SC.query $
       do S.constrain x'
          res <- getResultWith (toResultProp . LitB)
-         SC.resetAssertions
          SC.exit
          return res
 
@@ -140,17 +140,17 @@ runBruteForce ::
 runBruteForce pool prop = lift $ flip evalStateT (initSt pool prop) $
   do
   _confs <- get
+  -- dbg "PROP" prop
   let confs = M.keys _confs
       plainProps = if null confs
         then pure (M.empty, prop)
         else (\y -> (y, selectVariantTotal y prop)) <$> confs
   plainMs <- lift $
-             mapM (bitraverse
-                   (pure . configToResultProp)
-                   runForDict) $ plainProps
-  return $ mconcat (fmap (\(c, as) -> insertToSat c as) plainMs)
+             mapM (bitraverse (pure . configToResultProp) runForDict) $ plainProps
+  -- dbg "Models" plainMs
+  return $ combineResults plainMs
   where
-        helper c as =  insertToSat c as
+    helper c as =  insertToSat c as
 
 
 -- | Run plain terms on vsat, that is, perform selection for each dimension, and
@@ -387,11 +387,12 @@ isSat = do cs <- SC.checkSat
 -- | type class needed to avoid lifting for constraints in the IncSolve monad
 instance (Monad m, I.SolverContext m) =>
   I.SolverContext (StateT (IncState d) m) where
-  constrain = lift . (force S.constrain)
+  constrain = lift . S.constrain
   namedConstraint = (lift .) . S.namedConstraint
   setOption = lift . S.setOption
   softConstrain = lift . I.softConstrain
   constrainWithAttribute = (lift .) . I.constrainWithAttribute
+  contextState = lift I.contextState
 
 
 -- Helper functions for solve routine
@@ -537,8 +538,8 @@ toBValue (OpBB op l r) = BVOp (toBValue l) op (toBValue r)
 toBValue (OpIB _ _ _) = error "Blame Jeff! This isn't implemented yet!"
 toBValue (ChcB d l r) = C d l r
 
--- dbg :: (Show a, Monad m) => String -> a -> m ()
--- dbg s a = trace (s ++ " : " ++ show a ++ " \n") $ return ()
+dbg :: (Show a, Monad m) => String -> a -> m ()
+dbg s a = trace (s ++ " : " ++ show a ++ " \n") $ return ()
 
 -- | Evaluation allows communication with the solver and reduces terms to Unit
 -- values thereby representing that evaluation has taken place. Evaluation can
@@ -599,7 +600,6 @@ evaluate !(BVOp l op r) =                                         -- [Eval-Or]
      if isValue l' && isValue r'
        then evaluate res
        else return res
-
 
 accumulate :: Resultable d => BValue d -> IncVSMTSolve d (BValue d)
 accumulate !Unit        = return Unit                             -- [Acc-Unit]
@@ -662,7 +662,6 @@ driveNotDown (OpBB Impl l r) = driveNotDown (OpBB Or l' r)
 driveNotDown (OpBB BiImpl l r) = driveNotDown prop
   where prop = (OpBB Or (OpBB And l r) (OpBB And (bnot l) (bnot r)))
 driveNotDown (OpIB _ _ _) = error "Not implemented yet!"
-
 
 isValue :: BValue d -> Bool
 isValue (B _) = True

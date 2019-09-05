@@ -37,24 +37,23 @@ import           Utils              (fst')
 newtype DimProp d = DimProp {getDimProp :: VProp d (Dim String) (Dim String)}
   deriving (Boolean,Show)
 
-toDimProp :: VProp d String String -> DimProp d
-toDimProp = DimProp . trimap id f f
+toDimProp :: VProp d String String -> Maybe (DimProp d)
+toDimProp = Just . DimProp . trimap id f f
   where f = Dim
 
 instance (Show d, Ord d) =>
   SAT (DimProp d) where toPredicate = symbolicPropExpr'
 
-genConfigPool' :: (Resultable d, Show d, Ord d) =>
-  DimProp d -> IO [Config d]
-genConfigPool' p =
+genConfigPool' :: (Resultable d) => Maybe (DimProp d) -> IO [Config d]
+genConfigPool' Nothing  = return mempty
+genConfigPool' (Just p) =
   do
     S.AllSatResult (_,_,_,allRes) <- S.allSat $ toPredicate p
     let resMaps = S.getModelDictionary <$> allRes
     return $!
       M.foldMapWithKey (\k a -> M.singleton (Dim $ fromString k) (cvToBool a)) <$> resMaps
 
-genConfigPool :: (Resultable d, Show d, Ord d) =>
-  VProp d String String -> IO [Config d]
+genConfigPool :: (Resultable d) => VProp d String String -> IO [Config d]
 genConfigPool = genConfigPool' . toDimProp
 
 -- | Generate a symbolic predicate for a feature expression.
@@ -92,7 +91,7 @@ satWith = satWithConf Nothing
 satWithConf :: (Show d, Resultable d)
   => Maybe (DimProp d) -> ReadableSMTConf d -> ReadableProp d -> IO (Result d)
 satWithConf Nothing          conf prop = fst' <$> runVSMT mempty conf prop
-satWithConf (Just dimConfig) conf prop =
+satWithConf dimConfig conf prop =
   do
     configPool <- genConfigPool' dimConfig
     -- mapM_ (putStrLn . show) configPool
@@ -103,7 +102,7 @@ satWithConf (Just dimConfig) conf prop =
 bfWithConf :: (Show d, Resultable d, SAT (ReadableProp d))
   => Maybe (DimProp d) -> ReadableSMTConf d -> ReadableProp d -> IO (Result d)
 bfWithConf Nothing          conf prop = runBF mempty conf prop
-bfWithConf (Just dimConfig) conf prop =
+bfWithConf dimConfig conf prop =
   do
     configPool <- genConfigPool' dimConfig
     -- mapM_ (putStrLn . show) configPool
@@ -112,7 +111,7 @@ bfWithConf (Just dimConfig) conf prop =
 
 pOnVWithConf :: (Resultable d, Show d) => Maybe (DimProp d) -> ReadableSMTConf d -> ReadableProp d -> IO (Result d)
 pOnVWithConf Nothing          conf prop = fst' <$> runPonV mempty conf prop
-pOnVWithConf (Just dimConfig) conf prop =
+pOnVWithConf dimConfig conf prop =
   do
     configPool <- genConfigPool' dimConfig
     -- mapM_ (putStrLn . show) configPool
