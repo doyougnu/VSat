@@ -22,35 +22,35 @@ instance (Show a, Show b, Show c) => Show (VProp a b c) where
 instance Show NPrim where show (I i) = show i
                           show (D d) = show d
 
-instance Show NN_N where show Add  = "+"
-                         show Sub  = "-"
-                         show Mult = "*"
-                         show Div  = "/"
-                         show Mod  = "%"
+instance Show NN_N where show Add  = ".+"
+                         show Sub  = ".-"
+                         show Mult = ".*"
+                         show Div  = "./"
+                         show Mod  = ".%"
 
-instance Show NN_B where show LT  = "<"
-                         show LTE = "≤"
-                         show GT  = ">"
-                         show GTE = "≥"
-                         show EQ  = "=="
-                         show NEQ = "≠"
+instance Show NN_B where show LT  = ".<"
+                         show LTE = ".=<"
+                         show GT  = ".>"
+                         show GTE = ".>="
+                         show EQ  = ".=="
+                         show NEQ = ".!="
 
-instance Show BB_B where show Impl   = "→"
-                         show BiImpl = "↔"
-                         show XOr    = "⊻"
-                         show And    = "∧"
-                         show Or     = "∨"
+instance Show BB_B where show Impl   = "impl"
+                         show BiImpl = "iff"
+                         show XOr    = "xor"
+                         show And    = "and"
+                         show Or     = "or"
 
 instance (Show a, Show b) => Show (VIExpr a b) where
   show (LitI a) = show a
   show (Ref _ a) = show a
-  show (OpI Neg a) = "¬" <> "(" <> show a <> ")"
+  show (OpI Neg a) = "-" <> "(" <> show a <> ")"
   show (OpI Abs a) = "|" <> show a <> "|"
   show (OpI Sign a) = "signum " <> show a
   show (OpII f l r) = mconcat [show l, " ", show f, " ", show r]
-  show (ChcI d l r) = mconcat [show $ dimName d, "≺", show l, ", ", show r, "≻"]
+  show (ChcI d l r) = mconcat [show $ dimName d, "<", show l, ", ", show r, ">"]
 
-instance Show B_B where show Not = "¬"
+instance Show B_B where show Not = "not "
 
 prettyPropExpr :: (Show a, Show b, Show c) => VProp a b c -> String
 prettyPropExpr = top
@@ -58,7 +58,7 @@ prettyPropExpr = top
     top :: (Show a, Show b, Show c) => VProp a b c -> String
     top !(OpBB b l r)    = mconcat [sub l, " ", show b, " ", sub r]
     top !(OpIB nb l r)   = mconcat [show l, " ", show nb, " ", show r]
-    top !(ChcB d ls rs)  = show (dimName d) <> "≺" <> top ls <> ", " <> top rs <> "≻"
+    top !(ChcB d ls rs)  = show (dimName d) <> "<" <> top ls <> ", " <> top rs <> ">"
     top !e               = sub e
 
     sub :: (Show a, Show b, Show c) => VProp a b c -> String
