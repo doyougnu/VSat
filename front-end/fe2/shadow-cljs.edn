@@ -1,0 +1,13 @@
+{:lein         true
+ :source-paths ["src"]
+
+ :dependencies [[cider/cider-nrepl "2.4.0"]
+                [refactor-nrepl "0.18.0"]]
+
+ :builds       {:app {:target     :browser
+                      :output-dir "resources/public/js"
+                      :asset-path "/js"
+                      :modules    {:app {:entries [fe2.core]}}
+                      :devtools   {:after-load fe2.core/mount-root}}}
+ :dev-http     {3000 {:root    "resources/public"
+                      :handler fe2.handler/app}}}
