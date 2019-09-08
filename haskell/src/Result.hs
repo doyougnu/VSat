@@ -28,7 +28,6 @@ module Result ( ResultProp(..)
               , getResMap
               , getUnSatMap
               , insertToUnSat
-              , combineResults
               ) where
 
 import           Control.DeepSeq (NFData)
@@ -41,6 +40,7 @@ import           Data.SBV.Internals (cvToBool)
 import           Data.String (IsString, fromString)
 import           Data.Text (pack, Text)
 import           GHC.Generics (Generic)
+import           Data.Map.Internal.Debug (showTree)
 
 import           SAT
 import           VProp.SBV()
@@ -166,7 +166,7 @@ newtype ResultMap d = ResultMap {getRes :: M.Map d (ResultProp d)}
   deriving (Eq,Generic,Monoid)
 
 instance Show d => Show (ResultMap d) where
-  show = show . getRes
+  show = showTree . getRes
 
 instance NFData d => NFData (ResultMap d)
 instance NFData d => NFData (UnSatResult d)
