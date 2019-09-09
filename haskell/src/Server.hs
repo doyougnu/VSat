@@ -43,7 +43,7 @@ instance (FromJSON a, FromJSONKey a) => FromJSONKey (Dim a)
 instance (FromJSON d, FromJSON a, FromJSON b) => FromJSON (Request d a b)
 instance (ToJSON d, ToJSON a, ToJSON b) => ToJSON (Request d a b)
 
-app :: (SAT (ReadableProp Var)) => Api ()
+app :: Api ()
 app = do
   middleware logStdout
   post "satWith" satWithHandler
@@ -55,7 +55,7 @@ logfile :: FilePath
 logfile = "timing_desc_data.csv"
 
 -- TODO cleanup these types and refactor out the logging to middleware
-satWithHandler :: (SAT (ReadableProp Var)) => ActionCtxT () (WebStateM () () ()) b
+satWithHandler :: ActionCtxT () (WebStateM () () ()) b
 satWithHandler = do
   req <- jsonBody' :: ApiAction (Request Var Text Text)
   let prop = proposition req
@@ -75,7 +75,7 @@ satWithHandler = do
 --   _ <- liftIO . forkIO $ logData prop sets runtime logfile
 --   json res
 
-satHandler :: (SAT (ReadableProp Var)) => ActionCtxT () (WebStateM () () ()) b
+satHandler :: ActionCtxT () (WebStateM () () ()) b
 satHandler = do
   req <- jsonBody' :: ApiAction (Request Var Text Text)
   let prop = proposition req
