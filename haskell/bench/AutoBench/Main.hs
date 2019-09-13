@@ -38,10 +38,6 @@ import           VProp.Types
 
 import           Core
 
--- | a large dataset of queries
--- autoFile :: FilePath
--- autoFile = "bench/AutoBench/Automotive02_merged_evolution_history_integer.json"
-
 autoFileBool :: FilePath
 autoFileBool = "bench/AutoBench/Automotive02_merged_evolution_history_boolean.json"
 
@@ -58,7 +54,7 @@ chAutoFile = "bench/AutoBench/vsat_small_chunk.json"
 sliceAndNegate n xs = fromList (&&&) $ bnot <$> drop n xs
 
 ds :: [VProp Text String String]
-ds = bRef <$> ["D_0","D_2","D_4","D_5"]
+ds = bRef <$> ["D_0","D_1","D_2","D_3"]
 -- D_0 /\    D_2   /\     D_4   /\  D_5
 -- <0 /\ <=0 /\ <1 /\ <=1 /\ <2 /\ <= 2
 
@@ -108,13 +104,15 @@ main = do
 
       -- | Hardcoding equivalencies in generated dimensions to reduce number of
       -- dimensions to 4
-      sameDims :: Text -> Text
-      sameDims d
-        | d == "D_1" = "D_2"
-        | d == "D_3" = "D_4"
-        | otherwise = d
+      -- sameDims :: Text -> Text
+      -- sameDims d
+      --   | d == "D_1" = "D_2"
+      --   | d == "D_3" = "D_4"
+      --   | otherwise = d
 
-      !bProp = ((renameDims sameDims) . naiveEncode . autoToVSat) $ autoAndJoin (bPs)
+      bProp :: ReadableProp Text
+      -- !bProp = ((renameDims sameDims) . naiveEncode . autoToVSat) $ autoAndJoin (bPs)
+      !bProp = (naiveEncode . autoToVSat) $ autoAndJoin (bPs)
       !bPropOpts = applyOpts defConf bProp
       autoNegConf = (Just $ toDimProp negConf)
 
@@ -133,11 +131,11 @@ main = do
   [justV12] <- genConfigPool justV12Conf
   [justV123] <- genConfigPool justV123Conf
 
-  let !bPropV1   = selectVariantTotal ppV1 bProp
-      !bPropV2   = selectVariantTotal ppV2 bProp
-      !bPropV3   = selectVariantTotal ppV3 bProp
-      !bPropV4   = selectVariantTotal ppV4 bProp
-      !bPropVAll = selectVariantTotal ppVAll bProp
+  let bPropV1   = selectVariantTotal ppV1 bProp
+      bPropV2   = selectVariantTotal ppV2 bProp
+      bPropV3   = selectVariantTotal ppV3 bProp
+      bPropV4   = selectVariantTotal ppV4 bProp
+      bPropVAll = selectVariantTotal ppVAll bProp
 
       (Just bPropJustV1) = selectVariant justV1 bProp
       (Just bPropJustV2) = selectVariant justV2 bProp
@@ -149,37 +147,37 @@ main = do
       benches :: ReadableSMTConf Text -> [Benchmark]
       benches solverConf = [
         -- v - v
-        mkBench "v-->v" "V1"   d0Conf (satWithConf (toDimProp d0Conf) solverConf) bProp
+        -- mkBench "v-->v" "V1"   d0Conf (satWithConf (toDimProp d0Conf) solverConf) bProp
         -- , mkBench "v-->v" "V2" d2Conf (satWithConf (toDimProp d2Conf) solverConf) bProp
         -- , mkBench "v-->v" "V3" d3Conf (satWithConf (toDimProp d3Conf) solverConf) bProp
         -- , mkBench "v-->v" "V4" d4Conf (satWithConf (toDimProp d4Conf) solverConf) bProp
         -- , mkBench' "v-->v" "EvolutionAware" (satWithConf (toDimProp sumConf) solverConf) bProp
-        , mkBench "v-->v" "V1*V2"        justV12Conf  (satWith solverConf) bPropJustV12
-        , mkBench "v-->v" "V1*V2*V3"     justV123Conf (satWith solverConf) bPropJustV123
-        , mkBench' "v-->v" "V1*V2*V3*V4"  (satWith solverConf) bProp
+        -- , mkBench "v-->v" "V1*V2"        justV12Conf  (satWith solverConf) bPropJustV12
+        -- , mkBench "v-->v" "V1*V2*V3"     justV123Conf (satWith solverConf) bPropJustV123
+          mkBench' "v-->v" "V1*V2*V3*V4"  (satWith solverConf) bProp
 
-        --   -- p - v
-        -- , mkBench "p-->v" "V1"  (pOnVWithConf Nothing solverConf) bPropV1
-        -- , mkBench "p-->v" "V2"  (pOnVWithConf Nothing solverConf) bPropV2
-        -- , mkBench "p-->v" "V3"  (pOnVWithConf Nothing solverConf) bPropV3
-        -- , mkBench "p-->v" "V4"  (pOnVWithConf Nothing solverConf) bPropV4
-        -- , mkBench' "p-->v" "EvolutionAware" (pOnVWithConf (toDimProp sumConf) solverConf) bProp
+        -- p - v
+        , mkBench "p-->v" "V1"  justV1Conf (pOnVWithConf Nothing solverConf) bPropV1
+        , mkBench "p-->v" "V2"  justV2Conf (pOnVWithConf Nothing solverConf) bPropV2
+        , mkBench "p-->v" "V3"  justV3Conf (pOnVWithConf Nothing solverConf) bPropV3
+        , mkBench "p-->v" "V4"  justV4Conf (pOnVWithConf Nothing solverConf) bPropV4
+        , mkBench' "p-->v" "EvolutionAware" (pOnVWithConf (toDimProp sumConf) solverConf) bProp
 
-        --            -- p - p
-        -- , mkBench "p-->p" "V1"  (bfWith solverConf) bPropV1
-        -- , mkBench "p-->p" "V2"  (bfWith solverConf) bPropV2
-        -- , mkBench "p-->p" "V3"  (bfWith solverConf) bPropV3
-        -- , mkBench "p-->p" "V4"  (bfWith solverConf) bPropV4
+        -- p - p
+        , mkBench "p-->p" "V1"  justV1Conf (bfWith solverConf) bPropV1
+        , mkBench "p-->p" "V2"  justV2Conf (bfWith solverConf) bPropV2
+        , mkBench "p-->p" "V3"  justV3Conf (bfWith solverConf) bPropV3
+        , mkBench "p-->p" "V4"  justV4Conf (bfWith solverConf) bPropV4
 
-        --            -- v - p
-        -- , mkBench "v-->p" "V1"  (bfWithConf (toDimProp d0Conf) solverConf) bProp
-        -- , mkBench "v-->p" "V2"  (bfWithConf (toDimProp d2Conf) solverConf) bProp
-        -- , mkBench "v-->p" "V3"  (bfWithConf (toDimProp d3Conf) solverConf) bProp
-        -- , mkBench "v-->p" "V4"  (bfWithConf (toDimProp d4Conf) solverConf) bProp
-        -- , mkBench' "v-->p" "EvolutionAware"  (bfWithConf (toDimProp sumConf) solverConf) bProp
-        -- , mkBench "v-->p" "V1*V2"        (bfWith solverConf) bPropJustV12
-        -- , mkBench "v-->p" "V1*V2*V3"     (bfWith solverConf) bPropJustV123
-        -- , mkBench "v-->p" "V1*V2*V3*V4"  (bfWith solverConf) bProp
+        -- v - p
+        , mkBench "v-->p" "V1"  justV1Conf (bfWithConf (toDimProp d0Conf) solverConf) bProp
+        , mkBench "v-->p" "V2"  justV2Conf (bfWithConf (toDimProp d2Conf) solverConf) bProp
+        , mkBench "v-->p" "V3"  justV3Conf (bfWithConf (toDimProp d3Conf) solverConf) bProp
+        , mkBench "v-->p" "V4"  justV4Conf (bfWithConf (toDimProp d4Conf) solverConf) bProp
+        , mkBench' "v-->p" "EvolutionAware"  (bfWithConf (toDimProp sumConf) solverConf) bProp
+        , mkBench "v-->p" "V1*V2"        justV12Conf (bfWith solverConf) bPropJustV12
+        , mkBench "v-->p" "V1*V2*V3"     justV123Conf (bfWith solverConf) bPropJustV123
+        , mkBench' "v-->p" "V1*V2*V3*V4"  (bfWith solverConf) bProp
         ]
   -- res' <- runIncrementalSolve bPs
 
