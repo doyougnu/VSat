@@ -20,3 +20,7 @@ auto/
 *.prof
 R/plots/*
 
+~~~
+*.shadow-cljs/*
+node_modules
+*.js*
