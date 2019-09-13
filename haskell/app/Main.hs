@@ -16,8 +16,8 @@ import Server
 pprint = B.putStrLn
 
 main :: IO ()
-main = return ()
-  -- do
-  -- port <- read <$> (getEnv "PORT") `catchIOError` const (return ("8080" :: String))
-  -- spockCfg <- defaultSpockCfg () PCNoDatabase ()
-  -- runSpock port (spock spockCfg app)
+main =
+  do
+  port <- read <$> (getEnv "PORT") `catchIOError` const (return ("8080" :: String))
+  spockCfg <- defaultSpockCfg () PCNoDatabase ()
+  runSpock port (spock spockCfg app)
