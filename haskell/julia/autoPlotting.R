@@ -53,6 +53,7 @@ facetLabels <- c(V1 = "V1"
 
 cascade_plt <- ggplot(dfCascade, mapping = aes(x=Algorithm, y=Mean, shape=Algorithm, fill=Algorithm)) +
   theme(axis.text.x = element_text(angle = 90)) +
+  ylab("Mean [s]") +
   geom_col(position = "dodge") +
   facet_grid(. ~ Config
            , labeller = labeller(Config = facetLabels)
@@ -62,6 +63,7 @@ ggsave("../plots/auto_cascade.png", plot = cascade_plt, device = "png")
 
 evo_plt <- ggplot(df, mapping = aes(x=Algorithm, y=Mean, shape=Algorithm, fill=Algorithm)) +
   theme(axis.text.x = element_text(angle = 90)) +
+  ylab("Mean [s]") +
   geom_col(position = "dodge") +
   facet_grid(. ~ Config
            ## , labeller = labeller(Config = facetLabels)
