@@ -94,3 +94,12 @@ mkBench'
 mkBench' alg confDesc !f prop = run desc f prop
   where
     desc = mkDescription alg confDesc prop
+
+-- | make pairs for controlling complexity for compression ratio benchmark. We
+-- want to benchmark two versions that have different compression ratios, but
+-- that still run only n solver calls. This way the solver calls do not swamp
+-- the compression ratio signal
+mkPairs :: [a] -> [[a]]
+mkPairs [] = [[]]
+mkPairs [x] = [[x]]
+mkPairs (x:ys@(y:xs)) = [x,y] : mkPairs ys
