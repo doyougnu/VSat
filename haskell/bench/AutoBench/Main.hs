@@ -93,6 +93,12 @@ baselineSolve props = S.runSMT $
          (assocMap ! plainHandle) >>= S.constrain
          fmap S.SatResult SC.getSMTResult
 
+-- | Compression Ratio setup
+
+pairs = mkPairs ds
+
+[pD01Conf, pD12Conf, pD23Conf] = mkCompRatioPairs ds pairs
+
 -- run with stack bench --profile vsat:auto --benchmark-arguments='+RTS -S -RTS --output timings.html'
 main = do
   -- readfile is strict
@@ -130,6 +136,11 @@ main = do
 
   [justV12] <- genConfigPool justV12Conf
   [justV123] <- genConfigPool justV123Conf
+
+  -- | Compression ratio pairs
+  -- [justV12]  <- genConfigPool pD01Conf
+  [justV23]  <- genConfigPool pD12Conf
+  [justV34]  <- genConfigPool pD23Conf
 
   let bPropV1   = selectVariantTotal ppV1 bProp
       bPropV2   = selectVariantTotal ppV2 bProp
@@ -179,7 +190,18 @@ main = do
         , mkBench "v-->p" "V1*V2*V3"     justV123Conf (bfWith solverConf) bPropJustV123
         , mkBench' "v-->p" "V1*V2*V3*V4"  (bfWith solverConf) bProp
         ]
-  -- res' <- runIncrementalSolve bPs
+
+    -- | Compression Ratio props
+      (Just justbPropV12)  = selectVariant justV12 bProp
+      (Just justbPropV23)  = selectVariant justV23 bProp
+      (Just justbPropV34)  = selectVariant justV34 bProp
+
+      compRatioBenches :: ReadableSMTConf Text -> [Benchmark]
+      compRatioBenches solverConf =
+        [ mkBench "v-->v" "V1*V2"  pD01Conf (satWith solverConf) justbPropV12
+        , mkBench "v-->v" "V2*V3"  pD12Conf (satWith solverConf) justbPropV23
+        , mkBench "v-->v" "V3*V4"  pD23Conf (satWith solverConf) justbPropV34
+        ]
 
   -- mdl <- baselineSolve bPs
   -- print mdl
@@ -204,7 +226,8 @@ main = do
   -- goodRes <- testS goodS 1000
 
   defaultMain
-    [ bgroup "Z3" (benches z3DefConf)
+    [ --bgroup "Z3" (benches z3DefConf)
+      bgroup "Z3" (compRatioBenches z3DefConf)
     -- , bgroup "CVC4" (benches cvc4DefConf)
     -- , bgroup "Yices" (benches yicesDefConf)
     -- , bgroup "Boolector" (benches boolectorDefConf)
