@@ -92,6 +92,10 @@ justD0123456Conf = mkMultConf 7 ds
 justD01234567Conf = mkMultConf 8 ds
 justD012345678Conf = mkMultConf 9 ds
 
+pairs = mkPairs ds
+
+[pD01Conf, pD12Conf, pD23Conf, pD34Conf, pD45Conf, pD56Conf, pD67Conf, pD78Conf, pD89Conf] = mkCompRatioPairs ds pairs
+
 -- ((<,0), = "D_0"})
 -- ((<,1), = "D_16"})
 -- ((<,2), = "D_12"})
@@ -174,6 +178,16 @@ main = do
   [ppV8]  <- genConfigPool d7Conf
   [ppV9]  <- genConfigPool d8Conf
   [ppV10] <- genConfigPool d9Conf
+
+  -- [justV12]  <- genConfigPool pD01Conf
+  [justV23]  <- genConfigPool pD12Conf
+  [justV34]  <- genConfigPool pD23Conf
+  [justV45]  <- genConfigPool pD34Conf
+  [justV56]  <- genConfigPool pD45Conf
+  [justV67]  <- genConfigPool pD56Conf
+  [justV78]  <- genConfigPool pD67Conf
+  [justV89]  <- genConfigPool pD78Conf
+  [justV910] <- genConfigPool pD89Conf
 
   let
     -- | choice preserving props
@@ -273,9 +287,31 @@ main = do
       , mkBench' "v-->p" "V1*V2*V3*V4*V5*V6*V7*V8*V9*V10" (bfWith solverConf) bProp
       ]
 
-  -- res' <- runIncrementalSolve bPs
+    -- | Compression Ratio props
+    -- (Just justbPropV12)  = selectVariant justV12 bProp
+    (Just justbPropV23)  = selectVariant justV23 bProp
+    (Just justbPropV34)  = selectVariant justV34 bProp
+    (Just justbPropV45)  = selectVariant justV45 bProp
+    (Just justbPropV56)  = selectVariant justV56 bProp
+    (Just justbPropV67)  = selectVariant justV67 bProp
+    (Just justbPropV78)  = selectVariant justV78 bProp
+    (Just justbPropV89)  = selectVariant justV89 bProp
+    (Just justbPropV910) = selectVariant justV910 bProp
 
-  -- putStrLn $ "Done with parse: "
+    compRatioBenches :: ReadableSMTConf Text -> [Benchmark]
+    compRatioBenches solverConf =
+      [ mkBench "v-->v" "V1*V2"  pD01Conf (satWith solverConf) justbPropV12
+      , mkBench "v-->v" "V2*V3"  pD12Conf (satWith solverConf) justbPropV23
+      , mkBench "v-->v" "V3*V4"  pD23Conf (satWith solverConf) justbPropV34
+      , mkBench "v-->v" "V4*V5"  pD34Conf (satWith solverConf) justbPropV45
+      , mkBench "v-->v" "V5*V6"  pD45Conf (satWith solverConf) justbPropV56
+      , mkBench "v-->v" "V6*V7"  pD56Conf (satWith solverConf) justbPropV67
+      , mkBench "v-->v" "V7*V8"  pD67Conf (satWith solverConf) justbPropV78
+      , mkBench "v-->v" "V8*V9"  pD78Conf (satWith solverConf) justbPropV89
+      , mkBench "v-->v" "V9*V10" pD89Conf (satWith solverConf) justbPropV910
+      ]
+
+
   -- mapM_ (putStrLn . show . second numTerms) $
   --   zip [1..] [bPropV1, bPropV12, bPropV123, bPropV1234, bPropV12345, bPropV123456, bPropV123456, bPropV1234567, bPropV12345678, bPropV123456789, bPropVAll]
   -- putStrLn $ "------------------"
@@ -300,19 +336,7 @@ main = do
     [ -- bgroup "ABC" (benches abcDefConf)
     --   bgroup "Yices" (benches yicesDefConf)
     -- , bgroup "CVC4" (benches cvc4DefConf)
-      bgroup "Z3" (benches z3DefConf)
+      -- bgroup "Z3" (benches z3DefConf)
+      bgroup "Z3" (compRatioBenches z3DefConf)
     -- , bgroup "Boolector" (benches boolectorDefConf)
     ]
-
--- -- [d0Conf, d1Conf, d17Conf, d13Conf, d7Conf, d3Conf, d11Conf, d5Conf, d9Conf, d15Conf] = confs
-
--- d0Conf = mkCascadeConf 1 ds
--- d1Conf = mkCascadeConf 2 ds
--- d2Conf = mkCascadeConf 3 ds
--- d3Conf = mkCascadeConf 4 ds
--- d4Conf = mkCascadeConf 5 ds
--- d5Conf = mkCascadeConf 6 ds
--- d6Conf = mkCascadeConf 7 ds
--- d7Conf = mkCascadeConf 8 ds
--- d8Conf = mkCascadeConf 9 ds
--- d9Conf = mkCascadeConf 10 ds

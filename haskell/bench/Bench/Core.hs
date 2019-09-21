@@ -12,7 +12,7 @@ import           Data.Bitraversable      (bimapM)
 import qualified Data.ByteString         as BS (readFile)
 import           Data.Either             (lefts, rights)
 import           Data.Foldable           (foldr')
-import           Data.List               (sort,splitAt,intersperse,foldl1',delete)
+import           Data.List               (sort,splitAt,intersperse,foldl1',delete,(\\))
 import           Data.Map                (size, Map, toList)
 import qualified Data.SBV                as S
 import qualified Data.SBV.Control        as SC
@@ -103,3 +103,13 @@ mkPairs :: [a] -> [[a]]
 mkPairs [] = [[]]
 mkPairs [x] = [[x]]
 mkPairs (x:ys@(y:xs)) = [x,y] : mkPairs ys
+
+-- | Make the compression ratio pair configurations. To Test compression ratio
+-- we need to control the number of calls to the solver, so we construct pairs
+-- to restrict it to 2 solver calls. Hence if you have 4 features, then we want
+-- to test 0-1 1-2 2-3 3-4. The first list should be a list of all dimensions or
+-- features, while the second should be a list of pairs
+mkCompRatioPairs :: [VProp Text String String] -> [[VProp Text String String]] -> [VProp Text String String]
+mkCompRatioPairs ds = fmap mkPairConf  . filter (not . (<2) . length)
+  where negateRest     xs' = conjoin $ (bnot <$> (ds \\ xs'))
+        mkPairConf     xs' = negateRest xs'
