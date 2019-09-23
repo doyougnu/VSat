@@ -1,8 +1,8 @@
 library(ggplot2)
 library(dplyr)
 
-finResultsFile <- "../data/fin_data.csv"
-autoResultsFile <- "../data/auto_data.csv"
+finResultsFile <- "../data/fin_comp_data.csv"
+autoResultsFile <- "../data/auto_comp_data.csv"
 
 finData <- read.csv(file=finResultsFile) %>% mutate(Algorithm = as.factor(Algorithm), Config = as.factor(Config))
 autoData <- read.csv(file=autoResultsFile) %>% mutate(Algorithm = as.factor(Algorithm), Config = as.factor(Config))
@@ -63,17 +63,17 @@ facetLabels <- c(V1 = "V1"
 finDF <- munge(finData) %>% mutate(data = "Fin") %>% select(Mean, Algorithm, CompressionRatio, data, ChcCount, PlainCount, Config)
 autoDF <- munge(autoData) %>% mutate(data = "Auto") %>% select(Mean, Algorithm, CompressionRatio, data, ChcCount, PlainCount, Config)
 
-df <- rbind(finDF,autoDF)  %>% filter(Algorithm == "v-->v") %>% filter(ChcCount != 0)
+df <- rbind(finDF,autoDF)  %>% filter(Algorithm == "v-->v") %>% filter(ChcCount != 0) %>% mutate(PlainRatio = PlainCount / (ChcCount + PlainCount), ChcRatio = ChcCount / (ChcCount + PlainCount))
 
 model <- lm(log10(Mean) ~ log10(CompressionRatio), df)
 
 compression_plt <- ggplot(df, mapping = aes(x=CompressionRatio, y=Mean, shape=data, label=Config, color=data, fill=data)) +
   geom_point(size=3) +
   ylab("Mean [s]") +
-  scale_x_log10() +
+  ## scale_x_log10() +
   scale_y_log10() +
   geom_smooth(method=lm, formula = y ~ x, se=FALSE) +
-  geom_text(nudge_x = 0.15, nudge_y = 0.05)
+  geom_text(nudge_y = 0.1, nudge_x = 0.002, angle = 45, check_overlap = TRUE)
 
 
 # GET EQUATION AND R-SQUARED AS STRING
@@ -88,15 +88,16 @@ compression_plt <- ggplot(df, mapping = aes(x=CompressionRatio, y=Mean, shape=da
 ##   as.character(as.expression(eq));
 ## }
 
-## p1 <- compression_plt + geom_text(x = log10(0.003) , y = log10(1), label = lm_eqn(df), parse = TRUE)
-  ## theme(axis.text.x = element_text(angle = 90)) +
-  ## geom_col(position = "dodge") +
-  ## facet_grid(. ~ Config
-  ##          , labeller = labeller(Config = facetLabels)
-  ##            ) + theme(strip.text.x = element_text(size=10))
 
-## ggsave("../plots/fin_cascade.png", plot = cascade_plt, device = "png")
+ggsave("../plots/CompRatio.png", plot = compression_plt, device = "png")
 
+pl_ratio_plt <- ggplot(df, mapping = aes(x=PlainRatio, y=Mean, shape=data, label=Config, color=data, fill=data)) +
+  geom_point(size=3) +
+  ylab("Mean [s]") +
+  ## scale_x_log10() +
+  scale_y_log10() +
+  geom_smooth(method=lm, formula = y ~ x, se=FALSE) +
+  geom_text(nudge_y = 0.1, nudge_x = 0.002, angle = 45, check_overlap = TRUE)
 ## evo_plt <- ggplot(df, mapping = aes(x=Algorithm, y=Mean, shape=Algorithm, fill=Algorithm)) +
 ##   theme(axis.text.x = element_text(angle = 90)) +
 ##   geom_col(position = "dodge") +
@@ -104,4 +105,4 @@ compression_plt <- ggplot(df, mapping = aes(x=CompressionRatio, y=Mean, shape=da
 ##            ## , labeller = labeller(Config = facetLabels)
 ##              ) + theme(strip.text.x = element_text(size=10))
 
-ggsave("../plots/compression.png", plot = compression_plt, device = "png")
+ggsave("../plots/plainRatio.png", plot = pl_ratio_plt, device = "png")
