@@ -309,6 +309,16 @@ main = do
       , mkBench "v-->v" "V7*V8"  pD67Conf (satWith solverConf) justbPropV78
       , mkBench "v-->v" "V8*V9"  pD78Conf (satWith solverConf) justbPropV89
       , mkBench "v-->v" "V9*V10" pD89Conf (satWith solverConf) justbPropV910
+
+      , mkBench "v-->p" "V1*V2"  pD01Conf (bfWith solverConf) justbPropV12
+      , mkBench "v-->p" "V2*V3"  pD12Conf (bfWith solverConf) justbPropV23
+      , mkBench "v-->p" "V3*V4"  pD23Conf (bfWith solverConf) justbPropV34
+      , mkBench "v-->p" "V4*V5"  pD34Conf (bfWith solverConf) justbPropV45
+      , mkBench "v-->p" "V5*V6"  pD45Conf (bfWith solverConf) justbPropV56
+      , mkBench "v-->p" "V6*V7"  pD56Conf (bfWith solverConf) justbPropV67
+      , mkBench "v-->p" "V7*V8"  pD67Conf (bfWith solverConf) justbPropV78
+      , mkBench "v-->p" "V8*V9"  pD78Conf (bfWith solverConf) justbPropV89
+      , mkBench "v-->p" "V9*V10" pD89Conf (bfWith solverConf) justbPropV910
       ]
 
 
