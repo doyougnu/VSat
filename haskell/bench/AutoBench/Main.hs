@@ -201,8 +201,11 @@ main = do
         [ mkBench "v-->v" "V1*V2"  pD01Conf (satWith solverConf) justbPropV12
         , mkBench "v-->v" "V2*V3"  pD12Conf (satWith solverConf) justbPropV23
         , mkBench "v-->v" "V3*V4"  pD23Conf (satWith solverConf) justbPropV34
-        ]
 
+        , mkBench "v-->p" "V1*V2"  pD01Conf (bfWith solverConf)  justbPropV12
+        , mkBench "v-->p" "V2*V3"  pD12Conf (bfWith solverConf)  justbPropV23
+        , mkBench "v-->p" "V3*V4"  pD23Conf (bfWith solverConf)  justbPropV34
+        ]
   -- mdl <- baselineSolve bPs
   -- print mdl
   -- putStrLn $ "Done with parse: "
