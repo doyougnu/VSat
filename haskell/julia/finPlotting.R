@@ -1,9 +1,23 @@
 library(ggplot2)
 library(dplyr)
+library(cowplot)
 
 timingsResultsFile <- "../data/fin_data.csv"
 
-data <- read.csv(file=timingsResultsFile) %>% mutate(Algorithm = as.factor(Algorithm), Config = as.factor(Config))
+evoFacetLabels <- c( "Sum"
+                  , "EvolutionAware"
+                  , "V1"
+                  , "V2"
+                  , "V3"
+                  , "V4"
+                  , "V5"
+                  , "V6"
+                  , "V7"
+                  , "V8"
+                  , "V9"
+                  , "V10")
+
+data <- read.csv(file=timingsResultsFile) %>% mutate(Algorithm = as.factor(Algorithm))
 
 dfCascade <- data %>% filter( Config != "V2"
                       ,Config != "V3"
@@ -38,33 +52,35 @@ df <- merge(sumData, data, all=TRUE) %>%
          ,Config != "V1*V2*V3*V4*V5*V6*V7"
          ,Config != "V1*V2*V3*V4*V5*V6*V7*V8"
          ,Config != "V1*V2*V3*V4*V5*V6*V7*V8*V9"
-         ,Config != "V1*V2*V3*V4*V5*V6*V7*V8*V9*V10")
+         ,Config != "V1*V2*V3*V4*V5*V6*V7*V8*V9*V10") %>% mutate(Config = factor(Config, levels = evoFacetLabels))
 
 facetLabels <- c(V1 = "V1"
                , "V1*V2" = "V1**V2"
-               , "V1*V2*V3" = "V1...**...V3"
-               , "V1*V2*V3*V4"                    = "V1...**...V4"
-               , "V1*V2*V3*V4*V5"                 = "V1...**...V5"
-               , "V1*V2*V3*V4*V5*V6"              = "V1...**...V6"
-               , "V1*V2*V3*V4*V5*V6*V7"           = "V1...**...V7"
-               , "V1*V2*V3*V4*V5*V6*V7*V8"        = "V1...**...V8"
-               , "V1*V2*V3*V4*V5*V6*V7*V8*V9"     = "V1...**...V9"
-               , "V1*V2*V3*V4*V5*V6*V7*V8*V9*V10" = "V1...**...V10")
+               , "V1*V2*V3" = "V1**V3"
+               , "V1*V2*V3*V4"                    = "V1**V4"
+               , "V1*V2*V3*V4*V5"                 = "V1**V5"
+               , "V1*V2*V3*V4*V5*V6"              = "V1**V6"
+               , "V1*V2*V3*V4*V5*V6*V7"           = "V1**V7"
+               , "V1*V2*V3*V4*V5*V6*V7*V8"        = "V1**V8"
+               , "V1*V2*V3*V4*V5*V6*V7*V8*V9"     = "V1**V9"
+               , "V1*V2*V3*V4*V5*V6*V7*V8*V9*V10" = "V1**V10")
 
 cascade_plt <- ggplot(dfCascade, mapping = aes(x=Algorithm, y=Mean, shape=Algorithm, fill=Algorithm)) +
   theme(axis.text.x = element_text(angle = 90)) +
+  ylab("Mean [s]") +
   geom_col(position = "dodge") +
   facet_grid(. ~ Config
            , labeller = labeller(Config = facetLabels)
              ) + theme(strip.text.x = element_text(size=10))
 
-ggsave("../plots/fin_cascade.png", plot = cascade_plt, device = "png")
+ggsave("../plots/fin_cascade.svg", plot = cascade_plt, device = "svg")
 
 evo_plt <- ggplot(df, mapping = aes(x=Algorithm, y=Mean, shape=Algorithm, fill=Algorithm)) +
   theme(axis.text.x = element_text(angle = 90)) +
+  ylab("Mean [s]") +
   geom_col(position = "dodge") +
   facet_grid(. ~ Config
-           ## , labeller = labeller(Config = facetLabels)
-             ) + theme(strip.text.x = element_text(size=10))
+           ## , labeller = labeller(Config = evoFacetLabels)
+             ) + theme(strip.text.x = element_text(size=10), legend.position   = "none")
 
-ggsave("../plots/fin_evo.png", plot = evo_plt, device = "png")
+ggsave("../plots/fin_evo.svg", plot = evo_plt, device = "svg")
