@@ -1,5 +1,6 @@
 library(ggplot2)
 library(dplyr)
+library(cowplot)
 
 timingsResultsFile <- "../data/auto_data.csv"
 
@@ -43,13 +44,13 @@ df <- merge(sumData, data, all=TRUE) %>%
 facetLabels <- c(V1 = "V1"
                , "V1*V2" = "V1**V2"
                , "V1*V2*V3" = "V1...**...V3"
-               , "V1*V2*V3*V4"                    = "V1...**...V4"
-               , "V1*V2*V3*V4*V5"                 = "V1...**...V5"
-               , "V1*V2*V3*V4*V5*V6"              = "V1...**...V6"
-               , "V1*V2*V3*V4*V5*V6*V7"           = "V1...**...V7"
-               , "V1*V2*V3*V4*V5*V6*V7*V8"        = "V1...**...V8"
-               , "V1*V2*V3*V4*V5*V6*V7*V8*V9"     = "V1...**...V9"
-               , "V1*V2*V3*V4*V5*V6*V7*V8*V9*V10" = "V1...**...V10")
+               , "V1*V2*V3*V4"                    = "V1**V4"
+               , "V1*V2*V3*V4*V5"                 = "V1**V5"
+               , "V1*V2*V3*V4*V5*V6"              = "V1**V6"
+               , "V1*V2*V3*V4*V5*V6*V7"           = "V1**V7"
+               , "V1*V2*V3*V4*V5*V6*V7*V8"        = "V1**V8"
+               , "V1*V2*V3*V4*V5*V6*V7*V8*V9"     = "V1**V9"
+               , "V1*V2*V3*V4*V5*V6*V7*V8*V9*V10" = "V1**V10")
 
 cascade_plt <- ggplot(dfCascade, mapping = aes(x=Algorithm, y=Mean, shape=Algorithm, fill=Algorithm)) +
   theme(axis.text.x = element_text(angle = 90)) +
@@ -57,9 +58,10 @@ cascade_plt <- ggplot(dfCascade, mapping = aes(x=Algorithm, y=Mean, shape=Algori
   geom_col(position = "dodge") +
   facet_grid(. ~ Config
            , labeller = labeller(Config = facetLabels)
-             ) + theme(strip.text.x = element_text(size=10))
+             ) + theme(strip.text.x = element_text(size=10)) +
+  theme(legend.position   = "none")
 
-ggsave("../plots/auto_cascade.png", plot = cascade_plt, device = "png")
+ggsave("../plots/auto_cascade.svg", plot = cascade_plt, device = "svg")
 
 evo_plt <- ggplot(df, mapping = aes(x=Algorithm, y=Mean, shape=Algorithm, fill=Algorithm)) +
   theme(axis.text.x = element_text(angle = 90)) +
@@ -67,6 +69,6 @@ evo_plt <- ggplot(df, mapping = aes(x=Algorithm, y=Mean, shape=Algorithm, fill=A
   geom_col(position = "dodge") +
   facet_grid(. ~ Config
            ## , labeller = labeller(Config = facetLabels)
-             ) + theme(strip.text.x = element_text(size=10))
+             ) + theme(strip.text.x = element_text(size=10), legend.position   = "none")
 
-ggsave("../plots/auto_evo.png", plot = evo_plt, device = "png")
+ggsave("../plots/auto_evo.svg", plot = evo_plt, device = "svg")
