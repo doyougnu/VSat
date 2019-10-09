@@ -71,9 +71,9 @@ cascade_plt <- ggplot(dfCascade, mapping = aes(x=Algorithm, y=Mean, shape=Algori
   geom_col(position = "dodge") +
   facet_grid(. ~ Config
            , labeller = labeller(Config = facetLabels)
-             ) + theme(strip.text.x = element_text(size=10))
+             ) + theme(strip.text.x = element_text(size=10), legend.position = "none")
 
-ggsave("../plots/fin_cascade.svg", plot = cascade_plt, device = "svg")
+ggsave("../plots/fin_cascade.pdf", plot = cascade_plt, device = "pdf", width = 15, height = 8)
 
 evo_plt <- ggplot(df, mapping = aes(x=Algorithm, y=Mean, shape=Algorithm, fill=Algorithm)) +
   theme(axis.text.x = element_text(angle = 90)) +
@@ -83,4 +83,4 @@ evo_plt <- ggplot(df, mapping = aes(x=Algorithm, y=Mean, shape=Algorithm, fill=A
            ## , labeller = labeller(Config = evoFacetLabels)
              ) + theme(strip.text.x = element_text(size=10), legend.position   = "none")
 
-ggsave("../plots/fin_evo.svg", plot = evo_plt, device = "svg")
+ggsave("../plots/fin_evo.pdf", plot = evo_plt, device = "pdf")

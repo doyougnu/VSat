@@ -105,8 +105,8 @@ plain_ratio_plt <- ggplot(dfPlainRatio, mapping = aes(x=PlainRatio, y=Mean, shap
   ## scale_x_log10() +
   scale_y_log10() +
   geom_smooth(method=lm, formula = y ~ x, se=FALSE) +
-  geom_text(nudge_y = 0.01, nudge_x = 0.002, angle = 45, check_overlap = TRUE) +
-  theme(legend.position = c(.92,.92))
+  geom_text(nudge_y = 0.1, nudge_x = 0.002, angle = 45, check_overlap = TRUE) +
+  theme(legend.position = c(.90,.90))
   ## theme_cowplot(12)
 ## evo_plt <- ggplot(df, mapping = aes(x=Algorithm, y=Mean, shape=Algorithm, fill=Algorithm)) +
 ##   theme(axis.text.x = element_text(angle = 90)) +
@@ -115,7 +115,7 @@ plain_ratio_plt <- ggplot(dfPlainRatio, mapping = aes(x=PlainRatio, y=Mean, shap
 ##            ## , labeller = labeller(Config = facetLabels)
 ##              ) + theme(strip.text.x = element_text(size=10))
 
-ggsave("../plots/plainRatio.svg", plot = plain_ratio_plt, device = "svg")
+ggsave("../plots/plainRatio.pdf", plot = plain_ratio_plt, device = "pdf")
 
 mean_ratio_plt <- ggplot(dfMeanRatio, mapping = aes(x=PlainRatio, y=MeanRatio, shape=data, label=Config, color=data, fill=data)) +
   geom_point(size=3) +
@@ -123,7 +123,7 @@ mean_ratio_plt <- ggplot(dfMeanRatio, mapping = aes(x=PlainRatio, y=MeanRatio, s
   ## scale_x_log10() +
   ## scale_y_log10() +
   geom_smooth(method=lm, formula = y ~ x, se=FALSE) +
-  geom_text(nudge_y = 0.01, nudge_x = 0.002, angle = 45, check_overlap = TRUE) +
+  geom_text(nudge_y = 0.012, nudge_x = 0.003, angle = 45, check_overlap = FALSE) +
   theme(legend.position = c(.92,.92))
 ## theme_cowplot(12)
 ## evo_plt <- ggplot(df, mapping = aes(x=Algorithm, y=Mean, shape=Algorithm, fill=Algorithm)) +
@@ -133,4 +133,4 @@ mean_ratio_plt <- ggplot(dfMeanRatio, mapping = aes(x=PlainRatio, y=MeanRatio, s
 ##            ## , labeller = labeller(Config = facetLabels)
 ##              ) + theme(strip.text.x = element_text(size=10))
 
-ggsave("../plots/plainRatio_MeanRatio.svg", plot = mean_ratio_plt, device = "svg")
+ggsave("../plots/plainRatio_MeanRatio.pdf", plot = mean_ratio_plt, device = "pdf")
