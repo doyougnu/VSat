@@ -42,8 +42,8 @@ df <- merge(sumData, data, all=TRUE) %>%
          ,Config != "V1*V2*V3*V4*V5*V6*V7*V8*V9*V10")
 
 facetLabels <- c(V1 = "V1"
-               , "V1*V2" = "V1**V2"
-               , "V1*V2*V3" = "V1...**...V3"
+               , "V1*V2"                          = "V1**V2"
+               , "V1*V2*V3"                       = "V1**V3"
                , "V1*V2*V3*V4"                    = "V1**V4"
                , "V1*V2*V3*V4*V5"                 = "V1**V5"
                , "V1*V2*V3*V4*V5*V6"              = "V1**V6"
@@ -61,7 +61,7 @@ cascade_plt <- ggplot(dfCascade, mapping = aes(x=Algorithm, y=Mean, shape=Algori
              ) + theme(strip.text.x = element_text(size=10)) +
   theme(legend.position   = "none")
 
-ggsave("../plots/auto_cascade.svg", plot = cascade_plt, device = "svg")
+ggsave("../plots/auto_cascade.pdf", plot = cascade_plt, device = "pdf")
 
 evo_plt <- ggplot(df, mapping = aes(x=Algorithm, y=Mean, shape=Algorithm, fill=Algorithm)) +
   theme(axis.text.x = element_text(angle = 90)) +
@@ -71,4 +71,4 @@ evo_plt <- ggplot(df, mapping = aes(x=Algorithm, y=Mean, shape=Algorithm, fill=A
            ## , labeller = labeller(Config = facetLabels)
              ) + theme(strip.text.x = element_text(size=10), legend.position   = "none")
 
-ggsave("../plots/auto_evo.svg", plot = evo_plt, device = "svg")
+ggsave("../plots/auto_evo.pdf", plot = evo_plt, device = "pdf")
