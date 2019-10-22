@@ -179,16 +179,20 @@ main = do
         , mkBench "p-->p" "V2"  justV2Conf (bfWith solverConf) bPropV2
         , mkBench "p-->p" "V3"  justV3Conf (bfWith solverConf) bPropV3
         , mkBench "p-->p" "V4"  justV4Conf (bfWith solverConf) bPropV4
+        , mkBench' "p-->p" "EvolutionAware"  (bfWithConf (toDimProp sumConf) solverConf) bProp
+        , mkBench  "p-->p" "V1*V2"        justV12Conf (bfWith solverConf) bPropJustV12
+        , mkBench "p-->p" "V1*V2*V3"     justV123Conf (bfWith solverConf) bPropJustV123
+        , mkBench' "p-->p" "V1*V2*V3*V4"  (bfWith solverConf) bProp
 
         -- v - p
-        , mkBench "v-->p" "V1"  justV1Conf (bfWithConf (toDimProp d0Conf) solverConf) bProp
-        , mkBench "v-->p" "V2"  justV2Conf (bfWithConf (toDimProp d2Conf) solverConf) bProp
-        , mkBench "v-->p" "V3"  justV3Conf (bfWithConf (toDimProp d3Conf) solverConf) bProp
-        , mkBench "v-->p" "V4"  justV4Conf (bfWithConf (toDimProp d4Conf) solverConf) bProp
-        , mkBench' "v-->p" "EvolutionAware"  (bfWithConf (toDimProp sumConf) solverConf) bProp
-        , mkBench "v-->p" "V1*V2"        justV12Conf (bfWith solverConf) bPropJustV12
-        , mkBench "v-->p" "V1*V2*V3"     justV123Conf (bfWith solverConf) bPropJustV123
-        , mkBench' "v-->p" "V1*V2*V3*V4"  (bfWith solverConf) bProp
+        , mkBench "v-->p" "V1"  justV1Conf (vOnPWithConf (toDimProp d0Conf) solverConf) bProp
+        , mkBench "v-->p" "V2"  justV2Conf (vOnPWithConf (toDimProp d2Conf) solverConf) bProp
+        , mkBench "v-->p" "V3"  justV3Conf (vOnPWithConf (toDimProp d3Conf) solverConf) bProp
+        , mkBench "v-->p" "V4"  justV4Conf (vOnPWithConf (toDimProp d4Conf) solverConf) bProp
+        , mkBench' "v-->p" "EvolutionAware"  (vOnPWithConf (toDimProp sumConf) solverConf) bProp
+        , mkBench "v-->p" "V1*V2"        justV12Conf (vOnPWith solverConf) bPropJustV12
+        , mkBench "v-->p" "V1*V2*V3"     justV123Conf (vOnPWith solverConf) bPropJustV123
+        , mkBench' "v-->p" "V1*V2*V3*V4"  (vOnPWith solverConf) bProp
         ]
 
     -- | Compression Ratio props
@@ -229,8 +233,8 @@ main = do
   -- goodRes <- testS goodS 1000
 
   defaultMain
-    [ --bgroup "Z3" (benches z3DefConf)
-      bgroup "Z3" (compRatioBenches z3DefConf)
+    [ bgroup "Z3" (benches z3DefConf)
+      -- bgroup "Z3" (compRatioBenches z3DefConf)
     -- , bgroup "CVC4" (benches cvc4DefConf)
     -- , bgroup "Yices" (benches yicesDefConf)
     -- , bgroup "Boolector" (benches boolectorDefConf)

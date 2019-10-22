@@ -11,6 +11,8 @@ module Api ( sat
            , pOnVWithConf
            , genConfigPool
            , genConfigPool'
+           , vOnPWithConf
+           , vOnPWith
            ) where
 
 import qualified Data.Map           as M
@@ -108,6 +110,20 @@ bfWithConf dimConfig conf prop =
     -- mapM_ (putStrLn . show) configPool
     -- putStrLn . show $ (length configPool)
     runBF configPool conf prop
+
+vOnPWithConf :: (Show d, Resultable d, SAT (ReadableProp d))
+  => Maybe (DimProp d) -> ReadableSMTConf d -> ReadableProp d -> IO (Result d)
+vOnPWithConf Nothing          conf prop = runVonP mempty conf prop
+vOnPWithConf dimConfig conf prop =
+  do
+    configPool <- genConfigPool' dimConfig
+    -- mapM_ (putStrLn . show) configPool
+    -- putStrLn . show $ (length configPool)
+    runVonP configPool conf prop
+
+vOnPWith :: (Show d, Resultable d, SAT (ReadableProp d))
+  => ReadableSMTConf d -> ReadableProp d -> IO (Result d)
+vOnPWith = vOnPWithConf Nothing
 
 pOnVWithConf :: (Resultable d, Show d) => Maybe (DimProp d) -> ReadableSMTConf d -> ReadableProp d -> IO (Result d)
 pOnVWithConf Nothing          conf prop = fst' <$> runPonV mempty conf prop
