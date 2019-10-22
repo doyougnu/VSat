@@ -13,6 +13,7 @@ module Run ( SatDict
            , propToSBool
            , emptySt
            , runPonV
+           , runVonP
            ) where
 
 import           Control.Arrow (first, second)
@@ -88,6 +89,14 @@ runBF :: (Resultable d, SAT (ReadableProp d)) =>
          IO (Result d)
 runBF pool os p = fst' <$> runEnv (runBruteForce pool) os p
 
+
+runVonP :: (Resultable d, SAT (ReadableProp d)) =>
+           ConfigPool d        ->
+           SMTConf d Text Text ->
+           ReadableProp d      ->
+           IO (Result d)
+runVonP pool os p = fst' <$> runEnv (runVOnPlain pool) os p
+
 -- runPonV :: (Show d, Resultable d) => ConfigPool d -> ReadableProp d
 --         -> IO (Result d, SatDict d, Log)
 runPonV pool conf prop = runEnv (runPlainOnVSat pool) conf prop
@@ -133,6 +142,22 @@ runForDict (configToResultProp -> c, x) = do
            SC.exit
            return res
 
+-- | run the sat solver, when we get a satisafiable call get the assignments
+-- directly
+runForDict' :: ( Resultable d
+              , MonadIO m
+              , MonadReader (SMTConf d a a) m
+              , SAT (ReadableProp d)) =>
+  (Config d, ReadableProp d) -> m (Result d)
+runForDict' (configToResultProp -> c, x) = do
+  cnf <- ask
+  liftIO $ S.runSMTWith (conf cnf) $
+    do
+      x' <- toPredicate x
+      SC.query . SC.inNewAssertionStack $
+        do S.constrain x'
+           res <- getResultWith (\a -> if a then c else negateResultProp c)
+           return res
 
 -- | Run the brute force baseline case, that is select every plain variant and
 -- run them to the sat solver
@@ -156,6 +181,27 @@ runBruteForce pool prop = flip evalStateT (initSt pool prop) $
   plainMs <- lift $ mapM runForDict $ plainProps
   return $! mconcat plainMs
 
+-- | Run the brute force baseline case, that is select every plain variant and
+-- run them to the sat solver
+runVOnPlain ::
+  ( MonadIO m
+  , Resultable d
+  , MonadState (SatDict d) m
+  , MonadReader (SMTConf d a a) m
+  , SAT (ReadableProp d)) =>
+  ConfigPool d        ->
+  ReadableProp d      ->
+  m (Result d)
+runVOnPlain pool prop = flip evalStateT (initSt pool prop) $
+  do
+  _confs <- get
+  -- dbg "PROP" prop
+  let confs = M.keys _confs
+      plainProps = if null confs
+        then pure (M.empty, prop)
+        else (\y -> (y, selectVariantTotal y prop)) <$> confs
+  plainMs <- lift $ mapM runForDict' $ plainProps
+  return $! mconcat plainMs
 
 -- | Run plain terms on vsat, that is, perform selection for each dimension, and
 -- then run on the vsat solver. We know that this will always become a Unit, and
