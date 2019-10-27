@@ -4,7 +4,7 @@ library(cowplot)
 
 timingsResultsFile <- "../data/auto_data.csv"
 
-data <- read.csv(file=timingsResultsFile) %>% mutate(Algorithm = as.factor(Algorithm), Config = as.factor(Config))
+data <- read.csv(file=timingsResultsFile) %>% mutate(Algorithm = as.factor(Algorithm), Config = as.factor(Config)) %>% mutate(Algorithm = gsub("-->", "\U27f6", Algorithm))
 
 dfCascade <- data %>% filter( Config != "V2"
                       ,Config != "V3"
@@ -15,8 +15,8 @@ dfCascade <- data %>% filter( Config != "V2"
                       ,Config != "V8"
                       ,Config != "V9"
                       ,Config != "V10"
-                      ,Config != "EvolutionAware") %>% filter (Algorithm != "p-->p"
-                                                             , Algorithm != "p-->v")
+                      ,Config != "EvolutionAware") %>% filter (Algorithm != "p\U27f6p"
+                                                             , Algorithm != "p\U27f6v")
 
 sumData <- data %>% filter( Config != "V1*V2"
                           ,Config != "EvolutionAware"
@@ -41,6 +41,9 @@ df <- merge(sumData, data, all=TRUE) %>%
          ,Config != "V1*V2*V3*V4*V5*V6*V7*V8*V9"
          ,Config != "V1*V2*V3*V4*V5*V6*V7*V8*V9*V10")
 
+## reorder the facet labels
+df$Config <- factor(df$Config, levels=c("V1", "V2", "V3", "V4", "Sum", "EvolutionAware"))
+
 facetLabels <- c(V1 = "V1"
                , "V1*V2"                          = "V1**V2"
                , "V1*V2*V3"                       = "V1**V3"
@@ -61,7 +64,7 @@ cascade_plt <- ggplot(dfCascade, mapping = aes(x=Algorithm, y=Mean, shape=Algori
              ) + theme(strip.text.x = element_text(size=10)) +
   theme(legend.position   = "none")
 
-ggsave("../plots/auto_cascade.pdf", plot = cascade_plt, device = "pdf")
+ggsave("../plots/auto_cascade.png", plot = cascade_plt, device = "png")
 
 evo_plt <- ggplot(df, mapping = aes(x=Algorithm, y=Mean, shape=Algorithm, fill=Algorithm)) +
   theme(axis.text.x = element_text(angle = 90)) +
@@ -71,4 +74,4 @@ evo_plt <- ggplot(df, mapping = aes(x=Algorithm, y=Mean, shape=Algorithm, fill=A
            ## , labeller = labeller(Config = facetLabels)
              ) + theme(strip.text.x = element_text(size=10), legend.position   = "none")
 
-ggsave("../plots/auto_evo.pdf", plot = evo_plt, device = "pdf")
+ggsave("../plots/auto_evo.png", plot = evo_plt, device = "png")
