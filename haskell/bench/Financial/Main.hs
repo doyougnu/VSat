@@ -149,6 +149,7 @@ main = do
         | d == "D_14" = "D_9"
         | otherwise = d
 
+      -- !bProp = ((renameDims sameDims) . naiveEncode . autoToVSat) $ autoAndJoin bPs
       !bProp = ((renameDims sameDims) . naiveEncode . autoToVSat) $ autoAndJoin bPs
       dmapping = getDimMap $ autoAndJoin (bPs)
       !bPropOpts = applyOpts defConf bProp
@@ -336,7 +337,7 @@ main = do
   -- mapM_ (putStrLn . show . second numTerms) $
   --   zip [1..] [bPropV1, bPropV12, bPropV123, bPropV1234, bPropV12345, bPropV123456, bPropV123456, bPropV1234567, bPropV12345678, bPropV123456789, bPropVAll]
   -- putStrLn $ "------------------"
-  --  utStrLn $ (show bProp)
+  -- putStrLn $ (show $ hasHole bProp)
   -- res' <- satWithConf (toDimProp d0Conf) emptyConf bProp
   -- res' <- ad id bProp
   -- res' <- satWithConf autoConf emptyConf (bRef "a" &&& bRef "c")

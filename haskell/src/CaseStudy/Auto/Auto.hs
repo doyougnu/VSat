@@ -208,8 +208,14 @@ naiveEncode (V.OpBB V.Impl a@(V.ChcB dim l r) r')
                 (V.ChcB dim (naiveEncode l) (naiveEncode r))
                 (naiveEncode r')
 
+naiveEncode (V.OpBB V.Impl (V.OpBB V.And l@(V.ChcB d dl _) r@(V.ChcB b bl _)) r')
+  | isHole dl && isHole bl = V.ChcB d r' (V.ChcB b r' V.true)
+  | otherwise = V.OpBB V.Impl
+                (V.OpBB V.And (naiveEncode l) (naiveEncode r))
+                (naiveEncode r')
+
 naiveEncode (V.OpBB V.Impl l r')
-  | hasHole l = fill l r'
+  -- | hasHole l = fill l r' -- this is the one that nests the ranges
   | otherwise = V.OpBB V.Impl
                 (naiveEncode l)
                 (naiveEncode r')
