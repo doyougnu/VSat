@@ -108,8 +108,10 @@ mkPairs (x:ys@(y:xs)) = [x,y] : mkPairs ys
 -- we need to control the number of calls to the solver, so we construct pairs
 -- to restrict it to 2 solver calls. Hence if you have 4 features, then we want
 -- to test 0-1 1-2 2-3 3-4. The first list should be a list of all dimensions or
--- features, while the second should be a list of pairs
+-- features, while the second should be a list of pairs. The function takes in a
+-- list of dimensions and a list of pairs of sequential versions to consider, it
+-- then constructs an fmf that forces only two variants, one for each dimension
+-- of interest.
 mkCompRatioPairs :: [VProp Text String String] -> [[VProp Text String String]] -> [VProp Text String String]
-mkCompRatioPairs ds = fmap mkPairConf  . filter (not . (<2) . length)
-  where negateRest     xs' = conjoin $ (bnot <$> (ds \\ xs'))
-        mkPairConf     xs' = negateRest xs'
+mkCompRatioPairs ds = fmap negateRest . filter (not . (<2) . length)
+  where negateRest xs' = conjoin $ xOrJoin xs' : (bnot <$> (ds \\ xs'))
