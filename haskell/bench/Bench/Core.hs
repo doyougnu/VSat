@@ -30,7 +30,7 @@ import           CaseStudy.Auto.Run
 import           CaseStudy.Auto.CompactEncode
 import           Config
 import           Opts
-import           Run                     (runAD, runBF)
+import           Run                     (runAD, runBF, vCoreMetrics)
 import           Result
 import           Utils
 import           VProp.Core
@@ -45,15 +45,16 @@ run !desc !f prop = bench desc $! nfIO (f prop)
 -- and confDesc that are hand written names for the algorithm being used and the
 -- configuration/prop description. We then input the prop and get a bunch of
 -- statistics on it and return all these as a slash '/' separated string
-mkDescription :: Ord d => String -> String -> VProp d a b -> String
+mkDescription :: Resultable d => String -> String -> ReadableProp d -> String
 mkDescription alg confDesc prop = desc
   where
-    !desc' = ["Chc",show nChc , "numPlain", show nPln , "Compression", show ratio]
+    !desc' = ["Chc",show nChc , "numPlain", show nPln , "Compression", show ratio, "VCore_Total", show vCoreTotal, "VCorePlain", show vCorePlain, "VCoreVar", show vCoreVar]
     !desc = mconcat $ intersperse "/" $ pure alg ++ pure confDesc ++ desc'
     !nPln = numPlain prop
     !nChc = numChc prop
     ratio :: Double
     !ratio = fromRational $ compressionRatio prop
+    (vCoreTotal, vCorePlain, vCoreVar) = unsafePerformIO $ vCoreMetrics prop
 
 -- | Make a benchmark, take two description strings, one to describe the
 -- algorithm, one to describe the feature model under analysis, then take a
@@ -64,9 +65,9 @@ mkBench
   :: (NFData a1, Resultable d) =>
      String
      -> String
-     -> VProp d String String
-     -> (VProp d a2 b -> IO a1)
-     -> VProp d a2 b
+     -> ReadableProp d
+     -> (ReadableProp d -> IO a1)
+     -> ReadableProp d
      -> Benchmark
 mkBench alg confDesc conf !f prop = run desc f prop
   where
@@ -88,8 +89,8 @@ mkBench'
   :: (NFData a1, Resultable d) =>
      String
      -> String
-     -> (VProp d a2 b -> IO a1)
-     -> VProp d a2 b
+     -> (ReadableProp d -> IO a1)
+     -> ReadableProp d
      -> Benchmark
 mkBench' alg confDesc !f prop = run desc f prop
   where
@@ -109,7 +110,7 @@ mkPairs (x:ys@(y:xs)) = [x,y] : mkPairs ys
 -- to restrict it to 2 solver calls. Hence if you have 4 features, then we want
 -- to test 0-1 1-2 2-3 3-4. The first list should be a list of all dimensions or
 -- features, while the second should be a list of pairs
-mkCompRatioPairs :: [VProp Text String String] -> [[VProp Text String String]] -> [VProp Text String String]
+mkCompRatioPairs :: Eq d => [ReadableProp d] -> [[ReadableProp d]] -> [ReadableProp d]
 mkCompRatioPairs ds = fmap mkPairConf  . filter (not . (<2) . length)
   where negateRest     xs' = conjoin $ (bnot <$> (ds \\ xs'))
         mkPairConf     xs' = negateRest xs'

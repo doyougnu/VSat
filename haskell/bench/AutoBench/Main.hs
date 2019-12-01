@@ -53,7 +53,7 @@ chAutoFile = "bench/AutoBench/vsat_small_chunk.json"
 
 sliceAndNegate n xs = fromList (&&&) $ bnot <$> drop n xs
 
-ds :: [VProp Text String String]
+ds :: [ReadableProp d]
 ds = bRef <$> ["D_0","D_1","D_2","D_3"]
 -- D_0 /\    D_2   /\     D_4   /\  D_5
 -- <0 /\ <=0 /\ <1 /\ <=1 /\ <2 /\ <= 2
