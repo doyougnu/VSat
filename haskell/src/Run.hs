@@ -216,11 +216,11 @@ runPlainOnVSat pool prop = flip evalStateT (initSt pool prop) $
   _confs <- get
   let confs = M.keys _confs
       plainProps = if null confs
-        then [Just (M.empty, prop)]
-        else (\y -> sequence $! (y, selectVariant y prop)) <$> confs
+        then [(M.empty, prop)]
+        else (\y -> (y, selectVariant y prop)) <$> confs
   plainMs <- mapM (bitraverse
                    (pure . configToResultProp)
-                   (runVSMTSolve mempty)) $ catMaybes plainProps
+                   (runVSMTSolve mempty)) $ plainProps
   return $ foldMap (uncurry helper) plainMs
   where
         helper c as =  insertToSat c as

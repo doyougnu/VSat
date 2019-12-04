@@ -2,6 +2,7 @@ library(ggplot2)
 library(dplyr)
 library(cowplot)
 library(tidyr)
+library(latex2exp)
 
 timingsResultsFile <- "../data/auto_data.csv"
 
@@ -83,7 +84,7 @@ cascade_plt <- ggplot(dfCascade, mapping = aes(x=Algorithm, y=Mean, shape=Algori
 
 ## ggsave("../plots/auto_cascade.png", plot = cascade_plt, device = "png")
 
-evo_plt <- ggplot(df, mapping = aes(x=Config, y=NormPerf, shape=Algorithm, color=Algorithm)) +
+evo_plt <- ggplot(df, mapping = aes(x=Variants, y=NormPerf, shape=Algorithm, color=Algorithm)) +
   ylab(TeX('Normalized Time')) +
   theme(axis.text.x = element_text(angle = 90)) +
   geom_point(size=3) +
