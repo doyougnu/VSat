@@ -49,7 +49,14 @@ run !desc !f prop = bench desc $! nfIO (f prop)
 mkDescription :: Resultable d => String -> String -> ReadableProp d -> String
 mkDescription alg confDesc prop = desc
   where
-    !desc' = ["Chc",show nChc , "numPlain", show nPln , "Compression", show ratio, "VCore_Total", show vCoreTotal, "VCorePlain", show vCorePlain, "VCoreVar", show vCoreVar, "Variants", show variants]
+    !desc' = [ "Chc"        , show nChc
+             , "numPlain"   , show nPln
+             , "Compression", show ratio
+             , "VCore_Total", show vCoreTotal
+             , "VCorePlain" , show vCorePlain
+             , "VCoreVar"   , show vCoreVar
+             , "Variants"   , show variants
+             ]
     !desc = mconcat $ intersperse "/" $ pure alg ++ pure confDesc ++ desc'
     !nPln = numPlain prop
     !nChc = numChc prop
