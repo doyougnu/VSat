@@ -139,8 +139,8 @@ main = do
 
   -- | Compression ratio pairs
   -- [justV12]  <- genConfigPool pD01Conf
-  [justV23]  <- genConfigPool pD12Conf
-  [justV34]  <- genConfigPool pD23Conf
+  -- [justV23]  <- genConfigPool pD12Conf
+  -- [justV34]  <- genConfigPool pD23Conf
 
   let bPropV1   = selectVariantTotal ppV1 bProp
       bPropV2   = selectVariantTotal ppV2 bProp
@@ -196,19 +196,19 @@ main = do
         ]
 
     -- | Compression Ratio props
-      (Just justbPropV12)  = selectVariant justV12 bProp
-      (Just justbPropV23)  = selectVariant justV23 bProp
-      (Just justbPropV34)  = selectVariant justV34 bProp
+      -- (Just justbPropV12)  = selectVariant justV12 bProp
+      -- (Just justbPropV23)  = selectVariant justV23 bProp
+      -- (Just justbPropV34)  = selectVariant justV34 bProp
 
       compRatioBenches :: ReadableSMTConf Text -> [Benchmark]
       compRatioBenches solverConf =
-        [ mkBench "v-->v" "V1*V2"  pD01Conf (satWith solverConf) justbPropV12
-        , mkBench "v-->v" "V2*V3"  pD12Conf (satWith solverConf) justbPropV23
-        , mkBench "v-->v" "V3*V4"  pD23Conf (satWith solverConf) justbPropV34
+        [ mkBench "v-->v" "V1*V2"  pD01Conf (satWith solverConf) bProp
+        , mkBench "v-->v" "V2*V3"  pD12Conf (satWith solverConf) bProp
+        , mkBench "v-->v" "V3*V4"  pD23Conf (satWith solverConf) bProp
 
-        , mkBench "v-->p" "V1*V2"  pD01Conf (bfWith solverConf)  justbPropV12
-        , mkBench "v-->p" "V2*V3"  pD12Conf (bfWith solverConf)  justbPropV23
-        , mkBench "v-->p" "V3*V4"  pD23Conf (bfWith solverConf)  justbPropV34
+        , mkBench "v-->p" "V1*V2"  pD01Conf (bfWith solverConf) bProp
+        , mkBench "v-->p" "V2*V3"  pD12Conf (bfWith solverConf) bProp
+        , mkBench "v-->p" "V3*V4"  pD23Conf (bfWith solverConf) bProp
         ]
   -- mdl <- baselineSolve bPs
   -- print mdl
@@ -228,7 +228,8 @@ main = do
   -- print $ length p
   -- -- res <- test 10
   -- res <- S.runSMT $ do p' <- mapM S.sBool p
-  --                      SC.query $! test' p'
+  -- genConfigPool pD01Conf >>= putStrLn . show
+  -- putStrLn $ show $ mkCompRatioPairs ds pairs
   -- putStrLn "Running Good:\n"
   -- goodRes <- testS goodS 1000
 
