@@ -59,6 +59,8 @@ ds = bRef <$> ["D_0", "D_1", "D_17", "D_13", "D_7", "D_3", "D_11", "D_5", "D_9",
 [d0, d1, d17, d13, d7, d3, d11, d5, d9, d15] = ds
 
 mkCascadeConf n xs = conjoin $ (take n xs) ++ (bnot <$> drop n xs)
+
+mkMultConf :: Int -> [ReadableProp d] -> ReadableProp d
 mkMultConf n xs = conjoin (bnot <$> drop n xs)
 
 -- d0Conf = mkCascadeConf 1 ds
@@ -83,6 +85,7 @@ mkMultConf n xs = conjoin (bnot <$> drop n xs)
 -- justD7Conf = conjoin $ bnot <$> delete d1 ds
 -- justD8Conf = conjoin $ bnot <$> delete d17 ds
 -- justD9Conf = conjoin $ bnot <$> delete d13 ds
+
 justD01Conf = mkMultConf 2 ds
 justD012Conf = mkMultConf 3 ds
 justD0123Conf = mkMultConf 4 ds
@@ -196,14 +199,14 @@ main = do
     -- (Just justbPropV2)         = selectVariant justV2 bProp
     -- (Just justbPropV3)         = selectVariant justV3 bProp
     -- (Just justbPropV4)         = selectVariant justV4 bProp
-    (Just justbPropV12)        = selectVariant justV12 bProp
-    (Just justbPropV123)       = selectVariant justV123 bProp
-    (Just justbPropV1234)      = selectVariant justV1234 bProp
-    (Just justbPropV12345)     = selectVariant justV12345 bProp
-    (Just justbPropV123456)    = selectVariant justV123456 bProp
-    (Just justbPropV1234567)   = selectVariant justV1234567 bProp
-    (Just justbPropV12345678)  = selectVariant justV12345678 bProp
-    (Just justbPropV123456789) = selectVariant justV123456789 bProp
+    justbPropV12        = selectVariant justV12 bProp
+    justbPropV123       = selectVariant justV123 bProp
+    justbPropV1234      = selectVariant justV1234 bProp
+    justbPropV12345     = selectVariant justV12345 bProp
+    justbPropV123456    = selectVariant justV123456 bProp
+    justbPropV1234567   = selectVariant justV1234567 bProp
+    justbPropV12345678  = selectVariant justV12345678 bProp
+    justbPropV123456789 = selectVariant justV123456789 bProp
 
     -- | single version props
     !bPropV1  = selectVariantTotal ppV1  bProp
@@ -231,11 +234,11 @@ main = do
       -- , mkBench "v-->v" "V10" d9Conf (satWithConf (toDimProp d9Conf) solverConf) bProp
       -- , mkBench' "v-->v" "EvolutionAware" (satWithConf (toDimProp evoAwareConf) solverConf) bProp
 
-      -- mkBench "v-->v" "V1*V2"                          justD01Conf (satWith solverConf) justbPropV12
-      -- , mkBench "v-->v" "V1*V2*V3"                       justD012Conf (satWith solverConf) justbPropV123
-      -- , mkBench "v-->v" "V1*V2*V3*V4"                    justD0123Conf (satWith solverConf) justbPropV1234
-      -- , mkBench "v-->v" "V1*V2*V3*V4*V5"                 justD01234Conf (satWith solverConf) justbPropV12345
-        mkBench "v-->v" "V1*V2*V3*V4*V5*V6"              justD012345Conf (satWith solverConf) justbPropV123456
+      mkBench "v-->v" "V1*V2"                            justD01Conf (satWith solverConf) justbPropV12
+      , mkBench "v-->v" "V1*V2*V3"                       justD012Conf (satWith solverConf) justbPropV123
+      , mkBench "v-->v" "V1*V2*V3*V4"                    justD0123Conf (satWith solverConf) justbPropV1234
+      , mkBench "v-->v" "V1*V2*V3*V4*V5"                 justD01234Conf (satWith solverConf) justbPropV12345
+      , mkBench "v-->v" "V1*V2*V3*V4*V5*V6"              justD012345Conf (satWith solverConf) justbPropV123456
       , mkBench "v-->v" "V1*V2*V3*V4*V5*V6*V7"           justD0123456Conf (satWith solverConf) justbPropV1234567
       , mkBench "v-->v" "V1*V2*V3*V4*V5*V6*V7*V8"        justD01234567Conf (satWith solverConf) justbPropV12345678
       , mkBench "v-->v" "V1*V2*V3*V4*V5*V6*V7*V8*V9"     justD012345678Conf (satWith solverConf) justbPropV123456789
@@ -299,14 +302,14 @@ main = do
 
     -- | Compression Ratio props
     -- (Just justbPropV12)  = selectVariant justV12 bProp
-    (Just justbPropV23)  = selectVariant justV23 bProp
-    (Just justbPropV34)  = selectVariant justV34 bProp
-    (Just justbPropV45)  = selectVariant justV45 bProp
-    (Just justbPropV56)  = selectVariant justV56 bProp
-    (Just justbPropV67)  = selectVariant justV67 bProp
-    (Just justbPropV78)  = selectVariant justV78 bProp
-    (Just justbPropV89)  = selectVariant justV89 bProp
-    (Just justbPropV910) = selectVariant justV910 bProp
+    justbPropV23  = selectVariant justV23 bProp
+    justbPropV34  = selectVariant justV34 bProp
+    justbPropV45  = selectVariant justV45 bProp
+    justbPropV56  = selectVariant justV56 bProp
+    justbPropV67  = selectVariant justV67 bProp
+    justbPropV78  = selectVariant justV78 bProp
+    justbPropV89  = selectVariant justV89 bProp
+    justbPropV910 = selectVariant justV910 bProp
 
     compRatioBenches :: ReadableSMTConf Text -> [Benchmark]
     compRatioBenches solverConf =
