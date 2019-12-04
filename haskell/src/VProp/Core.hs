@@ -154,29 +154,29 @@ selectVariantTotal' _  x             = x
 
 
 -- | Given a config and a Variational VProp term select the element out that the
--- config points to
-selectVariant :: Ord d => Config d -> VProp d a b -> Maybe (VProp d a b)
+-- config points to. In the edge case that a dimension is not found in a
+-- configuration we simply recur through the choice but leave the choice intact.
+-- This is required to avoid cases were the user wants to select a choice, but
+-- that choice is guarded by a parent choice whose dimension is not in the
+-- configuration
+selectVariant :: Ord d => Config d -> VProp d a b -> VProp d a b
 selectVariant tbs x@(ChcB t y n) = case Map.lookup t tbs of
-                                     Nothing    -> Just x
+                                     Nothing    -> ChcB t (selectVariant tbs y) (selectVariant tbs n)
                                      Just True  -> selectVariant tbs y
                                      Just False -> selectVariant tbs n
-selectVariant tb (OpB op x)    = OpB op <$> selectVariant tb x
-selectVariant tb (OpBB a l r)  = liftM2 (OpBB a)
-                                (selectVariant tb l)
-                                (selectVariant tb r)
-selectVariant tb (OpIB op l r) = OpIB op <$>
-                                 selectVariant' tb l <*>
-                                 selectVariant' tb r
-selectVariant _  x             = Just x
+selectVariant tb (OpB op x)    = OpB op $ selectVariant tb x
+selectVariant tb (OpBB a l r)  = OpBB a (selectVariant tb l) (selectVariant tb r)
+selectVariant tb (OpIB op l r) = OpIB op (selectVariant' tb l) (selectVariant' tb r)
+selectVariant _  x             = x
 
-selectVariant' :: Ord d => Config d -> VIExpr d b -> Maybe (VIExpr d b)
+selectVariant' :: Ord d => Config d -> VIExpr d b -> VIExpr d b
 selectVariant' tb x@(ChcI t y n) = case Map.lookup t tb of
-                                     Nothing    -> Just x
+                                     Nothing    ->ChcI t (selectVariant' tb y) (selectVariant' tb x)
                                      Just True  -> selectVariant' tb y
                                      Just False -> selectVariant' tb n
-selectVariant' tb (OpI op e)    = OpI op <$> selectVariant' tb e
-selectVariant' tb (OpII op l r) = liftM2 (OpII op) (selectVariant' tb l) (selectVariant' tb r)
-selectVariant' _  x             = Just x
+selectVariant' tb (OpI op e)    = OpI op $ selectVariant' tb e
+selectVariant' tb (OpII op l r) = (OpII op) (selectVariant' tb l) (selectVariant' tb r)
+selectVariant' _  x             = x
 
 
 -- | Convert a dimension to a variable

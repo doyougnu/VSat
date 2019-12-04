@@ -14,6 +14,7 @@ module Run ( SatDict
            , emptySt
            , runPonV
            , runVonP
+           , vCoreMetrics
            ) where
 
 import           Control.Arrow (first, second)
@@ -215,11 +216,11 @@ runPlainOnVSat pool prop = flip evalStateT (initSt pool prop) $
   _confs <- get
   let confs = M.keys _confs
       plainProps = if null confs
-        then [Just (M.empty, prop)]
-        else (\y -> sequence $! (y, selectVariant y prop)) <$> confs
+        then [(M.empty, prop)]
+        else (\y -> (y, selectVariant y prop)) <$> confs
   plainMs <- mapM (bitraverse
                    (pure . configToResultProp)
-                   (runVSMTSolve mempty)) $ catMaybes plainProps
+                   (runVSMTSolve mempty)) $ plainProps
   return $ foldMap (uncurry helper) plainMs
   where
         helper c as =  insertToSat c as
@@ -566,6 +567,35 @@ data BValue d = B! S.SBool
               | BVOp! (BValue d) BB_B (BValue d)
               deriving (Eq, Show)
 
+-- | given a BValue, we assume that the input has gone through
+-- evaluation/accumulation. Count the terms in the core
+vCoreSize :: BValue d -> Int
+vCoreSize (BVOp l _ r) = vCoreSize l + vCoreSize r
+vCoreSize _            = 1
+
+-- | Count the plain terms, in the vcore
+vCoreNumPlain :: BValue d -> Int
+vCoreNumPlain (C _ _ _)    = 0
+vCoreNumPlain (BVOp l _ r) = vCoreNumPlain l + vCoreNumPlain r
+vCoreNumPlain _            = 1
+
+-- | Count the variational terms, in the vcore
+vCoreNumVar :: BValue d -> Int
+vCoreNumVar (C _ _ _)    = 1
+vCoreNumVar (BVOp l _ r) = vCoreNumVar l + vCoreNumVar r
+vCoreNumVar _            = 0
+
+vCoreMetrics :: Resultable d => ReadableProp d -> IO (Int, Int, Int)
+vCoreMetrics p = S.runSMT $
+  do
+    p' <- St.evalStateT (propToSBool p) (mempty, mempty)
+    SC.query $ do
+      (core,_) <- runStateT (evaluate $ toBValue p') emptySt
+      return (vCoreSize core, vCoreNumPlain core, vCoreNumVar core)
+     -- return core
+         -- (b,resSt) <- St.runStateT (pprop >>= solveVariational configPool) emptySt
+
+
 -- | The main solver algorithm. You can think of this as the sem function for
 -- the dsl. This progress in two stages, we extend the value domain with a
 -- choice constructor to ensure that choices are evaluated absolutely last. If
@@ -819,12 +849,6 @@ getFocus b (InR acc op (InL parent op' rbranch)) = (rbranch, InR res op' parent)
 getFocus b (InR acc op (InR acc' op' parent)) = (B res', parent)
   where !res = bDispatch op acc b
         !res' = bDispatch op' acc' res
-
-
-
--- data Ctx d = InL (Ctx d) BB_B (BValue d)
---            | InR !S.SBool BB_B (Ctx d)
---            | Top
 
 -- | Given a Loc find the first choice by crawling down the left hand of the zipper
 findPrincipleChoice :: Loc d -> Loc d

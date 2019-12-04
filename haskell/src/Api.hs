@@ -21,7 +21,7 @@ import qualified Data.SBV           as S
 import           Data.SBV.Internals (cvToBool)
 import qualified Data.Set           as Set
 import           Data.String        (IsString(..))
-import Data.Text (Text)
+import Data.Text (Text, unpack)
 
 import           VProp.Core
 import           VProp.SBV
@@ -36,10 +36,10 @@ import           Utils              (fst')
 
 -- | a newtype wrapper to denote that this proposition can only have dimensions
 -- as variables
-newtype DimProp d = DimProp {getDimProp :: VProp d (Dim String) (Dim String)}
+newtype DimProp d = DimProp {getDimProp :: VProp d (Dim Text) (Dim Text)}
   deriving (Boolean,Show)
 
-toDimProp :: VProp d String String -> Maybe (DimProp d)
+toDimProp :: ReadableProp d -> Maybe (DimProp d)
 toDimProp = Just . DimProp . trimap id f f
   where f = Dim
 
@@ -55,7 +55,7 @@ genConfigPool' (Just p) =
     return $!
       M.foldMapWithKey (\k a -> M.singleton (Dim $ fromString k) (cvToBool a)) <$> resMaps
 
-genConfigPool :: (Resultable d) => VProp d String String -> IO [Config d]
+genConfigPool :: (Resultable d) => ReadableProp d -> IO [Config d]
 genConfigPool = genConfigPool' . toDimProp
 
 -- | Generate a symbolic predicate for a feature expression.
@@ -66,10 +66,10 @@ symbolicPropExpr' e' = do
         ds = Set.toList (dimensions e)
         isType = Set.toList (ivarsWithType e)
 
-        helper (RefD, d) = sequence $ (d, SD <$> S.sDouble d)
-        helper (RefI, i) = sequence $ (i, SI <$> S.sInt64 i)
+        helper (RefD, d) = sequence $ (d, SD <$> S.sDouble (unpack d))
+        helper (RefI, i) = sequence $ (i, SI <$> S.sInt64 (unpack i))
 
-    syms  <- fmap (M.fromList . zip vs) (S.sBools vs)
+    syms  <- fmap (M.fromList . zip vs) (S.sBools (unpack <$> vs))
     dims  <- fmap (M.fromList . zip ds) (S.sBools (map (show . dimName) ds))
     isyms <- M.fromList <$> traverse helper isType
     let look f  = fromMaybe err  (M.lookup f syms)
