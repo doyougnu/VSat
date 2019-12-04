@@ -53,7 +53,7 @@ chAutoFile = "bench/AutoBench/vsat_small_chunk.json"
 
 sliceAndNegate n xs = fromList (&&&) $ bnot <$> drop n xs
 
-ds :: [VProp Text String String]
+ds :: [ReadableProp d]
 ds = bRef <$> ["D_0","D_1","D_2","D_3"]
 -- D_0 /\    D_2   /\     D_4   /\  D_5
 -- <0 /\ <=0 /\ <1 /\ <=1 /\ <2 /\ <= 2
@@ -158,14 +158,14 @@ main = do
       benches :: ReadableSMTConf Text -> [Benchmark]
       benches solverConf = [
         -- v - v
-        -- mkBench "v-->v" "V1"   d0Conf (satWithConf (toDimProp d0Conf) solverConf) bProp
-        -- , mkBench "v-->v" "V2" d2Conf (satWithConf (toDimProp d2Conf) solverConf) bProp
-        -- , mkBench "v-->v" "V3" d3Conf (satWithConf (toDimProp d3Conf) solverConf) bProp
-        -- , mkBench "v-->v" "V4" d4Conf (satWithConf (toDimProp d4Conf) solverConf) bProp
-        -- , mkBench' "v-->v" "EvolutionAware" (satWithConf (toDimProp sumConf) solverConf) bProp
-        -- , mkBench "v-->v" "V1*V2"        justV12Conf  (satWith solverConf) bPropJustV12
-        -- , mkBench "v-->v" "V1*V2*V3"     justV123Conf (satWith solverConf) bPropJustV123
-          mkBench' "v-->v" "V1*V2*V3*V4"  (satWith solverConf) bProp
+        mkBench "v-->v" "V1"   d0Conf (satWithConf (toDimProp d0Conf) solverConf) bProp
+        , mkBench "v-->v" "V2" d2Conf (satWithConf (toDimProp d2Conf) solverConf) bProp
+        , mkBench "v-->v" "V3" d3Conf (satWithConf (toDimProp d3Conf) solverConf) bProp
+        , mkBench "v-->v" "V4" d4Conf (satWithConf (toDimProp d4Conf) solverConf) bProp
+        , mkBench' "v-->v" "EvolutionAware" (satWithConf (toDimProp sumConf) solverConf) bProp
+        , mkBench "v-->v" "V1*V2"        justV12Conf  (satWith solverConf) bPropJustV12
+        , mkBench "v-->v" "V1*V2*V3"     justV123Conf (satWith solverConf) bPropJustV123
+        , mkBench' "v-->v" "V1*V2*V3*V4"  (satWith solverConf) bProp
 
         -- p - v
         , mkBench "p-->v" "V1"  justV1Conf (pOnVWithConf Nothing solverConf) bPropV1
@@ -235,7 +235,7 @@ main = do
 
   defaultMain
     [ bgroup "Z3" (benches z3DefConf)
-      -- bgroup "Z3" (compRatioBenches z3DefConf)
+    , bgroup "Z3" (compRatioBenches z3DefConf)
     -- , bgroup "CVC4" (benches cvc4DefConf)
     -- , bgroup "Yices" (benches yicesDefConf)
     -- , bgroup "Boolector" (benches boolectorDefConf)

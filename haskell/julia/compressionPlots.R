@@ -69,7 +69,7 @@ autoDF <- munge(autoData) %>% mutate(data = "Auto") %>% select(Mean, Algorithm, 
 df <- rbind(finDF,autoDF)  %>% filter(ChcCount != 0) %>% mutate(PlainRatio = PlainCount / (ChcCount + PlainCount), ChcRatio = ChcCount / (ChcCount + PlainCount))
 
 
-dfMeanRatio <- df %>% group_by(Algorithm, Mean, Config, PlainRatio) %>% spread(Algorithm, Mean) %>% mutate(MeanRatio = `v-->v` / `v-->p`)
+dfMeanRatio <- df %>% group_by(Algorithm, Mean, Config, PlainRatio) %>% spread(Algorithm, Mean) %>% mutate(MeanRatio = (`v-->v` / `v-->p`) * 100)
 
 dfPlainRatio <- df %>% filter(Algorithm == "v-->v")
 
@@ -99,8 +99,7 @@ dfPlainRatio <- df %>% filter(Algorithm == "v-->v")
 
 ## ggsave("../plots/CompRatio.png", plot = compression_plt, device = "png")
 
-plain_ratio_plt <- ggplot(dfPlainRatio, mapping = aes(x=PlainRatio, y=Mean, shape=data, label=Config, color=data, fill=data)) +
-  geom_point(size=3) +
+plain_ratio_plt <- ggplot(dfPlainRatio, mapping = aes(x=PlainRatio, y=Mean, label=Config, shape=data, color=data)) + geom_point(size=3) +
   ylab("Mean [s]") +
   ## scale_x_log10() +
   scale_y_log10() +
@@ -117,9 +116,9 @@ plain_ratio_plt <- ggplot(dfPlainRatio, mapping = aes(x=PlainRatio, y=Mean, shap
 
 ggsave("../plots/plainRatio.pdf", plot = plain_ratio_plt, device = "pdf")
 
-mean_ratio_plt <- ggplot(dfMeanRatio, mapping = aes(x=PlainRatio, y=MeanRatio, shape=data, label=Config, color=data, fill=data)) +
+mean_ratio_plt <- ggplot(dfMeanRatio, mapping = aes(x=PlainRatio, y=MeanRatio, label=Config, color=data)) +
   geom_point(size=3) +
-  ylab("SpeedUp (Lower is faster)") +
+  ylab("% SpeedUp") +
   ## scale_x_log10() +
   ## scale_y_log10() +
   geom_smooth(method=lm, formula = y ~ x, se=FALSE) +
