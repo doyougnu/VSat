@@ -121,5 +121,5 @@ mkPairs (x:ys@(y:xs)) = [x,y] : mkPairs ys
 -- features, while the second should be a list of pairs
 mkCompRatioPairs :: Eq d => [ReadableProp d] -> [[ReadableProp d]] -> [ReadableProp d]
 mkCompRatioPairs ds = fmap mkPairConf  . filter (not . (<2) . length)
-  where negateRest     xs' = conjoin $ (bnot <$> (ds \\ xs'))
-        mkPairConf     xs' = negateRest xs'
+  where mkPairConf xs@(x:y:_) = (x &&& (negateRest x)) ||| (y &&& (negateRest y))
+          where negateRest a = conjoin $ (bnot <$> (ds \\ pure a))

@@ -1,6 +1,7 @@
 library(ggplot2)
 library(dplyr)
 library(cowplot)
+library(latex2exp)
 
 timingsResultsFile <- "../data/fin_data.csv"
 
@@ -28,8 +29,10 @@ dfCascade <- data %>% filter( Config != "V2"
                       ,Config != "V8"
                       ,Config != "V9"
                       ,Config != "V10"
-                      ,Config != "EvolutionAware") %>% filter (Algorithm != "p\U27f6p"
-                                                             , Algorithm != "p\U27f6v")
+                      ,Config != "EvolutionAware") %>% mutate(QueryFormulaSize = ChcCount + PlainCount)
+
+## %>% filter (Algorithm != "p\U27f6p"
+##           , Algorithm != "p\U27f6v")
 
 sumData <- data %>% filter( Config != "V1*V2"
                           ,Config != "EvolutionAware"
@@ -68,22 +71,23 @@ facetLabels <- c(V1 = "V1"
 ## reorder the facet labels
 df$Config <- factor(df$Config, levels=c("V1", "V2", "V3", "V4", "V5", "V6", "V7", "V8", "V9", "V10", "Sum", "EvolutionAware"))
 
-cascade_plt <- ggplot(dfCascade, mapping = aes(x=Algorithm, y=Mean, shape=Algorithm, fill=Algorithm)) +
-  theme(axis.text.x = element_text(angle = 90)) +
+cascade_plt <- ggplot(dfCascade, mapping = aes(x=Variants, y=Mean, shape=Algorithm,colour=Algorithm)) +
+  ## theme(axis.text.x = element_text(angle = 90)) +
   ylab("Mean [s]") +
-  geom_col(position = "dodge") +
-  facet_grid(. ~ Config
-           , labeller = labeller(Config = facetLabels)
-             ) + theme(strip.text.x = element_text(size=10), legend.position = "none")
+  geom_point(size=3) +
+  scale_shape_manual(values = c(1,2,5,17)) +
+  geom_line(aes(linetype=Algorithm)) +
+  scale_x_continuous(breaks = seq(0, 130,10)) +
+  ggtitle("RQ1: Performance as variants represented by a query formula increases")
 
-## ggsave("../plots/fin_cascade.png", plot = cascade_plt, device = "png", width = 15, height = 8)
+ggsave("../plots/perf_by_variation.png", plot = cascade_plt, device = "png", width = 15, height = 8)
 
-evo_plt <- ggplot(df, mapping = aes(x=Algorithm, y=Mean, shape=Algorithm, fill=Algorithm)) +
-  theme(axis.text.x = element_text(angle = 90)) +
+perf_by_vcore_reduction <- ggplot(dfCascade, mapping = aes(x=VCoreSize/QueryFormulaSize, y=Mean, shape=Algorithm,colour=Algorithm)) +
+  ## theme(axis.text.x = element_text(angle = 90)) +
   ylab("Mean [s]") +
-  geom_col(position = "dodge") +
-  facet_grid(. ~ Config
-           ## , labeller = labeller(Config = evoFacetLabels)
-             ) + theme(strip.text.x = element_text(size=10), legend.position   = "none")
+  xlab(TeX("Percent reduction of Query formula done by accumulation/evaluation:   $\\frac{|Variational Core|}{|Query Formula|}$")) +
+  geom_point(size=3) +
+  scale_shape_manual(values = c(1,2,5,17)) +
+  geom_line(aes(linetype=Algorithm))
 
-## ggsave("../plots/fin_evo.png", plot = evo_plt, device = "png")
+ggsave("../plots/perf_by_vcore_reduction.png", plot = perf_by_vcore_reduction, device = "png", width = 15, height = 8)
