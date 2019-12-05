@@ -148,12 +148,12 @@ main = do
       bPropV4   = selectVariantTotal ppV4 bProp
       bPropVAll = selectVariantTotal ppVAll bProp
 
-      (Just bPropJustV1) = selectVariant justV1 bProp
-      (Just bPropJustV2) = selectVariant justV2 bProp
-      (Just bPropJustV3) = selectVariant justV3 bProp
-      (Just bPropJustV4) = selectVariant justV4 bProp
-      (Just bPropJustV12) = selectVariant justV12 bProp
-      (Just bPropJustV123) = selectVariant justV123 bProp
+      bPropJustV1 = selectVariant justV1 bProp
+      bPropJustV2 = selectVariant justV2 bProp
+      bPropJustV3 = selectVariant justV3 bProp
+      bPropJustV4 = selectVariant justV4 bProp
+      bPropJustV12 = selectVariant justV12 bProp
+      bPropJustV123 = selectVariant justV123 bProp
 
       benches :: ReadableSMTConf Text -> [Benchmark]
       benches solverConf = [
