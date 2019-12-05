@@ -9,6 +9,7 @@ module Api ( sat
            , DimProp(..)
            , toDimProp
            , pOnVWithConf
+           , pOnV
            , genConfigPool
            , genConfigPool'
            , vOnPWithConf
@@ -133,6 +134,9 @@ pOnVWithConf dimConfig conf prop =
     -- mapM_ (putStrLn . show) configPool
     -- putStrLn . show $ (length configPool)
     fst' <$> runPonV configPool conf prop
+
+pOnV :: (Resultable d, Show d) => ReadableSMTConf d -> ReadableProp d -> IO (Result d)
+pOnV = pOnVWithConf Nothing
 
 bfWith :: (Show d, Resultable d,SAT (ReadableProp d)) =>
  ReadableSMTConf d -> ReadableProp d -> IO (Result d)
