@@ -12,7 +12,7 @@ import           Data.Bitraversable      (bimapM)
 import qualified Data.ByteString         as BS (readFile)
 import           Data.Either             (lefts, rights)
 import           Data.Foldable           (foldr')
-import           Data.List               (sort,splitAt,intersperse,foldl1',delete,(\\))
+import           Data.List               (sort,splitAt,intersperse,foldl1',delete,(\\),genericLength)
 import           Data.Map                (size, Map, toList)
 import qualified Data.Set                as Set (size)
 import qualified Data.SBV                as S
@@ -23,6 +23,7 @@ import qualified Data.Text.IO            as T (writeFile)
 import           System.IO
 import           Text.Megaparsec         (parse)
 import           System.IO.Unsafe        (unsafePerformIO)
+import           Data.Function           (on)
 
 import           Api
 import           CaseStudy.Auto.Auto
@@ -42,12 +43,16 @@ import           VProp.Types
 run :: Control.DeepSeq.NFData a => String -> (t -> IO a) -> t -> Benchmark
 run !desc !f prop = bench desc $! nfIO (f prop)
 
+average :: (Real a, Fractional b) => [a] -> b
+average xs = realToFrac (sum xs) / genericLength xs
+
 -- | make a description for the benchmark, we input pass through variables alg,
 -- and confDesc that are hand written names for the algorithm being used and the
 -- configuration/prop description. We then input the prop and get a bunch of
 -- statistics on it and return all these as a slash '/' separated string
-mkDescription :: Resultable d => String -> String -> ReadableProp d -> String
-mkDescription alg confDesc prop = desc
+mkDescription :: Resultable d => String -> String -> [ReadableProp d] -> String
+mkDescription alg confDesc []   = error "called mkDescription with no props"
+mkDescription alg confDesc [prop] = desc
   where
     !desc' = [ "Chc"        , show nChc
              , "numPlain"   , show nPln
@@ -64,6 +69,34 @@ mkDescription alg confDesc prop = desc
     !ratio = fromRational $ compressionRatio prop
     !(vCoreTotal, vCorePlain, vCoreVar) = unsafePerformIO $ vCoreMetrics prop
     !variants = 2 ^ (Set.size $ dimensions prop)
+-- copying code, the greatest of all possible sins. This just isn't important
+-- enough to handle properly
+mkDescription alg confDesc props = desc
+  where
+    !desc' = [ "Chc"        , show nChc
+             , "numPlain"   , show nPln
+             , "Compression", show ratio
+             , "VCore_Total", show vCoreTotal
+             , "VCorePlain" , show vCorePlain
+             , "VCoreVar"   , show vCoreVar
+             , "Variants"   , show variants
+             ]
+    !desc = mconcat $ intersperse "/" $ pure alg ++ pure confDesc ++ desc'
+    !nPln = average $ numPlain <$> props
+    !nChc = average $ numChc <$> props
+    ratio :: Double
+    !ratio = average $ (fromRational . compressionRatio) <$> props
+    vCoreTotalSum, vCorePlainSum, vCoreVarSum :: Int
+    !(vCoreTotalSum, vCorePlainSum, vCoreVarSum) =
+      (foldr (\(x,y,z) (xAcc, yAcc, zAcc) -> (x + xAcc, y + yAcc, z + zAcc)) (0,0,0)
+      $ (unsafePerformIO . vCoreMetrics) <$> props)
+    !variants = average $ (\p -> 2 ^ (Set.size $ dimensions p)) <$> props
+    !l = genericLength props
+    myDiv = (/) `on` fromIntegral
+    (vCoreTotal, vCorePlain, vCoreVar) = ( vCoreTotalSum `myDiv` l
+                                         , vCorePlainSum `myDiv` l
+                                         , vCoreVarSum `myDiv` l
+                                         )
 
 -- | Make a benchmark, take two description strings, one to describe the
 -- algorithm, one to describe the feature model under analysis, then take a
@@ -80,12 +113,12 @@ mkBench
      -> Benchmark
 mkBench alg confDesc conf !f prop = run desc f prop
   where
-    [confPool] = unsafePerformIO $ genConfigPool conf --just call out to the
+    confPool = unsafePerformIO $ genConfigPool conf --just call out to the
                                                       --solver, this should
                                                       --always be safe
-    prop' = selectVariant confPool prop -- some confs will never be
-                                               -- total, so we use select
-                                               -- variant here
+    prop' = flip selectVariant prop <$> confPool  -- some confs will never be
+                                                  -- total, so we use select
+                                                  -- variant here
     desc = mkDescription alg confDesc prop'
 
 -- | a version of mkBench that doesn't require the actual configuration. This is
@@ -103,7 +136,7 @@ mkBench'
      -> Benchmark
 mkBench' alg confDesc !f prop = run desc f prop
   where
-    desc = mkDescription alg confDesc prop
+    desc = mkDescription alg confDesc (pure prop)
 
 -- | make pairs for controlling complexity for compression ratio benchmark. We
 -- want to benchmark two versions that have different compression ratios, but
