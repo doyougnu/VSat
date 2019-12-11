@@ -121,6 +121,14 @@ mkBench alg confDesc conf !f prop = run desc f prop
                                                   -- variant here
     desc = mkDescription alg confDesc prop'
 
+-- | like mkBench but we run compression statistics on the prop directly. It is
+-- assumed the prop will have been partially selected to reduce it to the
+-- compression dimensions of interest
+mkCompBench alg confDesc !f prop = run desc f prop
+  where
+    desc = mkDescription alg confDesc (pure prop)
+
+
 -- | a version of mkBench that doesn't require the actual configuration. This is
 -- used for instances where the proposition under consideration will be solved
 -- projected to a plain term many times, such as in the case of running an
@@ -144,7 +152,7 @@ mkBench' alg confDesc !f prop = run desc f prop
 -- the compression ratio signal
 mkPairs :: [a] -> [[a]]
 mkPairs [] = [[]]
-mkPairs [x] = [[x]]
+mkPairs [_] = [[]]
 mkPairs (x:ys@(y:xs)) = [x,y] : mkPairs ys
 
 -- | Make the compression ratio pair configurations. To Test compression ratio
@@ -156,3 +164,8 @@ mkCompRatioPairs :: Eq d => [ReadableProp d] -> [[ReadableProp d]] -> [ReadableP
 mkCompRatioPairs ds = fmap mkPairConf  . filter (not . (<2) . length)
   where mkPairConf xs@(x:y:_) = (x &&& (negateRest x)) ||| (y &&& (negateRest y))
           where negateRest a = conjoin $ (bnot <$> (ds \\ pure a))
+
+mkCompRatioConfs :: (Resultable d, Eq d) => [ReadableProp d] -> [[ReadableProp d]] -> IO [VProp.Types.Config d]
+mkCompRatioConfs ds pairs = mapM (fmap head . genConfigPool . negated) $ filter ((==2) . length) pairs
+  where
+    negated pair = conjoin $ (bnot <$> (ds \\ pair))
