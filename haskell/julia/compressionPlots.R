@@ -2,6 +2,7 @@ library(ggplot2)
 library(dplyr)
 library(tidyr)
 library(cowplot)
+library(latex2exp)
 
 finResultsFile <- "../data/fin_comp_data.csv"
 autoResultsFile <- "../data/auto_comp_data.csv"
@@ -68,8 +69,7 @@ autoDF <- munge(autoData) %>% mutate(data = "Auto") %>% select(Mean, Algorithm, 
 
 df <- rbind(finDF,autoDF)  %>% filter(ChcCount != 0) %>% mutate(PlainRatio = PlainCount / (ChcCount + PlainCount), ChcRatio = ChcCount / (ChcCount + PlainCount))
 
-
-dfMeanRatio <- df %>% group_by(Algorithm, Mean, Config, PlainRatio) %>% spread(Algorithm, Mean) %>% mutate(MeanRatio = (`v-->v` / `v-->p`) * 100)
+dfMeanRatio <- df %>% group_by(Algorithm, Mean, Config, PlainRatio) %>% spread(Algorithm, Mean) %>% mutate(MeanRatio = (`v-->p` / `v-->v` ))
 
 dfPlainRatio <- df %>% filter(Algorithm == "v-->v")
 
@@ -102,10 +102,12 @@ dfPlainRatio <- df %>% filter(Algorithm == "v-->v")
 plain_ratio_plt <- ggplot(dfPlainRatio, mapping = aes(x=PlainRatio, y=Mean, label=Config, shape=data, color=data)) + geom_point(size=3) +
   ylab("Mean [s]") +
   ## scale_x_log10() +
-  scale_y_log10() +
+  ## scale_y_log10() +
   geom_smooth(method=lm, formula = y ~ x, se=FALSE) +
   geom_text(nudge_y = 0.1, nudge_x = 0.002, angle = 45, check_overlap = TRUE) +
-  theme(legend.position = c(.90,.90))
+  theme(legend.position = c(.90,.90)) +
+  facet_wrap(. ~ data, scales = "free")
+
   ## theme_cowplot(12)
 ## evo_plt <- ggplot(df, mapping = aes(x=Algorithm, y=Mean, shape=Algorithm, fill=Algorithm)) +
 ##   theme(axis.text.x = element_text(angle = 90)) +
@@ -114,16 +116,17 @@ plain_ratio_plt <- ggplot(dfPlainRatio, mapping = aes(x=PlainRatio, y=Mean, labe
 ##            ## , labeller = labeller(Config = facetLabels)
 ##              ) + theme(strip.text.x = element_text(size=10))
 
-ggsave("../plots/plainRatio.pdf", plot = plain_ratio_plt, device = "pdf")
+## ggsave("../plots/plainRatio.pdf", plot = plain_ratio_plt, device = "pdf")
 
 mean_ratio_plt <- ggplot(dfMeanRatio, mapping = aes(x=PlainRatio, y=MeanRatio, label=Config, color=data)) +
   geom_point(size=3) +
-  ylab("% SpeedUp") +
+  ylab(TeX("% SpeedUp \t  $\\frac{v \\rightarrow v}{v \\rightarrow p}$")) +
   ## scale_x_log10() +
   ## scale_y_log10() +
   geom_smooth(method=lm, formula = y ~ x, se=FALSE) +
   geom_text(nudge_y = 0.012, nudge_x = 0.003, angle = 45, check_overlap =FALSE) +
-  theme(legend.position = c(.90,.90))
+  theme(legend.position = c(.85,.90)) +
+  ggtitle("RQ2: Performance as a function of plain ratio")
 ## theme_cowplot(12)
 ## evo_plt <- ggplot(df, mapping = aes(x=Algorithm, y=Mean, shape=Algorithm, fill=Algorithm)) +
 ##   theme(axis.text.x = element_text(angle = 90)) +
