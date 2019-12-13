@@ -28,6 +28,7 @@ module Result ( ResultProp(..)
               , getResMap
               , getUnSatMap
               , insertToUnSat
+              , getResultOnlySat
               ) where
 
 import           Control.DeepSeq (NFData)
@@ -35,7 +36,7 @@ import           Control.Arrow (first)
 import qualified Data.Map.Strict as M
 import           Data.Maybe (fromMaybe)
 import           Data.SBV (allSat, AllSatResult(..), SMTResult(..), getModelDictionary)
-import           Data.SBV.Control (Query, getSMTResult)
+import           Data.SBV.Control (Query, getSMTResult,CheckSatResult(..),checkSat)
 import           Data.SBV.Internals (cvToBool)
 import           Data.String (IsString, fromString)
 import           Data.Text (pack, Text)
@@ -271,6 +272,13 @@ nullResult = Result mempty
 getVSMTModel :: Query SMTResult
 getVSMTModel = getSMTResult
 
+--- | check if the current context is sat or not
+isSat :: Query Bool
+isSat = do cs <- checkSat
+           return $! case cs of
+                       Sat -> True
+                       _   -> False
+
 -- | getResult from the query monad, takes a function f that is used to dispatch
 -- result bools to resultProps i.e. if the model says variable "x" == True then
 -- when f is applied "x" == True result from f. This is used to turn
@@ -296,6 +304,17 @@ getResultWith !f =
   where
     toResMap = ResultMap . M.foldMapWithKey
                (\k a -> M.singleton (fromString k) (f $! cvToBool a))
+
+-- | getResult from the query monad, takes a function f that is used to dispatch
+-- result bools to resultProps i.e. if the model says variable "x" == True then
+-- when f is applied "x" == True result from f. This is used to turn
+-- dictionaries into <var> == <formula of dimensions where var is True>
+-- associations
+getResultOnlySat :: Resultable d => ResultProp d -> Query (Result d)
+getResultOnlySat !p = do s <- isSat
+                         return $! if s
+                                   then insertToSat   p mempty
+                                   else insertToUnSat p mempty mempty
 
 -- | Give a result proposition, dispatch on a boolean that SBV returns, If the
 -- boolean is true then just return the result prop, if not then negate it
@@ -328,7 +347,7 @@ deriveModels = fmap (fmap (M.mapKeys Dim)) . deriveModels'
 
 -- | Given a result and a mapping from dimensions to boolean values, make the
 -- boolean values for plain terms
-deriveValues :: Ord d => Result d -> Config d -> (M.Map d Bool)
+deriveValues :: Ord d => Result d -> Config d -> M.Map d Bool
 deriveValues (getResMap -> res) (M.toList -> model) =
   fmap (solveLiterals . substitute (fmap (first dimName) model)) res
 

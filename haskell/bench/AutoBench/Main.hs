@@ -207,13 +207,26 @@ main = do
 
       compRatioBenches :: ReadableSMTConf Text -> [Benchmark]
       compRatioBenches solverConf =
-        [ mkCompBench "v-->v" "V1*V2"  (satWithConf (toDimProp pD01Conf) solverConf) justbPropV12
+        [
+          -- v --> v
+          mkCompBench "v-->v" "V1*V2"  (satWithConf (toDimProp pD01Conf) solverConf) justbPropV12
         , mkCompBench "v-->v" "V2*V3"  (satWithConf (toDimProp pD12Conf) solverConf) justbPropV23
         , mkCompBench "v-->v" "V3*V4"  (satWithConf (toDimProp pD23Conf) solverConf) justbPropV34
 
-        , mkCompBench "v-->p" "V1*V2"  (bfWithConf (toDimProp pD01Conf) solverConf) justbPropV12
-        , mkCompBench "v-->p" "V2*V3"  (bfWithConf (toDimProp pD12Conf) solverConf) justbPropV23
-        , mkCompBench "v-->p" "V3*V4"  (bfWithConf (toDimProp pD23Conf) solverConf) justbPropV34
+          -- v --> p
+        , mkCompBench "v-->p" "V1*V2"  (vOnPWithConf (toDimProp pD01Conf) solverConf) justbPropV12
+        , mkCompBench "v-->p" "V2*V3"  (vOnPWithConf (toDimProp pD12Conf) solverConf) justbPropV23
+        , mkCompBench "v-->p" "V3*V4"  (vOnPWithConf (toDimProp pD23Conf) solverConf) justbPropV34
+
+          -- p --> v
+        , mkCompBench "p-->v" "V1*V2"  (pOnVWithConf (toDimProp pD01Conf) solverConf) justbPropV12
+        , mkCompBench "p-->v" "V2*V3"  (pOnVWithConf (toDimProp pD12Conf) solverConf) justbPropV23
+        , mkCompBench "p-->v" "V3*V4"  (pOnVWithConf (toDimProp pD23Conf) solverConf) justbPropV34
+
+          -- p --> p
+        , mkCompBench "p-->p" "V1*V2"  (bfWithConf (toDimProp pD01Conf) solverConf) justbPropV12
+        , mkCompBench "p-->p" "V2*V3"  (bfWithConf (toDimProp pD12Conf) solverConf) justbPropV23
+        , mkCompBench "p-->p" "V3*V4"  (bfWithConf (toDimProp pD23Conf) solverConf) justbPropV34
         ]
   -- mdl <- baselineSolve bPs
   -- print mdl
@@ -239,8 +252,8 @@ main = do
   -- goodRes <- testS goodS 1000
 
   defaultMain
-    [ --bgroup "Z3" (benches z3DefConf)
-      bgroup "Z3" (compRatioBenches z3DefConf)
+    [ bgroup "Z3" (benches z3DefConf)
+    , bgroup "Z3OnlySat" (benches z3DefConfOnlySat)
     -- , bgroup "CVC4" (benches cvc4DefConf)
     -- , bgroup "Yices" (benches yicesDefConf)
     -- , bgroup "Boolector" (benches boolectorDefConf)

@@ -34,7 +34,7 @@ type Api = SpockM () () ()
 -- * ApiAction represents Spock actions, these are handlers
 type ApiAction a = SpockAction () () () a
 
-data Request d a b = Request { settings :: Maybe Settings
+data Request d a b = Request { reqSettings :: Maybe Settings
                              , proposition :: VProp d a b
                              }
   deriving (Generic,Show)
@@ -59,7 +59,7 @@ satWithHandler :: ActionCtxT () (WebStateM () () ()) b
 satWithHandler = do
   req <- jsonBody' :: ApiAction (Request Var Text Text)
   let prop = proposition req
-      sets = fromMaybe defSettings (settings req)
+      sets = fromMaybe defSettings (reqSettings req)
       conf = toConf sets
   (runtime, res) <- liftIO . timeProc . satWith conf $ prop
   _ <- liftIO . forkIO $ logData prop sets runtime logfile
@@ -69,7 +69,7 @@ satWithHandler = do
 -- proveWithHandler = do
 --   req <- jsonBody' :: ApiAction (Request Var Var Var)
 --   let prop = proposition req
---       sets = maybe defSettings id (settings req)
+--       sets = maybe defSettings id (reqSettings req)
 --       conf = toConf sets
 --   (runtime, res) <- liftIO . timeProc . proveWith conf $ prop
 --   _ <- liftIO . forkIO $ logData prop sets runtime logfile
@@ -107,6 +107,7 @@ data RunData = RunData { utc_            :: !UTCTime
 
 instance C.ToField UTCTime  where toField = pack . show
 instance C.ToField Opts     where toField = pack . show
+instance C.ToField Bool     where toField = pack . show
 instance C.ToField Solver   where toField = pack . show
 instance C.ToField Settings where toField = pack . show
 instance C.ToField [Opts]   where toField = mconcat . fmap (pack . show)
