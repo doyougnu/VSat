@@ -18,7 +18,6 @@ module Run ( SatDict
            ) where
 
 import           Control.Arrow (first, second)
-import           Control.DeepSeq (force)
 import           Control.Monad.RWS.Strict
 import           Control.Monad.State.Strict as St
 import Control.Monad.IO.Class (MonadIO)
@@ -32,8 +31,6 @@ import           Data.Text (unpack, pack, Text)
 import           Data.List (intersperse)
 import           Prelude hiding (LT, GT, EQ)
 
-import           Data.Maybe (catMaybes)
-
 import           SAT
 import           VProp.Types
 import           VProp.SBV
@@ -42,7 +39,7 @@ import           Utils
 import           Config
 import           Result
 
-import           Text.Show.Unicode          (ushow)
+-- import           Text.Show.Unicode          (ushow)
 import Debug.Trace
 
 -- | The satisfiable dictionary, this is actually the "state" keys are configs
@@ -113,16 +110,16 @@ runVSMT = runEnv . runVSMTSolve
 -- | Given a VProp a term generate the satisfiability map
 initSt :: Ord d => ConfigPool d -> VProp d a a -> SatDict d
 initSt []   prop = M.fromList . fmap (\x -> (x, False)) $ choices prop
-initSt pool prop = M.fromList $ zip pool (repeat False)
+initSt pool _    = M.fromList $ zip pool (repeat False)
 
 -- | Some logging functions
 _logBaseline :: (Show a, MonadWriter [Char] m) => a -> m ()
 _logBaseline x = tell $ "Running baseline: " ++ show x
 
-_logCNF :: (Show a, MonadWriter [Char] m) => a -> m ()
+_logCNF :: (Show a, MonadWriter String m) => a -> m ()
 _logCNF x = tell $ "Generated CNF: " ++ show x
 
-_logResult :: (Show a, MonadWriter [Char] m) => a -> m ()
+_logResult :: (Show a, MonadWriter String m) => a -> m ()
 _logResult x = tell $ "Got result: " ++ show x
 
 -- | run the sat solver, when we get a satisafiable call get the assignments
@@ -157,8 +154,7 @@ runForDict' (configToResultProp -> c, x) = do
       x' <- toPredicate x
       SC.query . SC.inNewAssertionStack $
         do S.constrain x'
-           res <- getResultWith (\a -> if a then c else negateResultProp c)
-           return res
+           getResultWith (\a -> if a then c else negateResultProp c)
 
 -- | Run the brute force baseline case, that is select every plain variant and
 -- run them to the sat solver
@@ -233,10 +229,13 @@ runAndDecomp :: ( Resultable d
                 , MonadReader (SMTConf d a a) m
                 , SAT (ReadableProp d)) =>
   ReadableProp d -> (d -> Text) -> m (Result d)
-runAndDecomp prop f = runForDict $ (mempty, andDecomp prop (f . dimName))
+runAndDecomp prop f = runForDict (mempty, andDecomp prop (f . dimName))
 
 runVSMTSolve ::
-  (Show d, MonadIO m, Resultable d , MonadReader (SMTConf d a a) m) =>
+  (Show d
+  , MonadIO m
+  , Resultable d
+  , MonadReader (SMTConf d a a) m) =>
   ConfigPool d ->
   ReadableProp d ->
   m (Result d)
@@ -246,7 +245,8 @@ runVSMTSolve configPool prop =
      let prop' = St.evalStateT (propToSBool prop) (mempty, mempty)
      -- run the inner driver
      -- res <- liftIO $! S.runSMTWith (conf cnf){S.verbose=True} $! vSMTSolve prop' configPool
-     res <- liftIO $! S.runSMTWith (conf cnf) $! vSMTSolve prop' configPool
+     res <- liftIO $! S.runSMTWith (conf cnf) $!
+            vSMTSolve prop' configPool (settings cnf)
      return $! res
 
 -- | wrapper around map to keep track of the variable references we've seen, a,
@@ -283,6 +283,10 @@ data IncState d =
            , usedConstraints :: !(Used) -- * a set that checks constraints so we
                                         -- don't send redundant constraints to
                                         -- sbv
+           , genModelMaps :: !Bool       -- This is added boilerplate resulting
+                                        -- from not have a proper newtype for
+                                        -- IncStateVSMT. For VSAT1 this is fine
+                                        -- and will be refactored for VSAT2.
            } deriving (Eq,Show)
 
 emptySt :: (Resultable d) => IncState d
@@ -290,6 +294,7 @@ emptySt = IncState{ result=mempty
                   , config=mempty
                   , processed=False
                   , usedConstraints=mempty
+                  , genModelMaps=True
                   }
 
 onResult :: (Result d -> Result d) -> IncState d -> IncState d
@@ -313,6 +318,9 @@ onProcessed f IncState {..} = IncState {processed=f processed, ..}
 onUsed :: (Used -> Used) -> IncState d -> IncState d
 onUsed f IncState {..} = IncState {usedConstraints =f usedConstraints, ..}
 
+onGenModels :: (Bool -> Bool) -> IncState d -> IncState d
+onGenModels f IncState {..} = IncState {genModelMaps =f genModelMaps, ..}
+
 isUsed :: UsedConstraint -> Used -> Bool
 isUsed = member
 
@@ -322,6 +330,7 @@ insertUsed = onUsed . insert
 -- | the incremental solve monad, with the base monad being the query monad so
 -- we can pull out sbv models Hardcoding so that I don't have to write the mtl
 -- typeclass. I do not expect these to change much
+-- TODO newtype this and add a reader for various settings
 type IncVSMTSolve d = St.StateT (IncState d) SC.Query
 
 -- | Top level wrapper around engine and monad stack, this sets options for the
@@ -329,19 +338,21 @@ type IncVSMTSolve d = St.StateT (IncState d) SC.Query
 -- not, if not then it gets the plain model
 vSMTSolve :: (Show d, Resultable d) =>
   S.Symbolic (VProp d (S.SBool, Name) SNum) ->
-  ConfigPool d -> S.Symbolic (Result d)
-vSMTSolve prop configPool =
+  ConfigPool d -> Settings -> S.Symbolic (Result d)
+vSMTSolve prop configPool ss =
   do prop' <- prop
      S.setOption $ SC.ProduceUnsatCores True
      -- trace ("Solving with configPool: " ++ show configPool) $ return ()
      SC.query $
        do
          -- partially evaluate the prop
-         let !pprop = (findPrincipleChoice . mkTop) <$> (evaluate . toBValue $! prop')
+         let !pprop = findPrincipleChoice . mkTop <$> (evaluate . toBValue $! prop')
+             -- ask whether this should gen models or just perform isSat calls
 
          -- now we avoid redundent computation by solving on the evaluated
          -- proposition instead of the input proposition
-         (b,resSt) <- St.runStateT (pprop >>= solveVariational configPool) emptySt
+         (b,resSt) <- St.runStateT (pprop >>= solveVariational configPool)
+                      (onGenModels (const $! generateModels ss) emptySt)
 
          -- check if no models were generated, if that is the case then we had a
          -- plain formula as input. This means that the result of
@@ -356,7 +367,7 @@ solvePlain b = do S.constrain b; getResultWith (toResultProp . LitB)
 solveVariational :: (Show d, Resultable d) =>
                     ConfigPool d ->
                     Loc d ->
-                    IncVSMTSolve d (S.SBool)
+                    IncVSMTSolve d S.SBool
 solveVariational []        p    = doChoice p
 solveVariational cs prop = do mapM_ step cs; return true
   where step cfg = do lift $ SC.push 1
@@ -431,14 +442,6 @@ smtInt = mkSmt S.sInt64 SI
 smtDouble :: (Show a, Ord a) =>  a -> IncPack a SNum
 smtDouble = mkSmt S.sDouble SD
 
--- | check if the current context is sat or not
-isSat :: SC.Query Bool
-isSat = do cs <- SC.checkSat
-           return $ case cs of
-                      SC.Sat -> True
-                      _      -> False
-
-
 -- | type class needed to avoid lifting for constraints in the IncSolve monad
 instance (Monad m, I.SolverContext m) =>
   I.SolverContext (StateT (IncState d) m) where
@@ -510,8 +513,11 @@ solveVariant go = do
            -- if not generated a model, then construct a -- result
            resMap <- if not bd
                      then do prop <- gets (configToResultProp . config)
+                             modelsEnabled <- gets genModelMaps
                              setModelGenD
-                             lift $! getResult prop
+                             lift $! if modelsEnabled
+                                     then getResult prop
+                                     else getResultOnlySat prop
                       else -- not sat or have gen'd a model so ignore
                        return mempty
 
@@ -631,18 +637,18 @@ dbg s a = trace (s ++ " : " ++ show a ++ " \n") $ return ()
 -- expression
 evaluate :: (Resultable d) => BValue d -> IncVSMTSolve d (BValue d)
 evaluate Unit        = return Unit                             -- [Eval-Unit]
-evaluate !(B b) =
+evaluate (B b) =
   -- trace "Eval B" $
   do S.constrain b; return Unit           -- [Eval-Term]
-evaluate !(x@(C _ _ _)) = return x                             -- [Eval-Chc]
+evaluate x@(C _ _ _) = return x                             -- [Eval-Chc]
 -- evaluate (BVOp Unit _ Unit) = trace "double unit" $ return Unit                     -- [Eval-UAndR]
-evaluate !(BVOp Unit _ r) = evaluate r                     -- [Eval-UAndR]
-evaluate !(BVOp l _ Unit) = evaluate l                     -- [Eval-UAndL]
+evaluate (BVOp Unit _ r) = evaluate r                     -- [Eval-UAndR]
+evaluate (BVOp l _ Unit) = evaluate l                     -- [Eval-UAndL]
 
-evaluate !(BVOp l And x@(B _)) = do _ <- evaluate x; evaluate l
-evaluate !(BVOp x@(B _) And r) = do _ <- evaluate x; evaluate r
+evaluate (BVOp l And x@(B _)) = do _ <- evaluate x; evaluate l
+evaluate (BVOp x@(B _) And r) = do _ <- evaluate x; evaluate r
 
-evaluate !(BVOp l op x@(C _ _ _)) =
+evaluate (BVOp l op x@(C _ _ _)) =
   -- trace ("recursive RChc with: \n") $
   do l' <- accumulate l
      let !res = BVOp l' op x
@@ -650,7 +656,7 @@ evaluate !(BVOp l op x@(C _ _ _)) =
        then evaluate res
        else return res
 
-evaluate !(BVOp x@(C _ _ _) op r) =
+evaluate (BVOp x@(C _ _ _) op r) =
   -- trace ("recursive LChc \n") $
   do r' <- accumulate r
      let !res = BVOp x op r'
@@ -659,70 +665,70 @@ evaluate !(BVOp x@(C _ _ _) op r) =
        else return res
 
   -- evaluation of two bools, the case that does the actual work
-evaluate !(BVOp (B bl) op (B br)) =                     -- [Eval-Bools]
+evaluate (BVOp (B bl) op (B br)) =                     -- [Eval-Bools]
   -- trace "contracting" $
   evaluate (B res)
-  where !res = (bDispatch op bl br)
+  where !res = bDispatch op bl br
         -- !name = ln ++ (pure $ toText op) ++ rn
 
-evaluate !(BVOp l And r) =                                      -- [Eval-And]
+evaluate (BVOp l And r) =                                      -- [Eval-And]
   -- trace ("recursive AND case: \n") $
   do l' <- evaluate l
      r' <- evaluate r
-     let !res = (BVOp l' And r')
+     let !res = BVOp l' And r'
      -- trace ("recursive AND case GOT RES:\n") $ return ()
      if isValue l' || isValue r'
        then evaluate res
        else return res
 
-evaluate !(BVOp l op r) =                                         -- [Eval-Or]
+evaluate (BVOp l op r) =                                         -- [Eval-Or]
   -- trace ("recursive GEn case: \n") $
   do l' <- accumulate l
      r' <- accumulate r
-     let !res = (BVOp l' op r')
+     let !res = BVOp l' op r'
      -- trace ("recursive GEN case: \n") $ return ()
      if isValue l' && isValue r'
        then evaluate res
        else return res
 
 accumulate :: Resultable d => BValue d -> IncVSMTSolve d (BValue d)
-accumulate !Unit        = return Unit                             -- [Acc-Unit]
-accumulate !(x@(B _))   = return x                                -- [Acc-Term]
-accumulate !(x@(C _ _ _)) =
+accumulate Unit        = return Unit                             -- [Acc-Unit]
+accumulate (x@(B _))   = return x                                -- [Acc-Term]
+accumulate (x@(C _ _ _)) =
   -- trace "Ac: singleton chc" $
   return x                                -- [Acc-Chc]
-accumulate !(x@(BVOp (C _ _ _) _ (C _ _ _))) =  return x          -- [Acc-Op-ChcL]
-accumulate !(x@(BVOp (C _ _ _) _ (B _)))   =  return x          -- [Acc-Op-ChcL]
-accumulate !(x@(BVOp (B _) _ (C _ _ _)))   =  return x          -- [Acc-Op-ChcR]
+accumulate (x@(BVOp (C _ _ _) _ (C _ _ _))) =  return x          -- [Acc-Op-ChcL]
+accumulate (x@(BVOp (C _ _ _) _ (B _)))   =  return x          -- [Acc-Op-ChcL]
+accumulate (x@(BVOp (B _) _ (C _ _ _)))   =  return x          -- [Acc-Op-ChcR]
 
 -- accumulate (BVOp Unit _ Unit) = trace "double unit" $ return Unit
-accumulate !(BVOp Unit _ r) =
+accumulate (BVOp Unit _ r) =
   -- trace ("AC LUNIT") $
   accumulate r                     -- [Acc-UAndR]
-accumulate !(BVOp l _ Unit) =
+accumulate (BVOp l _ Unit) =
   -- trace ("Ac RUnit") $
   accumulate l                     -- [Acc-UAndL]
 
-accumulate !(BVOp l op x@(C _ _ _)) =
+accumulate (BVOp l op x@(C _ _ _)) =
   -- trace "AC RCHC" $
   do l' <- accumulate l; return $! BVOp l' op x
 
-accumulate !(BVOp x@(C _ _ _) op r) =
+accumulate (BVOp x@(C _ _ _) op r) =
   -- trace "AC LCHC" $
   do r' <- accumulate r; return $! BVOp x op r'
 
   -- accumulation of two bools
-accumulate !(BVOp (B bl) op (B br)) =                    -- [Acc-Bools]
+accumulate (BVOp (B bl) op (B br)) =                    -- [Acc-Bools]
   -- trace "Ac: Contracting bools" $
   return (B res)
   where !res = (bDispatch op bl br)
         -- !name = ln ++ (pure $ toText op) ++ rn
 
-accumulate !(BVOp l op r) =                                       -- [Acc-Or]
+accumulate (BVOp l op r) =                                       -- [Acc-Or]
   -- trace ("Accum recursive case") $
   do l' <- accumulate l;
      r' <- accumulate r;
-     let !res = (BVOp l' op r')
+     let !res = BVOp l' op r'
      if isValue l' && isValue r'
        then accumulate res
        else return res

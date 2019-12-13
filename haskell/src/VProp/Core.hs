@@ -1,6 +1,5 @@
 module VProp.Core where
 
-import           Control.Monad (liftM2)
 import           Data.List     (group, sort, nub)
 import qualified Data.Map      as Map
 import           Data.Monoid   ((<>), Sum(..))
