@@ -338,15 +338,15 @@ main = do
       , mkCompBench "p-->p" "V9*V10" (bfWithConf (toDimProp pD89Conf) solverConf) justbPropV910
 
         -- p --> v
-      , mkCompBench "p-->v" "V1*V2"  (vOnPWithConf (toDimProp pD01Conf) solverConf) justbPropV12'
-      , mkCompBench "p-->v" "V2*V3"  (vOnPWithConf (toDimProp pD12Conf) solverConf) justbPropV23
-      , mkCompBench "p-->v" "V3*V4"  (vOnPWithConf (toDimProp pD23Conf) solverConf) justbPropV34
-      , mkCompBench "p-->v" "V4*V5"  (vOnPWithConf (toDimProp pD34Conf) solverConf) justbPropV45
-      , mkCompBench "p-->v" "V5*V6"  (vOnPWithConf (toDimProp pD45Conf) solverConf) justbPropV56
-      , mkCompBench "p-->v" "V6*V7"  (vOnPWithConf (toDimProp pD56Conf) solverConf) justbPropV67
-      , mkCompBench "p-->v" "V7*V8"  (vOnPWithConf (toDimProp pD67Conf) solverConf) justbPropV78
-      , mkCompBench "p-->v" "V8*V9"  (vOnPWithConf (toDimProp pD78Conf) solverConf) justbPropV89
-      , mkCompBench "p-->v" "V9*V10" (vOnPWithConf (toDimProp pD89Conf) solverConf) justbPropV910
+      , mkCompBench "v-->p" "V1*V2"  (vOnPWithConf (toDimProp pD01Conf) solverConf) justbPropV12'
+      , mkCompBench "v-->p" "V2*V3"  (vOnPWithConf (toDimProp pD12Conf) solverConf) justbPropV23
+      , mkCompBench "v-->p" "V3*V4"  (vOnPWithConf (toDimProp pD23Conf) solverConf) justbPropV34
+      , mkCompBench "v-->p" "V4*V5"  (vOnPWithConf (toDimProp pD34Conf) solverConf) justbPropV45
+      , mkCompBench "v-->p" "V5*V6"  (vOnPWithConf (toDimProp pD45Conf) solverConf) justbPropV56
+      , mkCompBench "v-->p" "V6*V7"  (vOnPWithConf (toDimProp pD56Conf) solverConf) justbPropV67
+      , mkCompBench "v-->p" "V7*V8"  (vOnPWithConf (toDimProp pD67Conf) solverConf) justbPropV78
+      , mkCompBench "v-->p" "V8*V9"  (vOnPWithConf (toDimProp pD78Conf) solverConf) justbPropV89
+      , mkCompBench "v-->p" "V9*V10" (vOnPWithConf (toDimProp pD89Conf) solverConf) justbPropV910
       ]
 
   defaultMain
