@@ -353,9 +353,7 @@ main = do
     [ -- bgroup "ABC" (benches abcDefConf)
     --   bgroup "Yices" (benches yicesDefConf)
     -- , bgroup "CVC4" (benches cvc4DefConf)
-      bgroup "Z3" (benches z3DefConf)
-    , bgroup "Z3OnlySat" (benches z3DefConfOnlySat)
-        -- bgroup "Z3" (compRatioBenches z3DefConf)
+        bgroup "Z3" (compRatioBenches z3DefConf)
     -- , bgroup "Boolector" (benches boolectorDefConf)
     ]
 
