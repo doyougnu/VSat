@@ -200,39 +200,40 @@ main = do
 
     benches :: ReadableSMTConf Text -> [Benchmark]
     benches solverConf =
-      [ mkBench "v-->v" "V1"  d0Conf (satWithConf (toDimProp d0Conf) solverConf) bProp
-      , mkBench "v-->v" "V2"  d1Conf (satWithConf (toDimProp d1Conf) solverConf) bProp
-      , mkBench "v-->v" "V3"  d2Conf (satWithConf (toDimProp d2Conf) solverConf) bProp
-      , mkBench "v-->v" "V4"  d3Conf (satWithConf (toDimProp d3Conf) solverConf) bProp
-      , mkBench "v-->v" "V5"  d4Conf (satWithConf (toDimProp d4Conf) solverConf) bProp
-      , mkBench "v-->v" "V6"  d5Conf (satWithConf (toDimProp d5Conf) solverConf) bProp
-      , mkBench "v-->v" "V7"  d6Conf (satWithConf (toDimProp d6Conf) solverConf) bProp
-      , mkBench "v-->v" "V8"  d7Conf (satWithConf (toDimProp d7Conf) solverConf) bProp
-      , mkBench "v-->v" "V9"  d8Conf (satWithConf (toDimProp d8Conf) solverConf) bProp
-      , mkBench "v-->v" "V10" d9Conf (satWithConf (toDimProp d9Conf) solverConf) bProp
-      , mkBench' "v-->v" "EvolutionAware" (satWithConf (toDimProp evoAwareConf) solverConf) bProp
+      [
+      --   mkBench "v-->v" "V1"  d0Conf (satWithConf (toDimProp d0Conf) solverConf) bProp
+      -- , mkBench "v-->v" "V2"  d1Conf (satWithConf (toDimProp d1Conf) solverConf) bProp
+      -- , mkBench "v-->v" "V3"  d2Conf (satWithConf (toDimProp d2Conf) solverConf) bProp
+      -- , mkBench "v-->v" "V4"  d3Conf (satWithConf (toDimProp d3Conf) solverConf) bProp
+      -- , mkBench "v-->v" "V5"  d4Conf (satWithConf (toDimProp d4Conf) solverConf) bProp
+      -- , mkBench "v-->v" "V6"  d5Conf (satWithConf (toDimProp d5Conf) solverConf) bProp
+      -- , mkBench "v-->v" "V7"  d6Conf (satWithConf (toDimProp d6Conf) solverConf) bProp
+      -- , mkBench "v-->v" "V8"  d7Conf (satWithConf (toDimProp d7Conf) solverConf) bProp
+      -- , mkBench "v-->v" "V9"  d8Conf (satWithConf (toDimProp d8Conf) solverConf) bProp
+      -- , mkBench "v-->v" "V10" d9Conf (satWithConf (toDimProp d9Conf) solverConf) bProp
+      -- , mkBench' "v-->v" "EvolutionAware" (satWithConf (toDimProp evoAwareConf) solverConf) bProp
 
-      , mkBench "v-->v" "V1*V2"                          justD01Conf (satWith solverConf) justbPropV12
+        mkBench "v-->v" "V1*V2"                          justD01Conf (satWith solverConf) justbPropV12
       , mkBench "v-->v" "V1*V2*V3"                       justD012Conf (satWith solverConf) justbPropV123
       , mkBench "v-->v" "V1*V2*V3*V4"                    justD0123Conf (satWith solverConf) justbPropV1234
-      , mkBench "v-->v" "V1*V2*V3*V4*V5"                 justD01234Conf (satWith solverConf) justbPropV12345
-      , mkBench "v-->v" "V1*V2*V3*V4*V5*V6"              justD012345Conf (satWith solverConf) justbPropV123456
-      , mkBench "v-->v" "V1*V2*V3*V4*V5*V6*V7"           justD0123456Conf (satWith solverConf) justbPropV1234567
-      , mkBench "v-->v" "V1*V2*V3*V4*V5*V6*V7*V8"        justD01234567Conf (satWith solverConf) justbPropV12345678
-      , mkBench "v-->v" "V1*V2*V3*V4*V5*V6*V7*V8*V9"     justD012345678Conf (satWith solverConf) justbPropV123456789
-      , mkBench' "v-->v" "V1*V2*V3*V4*V5*V6*V7*V8*V9*V10" (satWith solverConf) bProp
+      -- , mkBench "v-->v" "V1*V2*V3*V4*V5"                 justD01234Conf (satWith solverConf) justbPropV12345
+      -- , mkBench "v-->v" "V1*V2*V3*V4*V5*V6"              justD012345Conf (satWith solverConf) justbPropV123456
+      -- , mkBench "v-->v" "V1*V2*V3*V4*V5*V6*V7"           justD0123456Conf (satWith solverConf) justbPropV1234567
+      -- , mkBench "v-->v" "V1*V2*V3*V4*V5*V6*V7*V8"        justD01234567Conf (satWith solverConf) justbPropV12345678
+      -- , mkBench "v-->v" "V1*V2*V3*V4*V5*V6*V7*V8*V9"     justD012345678Conf (satWith solverConf) justbPropV123456789
+      -- , mkBench' "v-->v" "V1*V2*V3*V4*V5*V6*V7*V8*V9*V10" (satWith solverConf) bProp
   -- p - v
-      , mkBench "p-->v" "V1" d0Conf (pOnV solverConf) bPropV1
-      , mkBench "p-->v" "V2" d1Conf (pOnV solverConf) bPropV2
-      , mkBench "p-->v" "V3" d2Conf (pOnV solverConf) bPropV3
-      , mkBench "p-->v" "V4" d3Conf (pOnV solverConf) bPropV4
-      , mkBench "p-->v" "V5" d4Conf (pOnV solverConf) bPropV5
-      , mkBench "p-->v" "V6" d5Conf (pOnV solverConf) bPropV6
-      , mkBench "p-->v" "V7" d6Conf (pOnV solverConf) bPropV7
-      , mkBench "p-->v" "V8" d7Conf (pOnV solverConf) bPropV8
-      , mkBench "p-->v" "V9" d8Conf (pOnV solverConf) bPropV9
-      , mkBench "p-->v" "V10" d9Conf  (pOnV solverConf) bPropV10
-      , mkBench' "p-->v" "EvolutionAware" (pOnVWithConf (toDimProp evoAwareConf) solverConf) bProp
+      -- , mkBench "p-->v" "V1" d0Conf (pOnV solverConf) bPropV1
+      -- , mkBench "p-->v" "V2" d1Conf (pOnV solverConf) bPropV2
+      -- , mkBench "p-->v" "V3" d2Conf (pOnV solverConf) bPropV3
+      -- , mkBench "p-->v" "V4" d3Conf (pOnV solverConf) bPropV4
+      -- , mkBench "p-->v" "V5" d4Conf (pOnV solverConf) bPropV5
+      -- , mkBench "p-->v" "V6" d5Conf (pOnV solverConf) bPropV6
+      -- , mkBench "p-->v" "V7" d6Conf (pOnV solverConf) bPropV7
+      -- , mkBench "p-->v" "V8" d7Conf (pOnV solverConf) bPropV8
+      -- , mkBench "p-->v" "V9" d8Conf (pOnV solverConf) bPropV9
+      -- , mkBench "p-->v" "V10" d9Conf  (pOnV solverConf) bPropV10
+      -- , mkBench' "p-->v" "EvolutionAware" (pOnVWithConf (toDimProp evoAwareConf) solverConf) bProp
       , mkBench "p-->v" "V1*V2"                          justD01Conf (pOnV solverConf) justbPropV12
       , mkBench "p-->v" "V1*V2*V3"                       justD012Conf (pOnV solverConf) justbPropV123
       , mkBench "p-->v" "V1*V2*V3*V4"                    justD0123Conf (pOnV solverConf) justbPropV1234
@@ -353,11 +354,13 @@ main = do
     [ -- bgroup "ABC" (benches abcDefConf)
     --   bgroup "Yices" (benches yicesDefConf)
     -- , bgroup "CVC4" (benches cvc4DefConf)
-        bgroup "Z3" (compRatioBenches z3DefConf)
+        bgroup "Z3" (benches z3DefConf)
+        -- bgroup "Z3" (compRatioBenches z3DefConf)
     -- , bgroup "Boolector" (benches boolectorDefConf)
     ]
-
-  -- putStrLn $ show $ ds
+  -- putStrLn $ show $ dimensions justbPropV1234567
+  -- res <- (satWith z3DefConf) justbPropV123
+  -- putStrLn $ show res
   -- putStrLn $ show $ pairs
   -- ts <- (mkCompRatioConfs ds pairs :: IO [VProp.Types.Config Text])
   -- mapM_ (putStrLn . show) ts

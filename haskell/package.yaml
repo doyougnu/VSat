@@ -38,6 +38,10 @@ dependencies:
 - Spock
 - wai-extra
 - parallel-io
+- async
+- monad-control
+- transformers-base
+- lifted-async
 - megaparsec >= 6.4
 # - parser-combinators >= 1.0
 - unicode-show # just for result output

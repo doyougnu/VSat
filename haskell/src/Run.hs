@@ -1,3 +1,6 @@
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE UndecidableInstances #-}
+
 module Run ( SatDict
            , Log
            , runAD
@@ -21,6 +24,10 @@ import           Control.Arrow (first, second)
 import           Control.Monad.RWS.Strict
 import           Control.Monad.State.Strict as St
 import Control.Monad.IO.Class (MonadIO)
+import Control.Monad.Reader (ReaderT)
+import           Control.Monad.Base
+import           Control.DeepSeq
+import           GHC.Generics
 import           Data.Foldable (foldr')
 import           Data.HashSet (HashSet, member, insert)
 import qualified Data.Map.Strict as M
@@ -32,6 +39,8 @@ import           Data.Text (unpack, pack, Text)
 import           Data.List (intersperse)
 import           Prelude hiding (LT, GT, EQ)
 import           Control.Concurrent.ParallelIO (parallel)
+import           Control.Monad.Trans.Control
+import           Control.Concurrent.Async.Lifted
 
 import           SAT
 import           VProp.Types
@@ -233,10 +242,7 @@ runAndDecomp :: ( Resultable d
 runAndDecomp prop f = runForDict (mempty, andDecomp prop (f . dimName))
 
 runVSMTSolve ::
-  (Show d
-  , Resultable d
-  -- , MonadReader (SMTConf d a a) IO
-  ) =>
+  (Show d , Resultable d) =>
   ConfigPool d ->
   ReadableProp d ->
   Env d (Result d)
@@ -247,9 +253,13 @@ runVSMTSolve configPool prop =
 
      -- run the inner driver
      let !pprop = findPrincipleChoice . mkTop <$> (prop' >>= (evaluate . toBValue))
+         run = (S.runSMTWith (conf cnf) . (\configuration -> vSMTSolve pprop configuration (settings cnf)))
 
-     res <- liftIO $ parallel $!
-            (S.runSMTWith (conf cnf) . (\configuration -> vSMTSolve pprop configuration (settings cnf))) <$> configPool
+     -- run configurations in parallel after making the variational core
+     res <- liftIO $ parallel $! if null configPool
+                                 then [run mempty]
+                                 else run <$> configPool
+
      return $! mconcat res
 
 -- | wrapper around map to keep track of the variable references we've seen, a,
@@ -290,7 +300,7 @@ data IncState d =
                                         -- from not have a proper newtype for
                                         -- IncStateVSMT. For VSAT1 this is fine
                                         -- and will be refactored for VSAT2.
-           } deriving (Eq,Show)
+           } deriving (Eq,Show,Generic)
 
 emptySt :: (Resultable d) => IncState d
 emptySt = IncState{ result=mempty
@@ -302,33 +312,43 @@ emptySt = IncState{ result=mempty
 
 onResult :: (Result d -> Result d) -> IncState d -> IncState d
 onResult f IncState {..} = IncState {result=f result, ..}
+{-# INLINE onResult #-}
 
 onConfig :: (Config d -> Config d) -> IncState d -> IncState d
 onConfig f IncState {..} = IncState {config=f config, ..}
+{-# INLINE onConfig #-}
 
 deleteFromConfig :: Ord d => (Dim d) -> IncState d -> IncState d
 deleteFromConfig = onConfig . M.delete
+{-# INLINE deleteFromConfig #-}
 
 insertToConfig :: Ord d => (Dim d) -> Bool -> IncState d -> IncState d
 insertToConfig d b = onConfig $ M.insert d b
+{-# INLINE insertToConfig #-}
 
 replaceConfig :: Config d -> IncState d -> IncState d
 replaceConfig = onConfig . const
+{-# INLINE replaceConfig #-}
 
 onProcessed :: (GenModel -> GenModel) -> IncState d -> IncState d
 onProcessed f IncState {..} = IncState {processed=f processed, ..}
+{-# INLINE onProcessed #-}
 
 onUsed :: (Used -> Used) -> IncState d -> IncState d
 onUsed f IncState {..} = IncState {usedConstraints =f usedConstraints, ..}
+{-# INLINE onUsed #-}
 
 onGenModels :: (Bool -> Bool) -> IncState d -> IncState d
 onGenModels f IncState {..} = IncState {genModelMaps =f genModelMaps, ..}
+{-# INLINE onGenModels #-}
 
 isUsed :: UsedConstraint -> Used -> Bool
 isUsed = member
+{-# INLINE isUsed #-}
 
 insertUsed :: UsedConstraint -> IncState d -> IncState d
 insertUsed = onUsed . insert
+{-# INLINE insertUsed #-}
 
 -- | the incremental solve monad, with the base monad being the query monad so
 -- we can pull out sbv models Hardcoding so that I don't have to write the mtl
@@ -525,7 +545,21 @@ solveVariant go = do
 
            return resMap
 
-handleChc :: (Show d, Resultable d) =>
+instance MonadTransControl I.QueryT where
+  type StT I.QueryT a = StT (ReaderT I.State) a
+  liftWith = defaultLiftWith I.QueryT I.runQueryT
+  restoreT = defaultRestoreT I.QueryT
+
+instance MonadBaseControl b m => MonadBaseControl b (I.QueryT m) where
+  type StM (I.QueryT m) a = ComposeSt I.QueryT m a
+  liftBaseWith            = defaultLiftBaseWith
+  restoreM                = defaultRestoreM
+
+instance MonadBase b m => MonadBase b (I.QueryT m) where
+  liftBase = lift . liftBase
+
+
+handleChc :: (Resultable d) =>
   IncVSMTSolve d (Result d)
   -> IncVSMTSolve d (Result d)
   -> Dim d
@@ -536,18 +570,33 @@ handleChc goLeft goRight d =
        Just True  -> goLeft
        Just False -> goRight
        Nothing    -> do
+
          --------------------- true variant -----------------------------
-         setDim d True
-         -- trace ("[CHC] Going Left, choice: " ++ show d ++ "\n") $ return ()
-         resMapT <- goLeft
+         -- setDim d True
+         result <- control $ \runInIO -> do
+           (!lRes, !rRes) <- concurrently
+                             (runInIO $ do setDim d True; goLeft)
+                             (runInIO $ do setDim d False; goRight)
+           return $! lRes
+           -- trace ("[CHC] Going Left, choice: " ++ show d ++ "\n") $ return ()
+           -- lRes <- S.runSMT $ SC.query $ evalStateT goLeft lState
+           -- putMVar lMVar lRes
+           -- leftRes <- P.new
+           -- P.fork $ do P.pval goRight >>= P.put leftRes
 
          -------------------- false variant -----------------------------
-         setDim d False
-         -- trace ("[CHC] Going Right, choice: " ++ show d ++ "\n") $ return ()
-         resMapF <- goRight
+         -- setDim d False
+
+         -- liftIO $ forkIO $ do
+           -- trace ("[CHC] Going Right, choice: " ++ show d ++ "\n") $ return ()
+           -- resMapF <- goRight
+           -- rRes <- S.runSMT $ SC.query $ evalStateT goRight lState
+           -- putMVar lMVar rRes
 
          -- store results and cleanup config
-         let !result = resMapT <> resMapF
+         -- resMapT <- liftIO $ takeMVar lMVar
+         -- resMapF <- liftIO $ takeMVar rMVar
+         -- let !result = resMapT <> resMapF
 
          -- we remove the Dim from the config so that when the recursion
          -- completes the last false branch of the last choice is not
@@ -559,6 +608,8 @@ handleChc goLeft goRight d =
          -- miss (B, True)
          removeDim d
          return result
+{-# INLINE handleChc #-}
+
 
 -- | type synonym to simplify the BValue type
 type SBVProp d = VProp d (S.SBool, Name) SNum

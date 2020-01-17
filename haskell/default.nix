@@ -3,6 +3,7 @@
 , megaparsec, mtl, QuickCheck, sbv, Spock, stdenv, tasty, hoogle
 , tasty-hspec, tasty-hunit, tasty-quickcheck, tasty-smallcheck
 , text, time, unicode-show, unordered-containers, vector, wai-extra
+, parallel-io
 }:
 mkDerivation {
   pname = "vsat";
@@ -21,6 +22,7 @@ mkDerivation {
     aeson aeson-pretty base bytestring cassava containers deepseq
     genifunctors hashable megaparsec mtl sbv Spock tasty-quickcheck
     text time unicode-show unordered-containers vector wai-extra
+    parallel-io
   ];
   testHaskellDepends = [
     aeson aeson-pretty base bytestring cassava containers deepseq

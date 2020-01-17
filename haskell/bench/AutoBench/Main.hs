@@ -252,8 +252,9 @@ main = do
   -- goodRes <- testS goodS 1000
 
   defaultMain
-    [  bgroup "Z3" (benches z3DefConf)
-      -- bgroup "Z3" (compRatioBenches z3DefConf)
+    [
+      -- bgroup "Z3" (benches z3DefConf)
+      bgroup "Z3" (compRatioBenches z3DefConf)
     -- , bgroup "CVC4" (benches cvc4DefConf)
     -- , bgroup "Yices" (benches yicesDefConf)
     -- , bgroup "Boolector" (benches boolectorDefConf)

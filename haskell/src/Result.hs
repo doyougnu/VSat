@@ -88,7 +88,6 @@ instance (Eq d, Semigroup d) => Monoid (ResultProp d) where
 instance Show d => Show (ResultProp d) where
   show rp = show $ getProp rp
 
-
 -- | construct a result prop from a uniformprop, this is just used for a nice
 -- api interface
 toResultProp :: VProp d d d -> ResultProp d
