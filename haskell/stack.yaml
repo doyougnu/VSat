@@ -5,14 +5,21 @@ packages:
 # system-ghc: false
 extra-deps:
   - genifunctors-0.4
-  - sbv-8.3
+  # - sbv-8.3
   # spock dependencies
-  # - Spock-0.13.0.0
-  # - Spock-core-0.13.0.0
-  # - reroute-0.5.0.0
-  # - stm-containers-1.1.0.2
-  # - stm-hamt-1.2.0.2
-  # - primitive-extras-0.7.1
+  - Spock-0.13.0.0
+  - Spock-core-0.13.0.0
+  - reroute-0.5.0.0
+  - stm-containers-0.2.16
+  - focus-0.1.5.2
+  - stm-hamt-1.2.0.2
+  - primitive-extras-0.7.1
+  - megaparsec-6.3.0
+  - containers-0.5.11.0
+  - binary-0.8.7.0
+  - parser-combinators-0.4.0
+  - text-1.2.4.0
+  - sbv-8.5
 
 ## uncomment the following lines to tell stack you are in a nix environment
 nix:
@@ -21,8 +28,8 @@ nix:
   packages: [ z3, pkgconfig, zlib, abc-verifier, cvc4, yices, boolector, haskellPackages.hoogle haskellPackages.hasktags]
 
 # resolver: lts-11.22
-resolver: lts-12.25
-# resolver: lts-13.10
+# resolver: lts-12.25
+resolver: lts-14.20
 
 build:
   library-profiling: false

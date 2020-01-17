@@ -354,7 +354,7 @@ insertUsed = onUsed . insert
 -- we can pull out sbv models Hardcoding so that I don't have to write the mtl
 -- typeclass. I do not expect these to change much
 -- TODO newtype this and add a reader for various settings
-type IncVSMTSolve d = St.StateT (IncState d) SC.Query
+type IncVSMTSolve d a = St.StateT (IncState d) (S.SymbolicT SC.Query) a
 
 -- | Top level wrapper around engine and monad stack, this sets options for the
 -- underlying solver, inspects the results to see if they were variational or
@@ -558,6 +558,18 @@ instance MonadBaseControl b m => MonadBaseControl b (I.QueryT m) where
 instance MonadBase b m => MonadBase b (I.QueryT m) where
   liftBase = lift . liftBase
 
+-- instance MonadTransControl Ts.SymbolicT where
+--   type StT Ts.SymbolicT a = StT (ReaderT I.State) a
+--   liftWith = defaultLiftWith Ts.SymbolicT Ts.runSymbolicT
+--   restoreT = defaultRestoreT Ts.SymbolicT
+
+-- instance MonadBaseControl b m => MonadBaseControl b (Ts.SymbolicT m) where
+--   type StM (Ts.SymbolicT m) a = ComposeSt Ts.SymbolicT m a
+--   liftBaseWith               = defaultLiftBaseWith
+--   restoreM                   = defaultRestoreM
+
+-- instance MonadBase b m => MonadBase b (S.SymbolicT m) where
+--   liftBase = lift . liftBase
 
 handleChc :: (Resultable d) =>
   IncVSMTSolve d (Result d)
