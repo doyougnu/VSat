@@ -84,16 +84,18 @@ df <- rbind(autoSharedDF, finSharedDF) %>% mutate(PlainRatio = PlainCount / (Chc
 
 ## ggsave("../plots/plainRatio.pdf", plot = plain_ratio_plt, device = "pdf")
 
-mean_ratio_plt <- ggplot(df, mapping = aes(x=PlainRatio, y=MeanRatio, color = Algorithm)) +
+rq2 <- ggplot(df, mapping = aes(x=PlainRatio, y=MeanRatio, colour = Algorithm)) +
   geom_point(size=3, aes(shape = Algorithm)) +
   ## ylab(TeX("% SpeedUp \t  $\\frac{v \\rightarrow v}{v \\rightarrow p}$")) +
   ylab("% SpeedUp") +
+  xlab(TeX("Plain Ratio:  $\\frac{|Plain Terms|}{|Total Terms|}}")) +
   ## scale_x_log10() +
   ## scale_y_log10() +
   geom_smooth(method=lm, formula = y ~ x, se=FALSE) +
   ## geom_text(nudge_y = 0.012, nudge_x = 0.003, angle = 45, check_overlap =FALSE) +
-  theme(legend.position = c(.85,.90)) +
+  theme(legend.position = c(.85,.90)
+      , plot.title = element_text(size=12)) +
   ggtitle("RQ2: Performance as a function of plain ratio") +
-  theme_cowplot(12)
+  theme_classic()
 
-ggsave("../plots/speedup.png", plot = mean_ratio_plt, device = "png")
+ggsave("../plots/RQ2.png", plot = rq2, device = "png", height = 4, width = 7)
