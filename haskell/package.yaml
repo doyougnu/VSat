@@ -37,7 +37,7 @@ dependencies:
 - aeson
 - Spock
 - wai-extra
-# - heaps
+- parallel-io
 - megaparsec >= 6.4
 # - parser-combinators >= 1.0
 - unicode-show # just for result output

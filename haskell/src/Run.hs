@@ -27,9 +27,11 @@ import qualified Data.Map.Strict as M
 import qualified Data.SBV as S
 import qualified Data.SBV.Control as SC
 import qualified Data.SBV.Internals as I
+import qualified Data.SBV.Trans as Ts
 import           Data.Text (unpack, pack, Text)
 import           Data.List (intersperse)
 import           Prelude hiding (LT, GT, EQ)
+import           Control.Concurrent.ParallelIO (parallel)
 
 import           SAT
 import           VProp.Types
@@ -175,7 +177,7 @@ runBruteForce pool prop = flip evalStateT (initSt pool prop) $
       plainProps = if null confs
         then pure (M.empty, prop)
         else (\y -> (y, selectVariantTotal y prop)) <$> confs
-  plainMs <- lift $ mapM runForDict $ plainProps
+  plainMs <- lift $ mapM runForDict plainProps
   return $! mconcat plainMs
 
 -- | Run the brute force baseline case, that is select every plain variant and
@@ -197,16 +199,15 @@ runVOnPlain pool prop = flip evalStateT (initSt pool prop) $
       plainProps = if null confs
         then pure (M.empty, prop)
         else (\y -> (y, selectVariantTotal y prop)) <$> confs
-  plainMs <- lift $ mapM runForDict' $ plainProps
+  plainMs <- lift $ mapM runForDict' plainProps
   return $! mconcat plainMs
 
 -- | Run plain terms on vsat, that is, perform selection for each dimension, and
 -- then run on the vsat solver. We know that this will always become a Unit, and
 -- will always hit solvePlain.
 runPlainOnVSat
-  :: (Show d, Resultable d, MonadIO m,
-      MonadReader (SMTConf d a a) m) =>
-     ConfigPool d -> ReadableProp d -> m (Result d)
+  :: (Resultable d) =>
+     ConfigPool d -> ReadableProp d -> Env d (Result d)
 runPlainOnVSat pool prop = flip evalStateT (initSt pool prop) $
  do
   _confs <- get
@@ -214,12 +215,12 @@ runPlainOnVSat pool prop = flip evalStateT (initSt pool prop) $
       plainProps = if null confs
         then [(M.empty, prop)]
         else (\y -> (y, selectVariant y prop)) <$> confs
-  plainMs <- mapM (bitraverse
+  plainMs <- lift $ mapM (bitraverse
                    (pure . configToResultProp)
                    (runVSMTSolve mempty)) $ plainProps
   return $ foldMap (uncurry helper) plainMs
   where
-        helper c as =  insertToSat c as
+        helper c as = insertToSat c as
 
 -- | Run the and decomposition baseline case, that is deconstruct every choice
 -- and then run the sat solver
@@ -233,21 +234,23 @@ runAndDecomp prop f = runForDict (mempty, andDecomp prop (f . dimName))
 
 runVSMTSolve ::
   (Show d
-  , MonadIO m
   , Resultable d
-  , MonadReader (SMTConf d a a) m) =>
+  -- , MonadReader (SMTConf d a a) IO
+  ) =>
   ConfigPool d ->
   ReadableProp d ->
-  m (Result d)
+  Env d (Result d)
 runVSMTSolve configPool prop =
   do cnf <- ask
      -- convert all refs to SBools
      let prop' = St.evalStateT (propToSBool prop) (mempty, mempty)
+
      -- run the inner driver
-     -- res <- liftIO $! S.runSMTWith (conf cnf){S.verbose=True} $! vSMTSolve prop' configPool
-     res <- liftIO $! S.runSMTWith (conf cnf) $!
-            vSMTSolve prop' configPool (settings cnf)
-     return $! res
+     let !pprop = findPrincipleChoice . mkTop <$> (prop' >>= (evaluate . toBValue))
+
+     res <- liftIO $ parallel $!
+            (S.runSMTWith (conf cnf) . (\configuration -> vSMTSolve pprop configuration (settings cnf))) <$> configPool
+     return $! mconcat res
 
 -- | wrapper around map to keep track of the variable references we've seen, a,
 -- and their symbolic type, b, which is eta reduced here
@@ -337,44 +340,40 @@ type IncVSMTSolve d = St.StateT (IncState d) SC.Query
 -- underlying solver, inspects the results to see if they were variational or
 -- not, if not then it gets the plain model
 vSMTSolve :: (Show d, Resultable d) =>
-  S.Symbolic (VProp d (S.SBool, Name) SNum) ->
-  ConfigPool d -> Settings -> S.Symbolic (Result d)
-vSMTSolve prop configPool ss =
-  do prop' <- prop
-     S.setOption $ SC.ProduceUnsatCores True
-     -- trace ("Solving with configPool: " ++ show configPool) $ return ()
+  S.Symbolic (Loc d) ->
+  Config d -> Settings -> S.Symbolic (Result d)
+vSMTSolve prop conf ss =
+  do S.setOption $ SC.ProduceUnsatCores True
+     -- partially evaluate the prop
+     -- ask whether this should gen models or just perform isSat calls
+     prop' <- prop
      SC.query $
        do
-         -- partially evaluate the prop
-         let !pprop = findPrincipleChoice . mkTop <$> (evaluate . toBValue $! prop')
-             -- ask whether this should gen models or just perform isSat calls
-
          -- now we avoid redundent computation by solving on the evaluated
          -- proposition instead of the input proposition
-         (b,resSt) <- St.runStateT (pprop >>= solveVariational configPool)
+         (b,resSt) <- St.runStateT (solveVariational conf prop')
                       (onGenModels (const $! generateModels ss) emptySt)
 
          -- check if no models were generated, if that is the case then we had a
-         -- plain formula as input. This means that the result of
-         -- evaluation/accumulation will be a single symbolic boolean reference
+         -- plain formula as input and it was all accumulated into a Unit value.
+         -- This means that we just need to get the result from the solver as it
+         -- already knows about the entire plain formula
          if isResultNull (result resSt)
-           then solvePlain b
+           then solvePlain
            else return $ result resSt
 
-solvePlain :: Resultable d => S.SBool -> SC.Query (Result d)
-solvePlain b = do S.constrain b; getResultWith (toResultProp . LitB)
+solvePlain :: Resultable d => SC.Query (Result d)
+solvePlain = getResultWith $ toResultProp . LitB
 
 solveVariational :: (Show d, Resultable d) =>
-                    ConfigPool d ->
+                    Config d ->
                     Loc d ->
-                    IncVSMTSolve d S.SBool
-solveVariational []        p    = doChoice p
-solveVariational cs prop = do mapM_ step cs; return true
-  where step cfg = do lift $ SC.push 1
-                      -- trace ("Result of Eval: " ++ ushow prop ++ "\n") $ return ()
-                      setConfig cfg
-                      _ <- doChoice prop
-                      lift $ SC.pop 1
+                    IncVSMTSolve d ()
+solveVariational cfg prop = do lift $ SC.push 1
+                              -- trace ("Result of Eval: " ++ ushow prop ++ "\n") $ return ()
+                               setConfig cfg
+                               _ <- doChoice prop
+                               lift $ SC.pop 1
 
 -- | The name of a reference
 type Name = Text
@@ -595,9 +594,8 @@ vCoreMetrics :: Resultable d => ReadableProp d -> IO (Int, Int, Int)
 vCoreMetrics p = S.runSMT $
   do
     p' <- St.evalStateT (propToSBool p) (mempty, mempty)
-    SC.query $ do
-      (core,_) <- runStateT (evaluate $ toBValue p') emptySt
-      return (vCoreSize core, vCoreNumPlain core, vCoreNumVar core)
+    core <- evaluate $ toBValue p'
+    return (vCoreSize core, vCoreNumPlain core, vCoreNumVar core)
      -- return core
          -- (b,resSt) <- St.runStateT (pprop >>= solveVariational configPool) emptySt
 
@@ -635,7 +633,7 @@ dbg s a = trace (s ++ " : " ++ show a ++ " \n") $ return ()
 -- values thereby representing that evaluation has taken place. Evaluation can
 -- call a switch into the accumulation mode in order to partially evaluate an
 -- expression
-evaluate :: (Resultable d) => BValue d -> IncVSMTSolve d (BValue d)
+evaluate :: (Resultable d, Ts.MonadSymbolic m, I.SolverContext m) => BValue d -> m (BValue d)
 evaluate Unit        = return Unit                             -- [Eval-Unit]
 evaluate (B b) =
   -- trace "Eval B" $
@@ -691,7 +689,7 @@ evaluate (BVOp l op r) =                                         -- [Eval-Or]
        then evaluate res
        else return res
 
-accumulate :: Resultable d => BValue d -> IncVSMTSolve d (BValue d)
+accumulate :: (Resultable d, Ts.MonadSymbolic m) => BValue d -> m (BValue d)
 accumulate Unit        = return Unit                             -- [Acc-Unit]
 accumulate (x@(B _))   = return x                                -- [Acc-Term]
 accumulate (x@(C _ _ _)) =
