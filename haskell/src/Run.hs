@@ -255,7 +255,7 @@ runVSMTSolve configPool prop =
 
      -- run the inner driver
      let !pprop = findPrincipleChoice . mkTop <$> (prop' >>= (evaluate . toBValue))
-         run = (S.runSMTWith (conf cnf){S.verbose=True} . (\configuration -> vSMTSolve pprop configuration (settings cnf)))
+         run = (S.runSMTWith (conf cnf) . (\configuration -> vSMTSolve pprop configuration (settings cnf)))
 
      -- run configurations in parallel after making the variational core
      res <- liftIO $ parallel $! if null configPool
@@ -304,6 +304,7 @@ data IncState d =
                                         -- and will be refactored for VSAT2.
            , reqChan :: Chan (IncVSMTSolve d I.SBool)
            , resChan :: Chan (Result d)
+           , chanMap :: M.Map (Dim d, Bool) (Chan (IncVSMTSolve d I.SBool))
            } deriving (Eq,Generic)
 
 emptySt :: (Resultable d) => Chan (IncVSMTSolve d I.SBool) -> Chan (Result d) -> IncState d
@@ -314,6 +315,7 @@ emptySt rqChan rsChan = IncState{ result=mempty
                                 , genModelMaps=True
                                 , reqChan=rqChan
                                 , resChan=rsChan
+                                , chanMap=mempty
                                 }
 
 onResult :: (Result d -> Result d) -> IncState d -> IncState d
@@ -382,17 +384,22 @@ vSMTSolve prop conf ss =
      SC.query $
        do
          -- spawn workers
-         let worker x = control $ \runInIO -> do
-               forkOS $ runInIO $ do
-                 St.runStateT solveVariant (onGenModels (const $! generateModels ss) (emptySt requestChan resultChan){config=conf})
-                 return ()
+         -- let worker x = control $ \runInIO -> do
+         --       forkOS $ runInIO $ do
+         --         liftIO $ threadDelay 100000
+         --         St.runStateT solveVariant (onGenModels (const $! generateModels ss) (emptySt requestChan resultChan){config=conf})
+         --         return ()
 
-         mapM_ worker [1..2]
+         -- mapM_ worker [1..7]
 
 
 
          -- now run doChoice to populate request channel
-         (_, resMap) <- St.runStateT (doChoice prop') (onGenModels (const $! generateModels ss) (emptySt requestChan resultChan){config=conf})
+         control $ \runInIO -> do
+           forkOS $ runInIO $
+             do
+             St.runStateT (doChoice prop') (onGenModels (const $! generateModels ss) (emptySt requestChan resultChan){config=conf})
+             return ()
 
          -- check if no models were generated, if that is the case then we had a
          -- plain formula as input and it was all accumulated into a Unit value.
@@ -536,15 +543,20 @@ constrain b !name = do
 toText :: Show a => a -> Text
 toText = pack . show
 
-solveVariant :: Resultable d => IncVSMTSolve d ()
-solveVariant = forever $ do
+
+solveVariant :: Resultable d => IncVSMTSolve d S.SBool -> IncVSMTSolve d ()
+solveVariant go = do
            setModelNotGenD
 
            -- the recursive computaton
-           liftIO $ dbg "waiting for request: " ()
-           requestChannel <- gets reqChan
-           go <- liftIO $ readChan requestChannel
+           -- liftIO $ dbg "waiting for request: " ()
+           -- requestChannel <- gets reqChan
+           -- go <- liftIO $ readChan requestChannel
+
+           -- spawn a new chan just for children of this choice
+           -- newReqChan <- newChan
            liftIO $ dbg "read request: " ()
+
            lift $! SC.push 1
            liftIO $ dbg "GOING!!!" ()
            _ <- go
@@ -567,6 +579,7 @@ solveVariant = forever $ do
 
            -- reset stack
            lift $! SC.pop 1
+
            liftIO $ dbg "writing result" ()
            resultChannel <- gets resChan
            liftIO $ writeChan resultChannel resMap
@@ -609,23 +622,23 @@ handleChc goLeft goRight d =
        Just False -> do goRight; return ()
        Nothing    -> do
 
-         dbg "Splitting!" ()
+         -- liftIO $ dbg "Splitting!" ()
          --------------------- true variant -----------------------------
-         -- setDim d True
-         rqChanL <- gets reqChan
-         liftIO $ control $ \runInIO ->
-           do forkOS $ runInIO $ do
-                dbg "writing left side!" ()
-                writeChan rqChanL (do setDim d True; goLeft)
-              return ()
 
-         liftIO $ threadDelay 10000000
-         rqChanR <- gets reqChan
-         liftIO $ control $ \runInIO ->
-           do forkOS $ runInIO $ do
-                dbg "writing right side!" ()
-                writeChan rqChanR (do setDim d False; goRight)
-              return ()
+
+         control $ \runInIO ->
+             do runInIO $
+                  liftIO $
+                  forkOS $ do threadDelay 5000000
+                              runInIO $ do setDim d True; solveVariant goLeft
+                              return ()
+
+         control $ \runInIO ->
+             do runInIO $
+                  liftIO $
+                  forkOS $ do threadDelay 5000000
+                              runInIO $ do setDim d False; solveVariant goRight
+                              return ()
          -- trace ("[CHC] Going Left, choice: " ++ show d ++ "\n") $ return ()
            -- lRes <- S.runSMT $ SC.query $ evalStateT goLeft lState
            -- putMVar lMVar lRes
@@ -656,6 +669,7 @@ handleChc goLeft goRight d =
          -- miss (B, True)
          -- removeDim d
          -- return $! result
+         return ()
 {-# INLINE handleChc #-}
 
 
