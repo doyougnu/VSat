@@ -42,6 +42,7 @@ import           Prelude hiding (LT, GT, EQ)
 import           Control.Concurrent.ParallelIO (parallel)
 import           Control.Monad.Trans.Control
 import           Control.Concurrent (forkOS, readChan, writeChan, newChan, Chan, threadDelay, getChanContents)
+import           System.IO
 
 import           SAT
 import           VProp.Types
@@ -254,7 +255,7 @@ runVSMTSolve configPool prop =
 
      -- run the inner driver
      let !pprop = findPrincipleChoice . mkTop <$> (prop' >>= (evaluate . toBValue))
-         run = (S.runSMTWith (conf cnf) . (\configuration -> vSMTSolve pprop configuration (settings cnf)))
+         run = (S.runSMTWith (conf cnf){S.verbose=True} . (\configuration -> vSMTSolve pprop configuration (settings cnf)))
 
      -- run configurations in parallel after making the variational core
      res <- liftIO $ parallel $! if null configPool
@@ -368,6 +369,7 @@ vSMTSolve :: (Resultable d) =>
   Ts.Symbolic (Loc d) -> Config d -> Settings -> Ts.Symbolic (Result d)
 vSMTSolve prop conf ss =
   do S.setOption $ SC.ProduceUnsatCores True
+     liftIO $ hSetBuffering stdout LineBuffering
      prop' <- prop
      requestChan <- liftIO $ newChan
      resultChan <- liftIO $ newChan
@@ -381,8 +383,9 @@ vSMTSolve prop conf ss =
        do
          -- spawn workers
          let worker x = control $ \runInIO -> do
-               threadDelay 500000
-               forkOS $ runInIO $ forever $ St.runStateT solveVariant (onGenModels (const $! generateModels ss) (emptySt requestChan resultChan){config=conf})
+               forkOS $ runInIO $ do
+                 St.runStateT solveVariant (onGenModels (const $! generateModels ss) (emptySt requestChan resultChan){config=conf})
+                 return ()
 
          mapM_ worker [1..2]
 
@@ -397,6 +400,7 @@ vSMTSolve prop conf ss =
          -- already knows about the entire plain formula
 
          results <- liftIO $ getChanContents resultChan
+         dbg "Size: " (length results)
          return (mconcat results)
 
 solvePlain :: (Resultable d) => SC.Query (Result d)
@@ -533,7 +537,7 @@ toText :: Show a => a -> Text
 toText = pack . show
 
 solveVariant :: Resultable d => IncVSMTSolve d ()
-solveVariant = do
+solveVariant = forever $ do
            setModelNotGenD
 
            -- the recursive computaton
@@ -542,8 +546,10 @@ solveVariant = do
            go <- liftIO $ readChan requestChannel
            liftIO $ dbg "read request: " ()
            lift $! SC.push 1
+           liftIO $ dbg "GOING!!!" ()
            _ <- go
 
+           liftIO $ dbg "after go going to get a model" ()
            -- check if the config was satisfiable, and if the recursion
            -- generated a model
            bd <- hasGenDModel
@@ -603,14 +609,23 @@ handleChc goLeft goRight d =
        Just False -> do goRight; return ()
        Nothing    -> do
 
-         liftIO $ dbg "Splitting!" ()
+         dbg "Splitting!" ()
          --------------------- true variant -----------------------------
          -- setDim d True
-         rqChan <- gets reqChan
+         rqChanL <- gets reqChan
          liftIO $ control $ \runInIO ->
-           do forkOS $ runInIO $ writeChan rqChan (do setDim d True; goLeft); return ()
+           do forkOS $ runInIO $ do
+                dbg "writing left side!" ()
+                writeChan rqChanL (do setDim d True; goLeft)
+              return ()
+
+         liftIO $ threadDelay 10000000
+         rqChanR <- gets reqChan
          liftIO $ control $ \runInIO ->
-           do forkOS $ runInIO $ writeChan rqChan (do setDim d False; goRight); return ()
+           do forkOS $ runInIO $ do
+                dbg "writing right side!" ()
+                writeChan rqChanR (do setDim d False; goRight)
+              return ()
          -- trace ("[CHC] Going Left, choice: " ++ show d ++ "\n") $ return ()
            -- lRes <- S.runSMT $ SC.query $ evalStateT goLeft lState
            -- putMVar lMVar lRes
@@ -710,8 +725,8 @@ toBValue (OpBB op l r) = BVOp (toBValue l) op (toBValue r)
 toBValue (OpIB _ _ _) = error "Blame Jeff! This isn't implemented yet!"
 toBValue (ChcB d l r) = C d l r
 
-dbg :: (Show a) => Text -> a -> IO ()
-dbg s a = T.putStrLn (s <> " : " <> toText a <> " \n")
+dbg :: (Show a, MonadIO m) => Text -> a -> m ()
+dbg s a = liftIO $ T.putStrLn (s <> " : " <> toText a <> " \n")
 
 -- | Evaluation allows communication with the solver and reduces terms to Unit
 -- values thereby representing that evaluation has taken place. Evaluation can
