@@ -23,8 +23,8 @@ module Run ( SatDict
 import           Control.Arrow (first, second)
 import           Control.Monad.RWS.Strict
 import           Control.Monad.State.Strict as St
-import Control.Monad.IO.Class (MonadIO)
-import Control.Monad.Reader (ReaderT)
+import           Control.Monad.IO.Class (MonadIO)
+import           Control.Monad.Reader (ReaderT, runReaderT)
 import           Control.Monad.Base
 import           Control.DeepSeq
 import           GHC.Generics
@@ -36,11 +36,12 @@ import qualified Data.SBV.Control as SC
 import qualified Data.SBV.Internals as I
 import qualified Data.SBV.Trans as Ts
 import           Data.Text (unpack, pack, Text)
+import qualified Data.Text.IO as T
 import           Data.List (intersperse)
 import           Prelude hiding (LT, GT, EQ)
 import           Control.Concurrent.ParallelIO (parallel)
 import           Control.Monad.Trans.Control
-import           Control.Concurrent.Async.Lifted
+import           Control.Concurrent (forkOS, readChan, writeChan, newChan, Chan, threadDelay, getChanContents)
 
 import           SAT
 import           VProp.Types
@@ -300,15 +301,19 @@ data IncState d =
                                         -- from not have a proper newtype for
                                         -- IncStateVSMT. For VSAT1 this is fine
                                         -- and will be refactored for VSAT2.
-           } deriving (Eq,Show,Generic)
+           , reqChan :: Chan (IncVSMTSolve d I.SBool)
+           , resChan :: Chan (Result d)
+           } deriving (Eq,Generic)
 
-emptySt :: (Resultable d) => IncState d
-emptySt = IncState{ result=mempty
-                  , config=mempty
-                  , processed=False
-                  , usedConstraints=mempty
-                  , genModelMaps=True
-                  }
+emptySt :: (Resultable d) => Chan (IncVSMTSolve d I.SBool) -> Chan (Result d) -> IncState d
+emptySt rqChan rsChan = IncState{ result=mempty
+                                , config=mempty
+                                , processed=False
+                                , usedConstraints=mempty
+                                , genModelMaps=True
+                                , reqChan=rqChan
+                                , resChan=rsChan
+                                }
 
 onResult :: (Result d -> Result d) -> IncState d -> IncState d
 onResult f IncState {..} = IncState {result=f result, ..}
@@ -354,46 +359,57 @@ insertUsed = onUsed . insert
 -- we can pull out sbv models Hardcoding so that I don't have to write the mtl
 -- typeclass. I do not expect these to change much
 -- TODO newtype this and add a reader for various settings
-type IncVSMTSolve d a = St.StateT (IncState d) (S.SymbolicT SC.Query) a
+type IncVSMTSolve d = St.StateT (IncState d)  SC.Query
 
 -- | Top level wrapper around engine and monad stack, this sets options for the
 -- underlying solver, inspects the results to see if they were variational or
 -- not, if not then it gets the plain model
-vSMTSolve :: (Show d, Resultable d) =>
-  S.Symbolic (Loc d) ->
-  Config d -> Settings -> S.Symbolic (Result d)
+vSMTSolve :: (Resultable d) =>
+  Ts.Symbolic (Loc d) -> Config d -> Settings -> Ts.Symbolic (Result d)
 vSMTSolve prop conf ss =
   do S.setOption $ SC.ProduceUnsatCores True
+     prop' <- prop
+     requestChan <- liftIO $ newChan
+     resultChan <- liftIO $ newChan
      -- partially evaluate the prop
      -- ask whether this should gen models or just perform isSat calls
-     prop' <- prop
-     SC.query $
-       do
          -- now we avoid redundent computation by solving on the evaluated
          -- proposition instead of the input proposition
-         (b,resSt) <- St.runStateT (solveVariational conf prop')
-                      (onGenModels (const $! generateModels ss) emptySt)
+     -- let mode = I.SMTMode I.QueryExternal I.ISafe True S.z3{S.verbose=True}
+
+     SC.query $
+       do
+         -- spawn workers
+         let worker x = control $ \runInIO -> do
+               threadDelay 500000
+               forkOS $ runInIO $ forever $ St.runStateT solveVariant (onGenModels (const $! generateModels ss) (emptySt requestChan resultChan){config=conf})
+
+         mapM_ worker [1..2]
+
+
+
+         -- now run doChoice to populate request channel
+         (_, resMap) <- St.runStateT (doChoice prop') (onGenModels (const $! generateModels ss) (emptySt requestChan resultChan){config=conf})
 
          -- check if no models were generated, if that is the case then we had a
          -- plain formula as input and it was all accumulated into a Unit value.
          -- This means that we just need to get the result from the solver as it
          -- already knows about the entire plain formula
-         if isResultNull (result resSt)
-           then solvePlain
-           else return $ result resSt
 
-solvePlain :: Resultable d => SC.Query (Result d)
+         results <- liftIO $ getChanContents resultChan
+         return (mconcat results)
+
+solvePlain :: (Resultable d) => SC.Query (Result d)
 solvePlain = getResultWith $ toResultProp . LitB
 
-solveVariational :: (Show d, Resultable d) =>
-                    Config d ->
-                    Loc d ->
-                    IncVSMTSolve d ()
-solveVariational cfg prop = do lift $ SC.push 1
-                              -- trace ("Result of Eval: " ++ ushow prop ++ "\n") $ return ()
-                               setConfig cfg
-                               _ <- doChoice prop
-                               lift $ SC.pop 1
+-- solveVariational :: (Resultable d) => Loc d -> IncVSMTSolve d ()
+-- solveVariational prop = do
+--   lift $ SC.push 1
+--     -- trace ("Result of Eval: " ++ ushow prop ++ "\n") $ return ()
+--   _ <- doChoice prop
+--   lift $ SC.pop 1
+--   -- spawn workers
+
 
 -- | The name of a reference
 type Name = Text
@@ -516,12 +532,15 @@ constrain b !name = do
 toText :: Show a => a -> Text
 toText = pack . show
 
-solveVariant :: Resultable d =>
-  IncVSMTSolve d I.SBool -> IncVSMTSolve d (Result d)
-solveVariant go = do
+solveVariant :: Resultable d => IncVSMTSolve d ()
+solveVariant = do
            setModelNotGenD
 
            -- the recursive computaton
+           liftIO $ dbg "waiting for request: " ()
+           requestChannel <- gets reqChan
+           go <- liftIO $ readChan requestChannel
+           liftIO $ dbg "read request: " ()
            lift $! SC.push 1
            _ <- go
 
@@ -535,15 +554,16 @@ solveVariant go = do
                              modelsEnabled <- gets genModelMaps
                              setModelGenD
                              lift $! if modelsEnabled
-                                     then getResult prop
-                                     else getResultOnlySat prop
+                                            then getResult prop
+                                            else getResultOnlySat prop
                       else -- not sat or have gen'd a model so ignore
                        return mempty
 
            -- reset stack
            lift $! SC.pop 1
-
-           return resMap
+           liftIO $ dbg "writing result" ()
+           resultChannel <- gets resChan
+           liftIO $ writeChan resultChannel resMap
 
 instance MonadTransControl I.QueryT where
   type StT I.QueryT a = StT (ReaderT I.State) a
@@ -558,39 +578,40 @@ instance MonadBaseControl b m => MonadBaseControl b (I.QueryT m) where
 instance MonadBase b m => MonadBase b (I.QueryT m) where
   liftBase = lift . liftBase
 
--- instance MonadTransControl Ts.SymbolicT where
---   type StT Ts.SymbolicT a = StT (ReaderT I.State) a
---   liftWith = defaultLiftWith Ts.SymbolicT Ts.runSymbolicT
---   restoreT = defaultRestoreT Ts.SymbolicT
+instance MonadTransControl Ts.SymbolicT where
+  type StT Ts.SymbolicT a = StT (ReaderT I.State) a
+  liftWith = defaultLiftWith Ts.SymbolicT Ts.runSymbolicT
+  restoreT = defaultRestoreT Ts.SymbolicT
 
--- instance MonadBaseControl b m => MonadBaseControl b (Ts.SymbolicT m) where
---   type StM (Ts.SymbolicT m) a = ComposeSt Ts.SymbolicT m a
---   liftBaseWith               = defaultLiftBaseWith
---   restoreM                   = defaultRestoreM
+instance MonadBaseControl b m => MonadBaseControl b (Ts.SymbolicT m) where
+  type StM (Ts.SymbolicT m) a = ComposeSt Ts.SymbolicT m a
+  liftBaseWith               = defaultLiftBaseWith
+  restoreM                   = defaultRestoreM
 
--- instance MonadBase b m => MonadBase b (S.SymbolicT m) where
---   liftBase = lift . liftBase
+instance MonadBase b m => MonadBase b (Ts.SymbolicT m) where
+  liftBase = lift . liftBase
 
 handleChc :: (Resultable d) =>
-  IncVSMTSolve d (Result d)
-  -> IncVSMTSolve d (Result d)
+  IncVSMTSolve d S.SBool
+  -> IncVSMTSolve d S.SBool
   -> Dim d
-  -> IncVSMTSolve d (Result d)
+  -> IncVSMTSolve d ()
 handleChc goLeft goRight d =
   do currentCfg <- gets config
      case M.lookup d currentCfg of
-       Just True  -> goLeft
-       Just False -> goRight
+       Just True  -> do goLeft; return ()
+       Just False -> do goRight; return ()
        Nothing    -> do
 
+         liftIO $ dbg "Splitting!" ()
          --------------------- true variant -----------------------------
          -- setDim d True
-         result <- control $ \runInIO -> do
-           (!lRes, !rRes) <- concurrently
-                             (runInIO $ do setDim d True; goLeft)
-                             (runInIO $ do setDim d False; goRight)
-           return $! lRes
-           -- trace ("[CHC] Going Left, choice: " ++ show d ++ "\n") $ return ()
+         rqChan <- gets reqChan
+         liftIO $ control $ \runInIO ->
+           do forkOS $ runInIO $ writeChan rqChan (do setDim d True; goLeft); return ()
+         liftIO $ control $ \runInIO ->
+           do forkOS $ runInIO $ writeChan rqChan (do setDim d False; goRight); return ()
+         -- trace ("[CHC] Going Left, choice: " ++ show d ++ "\n") $ return ()
            -- lRes <- S.runSMT $ SC.query $ evalStateT goLeft lState
            -- putMVar lMVar lRes
            -- leftRes <- P.new
@@ -618,8 +639,8 @@ handleChc goLeft goRight d =
          -- then the config will retain the selection of (B, False) and
          -- therefore on the (A, False) branch of the recursion it'll
          -- miss (B, True)
-         removeDim d
-         return result
+         -- removeDim d
+         -- return $! result
 {-# INLINE handleChc #-}
 
 
@@ -689,8 +710,8 @@ toBValue (OpBB op l r) = BVOp (toBValue l) op (toBValue r)
 toBValue (OpIB _ _ _) = error "Blame Jeff! This isn't implemented yet!"
 toBValue (ChcB d l r) = C d l r
 
-dbg :: (Show a, Monad m) => String -> a -> m ()
-dbg s a = trace (s ++ " : " ++ show a ++ " \n") $ return ()
+dbg :: (Show a) => Text -> a -> IO ()
+dbg s a = T.putStrLn (s <> " : " <> toText a <> " \n")
 
 -- | Evaluation allows communication with the solver and reduces terms to Unit
 -- values thereby representing that evaluation has taken place. Evaluation can
@@ -831,21 +852,20 @@ type Loc d = (BValue d, Ctx d)
 doChoice :: (Show d, Resultable d) => Loc d -> IncVSMTSolve d S.SBool
 doChoice (b@(B b'), Top)                =
   -- trace ("Bool" ++ show b ++ "\n") $
-  do _ <- evaluate b
-     return b'
+  do evaluate b; return b'
 doChoice (Unit, Top)               =
   -- trace ("Unit Top \n") $
   return true
 doChoice x@(C d l r, Top)            =
   -- trace ("Choice Top"  ++ show x ++ "\n") $
   do let
-      bl = toBValue l
-      goLeft = solveVariant $ doChoice (bl, Top)
+      !bl = toBValue l
+      !goLeft = doChoice (bl, Top)
 
-      br = toBValue r
-      goRight = solveVariant $ doChoice (br, Top)
+      !br = toBValue r
+      !goRight = doChoice (br, Top)
 
-     handleChc goLeft goRight d >>= store
+     handleChc goLeft goRight d
      return true
 
 doChoice (Unit, c@(InL parent op r))   =
@@ -873,28 +893,29 @@ doChoice (B bl, InL parent op r) =
 doChoice x@(C d l r, ctx@(InL _ _ _)) =
   -- trace ("Got here L " ++ show x ++ "\n") $
   do let
-      goLeft = do
+      !goLeft =
         -- bl <- evaluate (toBValue l)
-        solveVariant $! doChoice (toBValue l, ctx)
+        doChoice (toBValue l, ctx)
 
-      goRight = do
+      !goRight =
         -- br <- evaluate (toBValue r)
-        solveVariant $! doChoice (toBValue r, ctx)
+        doChoice (toBValue r, ctx)
 
-     handleChc goLeft goRight d >>= store
+     handleChc goLeft goRight d
      return true
 
 doChoice x@(C d l r, ctx@(InR _ _ _)) =
   -- trace ("Got here R" ++ show x ++ "\n") $
-  do let
-      bl = toBValue l
-      goLeft = solveVariant $ doChoice (bl, ctx)
+  do
+    let
+      !bl = toBValue l
+      !goLeft = doChoice (bl, ctx)
 
-      br = toBValue r
-      goRight = solveVariant $ doChoice (br, ctx)
+      !br = toBValue r
+      !goRight = doChoice (br, ctx)
 
-     handleChc goLeft goRight d >>= store
-     return true
+    handleChc goLeft goRight d
+    return true
 
   -- we recur to the left in order to fold to the right
 doChoice (BVOp l op r, ctx) =

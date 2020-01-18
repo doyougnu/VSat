@@ -36,7 +36,7 @@ import           Control.Arrow (first)
 import qualified Data.Map.Strict as M
 import           Data.Maybe (fromMaybe)
 import           Data.SBV (allSat, AllSatResult(..), SMTResult(..), getModelDictionary)
-import           Data.SBV.Control (Query, getSMTResult,CheckSatResult(..),checkSat)
+import           Data.SBV.Control (MonadQuery(..), Query, getSMTResult,CheckSatResult(..),checkSat)
 import           Data.SBV.Internals (cvToBool)
 import           Data.String (IsString, fromString)
 import           Data.Text (pack, Text)
@@ -283,7 +283,7 @@ isSat = do cs <- checkSat
 -- when f is applied "x" == True result from f. This is used to turn
 -- dictionaries into <var> == <formula of dimensions where var is True>
 -- associations
-getResultWith :: Resultable d => (Bool -> ResultProp d) -> Query (Result d)
+getResultWith :: (Resultable d) => (Bool -> ResultProp d) -> Query (Result d)
 getResultWith !f =
   do model <- getVSMTModel
      return $!
@@ -323,7 +323,7 @@ dispatchProp :: ResultProp d -> Bool -> ResultProp d
 dispatchProp !p !x = if x then p else (ResultProp $ UniformProp $ LitB x)
 {-# INLINE dispatchProp #-}
 
-getResult :: Resultable d => ResultProp d -> Query (Result d)
+getResult :: (Resultable d) => ResultProp d -> Query (Result d)
 getResult = getResultWith . dispatchProp
 {-# INLINE getResult #-}
 

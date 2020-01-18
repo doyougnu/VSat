@@ -1,7 +1,7 @@
 flags: {}
 packages:
   - '.'
-  # - /home/doyougnu/Research/VSat/haskell/lib/sbv
+  - /home/doyougnu/Research/VSat/haskell/lib/sbv
 # system-ghc: false
 extra-deps:
   - genifunctors-0.4
@@ -19,7 +19,6 @@ extra-deps:
   - binary-0.8.7.0
   - parser-combinators-0.4.0
   - text-1.2.4.0
-  - sbv-8.5
 
 ## uncomment the following lines to tell stack you are in a nix environment
 nix:

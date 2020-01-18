@@ -26,7 +26,7 @@ dependencies:
 - genifunctors >= 0.4
 # sbv forces us to use LTS-11.22 ghc 8.2.2
 # - sbvFix # my custom version
-- sbv >= 8.5
+- sbv == 8.5.6
 - cassava
 - bytestring
 - text
@@ -41,7 +41,7 @@ dependencies:
 - async
 - monad-control
 - transformers-base
-- lifted-async
+- lifted-base
 - megaparsec <= 6.4
 # - parser-combinators >= 1.0
 - unicode-show # just for result output
