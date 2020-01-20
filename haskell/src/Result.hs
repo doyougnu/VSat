@@ -33,11 +33,13 @@ module Result ( ResultProp(..)
 
 import           Control.DeepSeq (NFData)
 import           Control.Arrow (first)
+import           Control.Monad.IO.Class
 import qualified Data.Map.Strict as M
 import           Data.Maybe (fromMaybe)
 import           Data.SBV (allSat, AllSatResult(..), SMTResult(..), getModelDictionary)
-import           Data.SBV.Control (MonadQuery(..), Query, getSMTResult,CheckSatResult(..),checkSat)
+import           Data.SBV.Control (MonadQuery(..), Query,CheckSatResult(..))
 import           Data.SBV.Internals (cvToBool)
+import           Data.SBV.Trans.Control (checkSat, getSMTResult)
 import           Data.String (IsString, fromString)
 import           Data.Text (pack, Text)
 import           GHC.Generics (Generic)
@@ -268,11 +270,11 @@ nullResult = Result mempty
 
 
 -- | grab a vsmt model from SBV, check if it is sat or not, if so return it
-getVSMTModel :: Query SMTResult
+getVSMTModel :: (MonadIO m, MonadQuery m) => m SMTResult
 getVSMTModel = getSMTResult
 
 --- | check if the current context is sat or not
-isSat :: Query Bool
+isSat :: (MonadIO m, MonadQuery m) => m Bool
 isSat = do cs <- checkSat
            return $! case cs of
                        Sat -> True
@@ -283,7 +285,7 @@ isSat = do cs <- checkSat
 -- when f is applied "x" == True result from f. This is used to turn
 -- dictionaries into <var> == <formula of dimensions where var is True>
 -- associations
-getResultWith :: (Resultable d) => (Bool -> ResultProp d) -> Query (Result d)
+getResultWith :: (Resultable d, MonadIO m, MonadQuery m) => (Bool -> ResultProp d) -> m (Result d)
 getResultWith !f =
   do model <- getVSMTModel
      return $!
@@ -309,7 +311,7 @@ getResultWith !f =
 -- when f is applied "x" == True result from f. This is used to turn
 -- dictionaries into <var> == <formula of dimensions where var is True>
 -- associations
-getResultOnlySat :: Resultable d => ResultProp d -> Query (Result d)
+getResultOnlySat :: (Resultable d, MonadIO m, MonadQuery m) => ResultProp d -> m (Result d)
 getResultOnlySat !p = do s <- isSat
                          return $! if s
                                    then insertToSat   p mempty
@@ -323,7 +325,7 @@ dispatchProp :: ResultProp d -> Bool -> ResultProp d
 dispatchProp !p !x = if x then p else (ResultProp $ UniformProp $ LitB x)
 {-# INLINE dispatchProp #-}
 
-getResult :: (Resultable d) => ResultProp d -> Query (Result d)
+getResult :: (Resultable d, MonadIO m, MonadQuery m) => ResultProp d -> m (Result d)
 getResult = getResultWith . dispatchProp
 {-# INLINE getResult #-}
 
