@@ -42,6 +42,7 @@ dependencies:
 - monad-control
 - transformers-base
 - lifted-base
+- stm
 - megaparsec <= 6.4
 # - parser-combinators >= 1.0
 - unicode-show # just for result output

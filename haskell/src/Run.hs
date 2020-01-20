@@ -42,6 +42,8 @@ import           Prelude hiding (LT, GT, EQ)
 import           Control.Concurrent.ParallelIO (parallel)
 import           Control.Monad.Trans.Control
 import           Control.Concurrent (forkOS, readChan, dupChan, writeChan, newChan, Chan, threadDelay, getChanContents)
+import           Control.Concurrent.STM.TChan
+import           Control.Concurrent.STM
 import           Control.Concurrent.Async
 import           System.IO
 
@@ -304,10 +306,10 @@ data IncState d =
                                         -- from not have a proper newtype for
                                         -- IncStateVSMT. For VSAT1 this is fine
                                         -- and will be refactored for VSAT2.
-           , resChan :: Chan (IncVSMTSolve d (Result d))
+           , resChan :: TChan (IncVSMTSolve d (Result d))
            } deriving (Eq,Generic)
 
-emptySt :: (Resultable d) => Chan (IncVSMTSolve d (Result d)) -> IncState d
+emptySt :: (Resultable d) => TChan (IncVSMTSolve d (Result d)) -> IncState d
 emptySt rsChan = IncState{ result=mempty
                          , config=mempty
                          , processed=False
@@ -374,7 +376,7 @@ vSMTSolve :: (Resultable d) =>
 vSMTSolve solverF prop conf ss =
   do -- S.setOption $ SC.ProduceUnsatCores True
      liftIO $ hSetBuffering stdout LineBuffering
-     resultChan <- newChan
+     resultChan <- newBroadcastTChanIO
      -- partially evaluate the prop
      -- ask whether this should gen models or just perform isSat calls
          -- now we avoid redundent computation by solving on the evaluated
@@ -407,7 +409,6 @@ vSMTSolve solverF prop conf ss =
      --         St.runStateT (doChoice prop') (onGenModels (const $! generateModels ss) (emptySt requestChan resultChan){config=conf})
      --       return ()
 
-     -- forkOS $
      I.runSymbolic mode $ do prop' <- prop
                              return $ doChoice prop'
           -- return ()
@@ -416,8 +417,15 @@ vSMTSolve solverF prop conf ss =
          -- plain formula as input and it was all accumulated into a Unit value.
          -- This means that we just need to get the result from the solver as it
          -- already knows about the entire plain formula
-     results <- mapConcurrently (\_ -> dupChan resultChan >>= forever readChan >>= solverF . run) [1..2]
-     -- dbg "Size: " (length results)
+
+     let go = do threadDelay 750000
+                 dbg "I'm listening!" ()
+                 res <- atomically $ dupTChan resultChan >>= readTChan
+                 S.runSMTWith S.z3{S.verbose=True} $! run res
+
+     dbg "spawning readers!" ()
+     results <- replicateConcurrently 2 go
+     dbg "spawned readers!" ()
      return (mconcat results)
 
 solvePlain :: (Resultable d) => SC.Query (Result d)
@@ -591,7 +599,7 @@ solveVariant go = do
 
            liftIO $ dbg "writing result" ()
            resultChannel <- gets resChan
-           liftIO $ writeChan resultChannel (return resMap)
+           liftIO $ atomically $ writeTChan resultChannel (return resMap)
 
 instance MonadTransControl I.QueryT where
   type StT I.QueryT a = StT (ReaderT I.State) a
@@ -631,7 +639,6 @@ handleChc goLeft goRight d =
        Just False -> do goRight; return ()
        Nothing    -> do
 
-         -- liftIO $ dbg "Splitting!" ()
          --------------------- true variant -----------------------------
 
 
@@ -642,12 +649,13 @@ handleChc goLeft goRight d =
          --                      runInIO $ do setDim d True; solveVariant goLeft
          --                      return ()
 
-         control $ \runInIO -> do
-           runInIO $
-             liftIO $
-             concurrently_
-             (runInIO $ do setDim d False; solveVariant goRight)
-             (runInIO $ do setDim d True; solveVariant goLeft)
+         liftIO $ dbg "Splitting!" ()
+         -- control $ \runInIO -> do
+         --   runInIO $
+         --     liftIO $
+         --     concurrently_
+         --     (runInIO $ do setDim d False; solveVariant goRight)
+         --     (runInIO $ do setDim d True; solveVariant goLeft)
          -- trace ("[CHC] Going Left, choice: " ++ show d ++ "\n") $ return ()
            -- lRes <- S.runSMT $ SC.query $ evalStateT goLeft lState
            -- putMVar lMVar lRes
@@ -655,6 +663,8 @@ handleChc goLeft goRight d =
            -- P.fork $ do P.pval goRight >>= P.put leftRes
 
          -------------------- false variant -----------------------------
+         do setDim d False; solveVariant goRight
+         do setDim d True; solveVariant goLeft
          -- setDim d False
 
          -- liftIO $ forkIO $ do
