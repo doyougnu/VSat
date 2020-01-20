@@ -255,9 +255,9 @@ runVSMTSolve configPool prop =
   do cnf <- ask
      -- convert all refs to SBools
      let
-       prop' :: IncVSMTSolverT IncState Tsc.Query (VProp Text (Ts.SBool, Name) SNum)
-       prop' = IncVSMTSolverT . lift $
-         St.evalStateT (runVSolver $ propToSBool prop) (mempty, mempty)
+       prop' :: IncVSMTSolve (VProp Text (Ts.SBool, Name) SNum)
+       prop' = IncVSMTSolverT . lift $ fst <$>
+         St.runStateT (runVSolver $ propToSBool prop) (mempty, mempty)
 
      -- run the inner driver
      let !pprop = findPrincipleChoice . mkTop <$> (prop' >>= (evaluate . toBValue))
@@ -388,10 +388,10 @@ vSMTSolve prop conf ss =
   do -- S.setOption $ SC.ProduceUnsatCores True
 
      let runS :: IncVSMTSolve a -> IO a
-         runS p = S.runSMT $ SC.query $ Ts.runSMT $
-                  St.evalStateT
-                  (runVSolver p)
-                  (onGenModels (const $! generateModels ss) emptySt{config=conf})
+         runS p = do
+           let symb = St.evalStateT (runVSolver p) (onGenModels (const $! generateModels ss) emptySt{config=conf})
+           Ts.runSMT $ Tsc.query $ Ts.runSMT $ control (\inQuery -> inQuery symb)
+
 
      -- let go = do dbg "I'm listening!" ()
      --             threadDelay 7500000
@@ -518,7 +518,6 @@ instance (I.SolverContext m, Monad m) =>
 
 instance (Tsc.MonadQuery m) => Tsc.MonadQuery (IncVSMTSolverT s m) where
   queryState = lift Tsc.queryState
-
 
 -- Helper functions for solve routine
 -- store :: Result Text -> IncVSMTSolve  ()
