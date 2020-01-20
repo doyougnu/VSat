@@ -41,7 +41,8 @@ import           Data.List (intersperse)
 import           Prelude hiding (LT, GT, EQ)
 import           Control.Concurrent.ParallelIO (parallel)
 import           Control.Monad.Trans.Control
-import           Control.Concurrent (forkOS, readChan, writeChan, newChan, Chan, threadDelay, getChanContents)
+import           Control.Concurrent (forkOS, readChan, dupChan, writeChan, newChan, Chan, threadDelay, getChanContents)
+import           Control.Concurrent.Async
 import           System.IO
 
 import           SAT
@@ -255,7 +256,8 @@ runVSMTSolve configPool prop =
 
      -- run the inner driver
      let !pprop = findPrincipleChoice . mkTop <$> (prop' >>= (evaluate . toBValue))
-         run = (S.runSMTWith (conf cnf) . (\configuration -> vSMTSolve pprop configuration (settings cnf)))
+         runSolver = S.runSMTWith (conf cnf)
+         run = \configuration -> vSMTSolve runSolver pprop configuration (settings cnf)
 
      -- run configurations in parallel after making the variational core
      res <- liftIO $ parallel $! if null configPool
@@ -302,21 +304,17 @@ data IncState d =
                                         -- from not have a proper newtype for
                                         -- IncStateVSMT. For VSAT1 this is fine
                                         -- and will be refactored for VSAT2.
-           , reqChan :: Chan (IncVSMTSolve d I.SBool)
-           , resChan :: Chan (Result d)
-           , chanMap :: M.Map (Dim d, Bool) (Chan (IncVSMTSolve d I.SBool))
+           , resChan :: Chan (IncVSMTSolve d (Result d))
            } deriving (Eq,Generic)
 
-emptySt :: (Resultable d) => Chan (IncVSMTSolve d I.SBool) -> Chan (Result d) -> IncState d
-emptySt rqChan rsChan = IncState{ result=mempty
-                                , config=mempty
-                                , processed=False
-                                , usedConstraints=mempty
-                                , genModelMaps=True
-                                , reqChan=rqChan
-                                , resChan=rsChan
-                                , chanMap=mempty
-                                }
+emptySt :: (Resultable d) => Chan (IncVSMTSolve d (Result d)) -> IncState d
+emptySt rsChan = IncState{ result=mempty
+                         , config=mempty
+                         , processed=False
+                         , usedConstraints=mempty
+                         , genModelMaps=True
+                         , resChan=rsChan
+                         }
 
 onResult :: (Result d -> Result d) -> IncState d -> IncState d
 onResult f IncState {..} = IncState {result=f result, ..}
@@ -362,27 +360,31 @@ insertUsed = onUsed . insert
 -- we can pull out sbv models Hardcoding so that I don't have to write the mtl
 -- typeclass. I do not expect these to change much
 -- TODO newtype this and add a reader for various settings
-type IncVSMTSolve d = St.StateT (IncState d)  SC.Query
+type IncVSMTSolve d = St.StateT (IncState d)  (Ts.SymbolicT SC.Query)
 
 -- | Top level wrapper around engine and monad stack, this sets options for the
 -- underlying solver, inspects the results to see if they were variational or
 -- not, if not then it gets the plain model
 vSMTSolve :: (Resultable d) =>
-  Ts.Symbolic (Loc d) -> Config d -> Settings -> Ts.Symbolic (Result d)
-vSMTSolve prop conf ss =
-  do S.setOption $ SC.ProduceUnsatCores True
+  (S.Symbolic a -> IO a) ->
+  Ts.Symbolic (Loc d) ->
+  Config d ->
+  Settings ->
+  IO (Result d)
+vSMTSolve solverF prop conf ss =
+  do -- S.setOption $ SC.ProduceUnsatCores True
      liftIO $ hSetBuffering stdout LineBuffering
-     prop' <- prop
-     requestChan <- liftIO $ newChan
-     resultChan <- liftIO $ newChan
+     resultChan <- newChan
      -- partially evaluate the prop
      -- ask whether this should gen models or just perform isSat calls
          -- now we avoid redundent computation by solving on the evaluated
          -- proposition instead of the input proposition
-     -- let mode = I.SMTMode I.QueryExternal I.ISafe True S.z3{S.verbose=True}
+     let mode = I.SMTMode I.QueryExternal I.ISafe True S.z3{S.verbose=True}
+         -- run :: (Resultable d) => IncVSMTSolve d a -> IO a
+         run p = SC.query $ fmap (fst . fst) $
+                 I.runSymbolic mode $
+                 St.runStateT p (onGenModels (const $! generateModels ss) (emptySt resultChan){config=conf})
 
-     SC.query $
-       do
          -- spawn workers
          -- let worker x = control $ \runInIO -> do
          --       forkOS $ runInIO $ do
@@ -395,20 +397,28 @@ vSMTSolve prop conf ss =
 
 
          -- now run doChoice to populate request channel
-         control $ \runInIO -> do
-           forkOS $ runInIO $
-             do
-             St.runStateT (doChoice prop') (onGenModels (const $! generateModels ss) (emptySt requestChan resultChan){config=conf})
-             return ()
+     -- control $ \runInIO -> do
+     --   liftIO $
+     --     forkOS $
+     --     do
+     --       runInIO $ solverF $
+     --         SC.query $
+     --         I.runSymbolic mode $
+     --         St.runStateT (doChoice prop') (onGenModels (const $! generateModels ss) (emptySt requestChan resultChan){config=conf})
+     --       return ()
+
+     -- forkOS $
+     I.runSymbolic mode $ do prop' <- prop
+                             return $ doChoice prop'
+          -- return ()
 
          -- check if no models were generated, if that is the case then we had a
          -- plain formula as input and it was all accumulated into a Unit value.
          -- This means that we just need to get the result from the solver as it
          -- already knows about the entire plain formula
-
-         results <- liftIO $ getChanContents resultChan
-         dbg "Size: " (length results)
-         return (mconcat results)
+     results <- mapConcurrently (\_ -> dupChan resultChan >>= forever readChan >>= solverF . run) [1..2]
+     -- dbg "Size: " (length results)
+     return (mconcat results)
 
 solvePlain :: (Resultable d) => SC.Query (Result d)
 solvePlain = getResultWith $ toResultProp . LitB
@@ -555,9 +565,8 @@ solveVariant go = do
 
            -- spawn a new chan just for children of this choice
            -- newReqChan <- newChan
-           liftIO $ dbg "read request: " ()
 
-           lift $! SC.push 1
+           lift . lift $! SC.push 1
            liftIO $ dbg "GOING!!!" ()
            _ <- go
 
@@ -571,18 +580,18 @@ solveVariant go = do
                      then do prop <- gets (configToResultProp . config)
                              modelsEnabled <- gets genModelMaps
                              setModelGenD
-                             lift $! if modelsEnabled
+                             lift . lift $! if modelsEnabled
                                             then getResult prop
                                             else getResultOnlySat prop
                       else -- not sat or have gen'd a model so ignore
                        return mempty
 
            -- reset stack
-           lift $! SC.pop 1
+           lift . lift $! SC.pop 1
 
            liftIO $ dbg "writing result" ()
            resultChannel <- gets resChan
-           liftIO $ writeChan resultChannel resMap
+           liftIO $ writeChan resultChannel (return resMap)
 
 instance MonadTransControl I.QueryT where
   type StT I.QueryT a = StT (ReaderT I.State) a
@@ -626,19 +635,19 @@ handleChc goLeft goRight d =
          --------------------- true variant -----------------------------
 
 
-         control $ \runInIO ->
-             do runInIO $
-                  liftIO $
-                  forkOS $ do threadDelay 5000000
-                              runInIO $ do setDim d True; solveVariant goLeft
-                              return ()
+         -- control $ \runInIO ->
+         --     do runInIO $
+         --          liftIO $
+         --          forkOS $ do -- threadDelay 5000000
+         --                      runInIO $ do setDim d True; solveVariant goLeft
+         --                      return ()
 
-         control $ \runInIO ->
-             do runInIO $
-                  liftIO $
-                  forkOS $ do threadDelay 5000000
-                              runInIO $ do setDim d False; solveVariant goRight
-                              return ()
+         control $ \runInIO -> do
+           runInIO $
+             liftIO $
+             concurrently_
+             (runInIO $ do setDim d False; solveVariant goRight)
+             (runInIO $ do setDim d True; solveVariant goLeft)
          -- trace ("[CHC] Going Left, choice: " ++ show d ++ "\n") $ return ()
            -- lRes <- S.runSMT $ SC.query $ evalStateT goLeft lState
            -- putMVar lMVar lRes
