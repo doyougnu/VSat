@@ -57,7 +57,7 @@ logfile = "timing_desc_data.csv"
 -- TODO cleanup these types and refactor out the logging to middleware
 satWithHandler :: ActionCtxT () (WebStateM () () ()) b
 satWithHandler = do
-  req <- jsonBody' :: ApiAction (Request Var Text Text)
+  req <- jsonBody' :: ApiAction (Request Text Text Text)
   let prop = proposition req
       sets = fromMaybe defSettings (reqSettings req)
       conf = toConf sets
@@ -77,7 +77,7 @@ satWithHandler = do
 
 satHandler :: ActionCtxT () (WebStateM () () ()) b
 satHandler = do
-  req <- jsonBody' :: ApiAction (Request Var Text Text)
+  req <- jsonBody' :: ApiAction (Request Text Text Text)
   let prop = proposition req
   (runtime, res) <- liftIO . timeProc . sat $ prop
   _ <- liftIO . forkIO $ logData prop defSettings runtime logfile
@@ -115,7 +115,7 @@ instance C.ToRecord RunData
 instance C.ToRecord Settings
 instance C.ToRecord Opts
 
-logData :: VProp Var Text Text -> Settings -> Double -> FilePath -> IO ()
+logData :: VProp Text Text Text -> Settings -> Double -> FilePath -> IO ()
 logData prop sets runTime fn =
   do time <- getCurrentTime
      let row = RunData time sets runTime s c p sd sp ms

@@ -50,7 +50,7 @@ average xs = realToFrac (sum xs) / genericLength xs
 -- and confDesc that are hand written names for the algorithm being used and the
 -- configuration/prop description. We then input the prop and get a bunch of
 -- statistics on it and return all these as a slash '/' separated string
-mkDescription :: Resultable d => String -> String -> [ReadableProp d] -> String
+mkDescription :: String -> String -> [ReadableProp Text] -> String
 mkDescription alg confDesc []   = error "called mkDescription with no props"
 mkDescription alg confDesc [prop] = desc
   where
@@ -104,12 +104,12 @@ mkDescription alg confDesc props = desc
 -- ex: mkBench "v-->v" "V1"   d0Conf (satWithConf (toDimProp d0Conf) solverConf) bProp
 -- ex: mkBench "v-->p" "V1*V2*V3" justD012Conf (bfWith solverConf) justbPropV123
 mkBench
-  :: (NFData a1, Resultable d) =>
+  :: (NFData a1) =>
      String
      -> String
-     -> ReadableProp d
-     -> (ReadableProp d -> IO a1)
-     -> ReadableProp d
+     -> ReadableProp Text
+     -> (ReadableProp Text -> IO a1)
+     -> ReadableProp Text
      -> Benchmark
 mkBench alg confDesc conf !f prop = run desc f prop
   where
@@ -136,11 +136,11 @@ mkCompBench alg confDesc !f prop = run desc f prop
 -- to a plain prop which means that the compression ratio statistics will be
 -- meaningless because they only make sense with variational terms.
 mkBench'
-  :: (NFData a1, Resultable d) =>
+  :: (NFData a1) =>
      String
      -> String
-     -> (ReadableProp d -> IO a1)
-     -> ReadableProp d
+     -> (ReadableProp Text -> IO a1)
+     -> ReadableProp Text
      -> Benchmark
 mkBench' alg confDesc !f prop = run desc f prop
   where

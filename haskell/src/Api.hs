@@ -83,16 +83,13 @@ symbolicPropExpr' e' = do
 
 
 -- | Run VSMT and return variable bindings
-sat :: (Show d, Resultable d, SAT (ReadableProp d)) =>
-  ReadableProp d -> IO (Result d)
+sat :: ReadableProp Text -> IO (Result Text)
 sat = satWith defConf
 
-satWith :: (Show d, Resultable d)
-  => ReadableSMTConf d -> ReadableProp d -> IO (Result d)
+satWith :: ReadableSMTConf Text -> ReadableProp Text -> IO (Result Text)
 satWith = satWithConf Nothing
 
-satWithConf :: (Show d, Resultable d)
-  => Maybe (DimProp d) -> ReadableSMTConf d -> ReadableProp d -> IO (Result d)
+satWithConf :: Maybe (DimProp Text) -> ReadableSMTConf Text -> ReadableProp Text -> IO (Result Text)
 satWithConf Nothing          conf prop = fst' <$> runVSMT mempty conf prop
 satWithConf dimConfig conf prop =
   do
@@ -126,7 +123,7 @@ vOnPWith :: (Show d, Resultable d, SAT (ReadableProp d))
   => ReadableSMTConf d -> ReadableProp d -> IO (Result d)
 vOnPWith = vOnPWithConf Nothing
 
-pOnVWithConf :: (Resultable d, Show d) => Maybe (DimProp d) -> ReadableSMTConf d -> ReadableProp d -> IO (Result d)
+pOnVWithConf :: Maybe (DimProp Text) -> ReadableSMTConf Text -> ReadableProp Text -> IO (Result Text)
 pOnVWithConf Nothing          conf prop = fst' <$> runPonV mempty conf prop
 pOnVWithConf dimConfig conf prop =
   do
@@ -135,7 +132,7 @@ pOnVWithConf dimConfig conf prop =
     -- putStrLn . show $ (length configPool)
     fst' <$> runPonV configPool conf prop
 
-pOnV :: (Resultable d, Show d) => ReadableSMTConf d -> ReadableProp d -> IO (Result d)
+pOnV :: ReadableSMTConf Text -> ReadableProp Text -> IO (Result Text)
 pOnV = pOnVWithConf Nothing
 
 bfWith :: (Show d, Resultable d,SAT (ReadableProp d)) =>
