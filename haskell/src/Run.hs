@@ -45,7 +45,7 @@ import           Prelude hiding (LT, GT, EQ)
 import           Control.Concurrent.ParallelIO (parallel)
 import           Control.Monad.Trans.Control
 import           Control.Concurrent (forkOS, forkIO, threadDelay)
-import           Control.Concurrent.STM.TQueue
+import           Control.Concurrent.STM.TChan
 import           Control.Concurrent.STM
 import           Control.Concurrent.Async
 import           System.IO
@@ -256,14 +256,15 @@ runVSMTSolve configPool prop =
      -- convert all refs to SBools
      let
        prop' :: S.Symbolic (VProp Text (Ts.SBool, Name) SNum)
-       prop' = St.runStateT (runVSolver $ propToSBool prop) (mempty, mempty)
+       prop' = St.evalStateT (propToSBool prop) (mempty, mempty)
 
      -- run the inner driver
-     let !pprop = findPrincipleChoice . mkTop <$> (prop' >>= (evaluate . toBValue))
-         run = \configuration -> vSMTSolve pprop configuration (settings cnf)
+     let
+       pprop :: S.Symbolic (Loc Text)
+       !pprop = findPrincipleChoice . mkTop <$> (prop' >>= (evaluate . toBValue))
+       run = \configuration -> vSMTSolve pprop configuration (settings cnf)
 
      -- run configurations in parallel after making the variational core
-     trace "got core" (return ())
      -- res <- liftIO $ parallel $! if null configPool
      --                             then [run mempty]
      --                             else run <$> configPool
@@ -281,7 +282,7 @@ type GenModel = Bool
 -- | A state monad transformer that holds two usedvar maps, one for booleans and
 -- one for doubles
 type PackState a = (UsedVars a S.SBool, UsedVars a SNum)
-type IncPack a = IncVSMTSolver (PackState a)
+type IncPack a = StateT (PackState a) S.Symbolic
   -- St.StateT (UsedVars a S.SBool, UsedVars a SNum) (Ts.SymbolicT SC.Query)
 
 -- | a pool of configurations used to perform selection. A list is appropriate
@@ -310,13 +311,15 @@ data IncState =
                                         -- from not have a proper newtype for
                                         -- IncStateVSMT. For VSAT1 this is fine
                                         -- and will be refactored for VSAT2.
+           , workerChan :: TChan (IncVSMTSolve (Result Text))
            } deriving (Eq,Generic)
 
-emptySt :: IncState
-emptySt = IncState{ config=mempty
+-- emptySt :: IncState
+emptySt chan = IncState{ config=mempty
                   , processed=False
                   , usedConstraints=mempty
                   , genModelMaps=True
+                  , workerChan = chan
                   }
 
 -- onResult :: (Result Text -> Result Text) -> IncState -> IncState
@@ -358,14 +361,14 @@ insertUsed :: UsedConstraint -> IncState -> IncState
 insertUsed = onUsed . insert
 {-# INLINE insertUsed #-}
 
+onChan :: (TChan (IncVSMTSolve (Result Text)) -> TChan (IncVSMTSolve (Result Text))) -> IncState -> IncState
+onChan f IncState{..} = IncState{workerChan = f workerChan, ..}
+
 -- | the incremental solve monad, with the base monad being the query monad so
 -- we can pull out sbv models Hardcoding so that I don't have to write the mtl
 -- typeclass. I do not expect these to change much
 -- TODO newtype this and add a reader for various settings
-newtype IncVSMTSolver s a =
-  IncVSMTSolver {runVSolver :: St.StateT s SC.Query a}
-  deriving (Functor, Applicative, Monad, MonadIO
-           , MonadState s, S.MonadSymbolic, Tsc.MonadQuery)
+type IncVSMTSolver s = St.StateT s Tsc.Query
 
 type IncVSMTSolve = IncVSMTSolver IncState
 
@@ -378,7 +381,7 @@ vSMTSolve :: S.Symbolic (Loc Text) ->
              IO (Result Text)
 vSMTSolve prop conf ss =
   do -- S.setOption $ SC.ProduceUnsatCores True
-    chan <- newTQueueIO
+    chan <- newBroadcastTChanIO
 
      -- let runS :: IncVSMTSolve a -> IO a
      --     runS = three . two . evalSolver conf ss
@@ -386,36 +389,38 @@ vSMTSolve prop conf ss =
 
 
     let go = do dbg "I'm listening!" ()
-                threadDelay 7500000
                 worker chan prop
 
      -- dbg "spawning readers!" ()
-    results <- replicateConcurrently 2 go
      -- dbg "spawned readers!" ()
 
 
 
-    trace "running" (return ())
-    (IncVSMTSolver $ lift prop) >>= doChoice
-    return $ mconcat results
+    -- kick off
+    -- prop'  <- S.runSMT $ SC.query $ prop :: IO (Loc Text)
+    r <- S.runSMT $ do prop' <- prop
+                       SC.query $
+                         St.evalStateT (doChoice prop') (emptySt chan)
+
+    mapM_ (const go) [1..2]
+    return $ mempty
 
 solvePlain :: (Resultable d) => SC.Query (Result d)
 solvePlain = getResultWith $ toResultProp . LitB
 
-worker :: (TQueue (IncVSMTSolve (Result Text))) -> S.Symbolic a -> IO (Result Text)
-worker chan prop = forever $ do
-  queryProp <- atomically $ readTQueue chan
-  result <- S.runSMT $
-            do prop' <- prop
-               SC.query $ evalStateT (runVSolver (solveVariant queryProp)) emptySt
-  return result
--- solveVariational :: (Resultable d) => Loc d -> IncVSMTSolve  ()
--- solveVariational prop = do
---   lift $ SC.push 1
---     -- trace ("Result of Eval: " ++ ushow prop ++ "\n") $ return ()
---   _ <- doChoice prop
---   lift $ SC.pop 1
---   -- spawn workers
+worker :: (TChan (IncVSMTSolve (Result Text))) -> S.Symbolic a -> IO ()
+worker chan prop =
+  do
+  forkOS $ do
+    bChan <- atomically $ dupTChan chan
+    threadDelay 500000
+    queryProp <- atomically $ readTChan bChan
+    trace "got a query" (return ())
+    result <- S.runSMT $ do prop' <- prop
+                            SC.query $
+                              St.evalStateT (solveVariant queryProp) (emptySt chan)
+    return ()
+  return ()
 
 
 -- | The name of a reference
@@ -490,8 +495,17 @@ smtDouble :: Text -> IncPack Text SNum
 smtDouble = mkSmt Ts.sDouble SD
 
 -- | type class needed to avoid lifting for constraints in the IncSolve monad
-instance (Monad m, I.SolverContext m) =>
-  I.SolverContext (StateT IncState m) where
+
+-- instance (Monad m, I.SolverContext m) =>
+--   I.SolverContext (StateT IncState m) where
+--   constrain = lift . Ts.constrain
+--   namedConstraint = (lift .) . Ts.namedConstraint
+--   setOption = lift . Ts.setOption
+--   softConstrain = lift . I.softConstrain
+--   constrainWithAttribute = (lift .) . I.constrainWithAttribute
+--   contextState = lift I.contextState
+
+instance I.SolverContext (StateT s Tsc.Query) where
   constrain = lift . Ts.constrain
   namedConstraint = (lift .) . Ts.namedConstraint
   setOption = lift . Ts.setOption
@@ -500,13 +514,6 @@ instance (Monad m, I.SolverContext m) =>
   contextState = lift I.contextState
 
 
-instance I.SolverContext (IncVSMTSolver s) where
-  constrain = Ts.constrain
-  namedConstraint = S.namedConstraint
-  setOption = S.setOption
-  softConstrain = I.softConstrain
-  constrainWithAttribute = I.constrainWithAttribute
-  contextState = I.contextState
 
 -- Helper functions for solve routine
 -- store :: Result Text -> IncVSMTSolve  ()
@@ -630,13 +637,7 @@ handleChc goLeft goRight d =
 
          --------------------- true variant -----------------------------
 
-
-         -- control $ \runInIO ->
-         --     do runInIO $
-         --          liftIO $
-         --          forkOS $ do -- threadDelay 5000000
-         --                      runInIO $ do setDim d True; solveVariant goLeft
-         --                      return ()
+         chan <- gets workerChan
 
          -- liftIO $ dbg "Splitting!" ()
          -- ((resMapT,_), (resMapF,_)) <- control $
@@ -655,22 +656,22 @@ handleChc goLeft goRight d =
 
          -------------------- false variant -----------------------------
          trace "left" $ return ()
-         resMapT <- do setDim d True; goLeft
+         liftIO $ atomically $! writeTChan chan (do setDim d True; goLeft)
 
          trace "right" $ return ()
-         resMapF <- do setDim d False; goRight
+         liftIO $ atomically $ writeTChan chan (do setDim d False; goRight)
          -- setDim d False
 
          -- liftIO $ forkIO $ do
            -- trace ("[CHC] Going Right, choice: " ++ show d ++ "\n") $ return ()
-           -- resMapF <- goRight
+         -- resMapF <- goRight
            -- rRes <- S.runSMT $ SC.query $ evalStateT goRight lState
            -- putMVar lMVar rRes
 
          -- store results and cleanup config
          -- resMapT <- liftIO $ takeMVar lMVar
          -- resMapF <- liftIO $ takeMVar rMVar
-         let !result = resMapT <> resMapF
+         -- let !result = resMapT <> resMapF
 
          -- we remove the Dim from the config so that when the recursion
          -- completes the last false branch of the last choice is not
@@ -680,18 +681,10 @@ handleChc goLeft goRight d =
          -- then the config will retain the selection of (B, False) and
          -- therefore on the (A, False) branch of the recursion it'll
          -- miss (B, True)
-         removeDim d
-         return $! result
+         -- removeDim d
+         return $! mempty
          -- liftIO $ atomically $! writeTQueue c result
 {-# INLINE handleChc #-}
-
-forkQ :: SC.Query a -> SC.Query b -> SC.Query (a, b)
-forkQ a b = control $ \runInIO ->
-                        runInIO $ liftIO $
-                        concurrently
-                        (runInIO $! a)
-                        (runInIO $! b)
-
 
 -- | type synonym to simplify the BValue type
 type SBVProp d = VProp d (S.SBool, Name) SNum
@@ -724,8 +717,8 @@ vCoreNumVar (BVOp l _ r) = vCoreNumVar l + vCoreNumVar r
 vCoreNumVar _            = 0
 
 vCoreMetrics :: ReadableProp Text -> IO (Int, Int, Int)
-vCoreMetrics p = S.runSMT $ SC.query $ do
-    p' <- St.evalStateT (runVSolver $ propToSBool p) (mempty, mempty)
+vCoreMetrics p = S.runSMT $ do
+    p' <- St.evalStateT (propToSBool p) (mempty, mempty)
 
      -- let
      --   prop' :: IncVSMTSolve (VProp Text (Ts.SBool, Name) SNum)
@@ -770,7 +763,8 @@ dbg s a = liftIO $ T.putStrLn (s <> " : " <> toText a <> " \n")
 -- values thereby representing that evaluation has taken place. Evaluation can
 -- call a switch into the accumulation mode in order to partially evaluate an
 -- expression
-evaluate :: (Resultable d, Ts.MonadSymbolic m, I.SolverContext m) => BValue d -> m (BValue d)
+evaluate :: (Resultable d, Ts.MonadSymbolic m, I.SolverContext m) =>
+  BValue d -> m (BValue d)
 evaluate Unit        = return Unit                             -- [Eval-Unit]
 evaluate (B b) =
   -- trace "Eval B" $
