@@ -255,9 +255,8 @@ runVSMTSolve configPool prop =
   do cnf <- ask
      -- convert all refs to SBools
      let
-       prop' :: IncVSMTSolve (VProp Text (Ts.SBool, Name) SNum)
-       prop' = IncVSMTSolverT . lift $ fst <$>
-         St.runStateT (runVSolver $ propToSBool prop) (mempty, mempty)
+       prop' :: S.Symbolic (VProp Text (Ts.SBool, Name) SNum)
+       prop' = St.runStateT (runVSolver $ propToSBool prop) (mempty, mempty)
 
      -- run the inner driver
      let !pprop = findPrincipleChoice . mkTop <$> (prop' >>= (evaluate . toBValue))
@@ -282,7 +281,7 @@ type GenModel = Bool
 -- | A state monad transformer that holds two usedvar maps, one for booleans and
 -- one for doubles
 type PackState a = (UsedVars a S.SBool, UsedVars a SNum)
-type IncPack a = IncVSMTSolverT (PackState a)
+type IncPack a = IncVSMTSolver (PackState a)
   -- St.StateT (UsedVars a S.SBool, UsedVars a SNum) (Ts.SymbolicT SC.Query)
 
 -- | a pool of configurations used to perform selection. A list is appropriate
@@ -363,55 +362,53 @@ insertUsed = onUsed . insert
 -- we can pull out sbv models Hardcoding so that I don't have to write the mtl
 -- typeclass. I do not expect these to change much
 -- TODO newtype this and add a reader for various settings
-newtype IncVSMTSolverT s m a =
-  IncVSMTSolverT {runVSolver :: St.StateT s (Ts.SymbolicT m) a}
+newtype IncVSMTSolver s a =
+  IncVSMTSolver {runVSolver :: St.StateT s SC.Query a}
   deriving (Functor, Applicative, Monad, MonadIO
-           , MonadState s, S.MonadSymbolic)
+           , MonadState s, S.MonadSymbolic, Tsc.MonadQuery)
 
-type IncVSMTSolve = IncVSMTSolverT IncState SC.Query
-
-evalSolver :: IncVSMTSolve a -> IO a
-evalSolver = S.runSMT .
-               SC.query .
-               Ts.runSMT .
-               flip St.evalStateT emptySt .
-               runVSolver
+type IncVSMTSolve = IncVSMTSolver IncState
 
 -- | Top level wrapper around engine and monad stack, this sets options for the
 -- underlying solver, inspects the results to see if they were variational or
 -- not, if not then it gets the plain model
-vSMTSolve :: IncVSMTSolve (Loc Text) ->
+vSMTSolve :: S.Symbolic (Loc Text) ->
              Config Text ->
              Settings ->
              IO (Result Text)
 vSMTSolve prop conf ss =
   do -- S.setOption $ SC.ProduceUnsatCores True
+    chan <- newTQueueIO
 
-     let runS :: IncVSMTSolve a -> IO a
-         runS p = do
-           let symb = St.evalStateT (runVSolver p) (onGenModels (const $! generateModels ss) emptySt{config=conf})
-           Ts.runSMT $ Tsc.query $ Ts.runSMT $ control (\inQuery -> inQuery symb)
+     -- let runS :: IncVSMTSolve a -> IO a
+     --     runS = three . two . evalSolver conf ss
 
 
-     -- let go = do dbg "I'm listening!" ()
-     --             threadDelay 7500000
-     --             res <- atomically $! readTQueue resultChan
-     --             dbg "got one: " res
-     --             return res
+
+    let go = do dbg "I'm listening!" ()
+                threadDelay 7500000
+                worker chan prop
 
      -- dbg "spawning readers!" ()
-     -- (r1,r2) <- concurrently go go
+    results <- replicateConcurrently 2 go
      -- dbg "spawned readers!" ()
 
 
 
-     trace "running" (return ())
-     runS $! prop >>= doChoice
-     -- return $ r1 <> r2
+    trace "running" (return ())
+    (IncVSMTSolver $ lift prop) >>= doChoice
+    return $ mconcat results
 
 solvePlain :: (Resultable d) => SC.Query (Result d)
 solvePlain = getResultWith $ toResultProp . LitB
 
+worker :: (TQueue (IncVSMTSolve (Result Text))) -> S.Symbolic a -> IO (Result Text)
+worker chan prop = forever $ do
+  queryProp <- atomically $ readTQueue chan
+  result <- S.runSMT $
+            do prop' <- prop
+               SC.query $ evalStateT (runVSolver (solveVariant queryProp)) emptySt
+  return result
 -- solveVariational :: (Resultable d) => Loc d -> IncVSMTSolve  ()
 -- solveVariational prop = do
 --   lift $ SC.push 1
@@ -436,8 +433,7 @@ type ConstraintName = [Name]
 --                 , MonadTrans t) =>
 --                ReadableProp d ->
 --                t m (VProp Text (S.SBool, Name) SNum)
-propToSBool :: ReadableProp Text ->
-               IncVSMTSolverT (PackState Text) Tsc.Query (VProp Text (S.SBool, Name) SNum)
+propToSBool :: ReadableProp Text -> IncPack Text (VProp Text (S.SBool, Name) SNum)
 propToSBool (RefB x)     = do b <- smtBool x
                               return $! RefB (b, x)
 propToSBool (OpB o e)    = OpB  o <$> propToSBool e
@@ -446,8 +442,7 @@ propToSBool (ChcB d l r) = ChcB d <$> propToSBool l <*> propToSBool r
 propToSBool (OpIB o l r) = OpIB o <$> propToSBool' l <*> propToSBool' r
 propToSBool (LitB b)     = return $ LitB b
 
-propToSBool' :: VIExpr Text Text ->
-                IncVSMTSolverT (PackState Text) Tsc.Query (VIExpr Text SNum)
+propToSBool' :: VIExpr Text Text -> IncPack Text (VIExpr Text SNum)
 propToSBool' (Ref RefI i) = Ref RefI <$> smtInt i
 propToSBool' (Ref RefD d) = Ref RefD <$> smtDouble d
 propToSBool' (OpI o e)    = OpI o    <$> propToSBool' e
@@ -459,9 +454,8 @@ propToSBool' (LitI x)     = return $ LitI x
 -- takes a function to convert a string to a symbolic variable like S.sInt64, or
 -- S.sDouble, a constructor that add the symbolic type to the sum type SNum and
 -- produces a function k -> t m SNum, which reifies to k -> IncPack k SNum.
-mkSmt :: MonadIO m => (String -> IncVSMTSolverT (PackState Text) m a) ->
-         (a -> SNum) ->
-         Text -> IncPack Text m SNum
+mkSmt :: (String -> IncPack Text a) ->
+         (a -> SNum) -> Text -> IncPack Text SNum
 mkSmt f g str = do (_,st) <- get
                    case str `M.lookup` st of
                      Nothing -> do b <- f $ show str
@@ -473,7 +467,7 @@ mkSmt f g str = do (_,st) <- get
 
 -- | convert every reference to a boolean, keeping track of what you've seen
 -- before, can't use mkStatement here because its a special case
-smtBoolWith :: MonadIO m => Text -> (Text -> String) -> IncPack Text m S.SBool
+smtBoolWith :: Text -> (Text -> String) -> IncPack Text S.SBool
 smtBoolWith str f =
   do (st,_) <- get
      case str `M.lookup` st of
@@ -482,17 +476,17 @@ smtBoolWith str f =
                      return b
        Just x  -> return x
 
-smtBool :: MonadIO m => Text -> IncPack Text m S.SBool
+smtBool :: Text -> IncPack Text S.SBool
 smtBool = flip smtBoolWith unpack
 
 -- | convert every reference to a Integer, keeping track of what you've seen
 -- before
-smtInt :: MonadIO m => Text -> IncPack Text m SNum
+smtInt :: Text -> IncPack Text SNum
 smtInt = mkSmt Ts.sInt64 SI
 
 -- | convert every reference to a Integer, keeping track of what you've seen
 -- before
-smtDouble :: MonadIO m => Text -> IncPack Text m SNum
+smtDouble :: Text -> IncPack Text SNum
 smtDouble = mkSmt Ts.sDouble SD
 
 -- | type class needed to avoid lifting for constraints in the IncSolve monad
@@ -506,18 +500,13 @@ instance (Monad m, I.SolverContext m) =>
   contextState = lift I.contextState
 
 
-
-instance (I.SolverContext m, Monad m) =>
-  I.SolverContext (IncVSMTSolverT s m) where
-  constrain = lift . Ts.constrain
-  namedConstraint = (lift .) .S.namedConstraint
-  setOption = lift . S.setOption
-  softConstrain = lift . I.softConstrain
-  constrainWithAttribute = (lift .) . I.constrainWithAttribute
-  contextState = lift I.contextState
-
-instance (Tsc.MonadQuery m) => Tsc.MonadQuery (IncVSMTSolverT s m) where
-  queryState = lift Tsc.queryState
+instance I.SolverContext (IncVSMTSolver s) where
+  constrain = Ts.constrain
+  namedConstraint = S.namedConstraint
+  setOption = S.setOption
+  softConstrain = I.softConstrain
+  constrainWithAttribute = I.constrainWithAttribute
+  contextState = I.contextState
 
 -- Helper functions for solve routine
 -- store :: Result Text -> IncVSMTSolve  ()
@@ -599,26 +588,6 @@ solveVariant go = do
            Tsc.pop 1
 
            return $! resMap <> r
-
-instance MonadTrans (IncVSMTSolverT s) where
-  lift = IncVSMTSolverT . lift . lift
-
-instance MonadBase b m => MonadBase b (IncVSMTSolverT s m) where
-  liftBase = lift . liftBase
-
-instance MonadTransControl (IncVSMTSolverT s) where
-  type StT (IncVSMTSolverT s) a = StT (StateT s) a
-  -- liftWith = \f -> IncVSMTSolverT $
-  --   liftWith $ \run -> liftWith $
-  --                      \run' -> liftWith $
-  --                               \run'' -> f $ run'' . run' . run . runVSolver
-  liftWith = defaultLiftWith2 IncVSMTSolverT runVSolver
-  restoreT = defaultRestoreT2 IncVSMTSolverT
-
-instance MonadBaseControl b m => MonadBaseControl b (IncVSMTSolverT s m) where
-  type StM (IncVSMTSolverT s m)  a = ComposeSt (IncVSMTSolverT s) m a
-  liftBaseWith            = defaultLiftBaseWith
-  restoreM                = defaultRestoreM
 
 instance MonadBase b m => MonadBase b (I.QueryT m) where
   liftBase = lift . liftBase
@@ -716,6 +685,13 @@ handleChc goLeft goRight d =
          -- liftIO $ atomically $! writeTQueue c result
 {-# INLINE handleChc #-}
 
+forkQ :: SC.Query a -> SC.Query b -> SC.Query (a, b)
+forkQ a b = control $ \runInIO ->
+                        runInIO $ liftIO $
+                        concurrently
+                        (runInIO $! a)
+                        (runInIO $! b)
+
 
 -- | type synonym to simplify the BValue type
 type SBVProp d = VProp d (S.SBool, Name) SNum
@@ -748,7 +724,7 @@ vCoreNumVar (BVOp l _ r) = vCoreNumVar l + vCoreNumVar r
 vCoreNumVar _            = 0
 
 vCoreMetrics :: ReadableProp Text -> IO (Int, Int, Int)
-vCoreMetrics p = S.runSMT $ SC.query $ Ts.runSMT $ do
+vCoreMetrics p = S.runSMT $ SC.query $ do
     p' <- St.evalStateT (runVSolver $ propToSBool p) (mempty, mempty)
 
      -- let
