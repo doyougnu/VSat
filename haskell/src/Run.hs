@@ -397,7 +397,7 @@ type IncVSMTSolver s = St.StateT s Tsc.Query
 
 type IncVSMTSolve = IncVSMTSolver IncState
 
-type RequestChan = InChan IncState
+type RequestChan = InChan (IncState, IncVSMTSolve ())
 type ResultChan = InChan (Result Text)
 
 -- | Top level wrapper around engine and monad stack, this sets options for the
@@ -425,10 +425,6 @@ vSMTSolve prop conf ss i =
         numWorkers = sum $ fmap (2^) [1..dimensionCount]
 
 
-    dbg "MaxResults: " maxResults
-    dbg "MaxWorkers: " numWorkers
-
-
     -- kick off main thread
     runMain
 
@@ -445,14 +441,14 @@ solvePlain :: (Resultable d) => SC.Query (Result d)
 solvePlain = getResultWith $ toResultProp . LitB
 
 
-worker :: S.Symbolic (Loc Text) -> OutChan IncState -> Int -> IO ThreadId
+worker :: S.Symbolic (Loc Text) -> OutChan (IncState, IncVSMTSolve ()) -> Int -> IO ThreadId
 worker prop requestChan i =
   forkIO $ forever $ do
   -- trace (show i ++ ": " ++ "Waiting for Conf") $ return ()
-  st <- readChan requestChan
+  (!st, !qry) <- readChan requestChan
   -- trace (show i ++ ": " ++ "Runnign with CONF" ++ show (config st))  $ return ()
   S.runSMT $! do prop' <- prop
-                 SC.query $! St.evalStateT (doChoice prop') st
+                 SC.query $! St.evalStateT qry st
 
 -- | The name of a reference
 type Name = Text
@@ -683,14 +679,14 @@ handleChc goLeft goRight d =
          -- trace "left" $ return ()
          -- dbg "LEFT" d
          st <- get
-         liftIO $! writeChan chan' (insertToConfig d True st)
+         liftIO $! writeChan chan' (insertToConfig d True st, goLeft)
          -- trace "CHANNEL WRITTEN LEFT" $ return ()
          -- resultL <- (do setDim d True; goLeft)
 
 
          -- trace "right" $ return ()
          -- dbg "RIGHT" d
-         liftIO $! writeChan chan' (insertToConfig d False st)
+         liftIO $! writeChan chan' (insertToConfig d False st, goRight)
          -- trace "CHANNEL WRITTEN RIGHT" $ return ()
          -- do setDim d False
          -- resultR <- goRight
