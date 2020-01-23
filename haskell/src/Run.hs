@@ -422,7 +422,7 @@ vSMTSolve prop conf ss i =
                         SC.query $
                           St.evalStateT (doChoice prop') (emptySt reqChanIn resChanIn)
         maxResults = 2 ^ dimensionCount
-        numWorkers = sum $ fmap (2^) [1..dimensionCount]
+        numWorkers =  sum (fmap (2^) [1..dimensionCount]) `div` 2
 
 
     -- kick off main thread
@@ -679,7 +679,6 @@ handleChc goLeft goRight d =
          -- trace "left" $ return ()
          -- dbg "LEFT" d
          st <- get
-         liftIO $! writeChan chan' (insertToConfig d True st, goLeft)
          -- trace "CHANNEL WRITTEN LEFT" $ return ()
          -- resultL <- (do setDim d True; goLeft)
 
@@ -687,6 +686,10 @@ handleChc goLeft goRight d =
          -- trace "right" $ return ()
          -- dbg "RIGHT" d
          liftIO $! writeChan chan' (insertToConfig d False st, goRight)
+
+         -- liftIO $! writeChan chan' (insertToConfig d True st, goLeft)
+         setDim d True
+         goLeft
          -- trace "CHANNEL WRITTEN RIGHT" $ return ()
          -- do setDim d False
          -- resultR <- goRight
@@ -712,7 +715,7 @@ handleChc goLeft goRight d =
          -- therefore on the (A, False) branch of the recursion it'll
          -- miss (B, True)
          -- removeDim d
-         return ()
+         -- return ()
          -- liftIO $ atomically $! writeTQueue c result
 {-# INLINE handleChc #-}
 
