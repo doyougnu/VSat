@@ -30,6 +30,7 @@ import           Control.Monad.Base
 import           Control.Monad.Trans (MonadTrans)
 import           Control.DeepSeq
 import           GHC.Generics
+import           GHC.Conc
 import           Data.Foldable (foldr')
 import           Data.HashSet (HashSet, member, insert)
 import qualified Data.Map.Strict as M
@@ -44,9 +45,9 @@ import           Data.List (intersperse)
 import           Prelude hiding (LT, GT, EQ)
 import           Control.Concurrent.ParallelIO (parallel)
 import           Control.Monad.Trans.Control
-import           Control.Concurrent (forkOS, forkIO, threadDelay)
-import           Control.Concurrent.STM.TChan
-import           Control.Concurrent.STM
+import           Control.Concurrent
+import           Control.Concurrent.Chan
+import           Control.Concurrent.STM.TQueue
 import           Control.Concurrent.Async
 import           System.IO
 
@@ -311,16 +312,18 @@ data IncState =
                                         -- from not have a proper newtype for
                                         -- IncStateVSMT. For VSAT1 this is fine
                                         -- and will be refactored for VSAT2.
-           , workerChan :: TChan (IncVSMTSolve (Result Text))
+           , workerChan :: Chan IncState
+           , resultChan :: ResultChan
            } deriving (Eq,Generic)
 
 -- emptySt :: IncState
-emptySt chan = IncState{ config=mempty
-                  , processed=False
-                  , usedConstraints=mempty
-                  , genModelMaps=True
-                  , workerChan = chan
-                  }
+emptySt chan resChan = IncState{ config=mempty
+                               , processed=False
+                               , usedConstraints=mempty
+                               , genModelMaps=True
+                               , workerChan = chan
+                               , resultChan = resChan
+                               }
 
 -- onResult :: (Result Text -> Result Text) -> IncState -> IncState
 -- onResult f IncState {..} = IncState {result=f result, ..}
@@ -361,9 +364,6 @@ insertUsed :: UsedConstraint -> IncState -> IncState
 insertUsed = onUsed . insert
 {-# INLINE insertUsed #-}
 
-onChan :: (TChan (IncVSMTSolve (Result Text)) -> TChan (IncVSMTSolve (Result Text))) -> IncState -> IncState
-onChan f IncState{..} = IncState{workerChan = f workerChan, ..}
-
 -- | the incremental solve monad, with the base monad being the query monad so
 -- we can pull out sbv models Hardcoding so that I don't have to write the mtl
 -- typeclass. I do not expect these to change much
@@ -371,6 +371,9 @@ onChan f IncState{..} = IncState{workerChan = f workerChan, ..}
 type IncVSMTSolver s = St.StateT s Tsc.Query
 
 type IncVSMTSolve = IncVSMTSolver IncState
+
+type RequestChan = Chan IncState
+type ResultChan = Chan (Result Text)
 
 -- | Top level wrapper around engine and monad stack, this sets options for the
 -- underlying solver, inspects the results to see if they were variational or
@@ -381,47 +384,48 @@ vSMTSolve :: S.Symbolic (Loc Text) ->
              IO (Result Text)
 vSMTSolve prop conf ss =
   do -- S.setOption $ SC.ProduceUnsatCores True
-    chan <- newBroadcastTChanIO
+    reqChan <- newChan
+    resChan <- newChan
+    -- chans <- replicateM 1 $ do rC <- dupChan reqChan
+    --                            rS <- resChan
+    --                            return (rC, rS)
 
-     -- let runS :: IncVSMTSolve a -> IO a
-     --     runS = three . two . evalSolver conf ss
-
-
-
-    let go = do dbg "I'm listening!" ()
-                worker chan prop
-
-     -- dbg "spawning readers!" ()
-     -- dbg "spawned readers!" ()
-
+    -- chans
+    -- vars <- mapM (const newEmptyMVar) [1..10]
+    let go = worker prop
+        runMain = forkOS $ do
+          S.runSMT $ do prop' <- prop
+                        SC.query $
+                          St.evalStateT (doChoice prop') (emptySt reqChan resChan)
 
 
     -- kick off
-    -- prop'  <- S.runSMT $ SC.query $ prop :: IO (Loc Text)
-    r <- S.runSMT $ do prop' <- prop
-                       SC.query $
-                         St.evalStateT (doChoice prop') (emptySt chan)
+    runMain
 
-    mapM_ (const go) [1..2]
-    return $ mempty
+    mapM_ (go reqChan resChan) [1..14]
+    -- spin up readers
+    -- vars <- mapM (const newEmptyTMVarIO) [1..20]
+
+    -- threadDelay 100000000
+    rs <- mapConcurrently (\_ -> readChan resChan) [1..8]
+
+
+    return $ mconcat rs
 
 solvePlain :: (Resultable d) => SC.Query (Result d)
 solvePlain = getResultWith $ toResultProp . LitB
 
-worker :: (TChan (IncVSMTSolve (Result Text))) -> S.Symbolic a -> IO ()
-worker chan prop =
-  do
-  forkOS $ do
-    bChan <- atomically $ dupTChan chan
-    threadDelay 500000
-    queryProp <- atomically $ readTChan bChan
-    trace "got a query" (return ())
-    result <- S.runSMT $ do prop' <- prop
-                            SC.query $
-                              St.evalStateT (solveVariant queryProp) (emptySt chan)
-    return ()
-  return ()
 
+worker :: S.Symbolic (Loc Text) -> RequestChan -> ResultChan -> Int -> IO ThreadId
+worker prop requestChan resultChan i =
+  forkOS $ forever $ do
+  -- trace (show i ++ ": " ++ "Waiting for Conf") $ return ()
+  st <- readChan requestChan
+  threadDelay 500000
+  -- trace (show i ++ ": " ++ "Runnign with CONF" ++ show (config st))  $ return ()
+  S.runSMT $ do prop' <- prop
+                SC.query $
+                  St.evalStateT (doChoice prop') st
 
 -- | The name of a reference
 type Name = Text
@@ -432,12 +436,6 @@ type ConstraintName = [Name]
 -- | This ensures two things: 1st we need all variables to be symbolic before
 -- starting query mode. 2nd we cannot allow any duplicates to be called on a
 -- string -> symbolic a function or missiles will launch.
--- propToSBool :: (Ts.MonadSymbolic (t m)
---                 , Ts.MonadSymbolic m
---                 , MonadState (PackState Text) (t m)
---                 , MonadTrans t) =>
---                ReadableProp d ->
---                t m (VProp Text (S.SBool, Name) SNum)
 propToSBool :: ReadableProp Text -> IncPack Text (VProp Text (S.SBool, Name) SNum)
 propToSBool (RefB x)     = do b <- smtBool x
                               return $! RefB (b, x)
@@ -560,7 +558,7 @@ toText :: Show a => a -> Text
 toText = pack . show
 
 
-solveVariant :: IncVSMTSolve (Result Text) -> IncVSMTSolve (Result Text)
+solveVariant :: IncVSMTSolve () -> IncVSMTSolve ()
 solveVariant go = do
            setModelNotGenD
 
@@ -573,8 +571,8 @@ solveVariant go = do
            -- newReqChan <- newChan
 
            Tsc.push 1
-           trace "GOING!!!" (return ())
-           r <- go
+           -- trace "Going!!!" $ return ()
+           go
 
            -- check if the config was satisfiable, and if the recursion
            -- generated a model
@@ -594,7 +592,11 @@ solveVariant go = do
            -- reset stack
            Tsc.pop 1
 
-           return $! resMap <> r
+
+           resChan <- gets resultChan
+           liftIO $
+             when (not . isResultNull $ resMap) $
+               writeChan resChan resMap
 
 instance MonadBase b m => MonadBase b (I.QueryT m) where
   liftBase = lift . liftBase
@@ -623,21 +625,22 @@ instance MonadBaseControl b m => MonadBaseControl b (Ts.SymbolicT m) where
   restoreM                   = defaultRestoreM
 
 
-handleChc :: IncVSMTSolve (Result Text)
-          -> IncVSMTSolve (Result Text)
+handleChc :: IncVSMTSolve ()
+          -> IncVSMTSolve ()
           -> Dim Text
-          -> IncVSMTSolve  (Result Text)
+          -> IncVSMTSolve ()
 handleChc goLeft goRight d =
   -- trace "handle chc" $
   do currentCfg <- gets config
      case M.lookup d currentCfg of
-       Just True  -> goLeft
-       Just False -> goRight
+       Just True  -> do goLeft
+       Just False -> do goRight
        Nothing    -> do
 
          --------------------- true variant -----------------------------
 
-         chan <- gets workerChan
+         chan' <- gets workerChan
+         -- chan <- liftIO $ dupChan chan'
 
          -- liftIO $ dbg "Splitting!" ()
          -- ((resMapT,_), (resMapF,_)) <- control $
@@ -655,11 +658,20 @@ handleChc goLeft goRight d =
            -- P.fork $ do P.pval goRight >>= P.put leftRes
 
          -------------------- false variant -----------------------------
-         trace "left" $ return ()
-         liftIO $ atomically $! writeTChan chan (do setDim d True; goLeft)
+         -- trace "left" $ return ()
+         dbg "LEFT" d
+         st <- get
+         liftIO $! writeChan chan' (insertToConfig d True st)
+         -- trace "CHANNEL WRITTEN LEFT" $ return ()
+         -- resultL <- (do setDim d True; goLeft)
 
-         trace "right" $ return ()
-         liftIO $ atomically $ writeTChan chan (do setDim d False; goRight)
+
+         -- trace "right" $ return ()
+         dbg "RIGHT" d
+         liftIO $! writeChan chan' (insertToConfig d False st)
+         -- trace "CHANNEL WRITTEN RIGHT" $ return ()
+         -- do setDim d False
+         -- resultR <- goRight
          -- setDim d False
 
          -- liftIO $ forkIO $ do
@@ -682,7 +694,7 @@ handleChc goLeft goRight d =
          -- therefore on the (A, False) branch of the recursion it'll
          -- miss (B, True)
          -- removeDim d
-         return $! mempty
+         return ()
          -- liftIO $ atomically $! writeTQueue c result
 {-# INLINE handleChc #-}
 
@@ -896,21 +908,21 @@ data Ctx d = InL (Ctx d) BB_B (BValue d)
 
 type Loc d = (BValue d, Ctx d)
 
-doChoice :: Loc Text -> IncVSMTSolve (Result Text)
+doChoice :: Loc Text -> IncVSMTSolve ()
 doChoice (b@(B b'), Top) =
   -- trace ("Bool" ++ show b ++ "\n") $
-  do evaluate b; solveVariant (return mempty)
+  do evaluate b; solveVariant (return ())
 doChoice (Unit, Top)     =
   -- trace ("Unit Top \n") $
-  solveVariant (return mempty)
+  solveVariant $ return ()
 doChoice x@(C d l r, Top) =
   -- trace ("Choice Top"  ++ show x ++ "\n") $
   do let
       bl = toBValue l
-      goLeft = solveVariant $ doChoice (bl, Top)
+      goLeft = doChoice (bl, Top)
 
       br = toBValue r
-      goRight = solveVariant $ doChoice (br, Top)
+      goRight = doChoice (br, Top)
 
      handleChc goLeft goRight d
 
@@ -941,11 +953,11 @@ doChoice x@(C d l r, ctx@(InL _ _ _))  =
   do let
       goLeft =
         -- bl <- evaluate (toBValue l)
-        solveVariant $ doChoice (toBValue l, ctx)
+        doChoice (toBValue l, ctx)
 
       goRight =
         -- br <- evaluate (toBValue r)
-        solveVariant $ doChoice (toBValue r, ctx)
+        doChoice (toBValue r, ctx)
 
      handleChc goLeft goRight d
 
@@ -954,10 +966,10 @@ doChoice x@(C d l r, ctx@(InR _ _ _)) =
   do
     let
       bl = toBValue l
-      goLeft = solveVariant $ doChoice (bl, ctx)
+      goLeft = doChoice (bl, ctx)
 
       br = toBValue r
-      goRight = solveVariant $ doChoice (br, ctx)
+      goRight = doChoice (br, ctx)
 
     handleChc goLeft goRight d
 
