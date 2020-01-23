@@ -353,19 +353,23 @@ main = do
 
   -- gotta beat 2.4 s
 
-  -- current record 2.05
+  -- current record 2.05 s
 
-  -- defaultMain
-  --   [ -- bgroup "ABC" (benches abcDefConf)
-  --   --   bgroup "Yices" (benches yicesDefConf)
-  --   -- , bgroup "CVC4" (benches cvc4DefConf)
-  --       bgroup "Z3" (benches z3DefConf)
-  --       -- bgroup "Z3" (compRatioBenches z3DefConf)
-  --   -- , bgroup "Boolector" (benches boolectorDefConf)
-  --   ]
+  -- new record 1.668 s
+
+  -- new record 1.471 s
+
+  defaultMain
+    [ -- bgroup "ABC" (benches abcDefConf)
+    --   bgroup "Yices" (benches yicesDefConf)
+    -- , bgroup "CVC4" (benches cvc4DefConf)
+        bgroup "Z3" (benches z3DefConf)
+        -- bgroup "Z3" (compRatioBenches z3DefConf)
+    -- , bgroup "Boolector" (benches boolectorDefConf)
+    ]
   -- putStrLn $ show $ dimensions justbPropV1234567
-  res <- (satWith z3DefConf) justbPropV123
-  putStrLn $ show res
+  -- res <- (satWith z3DefConf) justbPropV123
+  -- putStrLn $ show res
   -- putStrLn $ show $ pairs
   -- ts <- (mkCompRatioConfs ds pairs :: IO [VProp.Types.Config Text])
   -- mapM_ (putStrLn . show) ts

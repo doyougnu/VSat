@@ -39,6 +39,7 @@ dependencies:
 - wai-extra
 - parallel-io
 - async
+- unagi-chan
 - monad-control
 - transformers-base
 - lifted-base
