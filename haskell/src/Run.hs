@@ -266,7 +266,8 @@ runVSMTSolve configPool prop =
      -- run the inner driver
      let
        pprop :: S.Symbolic (Loc Text)
-       !pprop = findPrincipleChoice . mkTop <$> (vCore >>= (evaluate . toBValue))
+       -- !pprop = findPrincipleChoice . mkTop <$> (vCore >>= (evaluate . toBValue))
+       !pprop = mkTop <$> (vCore >>= (evaluate . toBValue))
        run = \configuration -> vSMTSolve pprop configuration (settings cnf) dCount
 
      -- run configurations in parallel after making the variational core
