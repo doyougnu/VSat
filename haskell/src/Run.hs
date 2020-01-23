@@ -407,7 +407,7 @@ vSMTSolve prop conf ss =
     -- vars <- mapM (const newEmptyTMVarIO) [1..20]
 
     -- threadDelay 100000000
-    rs <- mapConcurrently (\_ -> readChan resChan) [1..8]
+    rs <- mapConcurrently (\_ -> readChan resChan) [1..4]
 
 
     return $! mconcat rs
@@ -419,12 +419,11 @@ solvePlain = getResultWith $ toResultProp . LitB
 worker :: S.Symbolic (Loc Text) -> RequestChan -> ResultChan -> Int -> IO ThreadId
 worker prop requestChan resultChan i =
   forkIO $ forever $ do
-  -- trace (show i ++ ": " ++ "Waiting for Conf") $ return ()
+  trace (show i ++ ": " ++ "Waiting for Conf") $ return ()
   st <- readChan requestChan
-  -- trace (show i ++ ": " ++ "Runnign with CONF" ++ show (config st))  $ return ()
+  trace (show i ++ ": " ++ "Runnign with CONF" ++ show (config st))  $ return ()
   S.runSMT $! do prop' <- prop
-                SC.query $
-                  St.evalStateT (doChoice prop') st
+                 SC.query $! St.evalStateT (doChoice prop') st
 
 -- | The name of a reference
 type Name = Text
