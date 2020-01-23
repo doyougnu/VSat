@@ -659,7 +659,7 @@ handleChc goLeft goRight d =
 
          -------------------- false variant -----------------------------
          -- trace "left" $ return ()
-         dbg "LEFT" d
+         -- dbg "LEFT" d
          st <- get
          liftIO $! writeChan chan' (insertToConfig d True st)
          -- trace "CHANNEL WRITTEN LEFT" $ return ()
@@ -667,7 +667,7 @@ handleChc goLeft goRight d =
 
 
          -- trace "right" $ return ()
-         dbg "RIGHT" d
+         -- dbg "RIGHT" d
          liftIO $! writeChan chan' (insertToConfig d False st)
          -- trace "CHANNEL WRITTEN RIGHT" $ return ()
          -- do setDim d False
