@@ -393,7 +393,7 @@ vSMTSolve prop conf ss =
     -- chans
     -- vars <- mapM (const newEmptyMVar) [1..10]
     let go = worker prop
-        runMain = forkOS $ do
+        runMain = forkIO $ do
           S.runSMT $ do prop' <- prop
                         SC.query $
                           St.evalStateT (doChoice prop') (emptySt reqChan resChan)
@@ -410,7 +410,7 @@ vSMTSolve prop conf ss =
     rs <- mapConcurrently (\_ -> readChan resChan) [1..8]
 
 
-    return $ mconcat rs
+    return $! mconcat rs
 
 solvePlain :: (Resultable d) => SC.Query (Result d)
 solvePlain = getResultWith $ toResultProp . LitB
@@ -418,12 +418,11 @@ solvePlain = getResultWith $ toResultProp . LitB
 
 worker :: S.Symbolic (Loc Text) -> RequestChan -> ResultChan -> Int -> IO ThreadId
 worker prop requestChan resultChan i =
-  forkOS $ forever $ do
+  forkIO $ forever $ do
   -- trace (show i ++ ": " ++ "Waiting for Conf") $ return ()
   st <- readChan requestChan
-  threadDelay 500000
   -- trace (show i ++ ": " ++ "Runnign with CONF" ++ show (config st))  $ return ()
-  S.runSMT $ do prop' <- prop
+  S.runSMT $! do prop' <- prop
                 SC.query $
                   St.evalStateT (doChoice prop') st
 
@@ -579,24 +578,22 @@ solveVariant go = do
            bd <- hasGenDModel
 
            -- if not generated a model, then construct a -- result
-           !resMap <- if not bd
-                      then do prop <- gets (configToResultProp . config)
-                              modelsEnabled <- gets genModelMaps
-                              setModelGenD
-                              if modelsEnabled
-                                then getResult prop
-                                else getResultOnlySat prop
-                      else -- not sat or have gen'd a model so ignore
-                        return mempty
+           if not bd
+             then do prop <- gets (configToResultProp . config)
+                     modelsEnabled <- gets genModelMaps
+                     setModelGenD
+                     resMap <- if modelsEnabled
+                               then getResult prop
+                               else getResultOnlySat prop
+                     Tsc.pop 1
+                     resChan <- gets resultChan
+                     liftIO $ writeChan resChan resMap
+             else -- not sat or have gen'd a model so ignore
+             return ()
 
            -- reset stack
-           Tsc.pop 1
 
 
-           resChan <- gets resultChan
-           liftIO $
-             when (not . isResultNull $ resMap) $
-               writeChan resChan resMap
 
 instance MonadBase b m => MonadBase b (I.QueryT m) where
   liftBase = lift . liftBase

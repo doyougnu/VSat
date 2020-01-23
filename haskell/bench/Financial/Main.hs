@@ -213,8 +213,8 @@ main = do
       -- , mkBench "v-->v" "V10" d9Conf (satWithConf (toDimProp d9Conf) solverConf) bProp
       -- , mkBench' "v-->v" "EvolutionAware" (satWithConf (toDimProp evoAwareConf) solverConf) bProp
 
-        mkBench "v-->v" "V1*V2"                          justD01Conf (satWith solverConf) justbPropV12
-      , mkBench "v-->v" "V1*V2*V3"                       justD012Conf (satWith solverConf) justbPropV123
+        -- mkBench "v-->v" "V1*V2"                          justD01Conf (satWith solverConf) justbPropV12
+        mkBench "v-->v" "V1*V2*V3"                       justD012Conf (satWith solverConf) justbPropV123
       , mkBench "v-->v" "V1*V2*V3*V4"                    justD0123Conf (satWith solverConf) justbPropV1234
       -- , mkBench "v-->v" "V1*V2*V3*V4*V5"                 justD01234Conf (satWith solverConf) justbPropV12345
       -- , mkBench "v-->v" "V1*V2*V3*V4*V5*V6"              justD012345Conf (satWith solverConf) justbPropV123456
@@ -350,17 +350,22 @@ main = do
       , mkCompBench "v-->p" "V9*V10" (vOnPWithConf (toDimProp pD89Conf) solverConf) justbPropV910
       ]
 
-  defaultMain
-    [ -- bgroup "ABC" (benches abcDefConf)
-    --   bgroup "Yices" (benches yicesDefConf)
-    -- , bgroup "CVC4" (benches cvc4DefConf)
-        bgroup "Z3" (benches z3DefConf)
-        -- bgroup "Z3" (compRatioBenches z3DefConf)
-    -- , bgroup "Boolector" (benches boolectorDefConf)
-    ]
+
+  -- gotta beat 2.4 s
+
+  -- current record 2.05
+
+  -- defaultMain
+  --   [ -- bgroup "ABC" (benches abcDefConf)
+  --   --   bgroup "Yices" (benches yicesDefConf)
+  --   -- , bgroup "CVC4" (benches cvc4DefConf)
+  --       bgroup "Z3" (benches z3DefConf)
+  --       -- bgroup "Z3" (compRatioBenches z3DefConf)
+  --   -- , bgroup "Boolector" (benches boolectorDefConf)
+  --   ]
   -- putStrLn $ show $ dimensions justbPropV1234567
-  -- res <- (satWith z3DefConf) justbPropV123
-  -- putStrLn $ show res
+  res <- (satWith z3DefConf) justbPropV123
+  putStrLn $ show res
   -- putStrLn $ show $ pairs
   -- ts <- (mkCompRatioConfs ds pairs :: IO [VProp.Types.Config Text])
   -- mapM_ (putStrLn . show) ts
