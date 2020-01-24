@@ -256,7 +256,8 @@ runVSMTSolve !configPool !prop =
        -- we get a symbolic count back so we just run a quick query to retrieve
        -- the number
        -- TODO push this into the parser
-       dCount = S.runSMT $! fmap (Set.size . foundDimensions . snd) mkVCore
+       dCount = S.runSMT $! do
+         fmap (Set.size . foundDimensions . snd) mkVCore
 
      -- run the inner driver
      let
@@ -396,16 +397,17 @@ vSMTSolve prop propConf cnf i =
         -- kick off a main thread
         runMain = forkIO $ do
           S.runSMTWith solverConf $
-            do prop' <- prop
-               SC.query $
-                 runReaderT
-                 (doChoice prop')
-                 -- set model generator
-                 (onGenModels (const $! generateModels (settings cnf))
+            do
+              prop' <- prop
+              SC.query $
+                do
+                  SC.timeout 9900000 $ runReaderT (doChoice prop')
+                    -- set model generator
+                    (onGenModels (const $! generateModels (settings cnf))
                  -- set prop formula configuration of dimensions
-                 . (onConfig $ const propConf) $!
+                      . (onConfig $ const propConf) $!
                  -- construct an empty state
-                  (emptySt reqChanIn resChanIn))
+                      (emptySt reqChanIn resChanIn))
 
         -- continuation to run in worker thread, takes a state and query computation
 
@@ -415,13 +417,20 @@ vSMTSolve prop propConf cnf i =
                                            else 2^propConfSize
         maxResults = if dimensionCount == 0 || possibleMax == 0
                      then 1 else possibleMax
-        numWorkers =  if dimensionCount == 0 || possibleMax == 0
+        numWorkers = if dimensionCount == 0 || possibleMax == 0
                       then 1
-                      else possibleMax
+                      else possibleMax `div` 2
+        numListeners = if dimensionCount == 0 || possibleMax == 0
+                       then 1
+                       else possibleMax `div` 2
+        readsPerListener = maxResults `div` numListeners
+
 
     -- dbg "Dim Count" dimensionCount
     -- dbg "Possible Max" possibleMax
     -- dbg "Workers" numWorkers
+    -- dbg "Num Reads" readsPerListener
+    -- dbg "Listeners" numListeners
     -- dbg "Results" maxResults
 
     -- kick off main thread
@@ -431,13 +440,22 @@ vSMTSolve prop propConf cnf i =
     mapM_ go [1..numWorkers]
 
     -- listen for results on main
-    rs <- mapConcurrently (\_ -> readChan resChanOut) [1..maxResults]
+    rs <- mapConcurrently
+          (\_ -> listener resChanOut readsPerListener mempty)
+          [1..numListeners]
 
     -- accumulate the results
     return $! mconcat rs
 
 solvePlain :: (Resultable d) => SC.Query (Result d)
 solvePlain = getResultWith $ toResultProp . LitB
+
+-- | a listener counts the results and returns an accumulated result
+listener :: OutChan (Result Text) -> Int -> Result Text -> IO (Result Text)
+listener chan 0  !results = return results
+listener chan !i !results = do
+  newResult <- readChan chan
+  listener chan (i - 1) (newResult <> results)
 
 worker :: S.Symbolic (Loc Text) ->
           Ts.SMTConfig ->
@@ -570,7 +588,6 @@ toText = pack . show
 
 solveVariant :: IncVSMTSolve () -> IncVSMTSolve ()
 solveVariant go = do
-           -- trace "Going!!!" $ return ()
            go
 
            -- convert configuration to a result propositional formula
@@ -578,7 +595,9 @@ solveVariant go = do
            !modelsEnabled <- asks genModelMaps
 
            -- grab the model if there is one
-           resMap <- if modelsEnabled then getResult prop else getResultOnlySat prop
+           resMap <- if modelsEnabled
+                     then getResult prop
+                     else getResultOnlySat prop
 
            -- return the result
            resChan <- asks resultChan
