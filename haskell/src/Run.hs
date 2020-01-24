@@ -391,11 +391,11 @@ vSMTSolve prop propConf cnf i =
     dimensionCount <- i
 
     -- convenience for spawning a curried worker
-    let go = worker prop reqChanOut
-
+    let solverConf = (conf cnf)
+        go = worker prop solverConf reqChanOut
         -- kick off a main thread
         runMain = forkIO $ do
-          S.runSMTWith (conf cnf) $
+          S.runSMTWith solverConf $
             do prop' <- prop
                SC.query $
                  runReaderT
@@ -439,14 +439,17 @@ vSMTSolve prop propConf cnf i =
 solvePlain :: (Resultable d) => SC.Query (Result d)
 solvePlain = getResultWith $ toResultProp . LitB
 
-worker :: S.Symbolic (Loc Text) -> OutChan (IncState, IncVSMTSolve ()) -> Int -> IO ThreadId
-worker prop requestChan i =
+worker :: S.Symbolic (Loc Text) ->
+          Ts.SMTConfig ->
+          OutChan (IncState, IncVSMTSolve ()) ->
+          Int -> IO ThreadId
+worker prop solverConfig requestChan i =
   -- use forkIO here, for some reason mapConcurrently_ errors out
   forkIO $ forever $ do
   -- trace (show i ++ ": " ++ "Waiting for Conf") $ return ()
   (!st, !qry) <- liftIO $ readChan requestChan
   -- trace (show i ++ ": " ++ "Running with CONF" ++ show (config st))  $ return ()
-  S.runSMT $!
+  S.runSMTWith solverConfig $!
     do prop' <- prop
        SC.query $! runReaderT qry st
 
