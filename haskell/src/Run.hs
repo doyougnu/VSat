@@ -24,7 +24,7 @@ import           Control.Arrow (first, second)
 import           Control.Monad.RWS.Strict
 import           Control.Monad.State.Strict as St
 import           Control.Monad.IO.Class (MonadIO)
-import           Control.Monad.Reader (ReaderT, runReaderT)
+import           Control.Monad.Reader
 import           Control.DeepSeq
 import           GHC.Generics
 import           GHC.Conc (ThreadId, threadDelay)
@@ -310,7 +310,6 @@ addDimension e PackState{..} =
 
 
 type IncPack a = StateT (PackState a) S.Symbolic
-  -- St.StateT (UsedVars a S.SBool, UsedVars a SNum) (Ts.SymbolicT SC.Query)
 
 -- | a pool of configurations used to perform selection. A list is appropriate
 -- here because we only use it as a stack, or a single traversal and we require
@@ -327,13 +326,6 @@ type UsedConstraint = Text
 -- d
 data IncState =
   IncState { config      :: !(Config Text) -- * the current config
-           , processed   :: !GenModel   -- * a flag denoting
-                                        -- that a model has been
-                                        -- generated during a
-                                        -- recursive call
-           , usedConstraints :: !(Used) -- * a set that checks constraints so we
-                                        -- don't send redundant constraints to
-                                        -- sbv
            , genModelMaps :: !Bool       -- This is added boilerplate resulting
                                         -- from not have a proper newtype for
                                         -- IncStateVSMT. For VSAT1 this is fine
@@ -344,8 +336,6 @@ data IncState =
 
 -- emptySt :: IncState
 emptySt chan resChan = IncState{ config=mempty
-                               , processed=False
-                               , usedConstraints=mempty
                                , genModelMaps=True
                                , workerChan = chan
                                , resultChan = resChan
@@ -370,31 +360,15 @@ replaceConfig :: Config Text -> IncState -> IncState
 replaceConfig = onConfig . const
 {-# INLINE replaceConfig #-}
 
-onProcessed :: (GenModel -> GenModel) -> IncState -> IncState
-onProcessed f IncState {..} = IncState {processed=f processed, ..}
-{-# INLINE onProcessed #-}
-
-onUsed :: (Used -> Used) -> IncState -> IncState
-onUsed f IncState {..} = IncState {usedConstraints =f usedConstraints, ..}
-{-# INLINE onUsed #-}
-
 onGenModels :: (Bool -> Bool) -> IncState -> IncState
 onGenModels f IncState {..} = IncState {genModelMaps =f genModelMaps, ..}
 {-# INLINE onGenModels #-}
-
-isUsed :: UsedConstraint -> Used -> Bool
-isUsed = member
-{-# INLINE isUsed #-}
-
-insertUsed :: UsedConstraint -> IncState -> IncState
-insertUsed = onUsed . insert
-{-# INLINE insertUsed #-}
 
 -- | the incremental solve monad, with the base monad being the query monad so
 -- we can pull out sbv models Hardcoding so that I don't have to write the mtl
 -- typeclass. I do not expect these to change much
 -- TODO newtype this and add a reader for various settings
-type IncVSMTSolver s = St.StateT s Tsc.Query
+type IncVSMTSolver s = ReaderT s Tsc.Query
 
 type IncVSMTSolve = IncVSMTSolver IncState
 
@@ -424,7 +398,7 @@ vSMTSolve prop propConf cnf i =
           S.runSMTWith (conf cnf) $
             do prop' <- prop
                SC.query $
-                 St.evalStateT
+                 runReaderT
                  (doChoice prop')
                  -- set model generator
                  (onGenModels (const $! generateModels (settings cnf))
@@ -435,17 +409,20 @@ vSMTSolve prop propConf cnf i =
 
         -- continuation to run in worker thread, takes a state and query computation
 
-        possibleMax = (2^dimensionCount) - (2^(length propConf))
+        propConfSize = length propConf
+        possibleMax = (2^dimensionCount) - if propConfSize == 0
+                                           then propConfSize
+                                           else 2^propConfSize
         maxResults = if dimensionCount == 0 || possibleMax == 0
                      then 1 else possibleMax
         numWorkers =  if dimensionCount == 0 || possibleMax == 0
                       then 1
                       else possibleMax
 
-    dbg "Dim Count" dimensionCount
-    dbg "Possible Max" possibleMax
-    dbg "Workers" numWorkers
-    dbg "Results" maxResults
+    -- dbg "Dim Count" dimensionCount
+    -- dbg "Possible Max" possibleMax
+    -- dbg "Workers" numWorkers
+    -- dbg "Results" maxResults
 
     -- kick off main thread
     runMain
@@ -471,7 +448,7 @@ worker prop requestChan i =
   -- trace (show i ++ ": " ++ "Running with CONF" ++ show (config st))  $ return ()
   S.runSMT $!
     do prop' <- prop
-       SC.query $! St.evalStateT qry st
+       SC.query $! runReaderT qry st
 
 -- | The name of a reference
 type Name = Text
@@ -550,27 +527,23 @@ instance I.SolverContext (StateT s Tsc.Query) where
   constrainWithAttribute = (lift .) . I.constrainWithAttribute
   contextState = lift I.contextState
 
+instance I.SolverContext (ReaderT s Tsc.Query) where
+  constrain = lift . Ts.constrain
+  namedConstraint = (lift .) . Ts.namedConstraint
+  setOption = lift . Ts.setOption
+  softConstrain = lift . I.softConstrain
+  constrainWithAttribute = (lift .) . I.constrainWithAttribute
+  contextState = lift I.contextState
 
-setDim :: Dim Text -> Bool -> IncVSMTSolve  ()
-setDim = (St.modify' .) . insertToConfig
 
-removeDim :: Dim Text -> IncVSMTSolve  ()
-removeDim = St.modify' . deleteFromConfig
+setDim :: Dim Text -> Bool -> IncVSMTSolve () -> IncVSMTSolve ()
+setDim = (local .) . insertToConfig
 
-setConfig :: Config Text -> IncVSMTSolve  ()
-setConfig = St.modify' . replaceConfig
+removeDim :: Dim Text -> IncVSMTSolve () -> IncVSMTSolve ()
+removeDim = local . deleteFromConfig
 
-hasGenDModel :: IncVSMTSolve  Bool
-hasGenDModel = gets processed
-
-setModelGenD :: IncVSMTSolve  ()
-setModelGenD = St.modify' $! onProcessed (const True)
-
-setModelNotGenD :: IncVSMTSolve  ()
-setModelNotGenD = St.modify' $! onProcessed (const False)
-
-setUsed :: UsedConstraint -> IncVSMTSolve  ()
-setUsed = St.modify' . insertUsed
+setConfig :: Config Text -> IncVSMTSolve () -> IncVSMTSolve ()
+setConfig = local . replaceConfig
 
 -- | A smart constrain method, this inspects a set of constraint names to see if
 -- we have a duplicate constraint name. If we do (if the name representing the
@@ -598,14 +571,14 @@ solveVariant go = do
            go
 
            -- convert configuration to a result propositional formula
-           !prop <- gets (configToResultProp . config)
-           !modelsEnabled <- gets genModelMaps
+           !prop <- asks (configToResultProp . config)
+           !modelsEnabled <- asks genModelMaps
 
            -- grab the model if there is one
            resMap <- if modelsEnabled then getResult prop else getResultOnlySat prop
 
            -- return the result
-           resChan <- gets resultChan
+           resChan <- asks resultChan
            liftIO $! writeChan resChan resMap
 
 
@@ -615,21 +588,17 @@ handleChc :: IncVSMTSolve ()
           -> IncVSMTSolve ()
 handleChc goLeft goRight d =
   -- trace "handle chc" $
-  do currentCfg <- gets config
+  do currentCfg <- asks config
      case M.lookup d currentCfg of
        Just True  -> goLeft
        Just False -> goRight
        Nothing    -> do
-
-         --------------------- true variant -----------------------------
-
-         chan' <- gets workerChan
-         st <- get
+         chan' <- asks workerChan
+         st <- ask
          liftIO $! writeChan chan' (insertToConfig d False st, goRight)
 
          -- liftIO $! writeChan chan' (insertToConfig d True st, goLeft)
-         setDim d True
-         Tsc.timeout (-1) $ goLeft
+         setDim d True goLeft
 {-# INLINE handleChc #-}
 
 -- | type synonym to simplify the BValue type
