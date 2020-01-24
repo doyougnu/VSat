@@ -25,9 +25,6 @@ import           Control.Monad.RWS.Strict
 import           Control.Monad.State.Strict as St
 import           Control.Monad.IO.Class (MonadIO)
 import           Control.Monad.Reader (ReaderT, runReaderT)
-import           Control.Monad.Identity
-import           Control.Monad.Base
-import           Control.Monad.Trans (MonadTrans)
 import           Control.DeepSeq
 import           GHC.Generics
 import           GHC.Conc (ThreadId, threadDelay)
@@ -44,10 +41,8 @@ import           Data.Text (unpack, pack, Text)
 import qualified Data.Text.IO as T
 import           Data.List (intersperse)
 import           Prelude hiding (LT, GT, EQ)
-import           Control.Monad.Trans.Control
 import           Control.Concurrent (forkIO, forkOS)
 import           Control.Concurrent.Chan.Unagi
-import           Control.Concurrent.STM.TQueue
 import           Control.Concurrent.Async
 import           System.IO
 
