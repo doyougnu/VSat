@@ -393,6 +393,7 @@ vSMTSolve prop propConf cnf i =
 
     -- convenience for spawning a curried worker
     let solverConf = (conf cnf)
+        numThreads = threads $ settings cnf
         go = worker prop solverConf reqChanOut
         -- kick off a main thread
         runMain = forkIO $ do
@@ -401,7 +402,7 @@ vSMTSolve prop propConf cnf i =
               prop' <- prop
               SC.query $
                 do
-                  SC.timeout 9900000 $ runReaderT (doChoice prop')
+                  runReaderT (doChoice prop')
                     -- set model generator
                     (onGenModels (const $! generateModels (settings cnf))
                  -- set prop formula configuration of dimensions
@@ -417,12 +418,14 @@ vSMTSolve prop propConf cnf i =
                                            else 2^propConfSize
         maxResults = if dimensionCount == 0 || possibleMax == 0
                      then 1 else possibleMax
-        numWorkers = if dimensionCount == 0 || possibleMax == 0
-                      then 1
-                      else possibleMax `div` 2
-        numListeners = if dimensionCount == 0 || possibleMax == 0
-                       then 1
-                       else possibleMax `div` 2
+        numWorkers = numThreads
+          -- if dimensionCount == 0 || possibleMax == 0
+          --             then 1
+          --             else possibleMax `div` 2
+        numListeners = numThreads
+          -- if dimensionCount == 0 || possibleMax == 0
+          --              then 1
+          --              else possibleMax `div` 2
         readsPerListener = maxResults `div` numListeners
 
 
@@ -465,11 +468,12 @@ worker prop solverConfig requestChan i =
   -- use forkIO here, for some reason mapConcurrently_ errors out
   forkIO $ forever $ do
   -- trace (show i ++ ": " ++ "Waiting for Conf") $ return ()
-  (!st, !qry) <- liftIO $ readChan requestChan
   -- trace (show i ++ ": " ++ "Running with CONF" ++ show (config st))  $ return ()
   S.runSMTWith solverConfig $!
     do prop' <- prop
-       SC.query $! runReaderT qry st
+       (!st, !qry) <- liftIO $ readChan requestChan
+       SC.query $! do
+         runReaderT qry st
 
 -- | The name of a reference
 type Name = Text

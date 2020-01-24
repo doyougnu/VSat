@@ -5,6 +5,8 @@ import Data.SBV (SMTConfig(..),z3,yices,mathSAT,boolector,abc,cvc4)
 import GHC.Generics (Generic)
 import Data.Foldable (foldr')
 import Data.Text (Text)
+import System.IO.Unsafe (unsafePerformIO) -- only used safely!
+import GHC.Conc (getNumProcessors, getNumCapabilities, numCapabilities)
 
 import VProp.Types
 import Opts
@@ -14,6 +16,7 @@ data Settings = Settings { solver         :: Solver
                          , optimizations  :: ![Opts]
                          , seed           :: Maybe Integer
                          , generateModels :: Bool
+                         , threads :: Int
                          } deriving (Show,Generic)
 
 data SMTConf d a b = SMTConf { conf :: !SMTConfig
@@ -41,15 +44,28 @@ toConf Settings{..} = foldr' ($) emptyConf ss
 
 -- | A default configuration uses z3 and tries to shrink propositions
 defSettings :: Settings
-defSettings = Settings{solver=Z3, optimizations=defs, seed=Nothing, generateModels = True}
+defSettings = Settings{ solver=Z3
+                      , optimizations=defs
+                      , seed=Nothing
+                      , generateModels = True
+                      , threads = numCapabilities
+                      }
   where defs = [Prune, Atomize, MoveRight]
+        numThreads = unsafePerformIO $ do cores <- getNumProcessors
+                                          threadsPerCore <- getNumCapabilities
+                                          return (cores * threadsPerCore)
 
 defSettingsOnlySat :: Settings
 defSettingsOnlySat = defSettings{generateModels = False}
 
 -- moveRight required for proper results
 minSettings :: Settings
-minSettings = Settings{solver=Z3, optimizations=[], seed=Nothing, generateModels = False}
+minSettings = Settings{ solver=Z3
+                      , optimizations=[]
+                      , seed=Nothing
+                      , generateModels = False
+                      , threads=1
+                      }
 
 allOptsSettings :: Settings
 allOptsSettings = defSettings{optimizations=[Atomize,Prune,Shrink,MoveRight]}
@@ -58,7 +74,9 @@ debugSettings :: Settings
 debugSettings = Settings{ solver=Z3
                         , optimizations=[MoveRight,Atomize]
                         , seed=Nothing
-                        , generateModels=True}
+                        , generateModels=True
+                        , threads=1
+                        }
 
 defConf :: (SAT (VProp d a b), Ord a,Ord b,Ord d) => SMTConf d a b
 defConf = toConf defSettings
@@ -93,6 +111,17 @@ setSeed :: Maybe Integer -> SMTConf d a b -> SMTConf d a b
 setSeed (Just x) c = addOption (RandomSeed x:) c
 setSeed Nothing  c = c
 
+setThreads' :: Int -> Settings -> Settings
+setThreads' i Settings{..} = Settings{threads=i,..}
+
+setThreads :: Int -> SMTConf d a b -> SMTConf d a b
+setThreads i SMTConf{..} = SMTConf{settings=setThreads' i settings,..}
+
+getThreads' :: Settings -> Int
+getThreads' Settings{..} = threads
+
+getThreads :: SMTConf d a b -> Int
+getThreads = getThreads' . settings
 
 setVerbose :: SMTConf d a b -> SMTConf d a b
 setVerbose SMTConf{..} = SMTConf{conf=conf{verbose=True}, opts,settings}

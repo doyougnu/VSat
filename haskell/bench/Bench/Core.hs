@@ -50,9 +50,9 @@ average xs = realToFrac (sum xs) / genericLength xs
 -- and confDesc that are hand written names for the algorithm being used and the
 -- configuration/prop description. We then input the prop and get a bunch of
 -- statistics on it and return all these as a slash '/' separated string
-mkDescription :: String -> String -> [ReadableProp Text] -> String
-mkDescription alg confDesc []   = error "called mkDescription with no props"
-mkDescription alg confDesc [prop] = desc
+mkDescription :: String -> String -> Int -> [ReadableProp Text] -> String
+mkDescription alg confDesc _ []   = error "called mkDescription with no props"
+mkDescription alg confDesc i [prop] = desc
   where
     !desc' = [ "Chc"        , show nChc
              , "numPlain"   , show nPln
@@ -61,6 +61,7 @@ mkDescription alg confDesc [prop] = desc
              , "VCorePlain" , show vCorePlain
              , "VCoreVar"   , show vCoreVar
              , "Variants"   , show variants
+             , "Core"       , show i
              ]
     !desc = mconcat $ intersperse "/" $ pure alg ++ pure confDesc ++ desc'
     !nPln = numPlain prop
@@ -71,7 +72,7 @@ mkDescription alg confDesc [prop] = desc
     !variants = 2 ^ (Set.size $ dimensions prop)
 -- copying code, the greatest of all possible sins. This just isn't important
 -- enough to handle properly
-mkDescription alg confDesc props = desc
+mkDescription alg confDesc i props = desc
   where
     !desc' = [ "Chc"        , show nChc
              , "numPlain"   , show nPln
@@ -80,6 +81,7 @@ mkDescription alg confDesc props = desc
              , "VCorePlain" , show vCorePlain
              , "VCoreVar"   , show vCoreVar
              , "Variants"   , show variants
+             , "Cores"      , show i
              ]
     !desc = mconcat $ intersperse "/" $ pure alg ++ pure confDesc ++ desc'
     !nPln = average $ numPlain <$> props
@@ -107,11 +109,12 @@ mkBench
   :: (NFData a1) =>
      String
      -> String
+     -> Int
      -> ReadableProp Text
      -> (ReadableProp Text -> IO a1)
      -> ReadableProp Text
      -> Benchmark
-mkBench alg confDesc conf !f prop = run desc f prop
+mkBench alg confDesc threads conf !f prop = run desc f prop
   where
     confPool = unsafePerformIO $ genConfigPool conf --just call out to the
                                                       --solver, this should
@@ -119,14 +122,14 @@ mkBench alg confDesc conf !f prop = run desc f prop
     prop' = flip selectVariant prop <$> confPool  -- some confs will never be
                                                   -- total, so we use select
                                                   -- variant here
-    desc = mkDescription alg confDesc prop'
+    desc = mkDescription alg confDesc threads prop'
 
 -- | like mkBench but we run compression statistics on the prop directly. It is
 -- assumed the prop will have been partially selected to reduce it to the
 -- compression dimensions of interest
-mkCompBench alg confDesc !f prop = run desc f prop
+mkCompBench alg confDesc threads !f prop = run desc f prop
   where
-    desc = mkDescription alg confDesc (pure prop)
+    desc = mkDescription alg confDesc threads (pure prop)
 
 
 -- | a version of mkBench that doesn't require the actual configuration. This is
@@ -139,12 +142,13 @@ mkBench'
   :: (NFData a1) =>
      String
      -> String
+     -> Int
      -> (ReadableProp Text -> IO a1)
      -> ReadableProp Text
      -> Benchmark
-mkBench' alg confDesc !f prop = run desc f prop
+mkBench' alg confDesc threads !f prop = run desc f prop
   where
-    desc = mkDescription alg confDesc (pure prop)
+    desc = mkDescription alg confDesc threads (pure prop)
 
 -- | make pairs for controlling complexity for compression ratio benchmark. We
 -- want to benchmark two versions that have different compression ratios, but
