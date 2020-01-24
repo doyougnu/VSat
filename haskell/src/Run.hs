@@ -30,7 +30,7 @@ import           Control.Monad.Base
 import           Control.Monad.Trans (MonadTrans)
 import           Control.DeepSeq
 import           GHC.Generics
-import           GHC.Conc (ThreadId)
+import           GHC.Conc (ThreadId, threadDelay)
 import qualified Data.Set as Set
 import           Data.Foldable (foldr')
 import           Data.HashSet (HashSet, member, insert)
@@ -44,9 +44,8 @@ import           Data.Text (unpack, pack, Text)
 import qualified Data.Text.IO as T
 import           Data.List (intersperse)
 import           Prelude hiding (LT, GT, EQ)
-import           Control.Concurrent.ParallelIO (parallel)
 import           Control.Monad.Trans.Control
-import           Control.Concurrent (forkIO)
+import           Control.Concurrent (forkIO, forkOS)
 import           Control.Concurrent.Chan.Unagi
 import           Control.Concurrent.STM.TQueue
 import           Control.Concurrent.Async
@@ -253,30 +252,36 @@ runVSMTSolve ::
   ConfigPool Text ->
   ReadableProp Text ->
   Env Text (Result Text)
-runVSMTSolve configPool prop =
+runVSMTSolve !configPool !prop =
   do cnf <- ask
-     -- convert all refs to SBools
      let
-
        mkVCore = St.runStateT (propToSBool prop) emptyPackState
        vCore :: S.Symbolic (VProp Text (Ts.SBool, Name) SNum)
        vCore = fmap fst mkVCore
-       dCount = fmap (Set.size . foundDimensions . snd) mkVCore
+       -- we get a symbolic count back so we just run a quick query to retrieve
+       -- the number
+       -- TODO push this into the parser
+       dCount = S.runSMT $! fmap (Set.size . foundDimensions . snd) mkVCore
 
      -- run the inner driver
      let
        pprop :: S.Symbolic (Loc Text)
        -- !pprop = findPrincipleChoice . mkTop <$> (vCore >>= (evaluate . toBValue))
        !pprop = mkTop <$> (vCore >>= (evaluate . toBValue))
-       run = \configuration -> vSMTSolve pprop configuration (settings cnf) dCount
+       run = \configuration -> vSMTSolve pprop configuration cnf dCount
 
-     -- run configurations in parallel after making the variational core
-     -- res <- liftIO $ parallel $! if null configPool
-     --                             then [run mempty]
-     --                             else run <$> configPool
-     results <- liftIO $ run mempty
+     -- run configurations in parallel after making the variational core. Note
+     -- that right now we do not support mixing partial configs with total
+     -- configs but this would be a useful feature in the future. This means
+     -- that if there is a config pool each config is the same size and hence we
+     -- can fmap over them to condition the vCore appropriately, if there are
+     -- choices left over than the inner solver will spin up threads to solve
+     -- them, if not then we'll just get a model immediately
+     results <- liftIO $ mapM run $ if null configPool
+                                    then pure mempty
+                                    else configPool
 
-     return $! results
+     return $! mconcat results
 
 -- | wrapper around map to keep track of the variable references we've seen, a,
 -- and their symbolic type, b, which is eta reduced here
@@ -406,25 +411,46 @@ type ResultChan = InChan (Result Text)
 -- not, if not then it gets the plain model
 vSMTSolve :: S.Symbolic (Loc Text) ->
              Config Text ->
-             Settings ->
-             (S.Symbolic NumDimensions) ->
+             SMTConf Text Text Text ->
+             IO NumDimensions ->
              IO (Result Text)
-vSMTSolve prop conf ss i =
-  do -- S.setOption $ SC.ProduceUnsatCores True
+vSMTSolve prop propConf cnf i =
+  do
     (reqChanIn, reqChanOut) <- newChan
     (resChanIn, resChanOut) <- newChan
-    dimensionCount <- S.runSMT i
 
-    -- chans
-    -- vars <- mapM (const newEmptyMVar) [1..10]
+    dimensionCount <- i
+
+    -- convenience for spawning a curried worker
     let go = worker prop reqChanOut
-        runMain = forkIO $ do
-          S.runSMT $ do prop' <- prop
-                        SC.query $
-                          St.evalStateT (doChoice prop') (emptySt reqChanIn resChanIn)
-        maxResults = 2 ^ dimensionCount
-        numWorkers =  sum (fmap (2^) [1..dimensionCount]) `div` 2
 
+        -- kick off a main thread
+        runMain = forkIO $ do
+          S.runSMTWith (conf cnf) $
+            do prop' <- prop
+               SC.query $
+                 St.evalStateT
+                 (doChoice prop')
+                 -- set model generator
+                 (onGenModels (const $! generateModels (settings cnf))
+                 -- set prop formula configuration of dimensions
+                 . (onConfig $ const propConf) $!
+                 -- construct an empty state
+                  (emptySt reqChanIn resChanIn))
+
+        -- continuation to run in worker thread, takes a state and query computation
+
+        possibleMax = (2^dimensionCount) - (2^(length propConf))
+        maxResults = if dimensionCount == 0 || possibleMax == 0
+                     then 1 else possibleMax
+        numWorkers =  if dimensionCount == 0 || possibleMax == 0
+                      then 1
+                      else possibleMax
+
+    dbg "Dim Count" dimensionCount
+    dbg "Possible Max" possibleMax
+    dbg "Workers" numWorkers
+    dbg "Results" maxResults
 
     -- kick off main thread
     runMain
@@ -435,21 +461,22 @@ vSMTSolve prop conf ss i =
     -- listen for results on main
     rs <- mapConcurrently (\_ -> readChan resChanOut) [1..maxResults]
 
-
+    -- accumulate the results
     return $! mconcat rs
 
 solvePlain :: (Resultable d) => SC.Query (Result d)
 solvePlain = getResultWith $ toResultProp . LitB
 
-
 worker :: S.Symbolic (Loc Text) -> OutChan (IncState, IncVSMTSolve ()) -> Int -> IO ThreadId
 worker prop requestChan i =
+  -- use forkIO here, for some reason mapConcurrently_ errors out
   forkIO $ forever $ do
   -- trace (show i ++ ": " ++ "Waiting for Conf") $ return ()
-  (!st, !qry) <- readChan requestChan
-  -- trace (show i ++ ": " ++ "Runnign with CONF" ++ show (config st))  $ return ()
-  S.runSMT $! do prop' <- prop
-                 SC.query $! St.evalStateT qry st
+  (!st, !qry) <- liftIO $ readChan requestChan
+  -- trace (show i ++ ": " ++ "Running with CONF" ++ show (config st))  $ return ()
+  S.runSMT $!
+    do prop' <- prop
+       SC.query $! St.evalStateT qry st
 
 -- | The name of a reference
 type Name = Text
@@ -572,76 +599,19 @@ toText = pack . show
 
 solveVariant :: IncVSMTSolve () -> IncVSMTSolve ()
 solveVariant go = do
-           -- setModelNotGenD
-
-           -- the recursive computaton
-           -- liftIO $ dbg "waiting for request: " ()
-           -- requestChannel <- gets reqChan
-           -- go <- liftIO $ readChan requestChannel
-
-           -- spawn a new chan just for children of this choice
-           -- newReqChan <- newChan
-
-           -- Tsc.push 1
            -- trace "Going!!!" $ return ()
            go
 
-           -- check if the config was satisfiable, and if the recursion
-           -- generated a model
-           -- bd <- hasGenDModel
-
-           -- if not generated a model, then construct a -- result
-           -- if not bd
-           --   then do prop <- gets (configToResultProp . config)
-           --           modelsEnabled <- gets genModelMaps
-           --           setModelGenD
-           --           !resMap <- if modelsEnabled
-           --                      then getResult prop
-           --                      else getResultOnlySat prop
-           --           Tsc.pop 1
-           --           resChan <- gets resultChan
-           --           liftIO $! writeChan resChan resMap
-           --   else -- not sat or have gen'd a model so ignore
-           --   return ()
-
-           -- reset stack
+           -- convert configuration to a result propositional formula
            !prop <- gets (configToResultProp . config)
-           modelsEnabled <- gets genModelMaps
-           resMap <- if modelsEnabled
-                     then getResult prop
-                     else getResultOnlySat prop
+           !modelsEnabled <- gets genModelMaps
 
+           -- grab the model if there is one
+           resMap <- if modelsEnabled then getResult prop else getResultOnlySat prop
 
-           -- Tsc.pop 1
+           -- return the result
            resChan <- gets resultChan
            liftIO $! writeChan resChan resMap
-
-
--- instance MonadBase b m => MonadBase b (I.QueryT m) where
---   liftBase = lift . liftBase
-
--- instance MonadTransControl I.QueryT where
---   type StT I.QueryT a = StT (ReaderT I.State) a
---   liftWith = defaultLiftWith I.QueryT I.runQueryT
---   restoreT = defaultRestoreT I.QueryT
-
--- instance MonadBaseControl b m => MonadBaseControl b (I.QueryT m) where
---   type StM (I.QueryT m) a = ComposeSt I.QueryT m a
---   liftBaseWith            = defaultLiftBaseWith
---   restoreM                = defaultRestoreM
-
--- instance MonadBase b m => MonadBase b (Ts.SymbolicT m) where
---   liftBase = lift . liftBase
-
--- instance MonadTransControl Ts.SymbolicT where
---   type StT Ts.SymbolicT a = StT (ReaderT I.State) a
---   liftWith = defaultLiftWith Ts.SymbolicT Ts.runSymbolicT
---   restoreT = defaultRestoreT Ts.SymbolicT
-
--- instance MonadBaseControl b m => MonadBaseControl b (Ts.SymbolicT m) where
---   type StM (Ts.SymbolicT m) a = ComposeSt Ts.SymbolicT m a
---   liftBaseWith               = defaultLiftBaseWith
---   restoreM                   = defaultRestoreM
 
 
 handleChc :: IncVSMTSolve ()
@@ -659,65 +629,12 @@ handleChc goLeft goRight d =
          --------------------- true variant -----------------------------
 
          chan' <- gets workerChan
-         -- chan <- liftIO $ dupChan chan'
-
-         -- liftIO $ dbg "Splitting!" ()
-         -- ((resMapT,_), (resMapF,_)) <- control $
-         --   \runInIO ->
-         --     runInIO $
-         --     liftIO $
-         --     concurrently
-         --     (runInIO $! do setDim d False; solveVariant goRight)
-         --     (runInIO $! do setDim d True; solveVariant goLeft)
-
-         -- trace ("[CHC] Going Left, choice: " ++ show d ++ "\n") $ return ()
-           -- lRes <- S.runSMT $ SC.query $ evalStateT goLeft lState
-           -- putMVar lMVar lRes
-           -- leftRes <- P.new
-           -- P.fork $ do P.pval goRight >>= P.put leftRes
-
-         -------------------- false variant -----------------------------
-         -- trace "left" $ return ()
-         -- dbg "LEFT" d
          st <- get
-         -- trace "CHANNEL WRITTEN LEFT" $ return ()
-         -- resultL <- (do setDim d True; goLeft)
-
-
-         -- trace "right" $ return ()
-         -- dbg "RIGHT" d
          liftIO $! writeChan chan' (insertToConfig d False st, goRight)
 
          -- liftIO $! writeChan chan' (insertToConfig d True st, goLeft)
          setDim d True
-         goLeft
-         -- trace "CHANNEL WRITTEN RIGHT" $ return ()
-         -- do setDim d False
-         -- resultR <- goRight
-         -- setDim d False
-
-         -- liftIO $ forkIO $ do
-           -- trace ("[CHC] Going Right, choice: " ++ show d ++ "\n") $ return ()
-         -- resMapF <- goRight
-           -- rRes <- S.runSMT $ SC.query $ evalStateT goRight lState
-           -- putMVar lMVar rRes
-
-         -- store results and cleanup config
-         -- resMapT <- liftIO $ takeMVar lMVar
-         -- resMapF <- liftIO $ takeMVar rMVar
-         -- let !result = resMapT <> resMapF
-
-         -- we remove the Dim from the config so that when the recursion
-         -- completes the last false branch of the last choice is not
-         -- remembered. For Example if we have A<p,q> /\ B<r,s> then the
-         -- recursion starts at A and completes at the right variants of
-         -- B, namely s. If we don't remove the dimension from the config
-         -- then the config will retain the selection of (B, False) and
-         -- therefore on the (A, False) branch of the recursion it'll
-         -- miss (B, True)
-         -- removeDim d
-         -- return ()
-         -- liftIO $ atomically $! writeTQueue c result
+         Tsc.timeout (-1) $ goLeft
 {-# INLINE handleChc #-}
 
 -- | type synonym to simplify the BValue type
@@ -753,16 +670,8 @@ vCoreNumVar _            = 0
 vCoreMetrics :: ReadableProp Text -> IO (Int, Int, Int)
 vCoreMetrics p = S.runSMT $ do
     p' <- St.evalStateT (propToSBool p) emptyPackState
-
-     -- let
-     --   prop' :: IncVSMTSolve (VProp Text (Ts.SBool, Name) SNum)
-     --   prop' = lift $ St.evalStateT (propToSBool prop) (mempty, mempty)
-
     core <- evaluate $ toBValue p'
     return (vCoreSize core, vCoreNumPlain core, vCoreNumVar core)
-     -- return core
-         -- (b,resSt) <- St.runStateT (pprop >>= solveVariational configPool) emptySt
-
 
 -- | The main solver algorithm. You can think of this as the sem function for
 -- the dsl. This progress in two stages, we extend the value domain with a
