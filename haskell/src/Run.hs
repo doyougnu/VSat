@@ -27,7 +27,7 @@ import           Control.Monad.IO.Class (MonadIO)
 import           Control.Monad.Reader
 import           Control.DeepSeq
 import           GHC.Generics
-import           GHC.Conc (ThreadId, threadDelay)
+import           GHC.Conc (ThreadId, threadDelay, setNumCapabilities)
 import qualified Data.Set as Set
 import           Data.Foldable (foldr')
 import           Data.HashSet (HashSet, member, insert)
@@ -390,6 +390,9 @@ vSMTSolve prop propConf cnf i =
     (resChanIn, resChanOut) <- newChan
 
     dimensionCount <- i
+
+    -- set the threads
+    setNumCapabilities (getThreads cnf)
 
     -- convenience for spawning a curried worker
     let solverConf = (conf cnf)
