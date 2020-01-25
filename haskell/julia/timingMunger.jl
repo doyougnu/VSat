@@ -41,6 +41,8 @@ function addVCoreVarCnt(df) genCol(df, :VCoreVar, 15, x->parse(Int,x)) end
 
 function addVariantCount(df) genCol(df, :Variants, 17, x->parse(Int,x)) end
 
+function addCore(df) genCol(df, :Core , 19, x->parse(Int,x)) end
+
 
 # mutate the data by splitting on the name column
 # function mungeDF!(df::DataFrame)
@@ -56,7 +58,7 @@ function addVariantCount(df) genCol(df, :Variants, 17, x->parse(Int,x)) end
 #         addComp |> addType
 # end
 function mungeDF!(df::DataFrame)
-    df |> addData |> addAlg |> addConf |> addNumChc |> addNumPlain |> addComp |> addVCoreSize |> addVCorePlainCnt |> addVCoreVarCnt |> addVariantCount
+    df |> addData |> addAlg |> addConf |> addNumChc |> addNumPlain |> addComp |> addVCoreSize |> addVCorePlainCnt |> addVCoreVarCnt |> addVariantCount |> addCore
 end
 
 ## perform the mutation

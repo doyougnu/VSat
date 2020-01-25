@@ -2,7 +2,6 @@ library(ggplot2)
 library(dplyr)
 library(cowplot)
 library(latex2exp)
-library(gridExtra)
 library(forcats)
 
 fin <- "../data/fin_data.csv"
@@ -27,23 +26,28 @@ clean <- function(input_port, name){
 
 finDf  <- clean(fin, "Financial")
 autoDf <- clean(auto, "Auto")
-finP <- clean(finParallel, "Financial") %>% mutate(Algorithm = paste(Algorithm, "p", sep=""))
+finP <- clean(finParallel, "Financial") %>%
+  mutate(AlgCore = paste(Algorithm, paste("p",Core,sep = ""),sep = "")) %>%
+  subset(select = -Algorithm) %>% rename(Algorithm = AlgCore)
 
-df <- merge(finDf, autoDf, finP, all = TRUE)
+
+df <- merge(finDf, finP, all = TRUE)
+df <- merge(df, autoDf, all = TRUE)
 
 ## Tomorrow: fix auto data, make facet to show linear vs log scale on x axis where x axis is dimensions and not variants
-rq1 <- ggplot(df %>% filter(Variants > 2), mapping = aes(x=Variants, y=Mean, shape = Algorithm, colour=Algorithm)) +
+rq1 <- ggplot(df %>% filter(Variants > 2), mapping = aes(x=UniqueDimensions, y=Mean, shape = Algorithm, colour=Algorithm)) +
   facet_wrap(. ~ DataSet, scales = "free") +
   geom_point(size=3) +
   geom_line() +
   ylab("Time [s] to solve all Variants") +
-  scale_shape_manual(values = c(1,2,5,17)) +
+  ## scale_shape_manual(values = c(1,2,5,17, 20)) +
+  scale_shape_manual(values = c(1:13)) +
   ggtitle("RQ1: Performance as variants increase") +
   theme_classic() +
   theme(legend.position = "bottom", panel.spacing = unit(2, "lines")
         , plot.title = element_text(size=12))
 
-ggsave("../plots/RQ1.png", plot = rq1, device = "png", width = 7, height = 4)
+## ggsave("../plots/RQ1.png", plot = rq1, device = "png", width = 7, height = 4)
 
 
 rq3 <- df %>% filter(Variants == 1) %>%
@@ -76,4 +80,4 @@ rq3 <- df %>% filter(Variants == 1) %>%
   xlab("Time [s] to solve a single variant") +
   ylab("Feature Model Version")
 
-ggsave("../plots/RQ3.png", plot = rq3, device = "png", width = 7, height = 4)
+## ggsave("../plots/RQ3.png", plot = rq3, device = "png", width = 7, height = 4)
