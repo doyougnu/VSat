@@ -26,9 +26,10 @@ clean <- function(input_port, name){
 
 finDf  <- clean(fin, "Financial")
 autoDf <- clean(auto, "Auto")
-finP <- clean(finParallel, "Financial") %>%
-  mutate(AlgCore = paste(Algorithm, paste("p",Core,sep = ""),sep = "")) %>%
-  subset(select = -Algorithm) %>% rename(Algorithm = AlgCore)
+finP <- clean(finParallel, "Financial")
+## %>%
+##   mutate(AlgCore = paste(Algorithm, paste("p",Core,sep = ""),sep = "")) %>%
+##   subset(select = -Algorithm) %>% rename(Algorithm = AlgCore)
 
 
 df <- merge(finDf, finP, all = TRUE)
@@ -41,13 +42,27 @@ rq1 <- ggplot(df %>% filter(Variants > 2), mapping = aes(x=UniqueDimensions, y=M
   geom_line() +
   ylab("Time [s] to solve all Variants") +
   ## scale_shape_manual(values = c(1,2,5,17, 20)) +
-  scale_shape_manual(values = c(1:13)) +
+  scale_shape_manual(values = c(1:19)) +
   ggtitle("RQ1: Performance as variants increase") +
   theme_classic() +
   theme(legend.position = "bottom", panel.spacing = unit(2, "lines")
         , plot.title = element_text(size=12))
 
 ## ggsave("../plots/RQ1.png", plot = rq1, device = "png", width = 7, height = 4)
+
+
+rq2 <- ggplot(df %>% filter(DataSet == "Financial"), mapping = aes(x=Core, y=Mean, shape = Algorithm, colour=Algorithm)) +
+  facet_wrap(. ~ Variants) +
+  geom_point() +
+  geom_line() +
+  ylab("Time [s] to solve all Variants") +
+  ## scale_shape_manual(values = c(1,2,5,17, 20)) +
+  scale_shape_manual(values = c(1:19)) +
+  ggtitle("RQ1: Performance as Cores increase") +
+  theme_classic() +
+  theme(legend.position = "bottom", panel.spacing = unit(2, "lines")
+      , plot.title = element_text(size=12))
+
 
 
 rq3 <- df %>% filter(Variants == 1) %>%
