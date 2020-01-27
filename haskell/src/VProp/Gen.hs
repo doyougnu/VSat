@@ -46,6 +46,15 @@ instance Arbitrary (ReadableProp Var) where
   shrink (OpB _ r)    = pure r
   shrink x            = pure x
 
+
+instance Arbitrary (ReadableProp Text) where
+  arbitrary = sized $ arbVProp genSharedDim' arbitrary (repeat 3, repeat 3)
+  shrink (ChcB _ l r) = [l, r]
+  shrink (OpIB _ _ _) = []
+  shrink (OpBB _ l r) = [l, r]
+  shrink (OpB _ r)    = pure r
+  shrink x            = pure x
+
 -- | Generate only alphabetical characters
 genAlphaNum :: Gen Text
 genAlphaNum = singleton <$> elements ['a'..'z']
@@ -60,6 +69,10 @@ genDim = Dim . Var . toUpper <$> genAlphaNumStr
 genSharedDim :: Gen (Dim Var)
 genSharedDim = (Dim . Var . toUpper . pack) <$>
                elements (zipWith (\a b -> [a,b]) ['a'..'d'] ['a'..'d'])
+
+genSharedDim' :: Gen (Dim Text)
+genSharedDim' = (Dim . toUpper . pack) <$>
+                elements (zipWith (\a b -> [a,b]) ['a'..'d'] ['a'..'d'])
 
 genSharedVar :: Gen Var
 genSharedVar = Var . singleton <$> elements ['a'..'j']

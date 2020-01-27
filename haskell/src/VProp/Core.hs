@@ -74,6 +74,9 @@ dToSNum :: Double -> SNum
 dToSNum = SD . literal
 
 ----------------------------- Predicates ---------------------------------------
+isConfigEmpty :: Config d -> Bool
+isConfigEmpty = Map.null
+
 isChc :: VProp d a b -> Bool
 isChc (ChcB _ _ _) = True
 isChc _            = False
@@ -330,7 +333,7 @@ numPlain _            = 0
 numSharedDims :: (Eq d) => VProp d a b -> Integer
 numSharedDims = toInteger . length . filter (flip (>=) 2 . length) . group . trifoldMap (:[]) mempty mempty
 
-numDims :: VProp d a b -> Integer
+numDims :: VProp d a b -> Int
 numDims = getSum . trifoldMap (const 1) mempty mempty
 
 -- | Number of like plain terms

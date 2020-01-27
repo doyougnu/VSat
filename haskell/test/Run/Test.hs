@@ -22,7 +22,7 @@ import System.IO.Unsafe (unsafePerformIO)
 import Control.Monad (liftM2, liftM)
 import           Control.Monad.State.Strict as St
 import Data.Maybe (maybe, isJust, catMaybes)
-import Data.Map   (keys, Map)
+import Data.Map   (keys, Map, null)
 import Data.Char  (isLower)
 import Data.Text
 import Data.Set   (Set)
@@ -32,7 +32,7 @@ import VProp.Core
 import VProp.SBV
 import VProp.Gen
 import VProp.Boolean
-import Config (defConf, allOptsConf, emptyConf)
+import Config (defConf, allOptsConf, defConf, z3DefConf)
 import Run
 import Result
 import Api
@@ -62,7 +62,8 @@ runProperties = testGroup "Run Properties" [
 unitTests :: TestTree
 unitTests = testGroup "Unit Tests"
   [
-    xor_fail
+    -- xor_fail
+    -- chc_balanced_is_sat
   ]
 
 specTests :: TestTree
@@ -185,9 +186,9 @@ chces_not_in_model = H.testCase
 --   do a <- ad id prop
 --      H.assertBool "should never be empty" (not $ isDMNull a)
 --   where
---     prop :: VProp Var Var Var
+--     prop :: VProp Text Text Text
 --     prop = x ./= x
---     x :: VIExpr Var Var
+--     x :: VIExpr Text Text
 --     x = iRef "x"
 
 -- andDecomp_duplicateChc = H.testCase
@@ -195,12 +196,12 @@ chces_not_in_model = H.testCase
 --   do a <- ad id prop
 --      H.assertBool "should never be empty" (not $ isDMNull a)
 --   where
---     prop :: ReadableProp Var
+--     prop :: ReadableProp Text
 --     prop = ChcB "D" (bRef "c" &&& bRef "d") (bRef "a") &&& ChcB "D" (bRef "a") (bRef "c")
 
 xor_fail' = H.testCase
   "Xor" $
-     do model <- satWith emptyConf prop
+     do model <- satWith defConf prop
         cfgs <- deriveModels model
         let getRes c = solveLiterals
                          $ substitute' (deriveValues model c) (selectVariantTotal c prop)
@@ -226,21 +227,21 @@ xor_fail' = H.testCase
 --     QCM.assert (not $ isDMNull a)
 
 -- sat_terminates x =  onlyInts x QC.==> QCM.monadicIO
---   $ do -- liftIO $ print $ "prop: " ++ show (x :: VProp Var Var) ++ " \n"
---        a <- QCM.run . sat $ (x :: ReadableProp Var)
+--   $ do -- liftIO $ print $ "prop: " ++ show (x :: VProp Text Text) ++ " \n"
+--        a <- QCM.run . sat $ (x :: ReadableProp Text)
 --        QCM.assert (not $ isDMNull a)
 
 vsat_matches_BF' x =  onlyBools x QC.==> QCM.monadicIO
-  $ do a <- QCM.run . (bfWith emptyConf) $ (x :: ReadableProp Var)
-       b <- QCM.run . (satWith emptyConf) $ x
+  $ do a <- QCM.run . (bfWith defConf) $ (x :: ReadableProp Text)
+       b <- QCM.run . (satWith defConf) $ x
        liftIO . putStrLn $ "[BF]:   \n" ++ show a
        liftIO . putStrLn $ "[VSAT]: \n" ++ show b
        QCM.assert (a == b)
 
 vsat_matches_BF_plain' x =
   (onlyBools x && isPlain x) QC.==> QCM.monadicIO
-  $ do a <- QCM.run . (bfWith emptyConf) $ (x :: ReadableProp Var)
-       b <- QCM.run . (satWith emptyConf) $ (x :: ReadableProp Var)
+  $ do a <- QCM.run . (bfWith defConf) $ (x :: ReadableProp Text)
+       b <- QCM.run . (satWith defConf) $ (x :: ReadableProp Text)
        liftIO . putStrLn $ "\n[BF]:   \n" ++ show a
        liftIO . putStrLn $ "[VSAT]: \n" ++ show b
        QCM.assert (a == b)
@@ -248,52 +249,54 @@ vsat_matches_BF_plain' x =
 eval_always_unit' x =
   (onlyBools x && isPlain x) QC.==> QCM.monadicIO
   $ do
-     let prop' = St.evalStateT (propToSBool (x :: ReadableProp Var)) (mempty, mempty)
+     let prop' = St.evalStateT (propToSBool (x :: ReadableProp Text)) emptyPackState
      let ev e = query $ St.evalStateT (evaluate $ toBValue e) emptySt
      a <- QCM.run . runSMT $ prop' >>= ev
      QCM.assert (a == Unit)
 
-solver_is_correct' :: (ReadableProp Var) -> QC.Property
-solver_is_correct' (trimap varName id id -> prop) =
+solver_is_correct' :: (ReadableProp Text) -> QC.Property
+solver_is_correct' prop =
   (onlyBools prop) QC.==> QCM.monadicIO
-  $ do model <- QCM.run $ (satWith emptyConf) prop
+  $ do model <- QCM.run $ (satWith z3DefConf) prop
        cfgs <- lift $ deriveModels model
-       let getRes c = solveLiterals
-                      $ substitute' (deriveValues model c) (selectVariantTotal c prop)
-           res = getRes <$> cfgs
+       let
+         getRes !c | isConfigEmpty c = True
+                   | otherwise = solveLiterals $! substitute' (deriveValues model c) (selectVariantTotal c prop)
+         res       = getRes <$> cfgs
        -- liftIO $ putStrLn $ "[CFGS]: " ++ (show $ cfgs)
        -- liftIO $ putStrLn $ "[MODEL]: " ++ (show $ model)
        -- liftIO $ putStrLn $ "[PROP]: " ++ (show $ prop)
        -- liftIO $ putStrLn $ "[RES]: " ++ (show $ res)
 
+       -- either we got a model and substituted soundly, or had a plain term and found a satisfiable result
        QCM.assert $ Prelude.all (==True) res
 
 -- ad_terminates x = onlyInts x QC.==> QCM.monadicIO
---   $ do -- liftIO $ print $ "prop: " ++ show (x :: VProp Var Var)
+--   $ do -- liftIO $ print $ "prop: " ++ show (x :: VProp Text Text)
 --        -- liftIO $ print $ "prop Dup?: " ++ show (noDupRefs x)
---        a <- QCM.run . ad id $ (x :: ReadableProp Var)
+--        a <- QCM.run . ad id $ (x :: ReadableProp Text)
 --        QCM.assert (not $ isDMNull a)
 
 -- dim_homomorphism x = onlyInts x QC.==> QCM.monadicIO
---   $ do a <- QCM.run . satWith emptyConf $ (x :: ReadableProp Var)
---        -- liftIO $ print $ "prop: " ++ show (x :: VProp Var Var)
+--   $ do a <- QCM.run . satWith defConf $ (x :: ReadableProp Text)
+--        -- liftIO $ print $ "prop: " ++ show (x :: VProp Text Text)
 --        -- liftIO $ print $ "dims: " ++ show (dimensions x)
 --        -- liftIO $ print $ "num dims: " ++ show (length $ dimensions x)
 
 --        QCM.assert (length (dimensions x) == length (getProp $ getResSat a))
 
--- dim_homo_unit = do a <- satWith emptyConf prop
+-- dim_homo_unit = do a <- satWith defConf prop
 --                    let numDimsAfter = length $ dimensions (getProp $ getResSat a)
 --                        numDimsBefore = length $ dimensions prop
 --                    print prop
 --                    print a
 
 --                    H.assertBool "" (numDimsBefore == numDimsAfter)
---   where prop :: VProp Var Var Var
+--   where prop :: VProp Text Text Text
 --         prop = (ChcB "AA" (bRef "x") (bRef "y")) ==> (ChcB "DD" true false)
 
 
--- dupDimensions' = do a <- satWith emptyConf prop
+-- dupDimensions' = do a <- satWith defConf prop
 --                     let numDimsAfter = length $ bvars $ getProp $ lookupRes_ "__SAT" a
 --                         numDimsBefore = length $ dimensions prop
 
@@ -302,16 +305,16 @@ solver_is_correct' (trimap varName id id -> prop) =
 --                     print prop
 --                     print a
 --                     H.assertBool "" (numDimsBefore >= numDimsAfter)
---   where prop :: VProp Var Var Var
+--   where prop :: VProp Text Text Text
 --         prop = (ChcB "AA" (bRef "x") (bRef "y")) &&& ((bRef "z") ==> (ChcB "AA" true false))
         -- prop = (ChcB "AA" (bRef "x") (bRef "y")) &&& (ChcB "AA" true false)
 
 -- sat_error_unit = do a <- sat prop
 --                     H.assertBool "" (not $ (==) mempty a)
 --   where
---     prop :: ReadableProp Var
+--     prop :: ReadableProp Text
 --     prop = (signum 7 - (LitI . D $ 10.905)) ./=
---            ((signum (signum (dRef "x" :: VIExpr Var Var))) + signum 6)
+--            ((signum (signum (dRef "x" :: VIExpr Text Text))) + signum 6)
 --     -- prop = (signum 7 - (LitI . D $ 10.905)) .== (0 :: VIExpr String)
 --     -- prop = (signum 7 - (LitI . D $ 10.905)) .== (0 :: VIExpr String)
 --     -- prop = ((dRef "x" - iRef "q") .== 0) &&& (bRef "w" &&& bRef "rhy")
@@ -319,28 +322,28 @@ solver_is_correct' (trimap varName id id -> prop) =
 -- sat_error_unit2 = do a <- sat prop
 --                      H.assertBool "" (not $ (==) mempty a)
 --   where
---     prop :: ReadableProp Var
---     prop = ((dRef "x" :: VIExpr Var Var) .<= (LitI . D $ 15.309)) &&& true
+--     prop :: ReadableProp Text
+--     prop = ((dRef "x" :: VIExpr Text Text) .<= (LitI . D $ 15.309)) &&& true
 --     -- prop = (dRef "x") .== (LitI . I $ 15) -- this passes
 
 -- sat_error_unit3 = do a <- sat prop
 --                      H.assertBool "Modulus with Doubles passes as long as there is one integer" . not . (==) mempty $ a
 --   where
---     prop = (dRef "x" :: VIExpr Var Var) .%
---            (dRef "y" :: VIExpr Var Var) .> (LitI . I $ 1)
+--     prop = (dRef "x" :: VIExpr Text Text) .%
+--            (dRef "y" :: VIExpr Text Text) .> (LitI . I $ 1)
 
 -- sat_error_unit4 = do a <- sat prop
 --                      H.assertBool "Division with a Double and Int coearces correctly" . not . (==) mempty $ a
 --   where
 --   -- this will still fail with a bitvec error
---     prop :: ReadableProp Var
---     prop =  (dRef "x" :: VIExpr Var Var) .% (-6) ./= (-(LitI . D $ 74.257))
+--     prop :: ReadableProp Text
+--     prop =  (dRef "x" :: VIExpr Text Text) .% (-6) ./= (-(LitI . D $ 74.257))
     -- prop =  (abs (iRef "x")) .% (-6) ./= (-(LitI . D $ 74.257)) -- this is the original error, a define_fun
     -- prop = ((abs (dRef "x")) .% (-6) ./= (-(LitI . D $ 74.257))) <+> (bnot (bRef "y")) -- this throws a bitvec error
     -- (|ogzpzgeb| .% -6 ≠ -74.25731844390708) ⊻ ¬opvp
 
-unitGen prop str = do a <- satWith emptyConf prop
-                      b <- bfWith emptyConf prop
+unitGen prop str = do a <- satWith defConf prop
+                      b <- bfWith defConf prop
                       putStrLn "\n\n--------------"
                       putStrLn $ show prop
                       putStrLn $ show b
@@ -348,59 +351,59 @@ unitGen prop str = do a <- satWith emptyConf prop
                       putStrLn "--------------\n\n"
                       H.assertBool str (a == b)
 
-not_unit = do a <- satWith emptyConf prop
-              b <- bfWith emptyConf prop
+not_unit = do a <- satWith defConf prop
+              b <- bfWith defConf prop
               putStrLn $ show prop
               H.assertBool "Brute Force matches VSAT for simple negations" (a == b)
   where
-    prop :: ReadableProp Var
+    prop :: ReadableProp Text
     prop = bnot . bRef $ "x"
 
-not_mult_unit = do a <- satWith emptyConf prop
-                   b <- bfWith emptyConf prop
+not_mult_unit = do a <- satWith defConf prop
+                   b <- bfWith defConf prop
                    putStrLn $ show prop
                    putStrLn $ show a
                    putStrLn $ show b
                    H.assertBool "Brute Force matches VSAT for multiple negations" (a == b)
   where
-    prop :: ReadableProp Var
+    prop :: ReadableProp Text
     prop = bnot . bnot . bnot . bRef $ "x"
 
-singleton_unit = do a <- satWith emptyConf prop
-                    b <- bfWith emptyConf prop
+singleton_unit = do a <- satWith defConf prop
+                    b <- bfWith defConf prop
                     putStrLn $ show prop
                     H.assertBool "Brute Force matches VSAT for simple negations" (a == b)
   where
-    prop :: ReadableProp Var
+    prop :: ReadableProp Text
     prop = bRef $ "x"
 
 chc_singleton_unit = unitGen prop "BF matches VSAT for a singleton choice of singletons"
   where
-    prop :: ReadableProp Var
+    prop :: ReadableProp Text
     prop = bChc "AA" (bRef "x") (bRef "y")
 
 chc_singleton_not_unit = unitGen prop "BF matches VSAT for a negated singleton choice of singletons"
   where
-    prop :: ReadableProp Var
+    prop :: ReadableProp Text
     prop =  bnot $ bChc "AA" false true
 
 chc_unbalanced_unit = unitGen prop "BF matches VSAT for a unbalanced choices of singletons"
   where
-    prop :: ReadableProp Var
+    prop :: ReadableProp Text
     prop = bnot $ bnot $ bChc "AA" (bChc "DD" (bRef "x") (bRef "y")) (bRef "z")
 
 chc_balanced_unit = unitGen prop "BF matches VSAT for balanced choices"
-  where prop :: ReadableProp Var
+  where prop :: ReadableProp Text
         prop = bChc "AA" (bRef "x") (bRef "y") &&& bChc "DD" (bRef "a") (bRef "b")
 
 chc_2_nested_unit = unitGen prop "BF matches VSAT for 2 nested choices"
-  where prop :: ReadableProp Var
+  where prop :: ReadableProp Text
         prop = bChc "AA"
           (bChc "BB" (bRef "x") (bRef "z"))
           (bChc "DD" false true)
 
 bimpl_w_false_is_sat_unit = unitGen prop "BF matches VSAT for equivalency that is always unsat"
-  where prop :: ReadableProp Var
+  where prop :: ReadableProp Text
         -- prop = ((bChc "AA" (bRef "a") (bRef "b")) ||| false) <=> false
         prop = (true ||| (bChc "AA" (bRef "a") (bRef "b"))) <=> false
         -- prop = (true <=> (bRef "a"))
@@ -408,14 +411,14 @@ bimpl_w_false_is_sat_unit = unitGen prop "BF matches VSAT for equivalency that i
 -- | notice this fails because SBV adds extra unused variables into the model where BF doesn't
 -- | TODO fix it by migrating away from SBV
 bimpl_w_false_chc_is_sat_unit = unitGen prop "BF matches VSAT for equivalency that is always unsat with a choice"
-  where prop :: ReadableProp Var
+  where prop :: ReadableProp Text
         prop = false <=> (bChc "AA" (bRef "a") (bRef "b"))
 
 mixed_and_impl_is_sat_unit =
   unitGen prop "BF matches VSAT for equivalency that is always unsat"
-  where prop :: ReadableProp Var
+  where prop :: ReadableProp Text
         prop = false &&& ((bChc "AA" (bRef "a") (bRef "b")) ==> (bRef "c"))
 
 chces_not_in_model_unit = unitGen prop "BF never returns a model that contains a choice as a variable"
-  where prop :: ReadableProp Var
+  where prop :: ReadableProp Text
         prop = (bChc "BB" (false) (bChc "CC" (bRef "a") (bRef "b"))) &&& true

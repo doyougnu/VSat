@@ -18,6 +18,7 @@ module Run ( SatDict
            , runPonV
            , runVonP
            , vCoreMetrics
+           , emptyPackState
            ) where
 
 import           Control.Arrow (first, second)
@@ -256,8 +257,8 @@ runVSMTSolve !configPool !prop =
        -- we get a symbolic count back so we just run a quick query to retrieve
        -- the number
        -- TODO push this into the parser
-       dCount = S.runSMT $! do
-         fmap (Set.size . foundDimensions . snd) mkVCore
+     dCount <- liftIO $ S.runSMT $! do
+       fmap (variantCount . snd) mkVCore
 
      -- run the inner driver
      let
@@ -273,16 +274,20 @@ runVSMTSolve !configPool !prop =
      -- can fmap over them to condition the vCore appropriately, if there are
      -- choices left over than the inner solver will spin up threads to solve
      -- them, if not then we'll just get a model immediately
-     results <- liftIO $ mapM run $ if null configPool
-                                    then pure mempty
-                                    else configPool
+     results <- liftIO $ if dCount == 0 -- then we had a plain formula
+                         then S.runSMTWith (conf cnf) $ do b <- vCore
+                                                           evaluate . toBValue $ b
+                                                           SC.query solvePlain
+                         else mapM run $ if null configPool
+                                         then pure mempty
+                                         else configPool
 
      return $! mconcat results
 
 -- | wrapper around map to keep track of the variable references we've seen, a,
 -- and their symbolic type, b, which is eta reduced here
 type UsedVars a = M.Map a
-type NumDimensions = Int
+type NumVariants = Int
 -- | a set of dimensions that have been processed and have generated models
 type GenModel = Bool
 
@@ -290,12 +295,12 @@ type GenModel = Bool
 -- one for doubles
 data PackState a = PackState { usedBools  :: UsedVars a S.SBool
                              , usedNums   :: UsedVars a SNum
-                             , foundDimensions :: Set.Set (Dim a)
+                             , variantCount  :: Int
                              }
 
 emptyPackState = PackState {usedBools=mempty
                            ,usedNums=mempty
-                           ,foundDimensions=mempty
+                           ,variantCount=0
                            }
 
 onUsedNums :: (UsedVars a SNum -> UsedVars a SNum) -> PackState a -> PackState a
@@ -305,9 +310,11 @@ onUsedBools :: (UsedVars a S.SBool -> UsedVars a S.SBool) ->
                PackState a -> PackState a
 onUsedBools f PackState{..} = PackState{usedBools=f usedBools, ..}
 
-addDimension :: Ord a => Dim a -> PackState a -> PackState a
-addDimension e PackState{..} =
-  PackState{foundDimensions=Set.insert e foundDimensions, ..}
+onCount :: (Int -> Int) -> PackState a -> PackState a
+onCount f PackState{..} = PackState{variantCount=f variantCount, ..}
+
+incrementConfCount :: MonadState (PackState a) m => m ()
+incrementConfCount = St.modify' (onCount succ)
 
 
 type IncPack a = StateT (PackState a) S.Symbolic
@@ -382,17 +389,15 @@ type ResultChan = InChan (Result Text)
 vSMTSolve :: S.Symbolic (Loc Text) ->
              Config Text ->
              SMTConf Text Text Text ->
-             IO NumDimensions ->
+             NumVariants ->
              IO (Result Text)
-vSMTSolve prop propConf cnf i =
+vSMTSolve prop propConf cnf variantCount =
   do
     (reqChanIn, reqChanOut) <- newChan
     (resChanIn, resChanOut) <- newChan
 
-    dimensionCount <- i
-
     -- set the threads
-    setNumCapabilities (getThreads cnf)
+    -- setNumCapabilities (getThreads cnf)
 
     -- convenience for spawning a curried worker
     let solverConf = (conf cnf)
@@ -416,28 +421,35 @@ vSMTSolve prop propConf cnf i =
         -- continuation to run in worker thread, takes a state and query computation
 
         propConfSize = length propConf
-        possibleMax = (2^dimensionCount) - if propConfSize == 0
-                                           then propConfSize
-                                           else 2^propConfSize
-        maxResults = if dimensionCount == 0 || possibleMax == 0
+        possibleMax = if variantCount >= propConfSize
+                      then propConfSize
+                      else variantCount
+
+        maxResults = if variantCount == 0 || possibleMax == 0
                      then 1 else possibleMax
+
         numWorkers = numThreads
           -- if dimensionCount == 0 || possibleMax == 0
           --             then 1
           --             else possibleMax `div` 2
-        numListeners = numThreads
+        numListeners = if maxResults <= numThreads
+                       then maxResults
+                       else numThreads
           -- if dimensionCount == 0 || possibleMax == 0
           --              then 1
           --              else possibleMax `div` 2
-        readsPerListener = maxResults `div` numListeners
+        readsPerListener = if maxResults <= numListeners
+                           then 1
+                           else maxResults `div` numListeners
 
 
-    -- dbg "Dim Count" dimensionCount
+    -- dbg "Variant Count" variantCount
+    -- dbg "Results" maxResults
+    -- dbg "Threads" numThreads
     -- dbg "Possible Max" possibleMax
     -- dbg "Workers" numWorkers
-    -- dbg "Num Reads" readsPerListener
     -- dbg "Listeners" numListeners
-    -- dbg "Results" maxResults
+    -- dbg "Reads Per Listener" readsPerListener
 
     -- kick off main thread
     runMain
@@ -453,13 +465,16 @@ vSMTSolve prop propConf cnf i =
     -- accumulate the results
     return $! mconcat rs
 
-solvePlain :: (Resultable d) => SC.Query (Result d)
-solvePlain = getResultWith $ toResultProp . LitB
+solvePlain :: (Resultable d) => SC.Query ([Result d])
+solvePlain = do
+  result <- getResultWith $ toResultProp . LitB
+  return [result]
 
 -- | a listener counts the results and returns an accumulated result
 listener :: OutChan (Result Text) -> Int -> Result Text -> IO (Result Text)
 listener chan 0  !results = return results
 listener chan !i !results = do
+  -- dbg "Listening for " i
   newResult <- readChan chan
   listener chan (i - 1) (newResult <> results)
 
@@ -471,10 +486,10 @@ worker prop solverConfig requestChan i =
   -- use forkIO here, for some reason mapConcurrently_ errors out
   forkIO $ forever $ do
   -- trace (show i ++ ": " ++ "Waiting for Conf") $ return ()
-  -- trace (show i ++ ": " ++ "Running with CONF" ++ show (config st))  $ return ()
   S.runSMTWith solverConfig $!
     do prop' <- prop
        (!st, !qry) <- liftIO $ readChan requestChan
+       -- trace (show i ++ ": " ++ "Got Conf" ++ show (config st)) $ return ()
        SC.query $! do
          runReaderT qry st
 
@@ -490,11 +505,18 @@ type ConstraintName = [Name]
 propToSBool :: ReadableProp Text -> IncPack Text (VProp Text (S.SBool, Name) SNum)
 propToSBool (RefB x)     = do b <- smtBool x
                               return $! RefB (b, x)
-propToSBool (OpB o e)    = OpB  o <$> propToSBool e
-propToSBool (OpBB o l r) = OpBB o <$> propToSBool l <*> propToSBool r
-propToSBool (ChcB d l r) = do St.modify' $ addDimension d
-                              ChcB d <$> propToSBool l <*> propToSBool r
-propToSBool (OpIB o l r) = OpIB o <$> propToSBool' l <*> propToSBool' r
+propToSBool (OpB o e)    = propToSBool e >>= return . OpB o
+propToSBool (OpBB o l r) = do l' <- propToSBool l
+                              r' <- propToSBool r
+                              return $ OpBB o l' r'
+propToSBool (ChcB d l r) = do incrementConfCount
+                              l' <- propToSBool l
+                              incrementConfCount
+                              r' <- propToSBool r
+                              return $ ChcB d l' r'
+propToSBool (OpIB o l r) = do l' <- propToSBool' l
+                              r' <- propToSBool' r
+                              return $ OpIB o l' r'
 propToSBool (LitB b)     = return $ LitB b
 
 propToSBool' :: VIExpr Text Text -> IncPack Text (VIExpr Text SNum)
@@ -502,7 +524,8 @@ propToSBool' (Ref RefI i) = Ref RefI <$> smtInt i
 propToSBool' (Ref RefD d) = Ref RefD <$> smtDouble d
 propToSBool' (OpI o e)    = OpI o    <$> propToSBool' e
 propToSBool' (OpII o l r) = OpII o <$> propToSBool' l <*> propToSBool' r
-propToSBool' (ChcI d l r) = do St.modify' $ addDimension d
+propToSBool' (ChcI d l r) = do incrementConfCount
+                               incrementConfCount
                                ChcI d <$> propToSBool' l <*> propToSBool' r
 propToSBool' (LitI x)     = return $ LitI x
 
@@ -605,6 +628,7 @@ solveVariant go = do
            resMap <- if modelsEnabled
                      then getResult prop
                      else getResultOnlySat prop
+           -- dbg "Got model for: " prop
 
            -- return the result
            resChan <- asks resultChan
