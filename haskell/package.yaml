@@ -19,24 +19,23 @@ dependencies:
 - base >= 4.7 && < 5
 - containers >= 0.5
 - unordered-containers
-- hashable
+# - hashable
 - mtl
 # - bifunctors
 - deepseq
 - genifunctors >= 0.4
 # sbv forces us to use LTS-11.22 ghc 8.2.2
 # - sbvFix # my custom version
-- sbv >= 8.3
-- cassava
+- sbv == 8.3
+# - cassava
 - bytestring
 - text
-- vector
-- time
+# - vector
+# - time
 - tasty-quickcheck
-- aeson-pretty
 - aeson
-- Spock
-- wai-extra
+# - Spock
+# - wai-extra
 # - heaps
 - megaparsec >= 6.4
 # - parser-combinators >= 1.0
