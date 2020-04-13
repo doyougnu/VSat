@@ -1,0 +1,11 @@
+* VSAT
+** TODO Debug some timing information, some stats did not add up for single variant
+** TODO refactor types, they are too polymorphic for the wrong things
+** TODO Building an executable that can be run on the OSU servers
+** TODO Rip out Spock, it's dependencies are a pain in the ass
+* Vsat concurrent
+** auto still does not work because the solvers run out of money
+*** TODO refactor to pass configuration only and not entire solver state
+** plot ratio of workers/listeners by time
+* Make a datalog implementation for ccl
+** this is likely the center of the paper on ccl
