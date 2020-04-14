@@ -78,7 +78,7 @@ conjEvoiffSingle = H.testCase "A term with conjuction evo ctxs and a iff" conjEv
 aSimplEvoCtx3    = H.testCase "a clause with an evo context" aSimplEvoCtx3'
 aConjEvoContext3 = H.testCase "a term with an _and_ in evo context" aConjEvoContext3'
 aSimplEvoCtx4    = H.testCase "a clause with an evo context" aSimpleEvoCtx4'
-arithAdd         = H.testCase "addition with features parses" arithAdd'
+-- arithAdd         = H.testCase "addition with features parses" arithAdd'
 xOrList          = H.testCase "Xor is parsed returning a list of possible features" xOrList'
 
 -- | given a string, parse the string and check that the parser succeeded
@@ -107,9 +107,10 @@ aSimplEvoCtx3'    = parseSucceedsGen $ test !! 12
 aConjEvoContext3' = parseSucceedsGen $ test !! 13
 aSimpleEvoCtx4'   = parseSucceedsGen $ test !! 14
 
-arithAdd' = parseSucceedsGen p
-  -- this is a type error?!?!?
-  where p = "(feature[_84928c30-724e-4e73-b9fb-733518d0e3c6] = 1) = (feature[_505abd5a-edac-4ea8-89fa-79e7297e5c3e] + feature[_c6c50923-72d1-4d46-a429-0839a91df6f2])"
+-- arithAdd' = parseSucceedsGen p
+--   -- this is a type error?!?!?
+--   -- this was confirmed to be a type error
+--   where p = "(feature[_84928c30-724e-4e73-b9fb-733518d0e3c6] = 1) = (feature[_505abd5a-edac-4ea8-89fa-79e7297e5c3e] + feature[_c6c50923-72d1-4d46-a429-0839a91df6f2])"
 
 xOrList' = parseSucceedsGen' p
   where p = "feature[_2ad480a4-eb1b-4846-bb97-00595e23faf3] iff oneonly [ feature[_6838428c-3d7c-4f10-8388-b1bdcecc421a], feature[_6ca297a5-8fd5-43bd-999c-d816780aea28], feature[_32070598-98a8-4072-b248-f589d9a95cc6], feature[_1dce285e-f324-4a7c-8399-0e899ecd4d23], feature[_e82d1eba-af04-4fd3-b854-daaef35ba028], feature[_fd07cd5c-29f2-4a44-a29c-38e392e71866], feature[_6dbe4f62-6eda-4365-864c-b3879045c0f2], feature[_ceb20bc9-03b8-43b6-ad70-32efb481f4c7], feature[_691b1794-b2f8-43c0-abc9-b2dc90799553], feature[_8ad64f6a-931c-4d68-99b1-d89761ab9581] ]"

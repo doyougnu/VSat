@@ -16,10 +16,10 @@ main = do
   where tests = testGroup "All" [ -- jsonProperties
                                  -- R.unitTests
                                 -- , R.specTests
-                                -- , CAP.unitTests
+                                  CAP.unitTests
                                 -- CAR.unitTests
                                 -- , CAP.unitTests
-                                R.runProperties
+                                -- R.runProperties
                                 -- O.properties
           -- VC.qcProps
                                 ]
