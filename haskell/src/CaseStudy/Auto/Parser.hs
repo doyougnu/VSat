@@ -5,7 +5,7 @@ import           Data.Void
 import           Text.Megaparsec
 import           Text.Megaparsec.Char
 import qualified Text.Megaparsec.Char.Lexer as L
-import           Text.Megaparsec.Expr
+import           Control.Monad.Combinators.Expr
 
 import           CaseStudy.Auto.Lang
 
@@ -85,7 +85,7 @@ contextRef = do f <- parens contextRef_
 boolRef :: Parser (AutoLang T.Text T.Text)
 boolRef = do reserved "feature"
              uuid <- brackets $ do
-               _ <- anyChar
+               _ <- underscore
                aVariable
              return . AutoRef $ uuid
 

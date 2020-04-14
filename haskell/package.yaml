@@ -17,7 +17,7 @@ description:         Please see the README on Github at https://github.com/doyou
 
 dependencies:
 - base >= 4.7 && < 5
-- containers >= 0.5
+- containers
 - unordered-containers
 # - hashable
 - mtl
@@ -26,7 +26,7 @@ dependencies:
 - genifunctors >= 0.4
 # sbv forces us to use LTS-11.22 ghc 8.2.2
 # - sbvFix # my custom version
-- sbv == 8.3
+- sbv >= 8.6
 # - cassava
 - bytestring
 - text
@@ -37,8 +37,8 @@ dependencies:
 # - Spock
 # - wai-extra
 # - heaps
-- megaparsec >= 6.4
-# - parser-combinators >= 1.0
+- megaparsec >= 8.0.0
+- parser-combinators >= 1.2.1
 - unicode-show # just for result output
 
 library:

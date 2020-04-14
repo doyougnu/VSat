@@ -7,7 +7,7 @@ import           Data.Void
 import           Text.Megaparsec
 import           Text.Megaparsec.Char
 import qualified Text.Megaparsec.Char.Lexer as L
-import           Text.Megaparsec.Expr
+import           Control.Monad.Combinators.Expr
 import           Prelude hiding (LT, EQ, GT)
 
 import           VProp.Core (atMost1)

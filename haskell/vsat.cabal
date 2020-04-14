@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: d027181cdc7130c86de92b8bf186ba9f6c53d0fa2dfbb0e4db588f345138b57a
+-- hash: b2c47ee3b4a1e54aa625cc32a415df2063bd56673415158dbc8ad79482c53fb2
 
 name:           vsat
 version:        0.1.0.0
@@ -53,12 +53,13 @@ library
       aeson
     , base >=4.7 && <5
     , bytestring
-    , containers >=0.5
+    , containers
     , deepseq
     , genifunctors >=0.4
-    , megaparsec >=6.4
+    , megaparsec >=8.0.0
     , mtl
-    , sbv ==8.3
+    , parser-combinators >=1.2.1
+    , sbv >=8.6
     , tasty-quickcheck
     , text
     , unicode-show
@@ -77,12 +78,13 @@ executable vsat
       aeson
     , base >=4.7 && <5
     , bytestring
-    , containers >=0.5
+    , containers
     , deepseq
     , genifunctors >=0.4
-    , megaparsec >=6.4
+    , megaparsec >=8.0.0
     , mtl
-    , sbv ==8.3
+    , parser-combinators >=1.2.1
+    , sbv >=8.6
     , tasty-quickcheck
     , text
     , unicode-show
@@ -110,12 +112,13 @@ test-suite vsat-test
     , aeson
     , base >=4.7 && <5
     , bytestring
-    , containers >=0.5
+    , containers
     , deepseq
     , genifunctors >=0.4
-    , megaparsec >=6.4
+    , megaparsec >=8.0.0
     , mtl
-    , sbv ==8.3
+    , parser-combinators >=1.2.1
+    , sbv >=8.6
     , tasty
     , tasty-hspec
     , tasty-hunit
@@ -163,13 +166,14 @@ benchmark auto
       aeson
     , base >=4.7 && <5
     , bytestring
-    , containers >=0.5
+    , containers
     , criterion
     , deepseq
     , genifunctors >=0.4
-    , megaparsec >=6.4
+    , megaparsec >=8.0.0
     , mtl
-    , sbv ==8.3
+    , parser-combinators >=1.2.1
+    , sbv >=8.6
     , tasty-quickcheck
     , text
     , unicode-show
@@ -213,13 +217,14 @@ benchmark fin
       aeson
     , base >=4.7 && <5
     , bytestring
-    , containers >=0.5
+    , containers
     , criterion
     , deepseq
     , genifunctors >=0.4
-    , megaparsec >=6.4
+    , megaparsec >=8.0.0
     , mtl
-    , sbv ==8.3
+    , parser-combinators >=1.2.1
+    , sbv >=8.6
     , tasty-quickcheck
     , text
     , unicode-show
@@ -263,13 +268,14 @@ benchmark linux
       aeson
     , base >=4.7 && <5
     , bytestring
-    , containers >=0.5
+    , containers
     , criterion
     , deepseq
     , genifunctors >=0.4
-    , megaparsec >=6.4
+    , megaparsec >=8.0.0
     , mtl
-    , sbv ==8.3
+    , parser-combinators >=1.2.1
+    , sbv >=8.6
     , tasty-quickcheck
     , text
     , unicode-show
@@ -313,12 +319,13 @@ benchmark sbv
       aeson
     , base >=4.7 && <5
     , bytestring
-    , containers >=0.5
+    , containers
     , criterion
     , deepseq
     , genifunctors >=0.4
-    , megaparsec >=6.4
+    , megaparsec >=8.0.0
     , mtl
+    , parser-combinators >=1.2.1
     , sbv >=8.3
     , tasty-quickcheck
     , text

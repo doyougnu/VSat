@@ -5,7 +5,7 @@ packages:
 # system-ghc: false
 extra-deps:
   - genifunctors-0.4
-  - sbv-8.3
+  - sbv-8.6
 
   # spock dependencies
   # - Spock-0.13.0.0
@@ -27,9 +27,9 @@ nix:
   packages: [ z3, pkgconfig, zlib ]
 
 # resolver: lts-11.22
-resolver: lts-12.25
+# resolver: lts-12.25
 # resolver: lts-13.10
-# resolver: lts-15.3
+resolver: lts-15.3
 
 build:
   library-profiling: false
