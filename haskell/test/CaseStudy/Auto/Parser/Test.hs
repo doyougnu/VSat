@@ -28,7 +28,6 @@ unitTests = testGroup "Parser unit tests" $
   , aSimplEvoCtx3
   , aConjEvoContext3
   , aSimplEvoCtx4
-  , arithAdd
   , xOrList
   ]
 
