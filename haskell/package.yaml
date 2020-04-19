@@ -19,24 +19,14 @@ dependencies:
 - base >= 4.7 && < 5
 - containers
 - unordered-containers
-# - hashable
 - mtl
-# - bifunctors
 - deepseq
 - genifunctors >= 0.4
-# sbv forces us to use LTS-11.22 ghc 8.2.2
-# - sbvFix # my custom version
 - sbv >= 8.6
-# - cassava
 - bytestring
 - text
-# - vector
-# - time
 - tasty-quickcheck
 - aeson
-# - Spock
-# - wai-extra
-# - heaps
 - megaparsec >= 8.0.0
 - parser-combinators >= 1.2.1
 - unicode-show # just for result output
@@ -74,24 +64,6 @@ executables:
     - vsat
 
 benchmarks:
-  sbv:
-    main:                Main.hs
-    source-dirs:
-      - bench/Bench
-      - bench/SBV
-      - src
-    ghc-options:
-    - -O2
-    - -threaded
-    - -rtsopts
-    - -with-rtsopts=-N
-    # - -with-rtsopts=-A1G
-    dependencies:
-    - sbv >= 8.3
-    - criterion
-    default-extensions:
-    - OverloadedStrings
-
   auto:
     main:                Main.hs
     source-dirs:
@@ -105,6 +77,38 @@ benchmarks:
     - -with-rtsopts=-N
     dependencies:
     - criterion
+    - vsat
+
+  auto-dead:
+    main:                Main.hs
+    source-dirs:
+      - bench/Bench
+      - bench/AutoDead
+      - src
+    ghc-options:
+    - -O2
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - criterion
+    - random
+    - vsat
+
+  auto-core:
+    main:                Main.hs
+    source-dirs:
+      - bench/Bench
+      - bench/AutoCore
+      - src
+    ghc-options:
+    - -O2
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - criterion
+    - random
     - vsat
 
   fin:
@@ -121,6 +125,40 @@ benchmarks:
     dependencies:
     - criterion
     - vsat
+
+  fin-dead:
+    main:                Main.hs
+    source-dirs:
+      - bench/Bench
+      - bench/FinDead
+      - src
+    ghc-options:
+    - -O2
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - criterion
+    - random
+    - vsat
+
+
+  fin-core:
+    main:                Main.hs
+    source-dirs:
+      - bench/Bench
+      - bench/FinCore
+      - src
+    ghc-options:
+    - -O2
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - criterion
+    - random
+    - vsat
+
 
   linux:
     main:                Main.hs

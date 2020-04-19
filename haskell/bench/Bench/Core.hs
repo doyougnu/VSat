@@ -5,21 +5,12 @@ import           Criterion.Main
 import           Criterion.Main.Options
 import           Criterion.Types         (Config (..))
 import           Control.DeepSeq
-import           Data.Aeson              (decodeStrict)
 import           Control.Monad           (replicateM, foldM, liftM2)
-import           Data.Bifunctor          (bimap)
-import           Data.Bitraversable      (bimapM)
-import qualified Data.ByteString         as BS (readFile)
-import           Data.Either             (lefts, rights)
-import           Data.Foldable           (foldr')
 import           Data.List               (sort,splitAt,intersperse,foldl1',delete,(\\),genericLength)
-import           Data.Map                (size, Map, toList)
 import qualified Data.Set                as Set (size)
 import qualified Data.SBV                as S
 import qualified Data.SBV.Control        as SC
 import qualified Data.SBV.Internals      as SI
-import           Data.Text               (pack, unpack,Text)
-import qualified Data.Text.IO            as T (writeFile)
 import           System.IO
 import           Text.Megaparsec         (parse)
 import           System.IO.Unsafe        (unsafePerformIO)
@@ -27,7 +18,6 @@ import           Data.Function           (on)
 
 import           Api
 import           CaseStudy.Auto.Auto
-import           CaseStudy.Auto.Parser   (langParser)
 import           CaseStudy.Auto.Run
 import           CaseStudy.Auto.CompactEncode
 import           Config
@@ -36,7 +26,6 @@ import           Run                     (runAD, runBF, vCoreMetrics)
 import           Result
 import           Utils
 import           VProp.Core
-import           VProp.SBV               (toPredicate)
 import           VProp.Types
 
 
