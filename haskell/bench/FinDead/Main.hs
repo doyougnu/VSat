@@ -13,6 +13,7 @@ import           Data.Either             (lefts, rights)
 import           Data.Foldable           (foldr')
 import           Data.List               (sort,splitAt,intersperse,foldl1',delete)
 import           Data.Map                (size, Map, toList)
+import qualified Data.Set                as Set
 import qualified Data.SBV                as S
 import qualified Data.SBV.Control        as SC
 import qualified Data.SBV.Internals      as SI
@@ -20,6 +21,7 @@ import           Data.Text               (pack, unpack,Text)
 import qualified Data.Text.IO            as T (writeFile)
 import           System.IO
 import           Text.Megaparsec         (parse)
+import           System.Random           (mkStdGen, randomR)
 
 import           Api
 import           CaseStudy.Auto.Auto
@@ -127,16 +129,24 @@ main = do
         | otherwise = d
 
       -- !bProp = ((renameDims sameDims) . naiveEncode . autoToVSat) $ autoAndJoin bPs
-      !bProp = ((renameDims sameDims) . naiveEncode . autoToVSat) $ autoAndJoin bPs
-      dmapping = getDimMap $ autoAndJoin (bPs)
-      !bPropOpts = applyOpts defConf bProp
+      bProp' :: ReadableProp Text
+      !bProp' = ((renameDims sameDims) . naiveEncode . autoToVSat) $ autoAndJoin bPs
+      features = vars bProp'
+      bPropLength = Set.size features
+
+  -- select a random feature to check for dead
+  let
+    (featIndex,_) = randomR (0, bPropLength) (mkStdGen 1111)
+    deadFeature   = Set.elemAt featIndex features
+  -- construct the dead feature proposition
+    bProp         = bProp' &&& (bRef deadFeature)
 
   -- | convert choice preserving fmfs to actual confs
   -- [justV1]         <- genConfigPool justD0Conf
   -- [justV2]         <- genConfigPool justD1Conf
   -- [justV3]         <- genConfigPool justD2Conf
   -- [justV4]         <- genConfigPool justD3Conf
-  [justV12']       <- genConfigPool justD01Conf
+  [justV12']        <- genConfigPool justD01Conf
   [justV123]       <- genConfigPool justD012Conf
   [justV1234]      <- genConfigPool justD0123Conf
   [justV12345]     <- genConfigPool justD01234Conf
