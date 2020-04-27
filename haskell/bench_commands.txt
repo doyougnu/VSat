@@ -1,0 +1,1 @@
+stack bench vsat:fin --benchmark-arguments='+RTS -qg -A64m -AL127m -n8m -RTS --csv fin_timings.csv'
