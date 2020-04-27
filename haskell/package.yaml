@@ -111,6 +111,22 @@ benchmarks:
     - random
     - vsat
 
+  auto-dead-core:
+    main:                Main.hs
+    source-dirs:
+      - bench/Bench
+      - bench/AutoDeadCore
+      - src
+    ghc-options:
+    - -O2
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - criterion
+    - random
+    - vsat
+
   fin:
     main:                Main.hs
     source-dirs:
@@ -159,6 +175,22 @@ benchmarks:
     - random
     - vsat
 
+
+  fin-dead-core:
+    main:                Main.hs
+    source-dirs:
+      - bench/Bench
+      - bench/FinDeadCore
+      - src
+    ghc-options:
+    - -O2
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - criterion
+    - random
+    - vsat
 
   linux:
     main:                Main.hs
