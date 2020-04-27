@@ -29,7 +29,7 @@ nix:
 # resolver: lts-11.22
 # resolver: lts-12.25
 # resolver: lts-13.10
-resolver: lts-15.3
+resolver: lts-15.7
 
 build:
   library-profiling: false
