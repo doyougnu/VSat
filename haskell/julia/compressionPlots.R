@@ -50,18 +50,20 @@ df <- rbind(autoSharedDF, finSharedDF) %>% mutate(PlainRatio = PlainCount / (Chc
 ##   geom_text(nudge_y = 0.1, nudge_x = 0.002, angle = 45, check_overlap = TRUE)
 
 
-rq2 <- ggplot(df, mapping = aes(x=PlainRatio, y=MeanRatio, colour = Algorithm)) +
-  geom_point(size=3, aes(shape = Algorithm)) +
+rq2 <- ggplot(df, mapping = aes(x=PlainRatio, y=MeanRatio, colour = Algorithm, shape = Algorithm)) +
+  geom_point(size=3) +
   ## ylab(TeX("% SpeedUp \t  $\\frac{v \\rightarrow v}{v \\rightarrow p}$")) +
   ylab("% SpeedUp") +
   xlab(TeX("Plain Ratio:  $\\frac{|Plain Terms|}{|Total Terms|}}")) +
   ## scale_x_log10() +
   ## scale_y_log10() +
+  scale_shape_manual(values = c(1,2,17)) +
   geom_smooth(method=lm, formula = y ~ x, se=FALSE) +
   ## geom_text(nudge_y = 0.012, nudge_x = 0.003, angle = 45, check_overlap =FALSE) +
-  theme(legend.position = c(.85,.90)
-      , plot.title = element_text(size=12)) +
+  ## theme(legend.position = c(.85,.90)
+  ##     , plot.title = element_text(size=12)) +
   ggtitle("RQ2: Performance as a function of plain ratio") +
-  theme_classic()
+  theme_classic() +
+theme(legend.position = "none")
 
-## ggsave("../plots/RQ2.png", plot = rq2, device = "png", height = 4, width = 7)
+ggsave("../plots/RQ2.png", plot = rq2, device = "png", height = 4, width = 7)
