@@ -4,39 +4,29 @@ library(cowplot)
 library(tidyr)
 library(latex2exp)
 
-timingsResultsFile <- "../data/auto_data.csv"
+finResultsFile <- "../data/fin_data.csv"
+autoResultsFile <- "../data/auto_data.csv"
 
-data <- read.csv(file=timingsResultsFile) %>%
-  filter(Config != "EvolutionAware") %>%
-  mutate(Algorithm = as.factor(Algorithm)
-       , Config = as.factor(Config)) %>%
-  mutate(Algorithm = gsub("-->", "\U27f6", Algorithm)) %>% select(-Name)
+finData <- read.csv(file=finResultsFile) %>% mutate(Algorithm = as.factor(Algorithm), Config = as.factor(Config)) %>% mutate(Algorithm = gsub("-->", "\U27f6", Algorithm))
 
-## df <- merge(sumData, data, all=TRUE) %>%
-singleton_means <- data %>%
-  filter( Config != "V1*V2"
-         ,Config != "V1*V2*V3"
-         ,Config != "V1*V2*V3*V4"
-         ,Config != "V1*V2*V3*V4*V5"
-         ,Config != "V1*V2*V3*V4*V5*V6"
-         ,Config != "V1*V2*V3*V4*V5*V6*V7"
-         ,Config != "V1*V2*V3*V4*V5*V6*V7*V8"
-         ,Config != "V1*V2*V3*V4*V5*V6*V7*V8*V9"
-         ,Config != "V1*V2*V3*V4*V5*V6*V7*V8*V9*V10"
-         ,Config != "EvolutionAware") %>%
-  group_by(Algorithm) %>%
-  summarise(SingletonMean = mean(Mean))
+autoData <- read.csv(file=autoResultsFile) %>% mutate(Algorithm = as.factor(Algorithm), Config = as.factor(Config)) %>% mutate(Algorithm = gsub("-->", "\U27f6", Algorithm))
 
-df <- merge(singleton_means,data, all=TRUE) %>%
-  group_by(Algorithm) %>%
-  mutate(NormPerf = Mean / SingletonMean) %>%
-  drop_na()
+finDF <- finData %>% mutate(data = "Fin") # %>% select(Mean, Algorithm, CompressionRatio, data, ChcCount, PlainCount, Config)
+autoDF <- autoData %>% mutate(data = "Auto") # %>% select(Mean, Algorithm, CompressionRatio, data, ChcCount, PlainCount, Config)
 
+data <- rbind(finDF, autoDF)
 
-cascade_plt <- ggplot(df, mapping = aes(x=Variants, y=NormPerf, shape=Algorithm, fill=Algorithm)) +
-  ylab("Normalized Time") +
+rq1DF <- data %>% filter(Variants > 2) %>% group_by(Algorithm) %>% arrange(Variants)
+
+rq1 <- ggplot(rq1DF, mapping = aes(x=Variants, y=Mean, shape=Algorithm, color=Algorithm)) +
+  ylab("Mean [s]") +
+  theme(legend.position = "bottom") +
   geom_point(size=3) +
   geom_line() +
-  scale_shape_manual(values = c(1,2,5,17))
+  scale_shape_manual(values = c(1,2,5,17)) +
+  facet_grid(. ~ data, scales = "free") +
+  theme_classic() +
+  ggtitle("RQ1: Performance as variants increase") +
+  ylab("Time [s] to solve all Variants")
 
-## ggsave("../plots/auto_cascade.png", plot = cascade_plt, device = "png")
+ggsave("../plots/RQ1.png", plot = rq1, height = 4, width = 7, device = "png")
