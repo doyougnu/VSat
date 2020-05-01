@@ -99,7 +99,8 @@ pairs = mkPairs ds
 -- encoding for 6 configs that make sure the inequalities encompass each other
 evoAwareConf = disjoin confs
 
-mkConf x xs = x &&& (conjoin $ bnot <$> (delete x xs))
+deadCore = bRef "DeadCore"
+mkConf x xs = (deadCore ||| x) &&& x &&& (conjoin $ bnot <$> (delete x xs))
 
 confs = fmap (flip mkConf ds) ds
 
@@ -150,7 +151,7 @@ main = do
       [
         mkBench' "v-->v" "V1*V2*V3*V4*V5*V6*V7*V8*V9*V10" (satWithConf (toDimProp singleVersionConf) solverConf) bProp
       -- p - v
-      , mkBench' "p-->v" "V1*V2*V3*V4*V5*V6*V7*V8*V9*V10" (pOnVWithConf (toDimProp singleVersionConf) solverConf) bProp
+      , mkBench' "p-->v" "V1*V2*V3*V4*V5*V6*V7*V8*V9*V10" (pOnVWithConf (toDimProp singleVersionConfBF) solverConf) bProp
       -- p - p
       , mkBench' "p-->p" "V1*V2*V3*V4*V5*V6*V7*V8*V9*V10" (bfWithConf (toDimProp singleVersionConfBF) solverConf) bProp
       -- v - p
