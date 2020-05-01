@@ -106,7 +106,7 @@ confs = fmap (flip mkConf ds) ds
 [d0Conf, d1Conf, d2Conf, d3Conf, d4Conf, d5Conf, d6Conf, d7Conf, d8Conf, d9Conf] = confs
 
 singleVersionConf = disjoin confs
-singeVersionConfBF = disjoin $ fmap ((|||) (bRef "DeadCore")) confs
+singleVersionConfBF = disjoin $ fmap ((|||) (bRef "DeadCore")) confs
 
 -- run with stack bench --profile vsat:auto --benchmark-arguments='+RTS -S -RTS --output timings.html'
 main = do
