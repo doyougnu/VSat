@@ -18,15 +18,27 @@ data <- rbind(finDF, autoDF)
 
 deadCoreDF <- data %>% filter(Variants > 2) %>% group_by(Algorithm) %>% arrange(Variants)
 
-dc <- ggplot(rq1DF, mapping = aes(x=Variants, y=Mean, shape=Algorithm, color=Algorithm)) +
+dc <- ggplot(deadCoreDF, mapping = aes(x=Variants, y=Mean, shape=Algorithm, color=Algorithm)) +
   ylab("Mean [s]") +
   geom_point(size=3) +
   geom_line() +
   scale_shape_manual(values = c(1,2,5,17)) +
+  scale_x_continuous(breaks=seq(2, 2048, 8)) +
   facet_wrap(. ~ data, scales = "free") +
   theme_classic() +
   ggtitle("Dead Core Demonstration") +
   ylab("Time [s] to solve all Variants") +
   theme(legend.position = "bottom")
 
-ggsave("../plots/DeadCore.png", plot = dc, height = 4, width = 7, device = "png")
+## ggsave("../plots/DeadCore.png", plot = dc, height = 4, width = 7, device = "png")
+
+dcAuto <- ggplot(deadCoreDF %>% filter(data =="Auto"), mapping = aes(x=Variants, y=Mean, shape=Algorithm, color=Algorithm)) +
+  ylab("Mean [s]") +
+  geom_point(size=3) +
+  geom_line() +
+  scale_shape_manual(values = c(1,2,5,17)) +
+  scale_x_continuous(breaks=seq(0, 32, 8)) +
+  theme_classic() +
+  ggtitle("Dead Core Demonstration") +
+  ylab("Time [s] to solve all Variants") +
+  theme(legend.position = "bottom")
