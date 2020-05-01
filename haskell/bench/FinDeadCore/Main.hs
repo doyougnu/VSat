@@ -106,6 +106,7 @@ confs = fmap (flip mkConf ds) ds
 [d0Conf, d1Conf, d2Conf, d3Conf, d4Conf, d5Conf, d6Conf, d7Conf, d8Conf, d9Conf] = confs
 
 singleVersionConf = disjoin confs
+singeVersionConfBF = disjoin $ fmap ((|||) (bRef "DeadCore")) confs
 
 -- run with stack bench --profile vsat:auto --benchmark-arguments='+RTS -S -RTS --output timings.html'
 main = do
@@ -151,7 +152,7 @@ main = do
       -- p - v
       , mkBench' "p-->v" "V1*V2*V3*V4*V5*V6*V7*V8*V9*V10" (pOnVWithConf (toDimProp singleVersionConf) solverConf) bProp
       -- p - p
-      , mkBench' "p-->p" "V1*V2*V3*V4*V5*V6*V7*V8*V9*V10" (bfWithConf (toDimProp singleVersionConf) solverConf) bProp
+      , mkBench' "p-->p" "V1*V2*V3*V4*V5*V6*V7*V8*V9*V10" (bfWithConf (toDimProp singleVersionConfBF) solverConf) bProp
       -- v - p
       , mkBench' "v-->p" "V1*V2*V3*V4*V5*V6*V7*V8*V9*V10" (vOnPWithConf (toDimProp singleVersionConf) solverConf) bProp
       ]
