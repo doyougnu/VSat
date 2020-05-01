@@ -62,26 +62,15 @@ ds = bRef <$> ["D_0","D_1","D_2","D_3"]
 
 [d0, d2, d4, d5] = ds
 
--- dimConf' :: VProp Text String String
--- encoding for 6 configs that make sure the inequalities encompass each other
-sumConf = (d0 &&& fromList (&&&) (bnot <$> tail ds)) -- <0
-          ||| ((bnot d0) &&& d2 &&& (bnot d4 &&& bnot d5))   -- <0 /\ <1
-          ||| ((bnot d0)&&& (bnot d2) &&& d4 &&& bnot d5) -- <0 /\ <1 /\
-          ||| ((bnot d0)&&& (bnot d2) &&& (bnot d4) &&& d5) -- <0 /\ <1 /\
-
--- | Configs that select only one version
-d0Conf = (d0 &&& fromList (&&&) (bnot <$> tail ds)) -- <0
-d2Conf = ((bnot d0) &&& d2 &&& (bnot d4 &&& bnot d5))   -- <0 /\ <1
-d3Conf = ((bnot d0) &&& (bnot d2) &&& d4 &&& bnot d5) -- <0 /\ <1 /\
-d4Conf = ((bnot d0) &&& (bnot d2) &&& (bnot d4) &&& d5) -- <0 /\ <1 /\
-dAllConf = (d0 &&& d2 &&& d4 &&& d5) -- <0 /\ <1 /\
-
 deadCore = bRef "DeadCore"
-singleVersionConf = d0Conf ||| d2Conf ||| d3Conf ||| d4Conf
-singleVersionConfBF = (d0Conf ||| deadCore)
-                      ||| (d2Conf ||| deadCore)
-                      ||| (d3Conf ||| deadCore)
-                      ||| (d4Conf ||| deadCore)
+mkConf x xs = (deadCore ||| x) &&& x &&& (conjoin $ bnot <$> (delete x xs))
+
+confs = fmap (flip mkConf ds) ds
+
+[d0Conf, d1Conf, d2Conf, d3Conf] = confs
+
+singleVersionConf = disjoin confs
+
 
 -- run with stack bench --profile vsat:auto --benchmark-arguments='+RTS -S -RTS --output timings.html'
 main = do
@@ -134,3 +123,5 @@ main = do
     -- , bgroup "Yices" (benches yicesDefConf)
     -- , bgroup "Boolector" (benches boolectorDefConf)
     ]
+
+  -- putStrLn . show $ singleVersionConf
