@@ -31,11 +31,11 @@ dc <- ggplot(deadCoreDF
   guides(size = FALSE) +
   guides(color = FALSE) +
   geom_bar(stat="identity", fill="white", width=0.5
-           ,size=2) +
+           ,size=1.15) +
   geom_text(aes(label=MeanLbl, hjust=1.4), color="black") +
   facet_wrap(. ~ data, scales = "free_x") +
   labs(title = "Dead Core Demonstration",
-       y = "Time [s] to solve Dead and Core Analysis over all Version") +
+       y = "Time [s] to solve Dead and Core Analysis over all Versions") +
   theme(legend.position = "none") +
   coord_flip()
 
