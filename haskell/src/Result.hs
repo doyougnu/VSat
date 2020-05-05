@@ -29,6 +29,7 @@ module Result ( ResultProp(..)
               , getUnSatMap
               , insertToUnSat
               , getResultOnlySat
+              , isSat
               ) where
 
 import           Control.DeepSeq (NFData)

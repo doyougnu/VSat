@@ -287,6 +287,8 @@ data IncState d =
                                         -- from not have a proper newtype for
                                         -- IncStateVSMT. For VSAT1 this is fine
                                         -- and will be refactored for VSAT2.
+           , unSatCnt :: !Int
+           , satCnt   :: !Int
            } deriving (Eq,Show)
 
 emptySt :: (Resultable d) => IncState d
@@ -295,6 +297,8 @@ emptySt = IncState{ result=mempty
                   , processed=False
                   , usedConstraints=mempty
                   , genModelMaps=True
+                  , unSatCnt = 0
+                  , satCnt = 0
                   }
 
 onResult :: (Result d -> Result d) -> IncState d -> IncState d
@@ -302,6 +306,14 @@ onResult f IncState {..} = IncState {result=f result, ..}
 
 onConfig :: (Config d -> Config d) -> IncState d -> IncState d
 onConfig f IncState {..} = IncState {config=f config, ..}
+
+incSatCnt :: IncVSMTSolve d ()
+incSatCnt = St.modify' go
+  where go IncState{..} = IncState {satCnt=succ satCnt, ..}
+
+incUnSatCnt :: IncVSMTSolve d ()
+incUnSatCnt = St.modify' go
+  where go IncState{..} = IncState {unSatCnt=succ unSatCnt, ..}
 
 deleteFromConfig :: Ord d => (Dim d) -> IncState d -> IncState d
 deleteFromConfig = onConfig . M.delete
@@ -497,8 +509,7 @@ constrain b !name = do
 toText :: Show a => a -> Text
 toText = pack . show
 
-solveVariant :: Resultable d =>
-  IncVSMTSolve d I.SBool -> IncVSMTSolve d (Result d)
+solveVariant :: Resultable d => IncVSMTSolve d I.SBool -> IncVSMTSolve d (Result d)
 solveVariant go = do
            setModelNotGenD
 
@@ -515,9 +526,9 @@ solveVariant go = do
                      then do prop <- gets (configToResultProp . config)
                              modelsEnabled <- gets genModelMaps
                              setModelGenD
-                             lift $! if modelsEnabled
-                                     then getResult prop
-                                     else getResultOnlySat prop
+                             b <- lift isSat
+                             if b then incSatCnt else incUnSatCnt
+                             return mempty
                       else -- not sat or have gen'd a model so ignore
                        return mempty
 
