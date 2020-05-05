@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 73ec6a10a5a9770ccc023bbd4d3834f0e0a10ac7df9f67b43962c4e77981c546
+-- hash: dc07ce24c0e573696ef91617bab2e39a20bad92aba62e765a2bbfa5843580206
 
 name:           vsat
 version:        0.1.0.0
@@ -176,6 +176,7 @@ benchmark auto
     , sbv >=8.6
     , tasty-quickcheck
     , text
+    , time
     , unicode-show
     , unordered-containers
     , vsat
@@ -383,6 +384,7 @@ benchmark fin
     , sbv >=8.6
     , tasty-quickcheck
     , text
+    , time
     , unicode-show
     , unordered-containers
     , vsat

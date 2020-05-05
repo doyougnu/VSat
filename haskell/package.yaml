@@ -78,6 +78,7 @@ benchmarks:
     dependencies:
     - criterion
     - vsat
+    - time
 
   auto-dead:
     main:                Main.hs
@@ -141,6 +142,7 @@ benchmarks:
     dependencies:
     - criterion
     - vsat
+    - time
 
   fin-dead:
     main:                Main.hs

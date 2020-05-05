@@ -17,9 +17,11 @@ import qualified Data.SBV                as S
 import qualified Data.SBV.Control        as SC
 import qualified Data.SBV.Internals      as SI
 import           Data.Text               (pack, unpack,Text)
-import qualified Data.Text.IO            as T (writeFile)
+import qualified Data.Text.IO            as T (writeFile, appendFile)
 import           System.IO
 import           Text.Megaparsec         (parse)
+import Data.Time.Clock
+import Data.Time.Calendar
 
 import           Api
 import           CaseStudy.Auto.Auto
@@ -177,27 +179,27 @@ main = do
 --        -- , mkBench' "p-->v" "EvolutionAware" (pOnVWithConf (toDimProp sumConf) solverConf) bProp
 --        , mkBench "p-->v" "V1*V2"        justV12Conf (pOnV solverConf) bPropJustV12
 --        , mkBench "p-->v" "V1*V2*V3"     justV123Conf (pOnV solverConf) bPropJustV123
-          mkBench' "p-->v" "V1*V2*V3*V4"  (pOnV solverConf) bProp
+        --   mkBench' "p-->v" "V1*V2*V3*V4"  (pOnV solverConf) bProp
 
-        -- -- p - p
-        , mkBench "p-->p" "V1"  justV1Conf (bfWith solverConf) bPropV1
-        , mkBench "p-->p" "V2"  justV2Conf (bfWith solverConf) bPropV2
-        , mkBench "p-->p" "V3"  justV3Conf (bfWith solverConf) bPropV3
-        , mkBench "p-->p" "V4"  justV4Conf (bfWith solverConf) bPropV4
-        -- , mkBench' "p-->p" "EvolutionAware"  (bfWithConf (toDimProp sumConf) solverConf) bProp
-        , mkBench "p-->p" "V1*V2"        justV12Conf (bfWith solverConf) bPropJustV12
-        , mkBench "p-->p" "V1*V2*V3"     justV123Conf (bfWith solverConf) bPropJustV123
-        , mkBench' "p-->p" "V1*V2*V3*V4"  (bfWith solverConf) bProp
+        -- -- -- p - p
+        -- , mkBench "p-->p" "V1"  justV1Conf (bfWith solverConf) bPropV1
+        -- , mkBench "p-->p" "V2"  justV2Conf (bfWith solverConf) bPropV2
+        -- , mkBench "p-->p" "V3"  justV3Conf (bfWith solverConf) bPropV3
+        -- , mkBench "p-->p" "V4"  justV4Conf (bfWith solverConf) bPropV4
+        -- -- , mkBench' "p-->p" "EvolutionAware"  (bfWithConf (toDimProp sumConf) solverConf) bProp
+        -- , mkBench "p-->p" "V1*V2"        justV12Conf (bfWith solverConf) bPropJustV12
+        -- , mkBench "p-->p" "V1*V2*V3"     justV123Conf (bfWith solverConf) bPropJustV123
+        -- , mkBench' "p-->p" "V1*V2*V3*V4"  (bfWith solverConf) bProp
 
-        -- v - p
-        , mkBench "v-->p" "V1"  justV1Conf (vOnPWithConf (toDimProp d0Conf) solverConf) bProp
-        , mkBench "v-->p" "V2"  justV2Conf (vOnPWithConf (toDimProp d2Conf) solverConf) bProp
-        , mkBench "v-->p" "V3"  justV3Conf (vOnPWithConf (toDimProp d3Conf) solverConf) bProp
-        , mkBench "v-->p" "V4"  justV4Conf (vOnPWithConf (toDimProp d4Conf) solverConf) bProp
-        -- , mkBench' "v-->p" "EvolutionAware"  (vOnPWithConf (toDimProp sumConf) solverConf) bProp
-        , mkBench "v-->p" "V1*V2"        justV12Conf (vOnPWith solverConf) bPropJustV12
-        , mkBench "v-->p" "V1*V2*V3"     justV123Conf (vOnPWith solverConf) bPropJustV123
-        , mkBench' "v-->p" "V1*V2*V3*V4"  (vOnPWith solverConf) bProp
+        -- -- v - p
+        -- , mkBench "v-->p" "V1"  justV1Conf (vOnPWithConf (toDimProp d0Conf) solverConf) bProp
+        -- , mkBench "v-->p" "V2"  justV2Conf (vOnPWithConf (toDimProp d2Conf) solverConf) bProp
+        -- , mkBench "v-->p" "V3"  justV3Conf (vOnPWithConf (toDimProp d3Conf) solverConf) bProp
+        -- , mkBench "v-->p" "V4"  justV4Conf (vOnPWithConf (toDimProp d4Conf) solverConf) bProp
+        -- -- , mkBench' "v-->p" "EvolutionAware"  (vOnPWithConf (toDimProp sumConf) solverConf) bProp
+        -- , mkBench "v-->p" "V1*V2"        justV12Conf (vOnPWith solverConf) bPropJustV12
+        -- , mkBench "v-->p" "V1*V2*V3"     justV123Conf (vOnPWith solverConf) bPropJustV123
+        -- , mkBench' "v-->p" "V1*V2*V3*V4"  (vOnPWith solverConf) bProp
         ]
 
     -- | Compression Ratio props
@@ -251,10 +253,31 @@ main = do
   -- putStrLn "Running Good:\n"
   -- goodRes <- testS goodS 1000
 
-  defaultMain
-    [  bgroup "Z3" (benches z3DefConf)
-      -- bgroup "Z3" (compRatioBenches z3DefConf)
-    -- , bgroup "CVC4" (benches cvc4DefConf)
-    -- , bgroup "Yices" (benches yicesDefConf)
-    -- , bgroup "Boolector" (benches boolectorDefConf)
-    ]
+  -- defaultMain
+  --   [  bgroup "Z3" (benches z3DefConf)
+  --     -- bgroup "Z3" (compRatioBenches z3DefConf)
+  --   -- , bgroup "CVC4" (benches cvc4DefConf)
+  --   -- , bgroup "Yices" (benches yicesDefConf)
+  --   -- , bgroup "Boolector" (benches boolectorDefConf)
+  --   ]
+
+  let countFile = "auto_counts.csv"
+      problems = [ ("V1*V2: "                         , bPropJustV12)
+                 , ("V1*V2*V3: "                      , bPropJustV123)
+                 , ("V1*V2*V3*V4: "                   , bProp)
+                 ]
+      newline = flip (++) "\n"
+      runner solver (desc,prb) = solver prb >>= T.appendFile countFile . pack . newline . ((++) desc) . show
+  fileHeader <- fmap (pack . flip (++) "\n"
+                      . (++) "Generated on (Year, Month, Day): "
+                      . show . toGregorian . utctDay) getCurrentTime
+
+  T.appendFile countFile fileHeader
+  -- v-->v
+  mapM_ (runner sat) problems
+  -- v-->p
+  mapM (runner vOnP) problems
+  -- p-->v
+  mapM (runner pOnV) problems
+  -- p-->p
+  mapM (runner bf) problems

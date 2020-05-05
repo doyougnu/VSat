@@ -17,9 +17,11 @@ import qualified Data.SBV                as S
 import qualified Data.SBV.Control        as SC
 import qualified Data.SBV.Internals      as SI
 import           Data.Text               (pack, unpack,Text)
-import qualified Data.Text.IO            as T (writeFile)
+import qualified Data.Text.IO            as T (writeFile, appendFile)
 import           System.IO
 import           Text.Megaparsec         (parse)
+import Data.Time.Clock
+import Data.Time.Calendar
 
 import           Api
 import           CaseStudy.Auto.Auto
@@ -365,17 +367,29 @@ main = do
   -- mapM_ (putStrLn . show) ts
 
   let countFile = "fin_counts.csv"
+      problems = [ ("V1*V2: "                         , justbPropV12)
+                 , ("V1*V2*V3: "                      , justbPropV123)
+                 , ("V1*V2*V3*V4: "                   , justbPropV1234)
+                 , ("V1*V2*V3*V4*V5: "                , justbPropV12345)
+                 , ("V1*V2*V3*V4*V5*V6: "             , justbPropV123456)
+                 , ("V1*V2*V3*V4*V5*V6*V7: "          , justbPropV1234567)
+                 , ("V1*V2*V3*V4*V5*V6*V7*V8: "       , justbPropV12345678)
+                 , ("V1*V2*V3*V4*V5*V6*V7*V8*V9: "    , justbPropV123456789)
+                 , ("V1*V2*V3*V4*V5*V6*V7*V8*V9*V10: ", bProp)
+                 ]
+      newline = flip (++) "\n"
+      runner solver (desc,prb) = solver prb >>= T.appendFile countFile . pack . newline . ((++) desc) . show
 
-  -- putStrLn "V1"
-  -- satWithConf (toDimProp d0Conf) defConf bProp >>= putStrLn . show
-  -- putStrLn "V2"
-  -- satWithConf (toDimProp d1Conf) defConf bProp >>= putStrLn . show
+  fileHeader <- fmap (pack . flip (++) "\n"
+                      . (++) "Generated on (Year, Month, Day): "
+                      . show . toGregorian . utctDay) getCurrentTime
 
-  -- putStrLn "V1*V2 vOnP"
-  -- vOnP justbPropV12 >>= putStrLn . show
-  putStrLn "V1*V2 vOnV"
-  sat justbPropV12 >>= putStrLn . show
-  -- mkBench "v-->v" "V1*V2*V3"                       justD012Conf (satWith solverConf) justbPropV123
-  -- mkBench "v-->v" "V1*V2*V3*V4"                    justD0123Conf (satWith solverConf) justbPropV1234
-  -- mkBench "v-->v" "V1*V2*V3*V4*V5"                 justD01234Conf (satWith solverConf) justbPropV12345
-  -- mkBench "v-->v" "V1*V2*V3*V4*V5*V6"              justD012345Conf (satWith solverConf) justbPropV123456
+  T.appendFile countFile fileHeader
+  -- v-->v
+  mapM_ (runner sat) problems
+  -- v-->p
+  mapM (runner vOnP) problems
+  -- p-->v
+  mapM (runner pOnV) problems
+  -- p-->p
+  mapM (runner bf) problems
