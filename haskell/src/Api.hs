@@ -14,6 +14,7 @@ module Api ( sat
            , genConfigPool'
            , vOnPWithConf
            , vOnPWith
+           , vOnP
            ) where
 
 import qualified Data.Map           as M
@@ -84,15 +85,15 @@ symbolicPropExpr' e' = do
 
 -- | Run VSMT and return variable bindings
 sat :: (Show d, Resultable d, SAT (ReadableProp d)) =>
-  ReadableProp d -> IO (Result d)
+  ReadableProp d -> IO Counts
 sat = satWith defConf
 
 satWith :: (Show d, Resultable d)
-  => ReadableSMTConf d -> ReadableProp d -> IO (Result d)
+  => ReadableSMTConf d -> ReadableProp d -> IO Counts
 satWith = satWithConf Nothing
 
 satWithConf :: (Show d, Resultable d)
-  => Maybe (DimProp d) -> ReadableSMTConf d -> ReadableProp d -> IO (Result d)
+  => Maybe (DimProp d) -> ReadableSMTConf d -> ReadableProp d -> IO Counts
 satWithConf Nothing          conf prop = fst' <$> runVSMT mempty conf prop
 satWithConf dimConfig conf prop =
   do
@@ -103,7 +104,7 @@ satWithConf dimConfig conf prop =
 
 
 bfWithConf :: (Show d, Resultable d, SAT (ReadableProp d))
-  => Maybe (DimProp d) -> ReadableSMTConf d -> ReadableProp d -> IO (Result d)
+  => Maybe (DimProp d) -> ReadableSMTConf d -> ReadableProp d -> IO Counts
 bfWithConf Nothing          conf prop = runBF mempty conf prop
 bfWithConf dimConfig conf prop =
   do
@@ -113,7 +114,7 @@ bfWithConf dimConfig conf prop =
     runBF configPool conf prop
 
 vOnPWithConf :: (Show d, Resultable d, SAT (ReadableProp d))
-  => Maybe (DimProp d) -> ReadableSMTConf d -> ReadableProp d -> IO (Result d)
+  => Maybe (DimProp d) -> ReadableSMTConf d -> ReadableProp d -> IO Counts
 vOnPWithConf Nothing          conf prop = runVonP mempty conf prop
 vOnPWithConf dimConfig conf prop =
   do
@@ -123,10 +124,13 @@ vOnPWithConf dimConfig conf prop =
     runVonP configPool conf prop
 
 vOnPWith :: (Show d, Resultable d, SAT (ReadableProp d))
-  => ReadableSMTConf d -> ReadableProp d -> IO (Result d)
+  => ReadableSMTConf d -> ReadableProp d -> IO Counts
 vOnPWith = vOnPWithConf Nothing
 
-pOnVWithConf :: (Resultable d, Show d) => Maybe (DimProp d) -> ReadableSMTConf d -> ReadableProp d -> IO (Result d)
+vOnP :: (Show d, Resultable d, SAT (ReadableProp d)) => ReadableProp d -> IO Counts
+vOnP = vOnPWith defConf
+
+pOnVWithConf :: (Resultable d, Show d) => Maybe (DimProp d) -> ReadableSMTConf d -> ReadableProp d -> IO Counts
 pOnVWithConf Nothing          conf prop = fst' <$> runPonV mempty conf prop
 pOnVWithConf dimConfig conf prop =
   do
@@ -135,16 +139,20 @@ pOnVWithConf dimConfig conf prop =
     -- putStrLn . show $ (length configPool)
     fst' <$> runPonV configPool conf prop
 
-pOnV :: (Resultable d, Show d) => ReadableSMTConf d -> ReadableProp d -> IO (Result d)
-pOnV = pOnVWithConf Nothing
+pOnVWith :: (Resultable d, Show d) => ReadableSMTConf d -> ReadableProp d -> IO Counts
+pOnVWith = pOnVWithConf Nothing
+
+pOnV :: (Resultable d, Show d, SAT (ReadableProp d)) =>
+  ReadableProp d -> IO Counts
+pOnV = pOnVWith defConf
 
 bfWith :: (Show d, Resultable d,SAT (ReadableProp d)) =>
- ReadableSMTConf d -> ReadableProp d -> IO (Result d)
+ ReadableSMTConf d -> ReadableProp d -> IO Counts
 bfWith = bfWithConf Nothing
 
 
 bf :: (Show d, Resultable d, SAT (ReadableProp d)) =>
-  ReadableProp d -> IO (Result d)
+  ReadableProp d -> IO Counts
 bf = bfWith defConf
 
 

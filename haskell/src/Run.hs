@@ -15,6 +15,7 @@ module Run ( SatDict
            , runPonV
            , runVonP
            , vCoreMetrics
+           , Counts
            ) where
 
 import           Control.Arrow (first, second)
@@ -66,10 +67,10 @@ _runEnv :: Env d r ->
 _runEnv = runRWST
 
 
-runEnv :: (ReadableProp d -> Env d (Result d)) ->
+runEnv :: (ReadableProp d -> Env d Counts) ->
           SMTConf d Text Text ->
           ReadableProp d ->
-          IO (Result d, SatDict d, Log)
+          IO (Counts, SatDict d, Log)
 runEnv f conf x = _runEnv (f x') conf _emptySt
   where x' = foldr' ($!) x (opts conf)
 
@@ -78,13 +79,14 @@ runAD :: (Show d, Resultable d, SAT (ReadableProp d)) =>
       -> ReadableProp d
       -> (d -> Text)
       -> IO (Result d)
-runAD os p f = fst' <$> runEnv (flip runAndDecomp f) os p
+runAD os p f = undefined
+  -- fst' <$> runEnv (flip runAndDecomp f) os p
 
 runBF :: (Resultable d, SAT (ReadableProp d)) =>
          ConfigPool d        ->
          SMTConf d Text Text ->
          ReadableProp d      ->
-         IO (Result d)
+         IO Counts
 runBF pool os p = fst' <$> runEnv (runBruteForce pool) os p
 
 
@@ -92,7 +94,7 @@ runVonP :: (Resultable d, SAT (ReadableProp d)) =>
            ConfigPool d        ->
            SMTConf d Text Text ->
            ReadableProp d      ->
-           IO (Result d)
+           IO Counts
 runVonP pool os p = fst' <$> runEnv (runVOnPlain pool) os p
 
 -- runPonV :: (Show d, Resultable d) => ConfigPool d -> ReadableProp d
@@ -104,7 +106,7 @@ runVSMT :: (Show d, Resultable d) =>
            ConfigPool d        ->
            SMTConf d Text Text ->
            ReadableProp d      ->
-           IO (Result d, SatDict d, Log)
+           IO (Counts, SatDict d, Log)
 runVSMT = runEnv . runVSMTSolve
 
 -- | Given a VProp a term generate the satisfiability map
@@ -128,7 +130,7 @@ runForDict :: ( Resultable d
               , MonadIO m
               , MonadReader (SMTConf d a a) m
               , SAT (ReadableProp d)) =>
-  (Config d, ReadableProp d) -> m (Result d)
+  (Config d, ReadableProp d) -> m Counts
 runForDict (configToResultProp -> c, x) = do
   cnf <- ask
   liftIO $ S.runSMTWith (conf cnf) $
@@ -136,9 +138,10 @@ runForDict (configToResultProp -> c, x) = do
       x' <- toPredicate x
       SC.query $
         do S.constrain x'
-           res <- getResultWith (\a -> if a then c else negateResultProp c)
-           SC.exit
-           return res
+           -- res <- getResultWith (\a -> if a then c else negateResultProp c)
+           -- SC.exit
+           b <- isSat
+           return $ if b then (1,0) else (0,1)
 
 -- | run the sat solver, when we get a satisafiable call get the assignments
 -- directly
@@ -146,7 +149,7 @@ runForDict' :: ( Resultable d
               , MonadIO m
               , MonadReader (SMTConf d a a) m
               , SAT (ReadableProp d)) =>
-  (Config d, ReadableProp d) -> m (Result d)
+  (Config d, ReadableProp d) -> m Counts
 runForDict' (configToResultProp -> c, x) = do
   cnf <- ask
   liftIO $ S.runSMTWith (conf cnf) $
@@ -154,7 +157,9 @@ runForDict' (configToResultProp -> c, x) = do
       x' <- toPredicate x
       SC.query . SC.inNewAssertionStack $
         do S.constrain x'
-           getResultWith (\a -> if a then c else negateResultProp c)
+           b <- isSat
+           return $ if b then (1,0) else (0,1)
+
 
 -- | Run the brute force baseline case, that is select every plain variant and
 -- run them to the sat solver
@@ -166,7 +171,7 @@ runBruteForce ::
   , SAT (ReadableProp d)) =>
   ConfigPool d        ->
   ReadableProp d      ->
-  m (Result d)
+  m Counts
 runBruteForce pool prop = flip evalStateT (initSt pool prop) $
   do
   _confs <- get
@@ -176,7 +181,7 @@ runBruteForce pool prop = flip evalStateT (initSt pool prop) $
         then pure (M.empty, prop)
         else (\y -> (y, selectVariantTotal y prop)) <$> confs
   plainMs <- lift $ mapM runForDict $ plainProps
-  return $! mconcat plainMs
+  return $! foldr (\(a,b) (aa,ab) -> (a+aa,b+ab)) (0,0) plainMs
 
 -- | Run the brute force baseline case, that is select every plain variant and
 -- run them to the sat solver
@@ -188,7 +193,7 @@ runVOnPlain ::
   , SAT (ReadableProp d)) =>
   ConfigPool d        ->
   ReadableProp d      ->
-  m (Result d)
+  m Counts
 runVOnPlain pool prop = flip evalStateT (initSt pool prop) $
   do
   _confs <- get
@@ -198,7 +203,7 @@ runVOnPlain pool prop = flip evalStateT (initSt pool prop) $
         then pure (M.empty, prop)
         else (\y -> (y, selectVariantTotal y prop)) <$> confs
   plainMs <- lift $ mapM runForDict' $ plainProps
-  return $! mconcat plainMs
+  return $! foldr (\(a,b) (aa,ab) -> (a+aa,b+ab)) (0,0) plainMs
 
 -- | Run plain terms on vsat, that is, perform selection for each dimension, and
 -- then run on the vsat solver. We know that this will always become a Unit, and
@@ -206,7 +211,7 @@ runVOnPlain pool prop = flip evalStateT (initSt pool prop) $
 runPlainOnVSat
   :: (Show d, Resultable d, MonadIO m,
       MonadReader (SMTConf d a a) m) =>
-     ConfigPool d -> ReadableProp d -> m (Result d)
+     ConfigPool d -> ReadableProp d -> m Counts
 runPlainOnVSat pool prop = flip evalStateT (initSt pool prop) $
  do
   _confs <- get
@@ -217,9 +222,7 @@ runPlainOnVSat pool prop = flip evalStateT (initSt pool prop) $
   plainMs <- mapM (bitraverse
                    (pure . configToResultProp)
                    (runVSMTSolve mempty)) $ plainProps
-  return $ foldMap (uncurry helper) plainMs
-  where
-        helper c as =  insertToSat c as
+  return $ foldr (\(_,(a,b)) (aa,ab) -> (a+aa,b+ab)) (0,0) plainMs
 
 -- | Run the and decomposition baseline case, that is deconstruct every choice
 -- and then run the sat solver
@@ -229,7 +232,8 @@ runAndDecomp :: ( Resultable d
                 , MonadReader (SMTConf d a a) m
                 , SAT (ReadableProp d)) =>
   ReadableProp d -> (d -> Text) -> m (Result d)
-runAndDecomp prop f = runForDict (mempty, andDecomp prop (f . dimName))
+runAndDecomp prop f = undefined
+  -- runForDict (mempty, andDecomp prop (f . dimName))
 
 runVSMTSolve ::
   (Show d
@@ -238,7 +242,7 @@ runVSMTSolve ::
   , MonadReader (SMTConf d a a) m) =>
   ConfigPool d ->
   ReadableProp d ->
-  m (Result d)
+  m Counts
 runVSMTSolve configPool prop =
   do cnf <- ask
      -- convert all refs to SBools
@@ -270,6 +274,8 @@ type Used = HashSet Text
 
 type UsedConstraint = Text
 
+type Counts = (Int, Int)
+
 -- | the internal state for the incremental solve algorithm, it holds a result
 -- list, and the used dims map, and is parameterized by the types of dimensions,
 -- d
@@ -287,8 +293,7 @@ data IncState d =
                                         -- from not have a proper newtype for
                                         -- IncStateVSMT. For VSAT1 this is fine
                                         -- and will be refactored for VSAT2.
-           , unSatCnt :: !Int
-           , satCnt   :: !Int
+           , counts :: !Counts
            } deriving (Eq,Show)
 
 emptySt :: (Resultable d) => IncState d
@@ -297,8 +302,7 @@ emptySt = IncState{ result=mempty
                   , processed=False
                   , usedConstraints=mempty
                   , genModelMaps=True
-                  , unSatCnt = 0
-                  , satCnt = 0
+                  , counts = (0,0)
                   }
 
 onResult :: (Result d -> Result d) -> IncState d -> IncState d
@@ -309,11 +313,13 @@ onConfig f IncState {..} = IncState {config=f config, ..}
 
 incSatCnt :: IncVSMTSolve d ()
 incSatCnt = St.modify' go
-  where go IncState{..} = IncState {satCnt=succ satCnt, ..}
+  where go IncState{..} = IncState {counts=first succ counts, ..}
 
 incUnSatCnt :: IncVSMTSolve d ()
 incUnSatCnt = St.modify' go
-  where go IncState{..} = IncState {unSatCnt=succ unSatCnt, ..}
+  where go IncState{..} = IncState {counts=second succ counts, ..}
+
+onCounts f IncState{..} = IncState {counts=f counts, ..}
 
 deleteFromConfig :: Ord d => (Dim d) -> IncState d -> IncState d
 deleteFromConfig = onConfig . M.delete
@@ -350,7 +356,7 @@ type IncVSMTSolve d = St.StateT (IncState d) SC.Query
 -- not, if not then it gets the plain model
 vSMTSolve :: (Show d, Resultable d) =>
   S.Symbolic (VProp d (S.SBool, Name) SNum) ->
-  ConfigPool d -> Settings -> S.Symbolic (Result d)
+  ConfigPool d -> Settings -> S.Symbolic Counts
 vSMTSolve prop configPool ss =
   do prop' <- prop
      S.setOption $ SC.ProduceUnsatCores True
@@ -369,12 +375,16 @@ vSMTSolve prop configPool ss =
          -- check if no models were generated, if that is the case then we had a
          -- plain formula as input. This means that the result of
          -- evaluation/accumulation will be a single symbolic boolean reference
-         if isResultNull (result resSt)
+         if (0,0) == (counts resSt)
            then solvePlain b
-           else return $ result resSt
+           else return $ counts resSt
 
-solvePlain :: Resultable d => S.SBool -> SC.Query (Result d)
-solvePlain b = do S.constrain b; getResultWith (toResultProp . LitB)
+solvePlain :: S.SBool -> SC.Query Counts
+solvePlain b = do S.constrain b
+                  s <- isSat
+                  return $ counts $ if s
+                    then onCounts (first succ) (emptySt :: IncState Text)
+                    else onCounts (second succ) emptySt
 
 solveVariational :: (Show d, Resultable d) =>
                     ConfigPool d ->

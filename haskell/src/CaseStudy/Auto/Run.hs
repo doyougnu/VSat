@@ -99,11 +99,11 @@ getBool = St.gets helper
           | otherwise = peekBool stk
 
 -- | check if the current context is sat or not
-isSat :: Query Bool
-isSat = do cs <- checkSat
-           return $ case cs of
-                      Sat -> True
-                      _   -> False
+isSat' :: Query Bool
+isSat' = do cs <- checkSat
+            return $ case cs of
+                       Sat -> True
+                       _   -> False
 
 instance (SolverContext (IncSolve a b)) where
   constrain = St.lift . constrain
@@ -193,7 +193,7 @@ runIncrementalSolve_  assocList = runSMT $
        do
          -- push 1
          ps >>= constrain
-         b <- isSat
+         b <- isSat'
          resMap <- if b
                    then
                      do let plainProp = autoToResProp (AutoRef "__plain__")
@@ -210,8 +210,8 @@ runIncrementalSolve_  assocList = runSMT $
                trace ("solving: " ++ show v ++ "\n") $ return ()
                push 1
                prop >>= constrain
-               a <- isSat
-               trace ("isSat?: " ++ show a ++ "\n") $ return ()
+               a <- isSat'
+               trace ("isSat'?: " ++ show a ++ "\n") $ return ()
                resMap' <- if a
                           then
                             do let prp = autoToResProp v
@@ -231,8 +231,8 @@ runIncrementalSolve_  assocList = runSMT $
                trace ("solving: " ++ show v ++ "\n") $ return ()
                push 1
                prop >>= constrain
-               a <- isSat
-               trace ("isSat?: " ++ show a ++ "\n") $ return ()
+               a <- isSat'
+               trace ("isSat'?: " ++ show a ++ "\n") $ return ()
                resMap' <- if a
                           then
                             do let prp = autoToResProp v

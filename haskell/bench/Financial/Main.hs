@@ -350,16 +350,32 @@ main = do
       , mkCompBench "v-->p" "V9*V10" (vOnPWithConf (toDimProp pD89Conf) solverConf) justbPropV910
       ]
 
-  defaultMain
-    [ -- bgroup "ABC" (benches abcDefConf)
-    --   bgroup "Yices" (benches yicesDefConf)
-    -- , bgroup "CVC4" (benches cvc4DefConf)
-        bgroup "Z3" (benches z3DefConf)
-      -- , bgroup "Z3" (compRatioBenches z3DefConf)
-    -- , bgroup "Boolector" (benches boolectorDefConf)
-    ]
+  -- defaultMain
+  --   [ -- bgroup "ABC" (benches abcDefConf)
+  --   --   bgroup "Yices" (benches yicesDefConf)
+  --   -- , bgroup "CVC4" (benches cvc4DefConf)
+  --       bgroup "Z3" (benches z3DefConf)
+  --     -- , bgroup "Z3" (compRatioBenches z3DefConf)
+  --   -- , bgroup "Boolector" (benches boolectorDefConf)
+  --   ]
 
   -- putStrLn $ show $ ds
   -- putStrLn $ show $ pairs
   -- ts <- (mkCompRatioConfs ds pairs :: IO [VProp.Types.Config Text])
   -- mapM_ (putStrLn . show) ts
+
+  let countFile = "fin_counts.csv"
+
+  -- putStrLn "V1"
+  -- satWithConf (toDimProp d0Conf) defConf bProp >>= putStrLn . show
+  -- putStrLn "V2"
+  -- satWithConf (toDimProp d1Conf) defConf bProp >>= putStrLn . show
+
+  -- putStrLn "V1*V2 vOnP"
+  -- vOnP justbPropV12 >>= putStrLn . show
+  putStrLn "V1*V2 vOnV"
+  sat justbPropV12 >>= putStrLn . show
+  -- mkBench "v-->v" "V1*V2*V3"                       justD012Conf (satWith solverConf) justbPropV123
+  -- mkBench "v-->v" "V1*V2*V3*V4"                    justD0123Conf (satWith solverConf) justbPropV1234
+  -- mkBench "v-->v" "V1*V2*V3*V4*V5"                 justD01234Conf (satWith solverConf) justbPropV12345
+  -- mkBench "v-->v" "V1*V2*V3*V4*V5*V6"              justD012345Conf (satWith solverConf) justbPropV123456
