@@ -11,7 +11,7 @@ finData <- read.csv(file=finResultsFile) %>% mutate(Algorithm = as.factor(Algori
 
 autoData <- read.csv(file=autoResultsFile) %>% mutate(Algorithm = as.factor(Algorithm), Config = as.factor(Config)) %>% mutate(Algorithm = gsub("-->", "\U27f6", Algorithm))
 
-finDF <- finData %>% mutate(data = "Fin") # %>% select(Mean, Algorithm, CompressionRatio, data, ChcCount, PlainCount, Config)
+finDF <- finData %>% mutate(data = "Financial") # %>% select(Mean, Algorithm, CompressionRatio, data, ChcCount, PlainCount, Config)
 autoDF <- autoData %>% mutate(data = "Auto") # %>% select(Mean, Algorithm, CompressionRatio, data, ChcCount, PlainCount, Config)
 
 data <- rbind(finDF, autoDF)
@@ -19,12 +19,14 @@ data <- rbind(finDF, autoDF)
 deadCoreDF <- data %>%
   group_by(data) %>%
   arrange(Mean) %>%
-  mutate(MeanLbl = case_when(data == "Auto" ~ signif(Mean, 5),
-                             data == "Fin" ~ signif(Mean, 3)))
+  mutate(MeanMin = (Mean %% (24 * 3600 * 3600 )) / 60.0,
+         MeanLbl = case_when(data == "Auto" ~ signif(MeanMin, 3),
+                             data == "Financial" ~ signif(MeanMin, 3)))
+
 
 dc <- ggplot(deadCoreDF
            , mapping = aes(x=Algorithm
-                         , y=Mean
+                         , y=MeanMin
                          , color = Algorithm)) +
   theme_classic() +
   guides(fill = FALSE) +
@@ -35,7 +37,7 @@ dc <- ggplot(deadCoreDF
   geom_text(aes(label=MeanLbl, hjust=1.4), color="black") +
   facet_wrap(. ~ data, scales = "free_x") +
   labs(title = "Dead Core Demonstration",
-       y = "Time [s] to solve Dead and Core Analysis over all Versions") +
+       y = "Time [min] to solve Dead and Core Analysis over all Versions") +
   theme(legend.position = "none") +
   coord_flip()
 
