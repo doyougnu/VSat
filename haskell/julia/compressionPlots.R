@@ -54,11 +54,11 @@ rq2 <- ggplot(df, mapping = aes(x=PlainRatio, y=MeanRatio, colour = Algorithm, s
   geom_point(size=3) +
   ## ylab(TeX("% SpeedUp \t  $\\frac{v \\rightarrow v}{v \\rightarrow p}$")) +
   ylab("% SpeedUp") +
-  xlab(TeX("Plain Ratio:  $\\frac{|Plain Terms|}{|Total Terms|}}")) +
+  xlab(TeX("Sharing Ratio:  $\\frac{|Plain Terms|}{|Total Terms|}}")) +
   ## scale_x_log10() +
   ## scale_y_log10() +
   scale_shape_manual(values = c(1,2,17)) +
-  geom_smooth(method=lm, formula = y ~ x, se=FALSE) +
+  geom_smooth(alpha=0.15, method=lm, formula = y ~ x, se=TRUE) +
   ## geom_text(nudge_y = 0.012, nudge_x = 0.003, angle = 45, check_overlap =FALSE) +
   ## theme(legend.position = c(.85,.90)
   ##     , plot.title = element_text(size=12)) +
@@ -66,4 +66,6 @@ rq2 <- ggplot(df, mapping = aes(x=PlainRatio, y=MeanRatio, colour = Algorithm, s
   theme_classic() +
 theme(legend.position = "none")
 
-ggsave("../plots/RQ2.png", plot = rq2, device = "png", height = 4, width = 7)
+## ggsave("../plots/RQ2.png", plot = rq2, device = "png", height = 4, width = 7)
+
+fits <- df %>% group_by(Algorithm) %>% do(model = lm(MeanRatio ~ PlainRatio, data = .))
