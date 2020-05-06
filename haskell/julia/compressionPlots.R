@@ -64,8 +64,8 @@ rq2 <- ggplot(df, mapping = aes(x=PlainRatio, y=MeanRatio, colour = Algorithm, s
   ##     , plot.title = element_text(size=12)) +
   ggtitle("RQ2: Performance as a function of plain ratio") +
   theme_classic() +
-theme(legend.position = "none")
+theme(legend.position = "right")
 
-## ggsave("../plots/RQ2.png", plot = rq2, device = "png", height = 4, width = 7)
+ggsave("../plots/RQ2.png", plot = rq2, device = "png", height = 4, width = 7)
 
 fits <- df %>% group_by(Algorithm) %>% do(model = lm(MeanRatio ~ PlainRatio, data = .))

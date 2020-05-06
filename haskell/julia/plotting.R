@@ -32,4 +32,6 @@ rq1 <- ggplot(rq1DF, mapping = aes(x=Variants, y=MeanMin, shape=Algorithm, color
   ylab("Time [min] to solve all Variants") +
   theme(legend.position = "bottom")
 
-ggsave("../plots/RQ1.png", plot = rq1, height = 4, width = 7, device = "png")
+## ggsave("../plots/RQ1.png", plot = rq1, height = 4, width = 7, device = "png")
+
+########################### RQ3 tests ##################################
