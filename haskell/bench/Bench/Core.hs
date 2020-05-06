@@ -1,9 +1,8 @@
 module Core where
 
 import           Control.Arrow           (first, second)
-import           Criterion.Main
-import           Criterion.Main.Options
-import           Criterion.Types         (Config (..))
+import           Gauge.Main
+import           Gauge
 import           Control.DeepSeq
 import           Control.Monad           (replicateM, foldM, liftM2)
 import           Data.List               (sort,splitAt,intersperse,foldl1',delete,(\\),genericLength)

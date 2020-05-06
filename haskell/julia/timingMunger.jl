@@ -4,7 +4,7 @@ using Query  # Tidyverse
 using Plots  # for plotting
 
 ### get the data in a data frame
-dataFile = "../auto_dead_core_timings.csv"
+dataFile = "../fin_raw.csv"
 df = CSV.File(dataFile) |> DataFrame
 
 ### helper functions
@@ -13,7 +13,7 @@ id = x -> x
 function mungeName(nameString) arr = split(nameString, "/") end
 
 function genCol(df, colName, index, f)
-    df[colName] = map(name -> mungeName(name) |> x -> getindex(x,index) |> f, df[:Name])
+    df[colName] = map(name -> mungeName(name) |> x -> getindex(x,index) |> f, df[:name])
     df
 end
 
@@ -63,4 +63,4 @@ end
 data = mungeDF!(df)
 
 ## write the file
-data |> CSV.write("../data/auto_dead_core_data.csv")
+data |> CSV.write("../data/fin_raw_singletons.csv")
