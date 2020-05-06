@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 73ec6a10a5a9770ccc023bbd4d3834f0e0a10ac7df9f67b43962c4e77981c546
+-- hash: 8cefaf97559ea0bb7b901656b7ca9f72ab06eb910d6e73b43df5d21b3e5dca9d
 
 name:           vsat
 version:        0.1.0.0
@@ -167,8 +167,8 @@ benchmark auto
     , base >=4.7 && <5
     , bytestring
     , containers
-    , criterion
     , deepseq
+    , gauge
     , genifunctors >=0.4
     , megaparsec >=8.0.0
     , mtl
@@ -374,8 +374,8 @@ benchmark fin
     , base >=4.7 && <5
     , bytestring
     , containers
-    , criterion
     , deepseq
+    , gauge
     , genifunctors >=0.4
     , megaparsec >=8.0.0
     , mtl

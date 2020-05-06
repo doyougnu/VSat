@@ -76,7 +76,7 @@ benchmarks:
     - -rtsopts
     - -with-rtsopts=-N
     dependencies:
-    - criterion
+    - gauge
     - vsat
 
   auto-dead:
@@ -139,7 +139,7 @@ benchmarks:
     - -rtsopts
     - -with-rtsopts=-N
     dependencies:
-    - criterion
+    - gauge
     - vsat
 
   fin-dead:
