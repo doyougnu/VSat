@@ -35,22 +35,6 @@ rq1 <- ggplot(rq1DF, mapping = aes(x=Variants, y=Mean, shape=Algorithm, color=Al
 
 ################# Singleton Analysis ##############################
 
-finSingData <- read.csv(file=finRawFile) %>%
-  mutate(Algorithm = as.factor(Algorithm), Config = as.factor(Config)) %>%
-  mutate(Algorithm = gsub("-->", "\U27f6", Algorithm), data = "Financial") %>%
-  group_by(Algorithm, Config) %>%
-  mutate(TimeCalc = time -append(0,head(time, -1))) %>% filter(TimeCalc > 0)
-
-## remove extreme outliers
-finSingData <- finSingData[-c(45,62,202),]
-## memory
-
-autoSingData <- read.csv(file=autoRawFile) %>%
-  mutate(Algorithm = as.factor(Algorithm), Config = as.factor(Config)) %>%
-  mutate(Algorithm = gsub("-->", "\U27f6", Algorithm), data = "Auto") %>%
-  group_by(Algorithm, Config) %>%
-  mutate(TimeCalc = time -append(0,head(time, -1))) %>% filter(TimeCalc > 0)
-
 rq3DF <- data %>% filter(Variants <= 2) %>%
   mutate(plotOrdering = as.numeric(substring(Config, 2))) %>%
   mutate(Config = factor(Config, levels = c("V1", "V2", "V3", "V4", "V5", "V6",
@@ -73,8 +57,25 @@ rq3 <- ggplot(rq3DF, aes(x=Config, y=Mean, fill=Algorithm, shape=Algorithm, colo
   theme(panel.grid.major.y = element_line(color = "grey")) +
   coord_flip()
 
-
 ggsave("../plots/RQ3.png", plot = rq3, height = 4, width = 7, device = "png")
+
+slow_down <- rq3DF %>% group_by(data,Algorithm) %>%  summarise(AvgMean = mean(Mean))
+
+finSingData <- read.csv(file=finRawFile) %>%
+  mutate(Algorithm = as.factor(Algorithm), Config = as.factor(Config)) %>%
+  mutate(Algorithm = gsub("-->", "\U27f6", Algorithm), data = "Financial") %>%
+  group_by(Algorithm, Config) %>%
+  mutate(TimeCalc = time -append(0,head(time, -1))) %>% filter(TimeCalc > 0)
+
+## remove extreme outliers
+finSingData <- finSingData[-c(45,62,202),]
+## memory
+
+autoSingData <- read.csv(file=autoRawFile) %>%
+  mutate(Algorithm = as.factor(Algorithm), Config = as.factor(Config)) %>%
+  mutate(Algorithm = gsub("-->", "\U27f6", Algorithm), data = "Auto") %>%
+  group_by(Algorithm, Config) %>%
+  mutate(TimeCalc = time -append(0,head(time, -1))) %>% filter(TimeCalc > 0)
 
 ### Do a two-way anova looking at both algorithm and config and their interaction
 res.fin.aov <- aov(TimeCalc ~ Algorithm * Config, data = finSingData)
@@ -126,7 +127,7 @@ res.fin.shaps <- shapiro.test(x = aov.fin.resids)
 
 ############################# Auto ANOVA ##############################
 ### Do a two-way anova looking at both algorithm and config and their interaction
-res.auto.aov <- aov(TimeCalc ~ Algorithm * Config, data = autoSingData)
+res.auto.aov <- aov(TimeCalc ~ Algorithm * Config, data = autoSingData %>% filter(Config == "V3" || Config == "V4"))
 
 ### Check the summary to see what is significant, all of it is as expected
 res.auto.sig <- summary(res.auto.aov)
@@ -159,6 +160,6 @@ res.auto.outliers <- plot(res.auto.aov, 1)
 res.auto.ass <- plot(res.auto.aov, 2)
 
 aov.auto.resids <- residuals(object=res.auto.aov)
-res.auto.shaps <- shapiro.test(x = aov.auto.resids)
 
 ## Shapiro-Wilk normality test
+res.auto.shaps <- shapiro.test(x = aov.auto.resids)
