@@ -35,16 +35,23 @@ rq1 <- ggplot(rq1DF, mapping = aes(x=Variants, y=Mean, shape=Algorithm, color=Al
 
 ################# Singleton Analysis ##############################
 
-finSingData <- read.csv(file=finRawFile) %>% mutate(Algorithm = as.factor(Algorithm), Config = as.factor(Config)) %>% mutate(Algorithm = gsub("-->", "\U27f6", Algorithm), data = "Financial") %>% group_by(Algorithm, Config) %>% mutate(TimeCalc = time -append(0,head(time, -1))) %>% filter(TimeCalc > 0)
+finSingData <- read.csv(file=finRawFile) %>%
+  mutate(Algorithm = as.factor(Algorithm), Config = as.factor(Config)) %>%
+  mutate(Algorithm = gsub("-->", "\U27f6", Algorithm), data = "Financial") %>%
+  group_by(Algorithm, Config) %>%
+  mutate(TimeCalc = time -append(0,head(time, -1))) %>% filter(TimeCalc > 0)
 
 ## remove extreme outliers
 finSingData <- finSingData[-c(45,62,202),]
 ## memory
 
-autoSingData <- read.csv(file=autoRawFile) %>% mutate(Algorithm = as.factor(Algorithm), Config = as.factor(Config)) %>% mutate(Algorithm = gsub("-->", "\U27f6", Algorithm), data = "Auto") %>% group_by(Algorithm, Config) %>% mutate(TimeCalc = time -append(0,head(time, -1))) %>% filter(TimeCalc > 0)
+autoSingData <- read.csv(file=autoRawFile) %>%
+  mutate(Algorithm = as.factor(Algorithm), Config = as.factor(Config)) %>%
+  mutate(Algorithm = gsub("-->", "\U27f6", Algorithm), data = "Auto") %>%
+  group_by(Algorithm, Config) %>%
+  mutate(TimeCalc = time -append(0,head(time, -1))) %>% filter(TimeCalc > 0)
 
-rq3DF <- data %>%
-  filter(Variants <= 2) %>%
+rq3DF <- data %>% filter(Variants <= 2) %>%
   mutate(plotOrdering = as.numeric(substring(Config, 2))) %>%
   mutate(Config = factor(Config, levels = c("V1", "V2", "V3", "V4", "V5", "V6",
                                             "V7", "V8", "V9", "V10")))
