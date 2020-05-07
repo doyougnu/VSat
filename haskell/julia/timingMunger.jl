@@ -4,7 +4,7 @@ using Query  # Tidyverse
 using Plots  # for plotting
 
 ### get the data in a data frame
-dataFile = "../fin_raw.csv"
+dataFile = "../auto_raw.csv"
 df = CSV.File(dataFile) |> DataFrame
 
 ### helper functions
@@ -63,4 +63,4 @@ end
 data = mungeDF!(df)
 
 ## write the file
-data |> CSV.write("../data/fin_raw_singletons.csv")
+data |> CSV.write("../data/auto_raw_singletons.csv")
