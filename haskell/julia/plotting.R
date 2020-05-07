@@ -43,25 +43,28 @@ finSingData <- finSingData[-c(45,62,202),]
 
 autoSingData <- read.csv(file=autoRawFile) %>% mutate(Algorithm = as.factor(Algorithm), Config = as.factor(Config)) %>% mutate(Algorithm = gsub("-->", "\U27f6", Algorithm), data = "Auto") %>% group_by(Algorithm, Config) %>% mutate(TimeCalc = time -append(0,head(time, -1))) %>% filter(TimeCalc > 0)
 
-rq3DF <- rbind(finSingData, autoSingData)
+rq3DF <- data %>%
+  filter(Variants <= 2) %>%
+  mutate(plotOrdering = as.numeric(substring(Config, 2))) %>%
+  mutate(Config = factor(Config, levels = c("V1", "V2", "V3", "V4", "V5", "V6",
+                                            "V7", "V8", "V9", "V10")))
 
-## previous TUKEY-HSD
-
-rq3 <- ggplot(rq3DF, aes(x=Algorithm, y=TimeCalc, fill=Config)) +
-  ## geom_violin(trim=FALSE) +
-  geom_boxplot(outlier.color="red", outlier.shape=16) +
-  geom_jitter(alpha=0.5) +
-  facet_wrap(.~ data, scales="free") +
+rq3 <- ggplot(rq3DF, aes(x=Config, y=Mean, fill=Algorithm, shape=Algorithm, color=Algorithm)) +
+  geom_point(size=6) +
+  scale_shape_manual(values = c(1,2,5,17)) +
   theme_classic() +
-  ## scale_shape_manual(values = c(1,2,5,17)) +
+  facet_wrap(.~ data, scales="free") +
   ## stat_summary(fun.data="mean_sdl"
   ##            , fun.args = list(mult=2)
   ##              , geom="pointrange"
   ##              , color="black"
   ##              , size=0.65) +
   ggtitle("RQ3: Overhead of Variational Solving on Plain Formulas") +
-  ylab("Time [s]") +
-  theme(legend.position = "none")
+  ylab("Time [s] to solve single version variant") +
+  xlab("Feature Model Version") +
+  theme(legend.position = "bottom") +
+  theme(panel.grid.major.y = element_line(color = "grey")) +
+  coord_flip()
 
 
 ggsave("../plots/RQ3.png", plot = rq3, height = 4, width = 7, device = "png")
