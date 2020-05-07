@@ -3,6 +3,7 @@ library(dplyr)
 library(tidyr)
 library(cowplot)
 library(latex2exp)
+library(broom)
 
 finResultsFile <- "../data/fin_comp_data.csv"
 autoResultsFile <- "../data/auto_comp_data.csv"
@@ -67,3 +68,8 @@ rq2 <- ggplot(df, mapping = aes(x=PlainRatio, y=MeanRatio, colour = Algorithm, s
 theme(legend.position = "none")
 
 ggsave("../plots/RQ2.png", plot = rq2, device = "png", height = 4, width = 7)
+
+
+### fits of the linear model
+### check the stats with > glance(fits, model)
+fits <- df %>% group_by(Algorithm) %>% do(model = lm(MeanRatio ~ PlainRatio, data = .))
