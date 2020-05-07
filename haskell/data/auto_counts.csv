@@ -1,0 +1,4 @@
+Config,Variants,Sat,UnSat
+V1*V2,4,3,1
+V1*V2*V3,8,4,4
+V1*V2*V3*V4,16,8,8
