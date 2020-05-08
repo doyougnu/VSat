@@ -4,6 +4,9 @@ library(cowplot)
 library(tidyr)
 library(latex2exp)
 library(Hmisc)
+library(broom)
+library(ggpubr)
+library(scales)
 
 finResultsFile <- "../data/fin_data.csv"
 autoResultsFile <- "../data/auto_data.csv"
@@ -20,24 +23,55 @@ autoDF <- autoData %>% mutate(data = "Auto") # %>% select(Mean, Algorithm, Compr
 
 finCountData  <- read.csv(file=finCountsFile) %>% mutate(data = "Financial")
 autoCountData <- read.csv(file=autoCountsFile) %>% mutate(data = "Auto")
-countData     <- rbind(finCountData, autoCountData) %>% mutate(SatRatio = Sat / UnSat) %>% mutate(Sat = as.factor(Sat), UnSat = as.factor(UnSat))
+autoRatio <- autoCountData %>% group_by(Variants) %>% count(Satisfiable) %>% pivot_wider(names_from=Satisfiable, values_from=n) %>% mutate(UnSatRatio = UnSat / (UnSat + Sat))
+finRatio <- finCountData %>% group_by(Variants) %>% count(Satisfiable) %>% pivot_wider(names_from=Satisfiable, values_from=n) %>% mutate(UnSatRatio = signif(UnSat / (UnSat + Sat), 3))
 
 data <- rbind(finDF, autoDF)
+rq1DF <- data %>% filter(Variants > 2) %>% group_by(Algorithm) %>% arrange(Variants)
 
-rq1DF <- data %>% filter(Variants > 2) %>% group_by(Algorithm) %>% arrange(Variants) %>% merge(countData)
-
-rq1 <- ggplot(rq1DF) +
+rq1Top <- ggplot(rq1DF) +
   geom_line(aes(x=Variants, y=Mean, color=Algorithm)) +
   geom_point(aes(x=Variants, y=Mean, shape=Algorithm, color=Algorithm),size=3) +
   scale_shape_manual(values = c(1,2,5,17)) +
   facet_wrap(. ~ data, scales = "free") +
-  geom_bar(aes(x=Variants, fill=Sat*100,size=5)) +
   theme_classic() +
   ggtitle("RQ1: Performance as variants increase") +
   ylab("Time [Min.] to solve all Variants") +
-  theme(legend.position = "bottom")
+  theme(legend.position = "right") +
+  theme(axis.title.x = element_blank(),axis.text.x = element_blank(),
+        axis.line.x = element_blank(), axis.ticks.x = element_blank())
 
-## ggsave("../plots/RQ1.png", plot = rq1, height = 4, width = 7, device = "png")
+rq1AutoBottom <- ggplot(autoCountData, aes(x=Variants)) +
+  geom_bar(aes(fill=Satisfiable), stat="count", width=0.5) +
+  geom_text(data=autoRatio, aes(label=paste(UnSatRatio, "%"), angle=90, y=20)) +
+  ## stat_bin(aes()),
+  ##          geom="text", position="identity") +
+  theme_classic() +
+  theme(legend.position = "none") +
+  scale_y_continuous(expand=c(0.3,0))
+
+rq1FinBottom <- ggplot(finCountData, aes(x=Variants)) +
+  geom_bar(aes(fill=Satisfiable), stat="count", width=40) +
+  geom_text(data=finRatio
+          , aes(label=paste(UnSatRatio, "%"), angle=90, y=1300)
+          , position=position_dodge(width=10)) +
+  theme_classic() +
+  theme(axis.title.y = element_blank()) +
+  scale_y_continuous(expand=c(0.3,0))
+
+legend1 <- get_legend(rq1FinBottom)
+legend2 <- get_legend(rq1Top)
+
+rq1 <- ggarrange(rq1Top,
+                 ggarrange(rq1AutoBottom, rq1FinBottom, common.legend=TRUE, legend="bottom"),
+                 ncol=1,
+                 common.legend=TRUE,
+                 legend = "right",
+                 align="v"
+                 ## heights = c(4,2)
+                 )
+
+ggsave("../plots/RQ1.png", plot = rq1, height = 6, width = 7, device = "png")
 
 ################# Singleton Analysis ##############################
 
@@ -63,7 +97,7 @@ rq3 <- ggplot(rq3DF, aes(x=Config, y=Mean, fill=Algorithm, shape=Algorithm, colo
   theme(panel.grid.major.y = element_line(color = "grey")) +
   coord_flip()
 
-ggsave("../plots/RQ3.png", plot = rq3, height = 4, width = 7, device = "png")
+## ggsave("../plots/RQ3.png", plot = rq3, height = 4, width = 7, device = "png")
 
 slow_down <- rq3DF %>% group_by(data,Algorithm) %>%  summarise(AvgMean = mean(Mean))
 
@@ -104,12 +138,12 @@ fin.tuk_res <- TukeyHSD(res.fin.aov, which = "Algorithm:Config") %>%
   arrange(adj.p.value)
 
 ### Check leverage of the observations for outliers
-res.fin.outliers <- plot(res.fin.aov, 1)
+## res.fin.outliers <- plot(res.fin.aov, 1)
 ### observations 251, 148 and 307 are severe outliers for this data
 
 
 ### Check the normality assumption of the ANOVA
-res.fin.ass <- plot(res.fin.aov, 2)
+## res.fin.ass <- plot(res.fin.aov, 2)
 ### its bad enough to check the stats directly with the shapiro-wilk test
 
 ## check residuals
@@ -151,11 +185,11 @@ auto.tuk_res <- TukeyHSD(res.auto.aov, which = "Algorithm:Config") %>%
 
 
 ### Check leverage of the observations for outliers
-res.auto.outliers <- plot(res.auto.aov, 1)
+## res.auto.outliers <- plot(res.auto.aov, 1)
 
 
 ### Check the normality assumption of the ANOVA
-res.auto.ass <- plot(res.auto.aov, 2)
+## res.auto.ass <- plot(res.auto.aov, 2)
 
 aov.auto.resids <- residuals(object=res.auto.aov)
 
