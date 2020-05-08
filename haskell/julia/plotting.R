@@ -134,6 +134,7 @@ fin.tuk_res <- TukeyHSD(res.fin.aov, which = "Algorithm:Config") %>%
   select(-Dump) %>%
   ## remove out-group comparisons between different variants, e.g., V1 - V10
   filter(ConfigLeft == ConfigRight) %>%
+  mutate(Comparison=paste(AlgLeft,":",AlgRight,":",ConfigLeft, sep="")) %>%
   ## sort by p-value
   arrange(adj.p.value)
 
@@ -144,7 +145,6 @@ fin.tuk_res <- TukeyHSD(res.fin.aov, which = "Algorithm:Config") %>%
 
 ### Check the normality assumption of the ANOVA
 ## res.fin.ass <- plot(res.fin.aov, 2)
-### its bad enough to check the stats directly with the shapiro-wilk test
 
 ## check residuals
 aov.fin.resids <- residuals(object=res.fin.aov)
@@ -189,7 +189,7 @@ auto.tuk_res <- TukeyHSD(res.auto.aov, which = "Algorithm:Config") %>%
 
 
 ### Check the normality assumption of the ANOVA
-## res.auto.ass <- plot(res.auto.aov, 2)
+res.auto.ass <- plot(res.auto.aov, 2)
 
 aov.auto.resids <- residuals(object=res.auto.aov)
 
@@ -201,7 +201,8 @@ res.auto.shaps <- shapiro.test(x = aov.auto.resids)
 options(scipen = 999)
 rq3pvDF <- rbind(auto.tuk_res, fin.tuk_res) %>% arrange(adj.p.value)
 
-rq3pv <- ggplot(rq3pvDF, aes(x=AlgLeft, y=AlgRight, shape=data)) +
-  geom_point(aes(size=sizeVal)) +
-  geom_jitter() +
-  theme_classic()
+fin.pval.plt <- ggdotchart(fin.tuk_res, x="Comparison", y="adj.p.value",
+                           color="AlgLeft", shape="AlgLeft",
+                           sorting="descending", dot.size=2,
+                           ggtheme=theme_pubr(), y.text.col=TRUE) +
+  theme_cleveland() + scale_shape_manual(values = c(2,5,17))

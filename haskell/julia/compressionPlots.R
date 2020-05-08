@@ -67,9 +67,33 @@ rq2 <- ggplot(df, mapping = aes(x=PlainRatio, y=MeanRatio, colour = Algorithm, s
   theme_classic() +
 theme(legend.position = "none")
 
-ggsave("../plots/RQ2.png", plot = rq2, device = "png", height = 4, width = 7)
+ydens <- axis_canvas(rq2, axis="y") +
+  geom_density(data=df, aes(x=MeanRatio, fill=Algorithm, alpha=0.7, size=0.2))
+
+rq22 <- insert_yaxis_grob(rq2, ydens, grid::unit(.2, "null"),position="right")
+
+## ggsave("../plots/RQ2.png", plot = rq2, device = "png", height = 4, width = 7)
 
 
 ### fits of the linear model
 ### check the stats with > glance(fits, model)
 fits <- df %>% group_by(Algorithm) %>% do(model = lm(MeanRatio ~ PlainRatio, data = .))
+
+
+### Perform the anova
+
+res.aov <- aov(MeanRatio ~ PlainRatio * Algorithm, data = df)
+
+### Check the summary to see what is significant, all of it is as expected
+res.sig <- summary(res.aov)
+
+### Autoally, perform the pair-wise Tukey comparison to test the difference
+### between groups
+tuk_res <- TukeyHSD(res.aov)
+
+res.ass <- plot(res.aov, 2)
+
+aov.resids <- residuals(object=res.aov)
+
+## Shapiro-Wilk normality test
+res.shaps <- shapiro.test(x = aov.resids)
