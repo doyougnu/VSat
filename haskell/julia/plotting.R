@@ -71,7 +71,7 @@ rq1 <- ggarrange(rq1Top,
                  ## heights = c(4,2)
                  )
 
-ggsave("../plots/RQ1.png", plot = rq1, height = 6, width = 7, device = "png")
+## ggsave("../plots/RQ1.png", plot = rq1, height = 6, width = 7, device = "png")
 
 ################# Singleton Analysis ##############################
 
