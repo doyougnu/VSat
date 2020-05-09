@@ -23,6 +23,7 @@ autoDF <- autoData %>% mutate(data = "Auto") # %>% select(Mean, Algorithm, Compr
 
 finCountData  <- read.csv(file=finCountsFile) %>% mutate(data = "Financial")
 autoCountData <- read.csv(file=autoCountsFile) %>% mutate(data = "Auto")
+
 autoRatio <- autoCountData %>% group_by(Variants) %>% count(Satisfiable) %>% pivot_wider(names_from=Satisfiable, values_from=n) %>% mutate(UnSatRatio = UnSat / (UnSat + Sat))
 finRatio <- finCountData %>% group_by(Variants) %>% count(Satisfiable) %>% pivot_wider(names_from=Satisfiable, values_from=n) %>% mutate(UnSatRatio = signif(UnSat / (UnSat + Sat), 3))
 
@@ -71,7 +72,7 @@ rq1 <- ggarrange(rq1Top,
                  ## heights = c(4,2)
                  )
 
-## ggsave("../plots/RQ1.png", plot = rq1, height = 6, width = 7, device = "png")
+ggsave("../plots/RQ1.png", plot = rq1, height = 6, width = 7, device = "png")
 
 ################# Singleton Analysis ##############################
 
@@ -84,6 +85,7 @@ rq3 <- ggplot(rq3DF, aes(x=Config, y=Mean, fill=Algorithm, shape=Algorithm, colo
   geom_point(size=6) +
   scale_shape_manual(values = c(1,6,5,17)) +
   theme_classic() +
+  ## scale_y_continuous(limits=c(0,100), breaks=seq(0,100,10)) +
   facet_wrap(.~ data, scales="free") +
   ## stat_summary(fun.data="mean_sdl"
   ##            , fun.args = list(mult=2)
@@ -97,7 +99,7 @@ rq3 <- ggplot(rq3DF, aes(x=Config, y=Mean, fill=Algorithm, shape=Algorithm, colo
   theme(panel.grid.major.y = element_line(color = "grey")) +
   coord_flip()
 
-## ggsave("../plots/RQ3.png", plot = rq3, height = 4, width = 7, device = "png")
+ggsave("../plots/RQ3.png", plot = rq3, height = 4, width = 7, device = "png")
 
 slow_down <- rq3DF %>% group_by(data,Algorithm) %>%  summarise(AvgMean = mean(Mean))
 
