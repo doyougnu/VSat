@@ -199,10 +199,14 @@ res.auto.shaps <- shapiro.test(x = aov.auto.resids)
 
 ########################## Plot p-values ##################
 options(scipen = 999)
-rq3pvDF <- rbind(auto.tuk_res, fin.tuk_res) %>% arrange(adj.p.value)
+## rq3pvDF <- rbind(auto.tuk_res, fin.tuk_res) %>% arrange(adj.p.value)
 
 fin.pval.plt <- ggdotchart(fin.tuk_res, x="Comparison", y="adj.p.value",
                            color="AlgLeft", shape="AlgLeft",
-                           sorting="descending", dot.size=2,
+                           sorting="descending", dot.size=3,
                            ggtheme=theme_pubr(), y.text.col=TRUE) +
-  theme_cleveland() + scale_shape_manual(values = c(2,5,17))
+  scale_y_continuous(breaks=seq(0,1,0.05)) +
+  theme_cleveland() +
+  scale_shape_manual(values = c(2,5,17)) +
+
+ggsave("../plots/RQ2_finPval.png", plot = fin.pval.plt, height = 6, width = 7, device = "png")
