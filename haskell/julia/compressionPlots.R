@@ -52,27 +52,24 @@ df <- rbind(autoSharedDF, finSharedDF) %>% mutate(PlainRatio = PlainCount / (Chc
 
 
 rq2 <- ggplot(df, mapping = aes(x=PlainRatio, y=MeanRatio, colour = Algorithm, shape = Algorithm)) +
-  geom_point(size=3) +
+  geom_point(size=3, alpha=0.7) +
   ## ylab(TeX("% SpeedUp \t  $\\frac{v \\rightarrow v}{v \\rightarrow p}$")) +
   ylab("% SpeedUp") +
   xlab(TeX("Plain Ratio:  $\\frac{|Plain Terms|}{|Total Terms|}}")) +
-  ## scale_x_log10() +
-  ## scale_y_log10() +
   scale_shape_manual(values = c(1,2,17)) +
-  geom_smooth(method=lm, formula = y ~ x, se=FALSE) +
-  ## geom_text(nudge_y = 0.012, nudge_x = 0.003, angle = 45, check_overlap =FALSE) +
-  ## theme(legend.position = c(.85,.90)
-  ##     , plot.title = element_text(size=12)) +
+  geom_smooth(method=lm, formula = y ~ x, se=TRUE, alpha=0.15) +
   ggtitle("RQ2: Performance as a function of plain ratio") +
   theme_classic() +
-theme(legend.position = "none")
+  stat_cor(aes(color=Algorithm),
+           label.x=0.74, label.y.npc=c(0.91, 0.9, 0.88)) +
+  theme(legend.position = c(0.07, 0.83))
 
-ydens <- axis_canvas(rq2, axis="y") +
-  geom_density(data=df, aes(x=MeanRatio, fill=Algorithm, alpha=0.7, size=0.2))
+## rq22 <- ggscatter(df, x="PlainRatio", y="MeanRatio", color="Algorithm",
+##                   palette="jco", size=3, alpha=0.7, ggtheme=theme_bw()
+##                   , add="reg.line", shape="Algorithm", conf.int = TRUE) +
+##   scale_shape_manual(values = c(1,2,17))
 
-rq22 <- insert_yaxis_grob(rq2, ydens, grid::unit(.2, "null"),position="right")
-
-## ggsave("../plots/RQ2.png", plot = rq2, device = "png", height = 4, width = 7)
+ggsave("../plots/RQ2.png", plot = rq2, device = "png", height = 4, width = 7)
 
 
 ### fits of the linear model
