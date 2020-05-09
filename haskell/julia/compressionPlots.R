@@ -4,6 +4,7 @@ library(tidyr)
 library(cowplot)
 library(latex2exp)
 library(broom)
+library(scales)
 
 finResultsFile <- "../data/fin_comp_data.csv"
 autoResultsFile <- "../data/auto_comp_data.csv"
@@ -56,12 +57,12 @@ rq2 <- ggplot(df, mapping = aes(x=PlainRatio, y=MeanRatio, colour = Algorithm, s
   ## ylab(TeX("% SpeedUp \t  $\\frac{v \\rightarrow v}{v \\rightarrow p}$")) +
   ylab("% SpeedUp") +
   xlab(TeX("Plain Ratio:  $\\frac{|Plain Terms|}{|Total Terms|}}")) +
-  scale_shape_manual(values = c(1,2,17)) +
+  scale_shape_manual(values = c(1,6,17)) +
   geom_smooth(method=lm, formula = y ~ x, se=TRUE, alpha=0.15) +
   ggtitle("RQ2: Performance as a function of plain ratio") +
   theme_classic() +
   stat_cor(aes(color=Algorithm),
-           label.x=0.74, label.y.npc=c(0.91, 0.9, 0.88)) +
+           label.x=0.74, label.y.npc=c(0.91, 0.89, 0.88)) +
   theme(legend.position = c(0.07, 0.83))
 
 ## rq22 <- ggscatter(df, x="PlainRatio", y="MeanRatio", color="Algorithm",
@@ -72,13 +73,7 @@ rq2 <- ggplot(df, mapping = aes(x=PlainRatio, y=MeanRatio, colour = Algorithm, s
 ggsave("../plots/RQ2.png", plot = rq2, device = "png", height = 4, width = 7)
 
 
-### fits of the linear model
-### check the stats with > glance(fits, model)
-fits <- df %>% group_by(Algorithm) %>% do(model = lm(MeanRatio ~ PlainRatio, data = .))
-
-
 ### Perform the anova
-
 res.aov <- aov(MeanRatio ~ PlainRatio * Algorithm, data = df)
 
 ### Check the summary to see what is significant, all of it is as expected
@@ -86,7 +81,7 @@ res.sig <- summary(res.aov)
 
 ### Autoally, perform the pair-wise Tukey comparison to test the difference
 ### between groups
-tuk_res <- TukeyHSD(res.aov)
+tuk_res <- TukeyHSD(res.aov) %>% tidy %>% mutate(pVal = scientific(adj.p.value, 3))
 
 res.ass <- plot(res.aov, 2)
 

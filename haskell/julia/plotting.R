@@ -32,7 +32,7 @@ rq1DF <- data %>% filter(Variants > 2) %>% group_by(Algorithm) %>% arrange(Varia
 rq1Top <- ggplot(rq1DF) +
   geom_line(aes(x=Variants, y=Mean, color=Algorithm)) +
   geom_point(aes(x=Variants, y=Mean, shape=Algorithm, color=Algorithm),size=3) +
-  scale_shape_manual(values = c(1,2,5,17)) +
+  scale_shape_manual(values = c(1,6,5,17)) +
   facet_wrap(. ~ data, scales = "free") +
   theme_classic() +
   ggtitle("RQ1: Performance as variants increase") +
@@ -82,7 +82,7 @@ rq3DF <- data %>% filter(Variants <= 2) %>%
 
 rq3 <- ggplot(rq3DF, aes(x=Config, y=Mean, fill=Algorithm, shape=Algorithm, color=Algorithm)) +
   geom_point(size=6) +
-  scale_shape_manual(values = c(1,2,5,17)) +
+  scale_shape_manual(values = c(1,6,5,17)) +
   theme_classic() +
   facet_wrap(.~ data, scales="free") +
   ## stat_summary(fun.data="mean_sdl"
@@ -93,7 +93,7 @@ rq3 <- ggplot(rq3DF, aes(x=Config, y=Mean, fill=Algorithm, shape=Algorithm, colo
   ggtitle("RQ3: Overhead of Variational Solving on Plain Formulas") +
   ylab("Time [s] to solve single version variant") +
   xlab("Feature Model Version") +
-  theme(legend.position = "right") +
+  theme(legend.position = "bottom") +
   theme(panel.grid.major.y = element_line(color = "grey")) +
   coord_flip()
 
@@ -130,11 +130,13 @@ fin.tuk_res <- TukeyHSD(res.fin.aov, which = "Algorithm:Config") %>%
   mutate(ConfigLeft = gsub("-", "", ConfigLeft),
          ConfigRight = gsub(":","", ConfigRight),
          AlgRight = gsub(":|-", "", AlgRight),
-         data = "Financial") %>%
+         data = "Financial",
+         pVal = scientific(adj.p.value, 3)) %>%
   select(-Dump) %>%
   ## remove out-group comparisons between different variants, e.g., V1 - V10
   filter(ConfigLeft == ConfigRight) %>%
-  mutate(Comparison=paste(AlgLeft,":",AlgRight,":",ConfigLeft, sep="")) %>%
+  mutate(Comparison=paste(AlgLeft,":",AlgRight,":",ConfigLeft, sep=""),
+         AlgComparison=paste(AlgLeft,":",AlgRight, sep="")) %>%
   ## sort by p-value
   arrange(adj.p.value)
 
@@ -176,7 +178,10 @@ auto.tuk_res <- TukeyHSD(res.auto.aov, which = "Algorithm:Config") %>%
   mutate(ConfigLeft = gsub("-", "", ConfigLeft),
          ConfigRight = gsub(":","", ConfigRight),
          AlgRight = gsub(":|-", "", AlgRight),
-         data = "Auto") %>%
+         data = "Auto",
+         pVal = scientific(adj.p.value, 3),
+         Comparison=paste(AlgLeft,":",AlgRight,":",ConfigLeft, sep=""),
+         AlgComparison=paste(AlgLeft,":",AlgRight, sep="")) %>%
   select(-Dump) %>%
   ## remove out-group comparisons between different variants, e.g., V1 - V10
   filter(ConfigLeft == ConfigRight) %>%
@@ -199,14 +204,57 @@ res.auto.shaps <- shapiro.test(x = aov.auto.resids)
 
 ########################## Plot p-values ##################
 options(scipen = 999)
-## rq3pvDF <- rbind(auto.tuk_res, fin.tuk_res) %>% arrange(adj.p.value)
+rq3pvDF <- rbind(auto.tuk_res, fin.tuk_res) %>%
+  arrange(pVal) %>%
+  mutate(Significance = case_when(adj.p.value <= 0.05 ~ "Significant",
+                                  TRUE ~ "Not Significant"),
+         SigLabel = case_when(Significance == "Significant" ~ Comparison,
+                              TRUE ~ ""),
+         SigColor = paste(AlgLeft,":",Significance,sep=""),
+         Version = factor(ConfigLeft, levels = c("V1", "V2", "V3", "V4", "V5", "V6", "V7", "V8", "V9", "V10")))
 
-fin.pval.plt <- ggdotchart(fin.tuk_res, x="Comparison", y="adj.p.value",
-                           color="AlgLeft", shape="AlgLeft",
-                           sorting="descending", dot.size=3,
-                           ggtheme=theme_pubr(), y.text.col=TRUE) +
-  scale_y_continuous(breaks=seq(0,1,0.05)) +
-  theme_cleveland() +
-  scale_shape_manual(values = c(2,5,17)) +
 
-ggsave("../plots/RQ2_finPval.png", plot = fin.pval.plt, height = 6, width = 7, device = "png")
+
+## fin.pval.plt <- ggdotchart(rq3pvDF %>% filter(Significance == "Significant"),
+##                            x="ConfigLeft", y="AlgComparison",
+##                            shape="AlgLeft",
+##                            dot.size=3, label="pVal", fill="adj.p.value",
+##                            font.label = list(rotate=TRUE, color ="AlgLeft" , vjust=2,rotate=TRUE),
+##                            ggtheme=theme_pubr(), y.text.col=TRUE) +
+##   facet_wrap(. ~ data, scales = "free") +
+##   theme_classic() +
+##   ## theme(legend.position="none") +
+##   theme(panel.grid.major.y = element_line(color = "grey")) +
+##   scale_shape_manual(values = c(2,5,17))
+
+
+pval.plt <- ggplot(rq3pvDF, aes(x=AlgLeft, y=AlgRight, size=(1-adj.p.value),
+                                shape=SigColor, color=Significance)) +
+  geom_point() +
+  geom_jitter() +
+  ## geom_text(size=5) +
+  ## geom_tile()
+  ## scale_shape_manual(values = c(6,5,2)) +
+  ## scale_color_manual
+  theme_classic() +
+  facet_grid(data ~ Version, scales="free") +
+  scale_size_continuous(range=c(2,4)) +
+  scale_shape_manual(values = c(6,5,18,2,17)) +
+  ## scale_shape_discrete(name = "Algorithm",
+  ##                      labels=c("p\U27f6v","v\U27f6p", "v\U27f6v", "", "", "")) +
+  guides(size=FALSE, shape=FALSE) +
+  ## scale_color_manual(values = c("white", "lightblue2"))
+  ## stat_summary(fun.data="mean_sdl"
+  ##            , fun.args = list(mult=2)
+  ##              , geom="pointrange"
+  ##              , color="black"
+  ##              , size=0.65) +
+  ggtitle("RQ3: Statistical significance comparison matrix") +
+  ylab("Algorithm") +
+  theme(panel.grid.major.y = element_line(color = "lightgrey", linetype="dashed"),
+        axis.text.x = element_text(angle = 90, hjust = 1),
+        axis.title.x = element_blank(),
+        legend.position = "bottom")
+
+
+ggsave("../plots/RQ3_PVal.png", plot = pval.plt, height = 4, width = 7, device = "png")
