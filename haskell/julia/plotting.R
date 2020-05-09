@@ -10,8 +10,8 @@ library(scales)
 
 finResultsFile <- "../data/fin_data.csv"
 autoResultsFile <- "../data/auto_data.csv"
-finRawFile <- "../data/fin_raw_singletons.csv"
-autoRawFile <- "../data/auto_raw_singletons.csv"
+finRawFile <- "../data/fin_rq3_singletons.csv"
+autoRawFile <- "../data/auto_rq3_singletons.csv"
 finCountsFile <- "../data/fin_counts.csv"
 autoCountsFile <- "../data/auto_counts.csv"
 
