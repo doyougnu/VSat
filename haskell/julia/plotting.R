@@ -57,7 +57,7 @@ rq1 <- ggplot(rq1DF) +
   theme_classic() +
   ggtitle("RQ1: Performance as variants increase") +
   ylab("Time [Min.] to solve all Variants") +
-  theme(legend.position = "right")
+  theme(legend.position = c(0.6,0.75))
   ## theme(axis.title.x = element_blank(),axis.text.x = element_blank(),
   ##       axis.line.x = element_blank(), axis.ticks.x = element_blank())
 
@@ -91,7 +91,7 @@ rq1 <- ggplot(rq1DF) +
 ##                  ## heights = c(4,2)
 ##                  )
 
-## ggsave("../plots/RQ1.png", plot = rq1, height = 4, width = 7, device = "png")
+ggsave("../plots/RQ1.png", plot = rq1, height = 4, width = 7, device = "png")
 
 ################# Singleton Analysis ##############################
 
