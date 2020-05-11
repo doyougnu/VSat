@@ -15,9 +15,11 @@ import qualified Data.SBV                as S
 import qualified Data.SBV.Control        as SC
 import qualified Data.SBV.Internals      as SI
 import           Data.Text               (pack, unpack,Text)
-import qualified Data.Text.IO            as T (writeFile)
+import qualified Data.Text.IO            as T (writeFile, appendFile)
 import           System.IO
 import           Text.Megaparsec         (parse)
+import           Data.Time.Calendar
+import           Data.Time
 
 import           Api
 import           CaseStudy.Auto.Auto
@@ -360,26 +362,31 @@ main = do
   --     -- , bgroup "Z3" (compRatioBenches z3DefConf)
   --   -- , bgroup "Boolector" (benches boolectorDefConf)
   --   ]
-  let problems = [ justbPropV1
-                 , justbPropV12
-                 , justbPropV123
-                 , justbPropV1234
-                 , justbPropV12345
-                 , justbPropV123456
-                 , justbPropV1234567
-                 , justbPropV12345678
-                 , justbPropV123456789
-                 , bProp
+  let countFile = "fin_diagnostics.csv"
+      problems = [ ("V1: "                         , justbPropV1)
+                 , ("V1*V2: "                         , justbPropV12)
+                 , ("V1*V2*V3: "                      , justbPropV123)
+                 , ("V1*V2*V3*V4: "                   , justbPropV1234)
+                 , ("V1*V2*V3*V4*V5: "                , justbPropV12345)
+                 , ("V1*V2*V3*V4*V5*V6: "             , justbPropV123456)
+                 , ("V1*V2*V3*V4*V5*V6*V7: "          , justbPropV1234567)
+                 , ("V1*V2*V3*V4*V5*V6*V7*V8: "       , justbPropV12345678)
+                 , ("V1*V2*V3*V4*V5*V6*V7*V8*V9: "    , justbPropV123456789)
+                 , ("V1*V2*V3*V4*V5*V6*V7*V8*V9*V10: ", bProp)
                  ]
+      newline = flip (++) "\n"
+      runner f (desc,prb) = f prb >>= T.appendFile countFile . pack . newline . ((++) desc) . show
 
       diagnostics p = do res <- sat p
-                         putStrLn "-------- Total Number -----"
-                         putStrLn $ show $ Result.size res
-                         putStrLn "-------- Num not changed -----"
-                         putStrLn $ show $ numUnChanged res
-                         putStrLn "-------- Maximum clause -----"
-                         putStrLn $ show $ maxClauseSize res
-  mapM_ diagnostics problems
+                         return $ "Num not changed: " ++ (show $ numUnChanged res) ++ "\n" ++ "Maximum clause " ++ (show $ maxClauseSize res)
+
+  fileHeader <- fmap (pack . flip (++) "\n"
+                      . (++) "Generated on (Year, Month, Day): "
+                      . show . toGregorian . utctDay) getCurrentTime
+
+  T.appendFile countFile fileHeader
+  -- v-->v
+  mapM_ (runner diagnostics) problems
   -- putStrLn $ show $ ds
   -- putStrLn "-------- Clauses -----"
   -- mapM (putStrLn . show) $ getSignificantClauses res

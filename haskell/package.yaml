@@ -76,6 +76,7 @@ benchmarks:
     - -rtsopts
     - -with-rtsopts=-N
     dependencies:
+    - time
     - gauge
     - vsat
 
@@ -139,6 +140,7 @@ benchmarks:
     - -rtsopts
     - -with-rtsopts=-N
     dependencies:
+    - time
     - gauge
     - vsat
 
