@@ -5,6 +5,7 @@ library(cowplot)
 library(latex2exp)
 library(broom)
 library(scales)
+library(ggpubr)
 
 finResultsFile <- "../data/fin_comp_data.csv"
 autoResultsFile <- "../data/auto_comp_data.csv"
