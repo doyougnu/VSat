@@ -363,11 +363,13 @@ deriveValues' (getResMap -> res) model =
 
 ------------------------------ Diagnostics -------------------------------------
 maxClauseSize :: Result d -> Integer
-maxClauseSize = foldr (\v acc -> max acc (countOrs v)) 0 . getResMap
+maxClauseSize = foldr max' 0 . getResMap
+  where max' !v !acc = max acc (countOrs v)
 
 numUnChanged :: Resultable d => Result d -> Integer
-numUnChanged = foldr (\v acc -> acc + isFalse v) 0 . getResMap
+numUnChanged = foldr count 0 . getResMap
   where isFalse a = if a == false then 1 else 0
+        count !v !acc = acc + isFalse v
 
 size :: Result d -> Integer
 size = fromIntegral . M.size . getResMap
