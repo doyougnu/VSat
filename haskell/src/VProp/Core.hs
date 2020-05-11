@@ -317,6 +317,20 @@ numVars = getSum . trifoldMap (const 0) f f
 numChc :: VProp d a b -> Integer
 numChc = toInteger . length . trifoldMap (:[]) mempty mempty
 
+countConnective :: (BB_B -> Bool) -> VProp d a b -> Integer
+countConnective f (OpBB c l r) | f c       = 1 + go
+                               | otherwise = go
+  where go = countConnective f l + countConnective f r
+countConnective f (ChcB _ l r) = countConnective f l + countConnective f r
+countConnective f (OpB _ l)    = countConnective f l
+countConnective _ _            = 0
+
+countAnds :: VProp d a b -> Integer
+countAnds = countConnective ((==) And)
+
+countOrs :: VProp d a b -> Integer
+countOrs = countConnective ((==) Or)
+
 -- | Count the plain values in a tree
 numPlain :: VProp d a b -> Integer
 numPlain (LitB _) = 1

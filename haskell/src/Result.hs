@@ -29,6 +29,10 @@ module Result ( ResultProp(..)
               , getUnSatMap
               , insertToUnSat
               , getResultOnlySat
+              , maxClauseSize
+              , numUnChanged
+              , size
+              , getSignificantClauses
               ) where
 
 import           Control.DeepSeq (NFData)
@@ -46,9 +50,9 @@ import           Data.Map.Internal.Debug (showTree)
 import           SAT
 import           VProp.SBV()
 import           VProp.Boolean
-import           VProp.Core (dimToVar)
+import           VProp.Core (dimToVar, countOrs)
 import           VProp.Types             (BB_B (..), B_B (..), Config,
-                                          VProp (..), Var, Dim(..))
+                                          VProp (..), Var, Dim(..), ReadableProp)
 
 -- | A custom type whose only purpose is to define a monoid instance over VProp
 -- with logical or as the concat operation and false as unit. We constrain all
@@ -356,3 +360,17 @@ deriveValues (getResMap -> res) (M.toList -> model) =
 deriveValues' :: Result Text -> M.Map Text Bool -> (M.Map Text Bool)
 deriveValues' (getResMap -> res) model =
   fmap (solveLiterals . substitute (M.toList model)) res
+
+------------------------------ Diagnostics -------------------------------------
+maxClauseSize :: Result d -> Integer
+maxClauseSize = foldr (\v acc -> max acc (countOrs v)) 0 . getResMap
+
+numUnChanged :: Resultable d => Result d -> Integer
+numUnChanged = foldr (\v acc -> acc + isFalse v) 0 . getResMap
+  where isFalse a = if a == false then 1 else 0
+
+size :: Result d -> Integer
+size = fromIntegral . M.size . getResMap
+
+getSignificantClauses :: Resultable d => Result d -> [(d, VProp d d d)]
+getSignificantClauses = M.toList . M.filter (not . (==) false) . getResMap
