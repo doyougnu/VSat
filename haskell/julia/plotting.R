@@ -39,51 +39,59 @@ finRatio <- finCountData %>%
   replace_na(list(UnSatRatio = 0, UnSat = 0))
 
 data <- rbind(finDF, autoDF)
-rq1DF <- data %>% filter(Variants > 2) %>% group_by(Algorithm) %>% arrange(Variants)
+rq1DF <- data %>% filter(Variants >= 2) %>% group_by(Algorithm) %>% arrange(Variants)
 
-rq1Top <- ggplot(rq1DF) +
+breaks <- function(x) {
+  if (max(x) > 16) {
+    2^(1:10)
+  } else {
+    2^(1:4)}
+  }
+
+rq1 <- ggplot(rq1DF) +
   geom_line(aes(x=Variants, y=Mean/60, color=Algorithm)) +
   geom_point(aes(x=Variants, y=Mean/60, shape=Algorithm, color=Algorithm),size=3) +
   scale_shape_manual(values = c(1,6,5,17)) +
+  scale_x_continuous(breaks=breaks, limits=c(2,NA)) +
   facet_wrap(. ~ data, scales = "free") +
   theme_classic() +
   ggtitle("RQ1: Performance as variants increase") +
   ylab("Time [Min.] to solve all Variants") +
-  theme(legend.position = "right") +
-  theme(axis.title.x = element_blank(),axis.text.x = element_blank(),
-        axis.line.x = element_blank(), axis.ticks.x = element_blank())
+  theme(legend.position = "right")
+  ## theme(axis.title.x = element_blank(),axis.text.x = element_blank(),
+  ##       axis.line.x = element_blank(), axis.ticks.x = element_blank())
 
-rq1AutoBottom <- ggplot(autoCountData, aes(x=Variants)) +
-  geom_bar(aes(fill=Satisfiable), stat="count", width=0.5) +
-  geom_text(data=autoRatio, aes(label=paste(UnSatRatio, "%"), angle=90, y=20)) +
-  ## stat_bin(aes()),
-  ##          geom="text", position="identity") +
-  theme_classic() +
-  theme(legend.position = "none") +
-  scale_y_continuous(expand=c(0.3,0))
+## rq1AutoBottom <- ggplot(autoCountData, aes(x=Variants)) +
+##   geom_bar(aes(fill=Satisfiable), stat="count", width=0.5) +
+##   geom_text(data=autoRatio, aes(label=paste(UnSatRatio, "%"), angle=90, y=20)) +
+##   ## stat_bin(aes()),
+##   ##          geom="text", position="identity") +
+##   theme_classic() +
+##   theme(legend.position = "none") +
+##   scale_y_continuous(expand=c(0.3,0))
 
-rq1FinBottom <- ggplot(finCountData, aes(x=Variants)) +
-  geom_bar(aes(fill=Satisfiable), stat="count", width=40) +
-  geom_text(data=finRatio
-          , aes(label=paste(UnSatRatio, "%"), angle=90, y=1300)
-          , position=position_dodge(width=10)) +
-  theme_classic() +
-  theme(axis.title.y = element_blank()) +
-  scale_y_continuous(expand=c(0.3,0))
+## rq1FinBottom <- ggplot(finCountData, aes(x=Variants)) +
+##   geom_bar(aes(fill=Satisfiable), stat="count", width=40) +
+##   geom_text(data=finRatio
+##           , aes(label=paste(UnSatRatio, "%"), angle=90, y=1300)
+##           , position=position_dodge(width=10)) +
+##   theme_classic() +
+##   theme(axis.title.y = element_blank()) +
+##   scale_y_continuous(expand=c(0.3,0))
 
-legend1 <- get_legend(rq1FinBottom)
-legend2 <- get_legend(rq1Top)
+## legend1 <- get_legend(rq1FinBottom)
+## legend2 <- get_legend(rq1Top)
 
-rq1 <- ggarrange(rq1Top,
-                 ggarrange(rq1AutoBottom, rq1FinBottom, common.legend=TRUE, legend="bottom"),
-                 ncol=1,
-                 common.legend=TRUE,
-                 legend = "right",
-                 align="hv"
-                 ## heights = c(4,2)
-                 )
+## rq1 <- ggarrange(rq1Top,
+##                  ggarrange(rq1AutoBottom, rq1FinBottom, common.legend=TRUE, legend="bottom"),
+##                  ncol=1,
+##                  common.legend=TRUE,
+##                  legend = "right",
+##                  align="hv"
+##                  ## heights = c(4,2)
+##                  )
 
-ggsave("../plots/RQ1.png", plot = rq1, height = 6, width = 7, device = "png")
+## ggsave("../plots/RQ1.png", plot = rq1, height = 4, width = 7, device = "png")
 
 ################# Singleton Analysis ##############################
 

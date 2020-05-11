@@ -59,7 +59,7 @@ mkCascadeConf n xs = conjoin $ (take n xs) ++ (bnot <$> drop n xs)
 mkMultConf :: Int -> [ReadableProp d] -> ReadableProp d
 mkMultConf n xs = conjoin (bnot <$> drop n xs)
 
-justD1Conf         = mkMultConf 1 ds
+justD0Conf         = mkMultConf 1 ds
 justD01Conf        = mkMultConf 2 ds
 justD012Conf       = mkMultConf 3 ds
 justD0123Conf      = mkMultConf 4 ds
@@ -211,14 +211,14 @@ main = do
 --     , mkBench "v-->v" "V10" d9Conf (satWithConf (toDimProp d9Conf) solverConf) bProp
 --      -- , mkBench' "v-->v" "EvolutionAware" (satWithConf (toDimProp evoAwareConf) solverConf) bProp
 
-       mkBench "v-->v" "V1"                             justD0Conf (satWith solverConf) justbPropV1
-     , mkBench "v-->v" "V1*V2"                          justD01Conf (satWith solverConf) justbPropV12
-     , mkBench "v-->v" "V1*V2*V3"                       justD012Conf (satWith solverConf) justbPropV123
-     , mkBench "v-->v" "V1*V2*V3*V4"                    justD0123Conf (satWith solverConf) justbPropV1234
-     , mkBench "v-->v" "V1*V2*V3*V4*V5"                 justD01234Conf (satWith solverConf) justbPropV12345
-     , mkBench "v-->v" "V1*V2*V3*V4*V5*V6"              justD012345Conf (satWith solverConf) justbPropV123456
-     , mkBench "v-->v" "V1*V2*V3*V4*V5*V6*V7"           justD0123456Conf (satWith solverConf) justbPropV1234567
-     , mkBench "v-->v" "V1*V2*V3*V4*V5*V6*V7*V8"        justD01234567Conf (satWith solverConf) justbPropV12345678
+       mkBench "v-->v" "V1"                             justD0Conf (satWith solverConf)         justbPropV1
+     , mkBench "v-->v" "V1*V2"                          justD01Conf (satWith solverConf)        justbPropV12
+     , mkBench "v-->v" "V1*V2*V3"                       justD012Conf (satWith solverConf)       justbPropV123
+     , mkBench "v-->v" "V1*V2*V3*V4"                    justD0123Conf (satWith solverConf)      justbPropV1234
+     , mkBench "v-->v" "V1*V2*V3*V4*V5"                 justD01234Conf (satWith solverConf)     justbPropV12345
+     , mkBench "v-->v" "V1*V2*V3*V4*V5*V6"              justD012345Conf (satWith solverConf)    justbPropV123456
+     , mkBench "v-->v" "V1*V2*V3*V4*V5*V6*V7"           justD0123456Conf (satWith solverConf)   justbPropV1234567
+     , mkBench "v-->v" "V1*V2*V3*V4*V5*V6*V7*V8"        justD01234567Conf (satWith solverConf)  justbPropV12345678
      , mkBench "v-->v" "V1*V2*V3*V4*V5*V6*V7*V8*V9"     justD012345678Conf (satWith solverConf) justbPropV123456789
      , mkBench' "v-->v" "V1*V2*V3*V4*V5*V6*V7*V8*V9*V10" (satWith solverConf) bProp
 --  -- p - v
@@ -352,16 +352,36 @@ main = do
       , mkCompBench "v-->p" "V9*V10" (vOnPWithConf (toDimProp pD89Conf) solverConf) justbPropV910
       ]
 
-  defaultMain
-    [ -- bgroup "ABC" (benches abcDefConf)
-    --   bgroup "Yices" (benches yicesDefConf)
-    -- , bgroup "CVC4" (benches cvc4DefConf)
-        bgroup "Z3" (benches z3DefConf)
-      -- , bgroup "Z3" (compRatioBenches z3DefConf)
-    -- , bgroup "Boolector" (benches boolectorDefConf)
-    ]
+  -- defaultMain
+  --   [ -- bgroup "ABC" (benches abcDefConf)
+  --   --   bgroup "Yices" (benches yicesDefConf)
+  --   -- , bgroup "CVC4" (benches cvc4DefConf)
+  --       bgroup "Z3" (benches z3DefConf)
+  --     -- , bgroup "Z3" (compRatioBenches z3DefConf)
+  --   -- , bgroup "Boolector" (benches boolectorDefConf)
+  --   ]
+  let problems = [ justbPropV1
+                 , justbPropV12
+                 , justbPropV123
+                 , justbPropV1234
+                 , justbPropV12345
+                 , justbPropV123456
+                 , justbPropV1234567
+                 , justbPropV12345678
+                 , justbPropV123456789
+                 , bProp
+                 ]
 
+      diagnostics p = do res <- sat p
+                         putStrLn "-------- Total Number -----"
+                         putStrLn $ show $ Result.size res
+                         putStrLn "-------- Num not changed -----"
+                         putStrLn $ show $ numUnChanged res
+                         putStrLn "-------- Maximum clause -----"
+                         putStrLn $ show $ maxClauseSize res
+  mapM_ diagnostics problems
   -- putStrLn $ show $ ds
-  -- putStrLn $ show $ pairs
+  -- putStrLn "-------- Clauses -----"
+  -- mapM (putStrLn . show) $ getSignificantClauses res
   -- ts <- (mkCompRatioConfs ds pairs :: IO [VProp.Types.Config Text])
   -- mapM_ (putStrLn . show) ts
