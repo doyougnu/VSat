@@ -1,4 +1,6 @@
 Config,Variants,Satisfiable
+V1,2,Sat
+V1,2,Sat
 V1*V2,4,Sat
 V1*V2,4,Sat
 V1*V2,4,Sat

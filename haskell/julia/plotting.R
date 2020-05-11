@@ -24,8 +24,19 @@ autoDF <- autoData %>% mutate(data = "Auto") # %>% select(Mean, Algorithm, Compr
 finCountData  <- read.csv(file=finCountsFile) %>% mutate(data = "Financial")
 autoCountData <- read.csv(file=autoCountsFile) %>% mutate(data = "Auto")
 
-autoRatio <- autoCountData %>% group_by(Variants) %>% count(Satisfiable) %>% pivot_wider(names_from=Satisfiable, values_from=n) %>% mutate(UnSatRatio = UnSat / (UnSat + Sat))
-finRatio <- finCountData %>% group_by(Variants) %>% count(Satisfiable) %>% pivot_wider(names_from=Satisfiable, values_from=n) %>% mutate(UnSatRatio = signif(UnSat / (UnSat + Sat), 3))
+autoRatio <- autoCountData %>%
+  group_by(Variants) %>%
+  count(Satisfiable) %>%
+  pivot_wider(names_from=Satisfiable, values_from=n) %>%
+  mutate(UnSatRatio = UnSat / (UnSat + Sat)) %>%
+  replace_na(list(UnSatRatio = 0, UnSat = 0))
+
+finRatio <- finCountData %>%
+  group_by(Variants) %>%
+  count(Satisfiable) %>%
+  pivot_wider(names_from=Satisfiable, values_from=n) %>%
+  mutate(UnSatRatio = signif(UnSat / (UnSat + Sat), 3)) %>%
+  replace_na(list(UnSatRatio = 0, UnSat = 0))
 
 data <- rbind(finDF, autoDF)
 rq1DF <- data %>% filter(Variants > 2) %>% group_by(Algorithm) %>% arrange(Variants)
@@ -72,7 +83,7 @@ rq1 <- ggarrange(rq1Top,
                  ## heights = c(4,2)
                  )
 
-## ggsave("../plots/RQ1.png", plot = rq1, height = 6, width = 7, device = "png")
+ggsave("../plots/RQ1.png", plot = rq1, height = 6, width = 7, device = "png")
 
 ################# Singleton Analysis ##############################
 
