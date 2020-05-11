@@ -256,3 +256,18 @@ main = do
     -- , bgroup "Yices" (benches yicesDefConf)
     -- , bgroup "Boolector" (benches boolectorDefConf)
     ]
+
+  let problems = [ justbPropV1
+                 , justbPropV12
+                 , justbPropV123
+                 , bprop
+                 ]
+
+      diagnostics p = do res <- sat p
+                         putStrLn "-------- Total Number -----"
+                         putStrLn $ show $! Result.size res
+                         putStrLn "-------- Num not changed -----"
+                         putStrLn $ show $! numUnChanged res
+                         putStrLn "-------- Maximum clause -----"
+                         putStrLn $ show $! maxClauseSize res
+  mapM_ diagnostics problems
