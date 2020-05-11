@@ -31,8 +31,8 @@ data <- rbind(finDF, autoDF)
 rq1DF <- data %>% filter(Variants > 2) %>% group_by(Algorithm) %>% arrange(Variants)
 
 rq1Top <- ggplot(rq1DF) +
-  geom_line(aes(x=Variants, y=Mean, color=Algorithm)) +
-  geom_point(aes(x=Variants, y=Mean, shape=Algorithm, color=Algorithm),size=3) +
+  geom_line(aes(x=Variants, y=Mean/60, color=Algorithm)) +
+  geom_point(aes(x=Variants, y=Mean/60, shape=Algorithm, color=Algorithm),size=3) +
   scale_shape_manual(values = c(1,6,5,17)) +
   facet_wrap(. ~ data, scales = "free") +
   theme_classic() +
@@ -68,11 +68,11 @@ rq1 <- ggarrange(rq1Top,
                  ncol=1,
                  common.legend=TRUE,
                  legend = "right",
-                 align="v"
+                 align="hv"
                  ## heights = c(4,2)
                  )
 
-ggsave("../plots/RQ1.png", plot = rq1, height = 6, width = 7, device = "png")
+## ggsave("../plots/RQ1.png", plot = rq1, height = 6, width = 7, device = "png")
 
 ################# Singleton Analysis ##############################
 
@@ -99,7 +99,7 @@ rq3 <- ggplot(rq3DF, aes(x=Config, y=Mean, fill=Algorithm, shape=Algorithm, colo
   theme(panel.grid.major.y = element_line(color = "grey")) +
   coord_flip()
 
-ggsave("../plots/RQ3.png", plot = rq3, height = 4, width = 7, device = "png")
+## ggsave("../plots/RQ3.png", plot = rq3, height = 4, width = 7, device = "png")
 
 slow_down <- rq3DF %>% group_by(data,Algorithm) %>%  summarise(AvgMean = mean(Mean))
 
@@ -259,4 +259,4 @@ pval.plt <- ggplot(rq3pvDF, aes(x=AlgLeft, y=AlgRight, size=(1-adj.p.value),
         legend.position = "bottom")
 
 
-ggsave("../plots/RQ3_PVal.png", plot = pval.plt, height = 4, width = 7, device = "png")
+## ggsave("../plots/RQ3_PVal.png", plot = pval.plt, height = 4, width = 7, device = "png")
