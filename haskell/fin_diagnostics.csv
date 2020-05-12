@@ -9,3 +9,34 @@ V1*V2*V3*V4*V5*V6*V7: "Num not changed: 919\nMaximum clause 64"
 V1*V2*V3*V4*V5*V6*V7*V8: "Num not changed: 880\nMaximum clause 65"
 V1*V2*V3*V4*V5*V6*V7*V8*V9: "Num not changed: 857\nMaximum clause 66"
 V1*V2*V3*V4*V5*V6*V7*V8*V9*V10: "Num not changed: 851\nMaximum clause 132"
+Generated on (Year, Month, Day): (2020,5,12)
+V1: Num not changed: 1005
+Maximum clause 1
+Total Count1072
+V1*V2: Num not changed: 976
+Maximum clause 2
+Total Count1075
+V1*V2*V3: Num not changed: 971
+Maximum clause 4
+Total Count1079
+V1*V2*V3*V4: Num not changed: 956
+Maximum clause 8
+Total Count1079
+V1*V2*V3*V4*V5: Num not changed: 940
+Maximum clause 16
+Total Count1081
+V1*V2*V3*V4*V5*V6: Num not changed: 934
+Maximum clause 32
+Total Count1081
+V1*V2*V3*V4*V5*V6*V7: Num not changed: 919
+Maximum clause 64
+Total Count1084
+V1*V2*V3*V4*V5*V6*V7*V8: Num not changed: 880
+Maximum clause 65
+Total Count1084
+V1*V2*V3*V4*V5*V6*V7*V8*V9: Num not changed: 857
+Maximum clause 66
+Total Count1084
+V1*V2*V3*V4*V5*V6*V7*V8*V9*V10: Num not changed: 851
+Maximum clause 132
+Total Count1084
