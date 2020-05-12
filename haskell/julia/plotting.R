@@ -41,7 +41,7 @@ finRatio <- finCountData %>%
 data <- rbind(finDF, autoDF)
 rq1DF <- data %>% filter(Variants >= 2) %>% group_by(Algorithm) %>% arrange(Variants)
 
-breaks <- function(x) {
+breaksRq1 <- function(x) {
   if (max(x) > 16) {
     2^(1:10)
   } else {
@@ -52,7 +52,7 @@ rq1 <- ggplot(rq1DF) +
   geom_line(aes(x=Variants, y=Mean/60, color=Algorithm)) +
   geom_point(aes(x=Variants, y=Mean/60, shape=Algorithm, color=Algorithm),size=3) +
   scale_shape_manual(values = c(1,6,5,17)) +
-  scale_x_continuous(breaks=breaks, limits=c(2,NA)) +
+  scale_x_continuous(breaks=breaksRq1, limits=c(2,NA)) +
   facet_wrap(. ~ data, scales = "free") +
   theme_classic() +
   ggtitle("RQ1: Performance as variants increase") +
@@ -91,20 +91,31 @@ rq1 <- ggplot(rq1DF) +
 ##                  ## heights = c(4,2)
 ##                  )
 
-ggsave("../plots/RQ1.png", plot = rq1, height = 4, width = 7, device = "png")
+## ggsave("../plots/RQ1.png", plot = rq1, height = 4, width = 7, device = "png")
 
 ################# Singleton Analysis ##############################
 
-rq3DF <- data %>% filter(Variants <= 2) %>%
+## Need to filter out version variants which have choices for rq1
+rq3DF <- data %>% filter(ChcCount == 0) %>%
   mutate(plotOrdering = as.numeric(substring(Config, 2))) %>%
   mutate(Config = factor(Config, levels = c("V1", "V2", "V3", "V4", "V5", "V6",
                                             "V7", "V8", "V9", "V10")))
+
+## custom breaks for the facets
+breaksRq3 <- function(x) {
+  if (max(x) < 4) {
+    ## then we are in fin, NA to just have R find the max
+    seq(0, 1.2, 0.10)
+  } else {
+    seq(0, 120, 10)
+  }
+}
 
 rq3 <- ggplot(rq3DF, aes(x=Config, y=Mean, fill=Algorithm, shape=Algorithm, color=Algorithm)) +
   geom_point(size=6) +
   scale_shape_manual(values = c(1,6,5,17)) +
   theme_classic() +
-  ## scale_y_continuous(limits=c(0,100), breaks=seq(0,100,10)) +
+  scale_y_continuous(limits=c(0, NA), breaks=breaksRq3) +
   facet_wrap(.~ data, scales="free") +
   ## stat_summary(fun.data="mean_sdl"
   ##            , fun.args = list(mult=2)
@@ -114,11 +125,12 @@ rq3 <- ggplot(rq3DF, aes(x=Config, y=Mean, fill=Algorithm, shape=Algorithm, colo
   ggtitle("RQ3: Overhead of Variational Solving on Plain Formulas") +
   ylab("Time [s] to solve single version variant") +
   xlab("Feature Model Version") +
-  theme(legend.position = "bottom") +
+  theme(legend.position = c(0.42,0.75),
+        legend.key.size = unit(.65,'cm')) +
   theme(panel.grid.major.y = element_line(color = "grey")) +
   coord_flip()
 
-## ggsave("../plots/RQ3.png", plot = rq3, height = 4, width = 7, device = "png")
+ggsave("../plots/RQ3.png", plot = rq3, height = 4, width = 7, device = "png")
 
 slow_down <- rq3DF %>% group_by(data,Algorithm) %>%  summarise(AvgMean = mean(Mean))
 
@@ -275,7 +287,11 @@ pval.plt <- ggplot(rq3pvDF, aes(x=AlgLeft, y=AlgRight, size=(1-adj.p.value),
   theme(panel.grid.major.y = element_line(color = "lightgrey", linetype="dashed"),
         axis.text.x = element_text(angle = 90, hjust = 1),
         axis.title.x = element_blank(),
-        legend.position = "bottom")
+        legend.position = c(0.88, 0.75),
+        legend.key.size = unit(.85,'cm')
+        ## legend.text = element_text(size=14),
+        ## legend.key.size = unit(3,"line")
+        ) + guides(colour = guide_legend(override.aes = list(size=7)))
 
 
 ## ggsave("../plots/RQ3_PVal.png", plot = pval.plt, height = 4, width = 7, device = "png")
