@@ -90,3 +90,21 @@ aov.resids <- residuals(object=res.aov)
 
 ## Shapiro-Wilk normality test
 res.shaps <- shapiro.test(x = aov.resids)
+
+########## Again violates equal variance and normality ###############
+
+## Algorithms are significant
+alg.res <- kruskal.test(MeanRatio ~ Algorithm, df)
+
+## Plain ratio is not significant!!
+pr.res <- kruskal.test(MeanRatio ~ PlainRatio, df)
+
+## Interaction is not significant surprisingly
+rq2.inters <- interaction(df$Algorithm, df$PlainRatio)
+inters.res <- kruskal.test(MeanRatio ~ rq2.inters, df)
+
+## Autod the pairs which are significant
+pairs <- pairwise.wilcox.test(df$MeanRatio, df$Algorithm,
+                              p.adj="bonf", method="holm"
+                            , exact=TRUE, paired=FALSE) %>%
+  tidy %>% arrange(p.value)
