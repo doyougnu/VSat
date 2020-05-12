@@ -7,6 +7,7 @@ library(Hmisc)
 library(broom)
 library(ggpubr)
 library(scales)
+library(rstatix)
 
 finResultsFile <- "../data/fin_data.csv"
 autoResultsFile <- "../data/auto_data.csv"
@@ -96,7 +97,7 @@ rq1 <- ggplot(rq1DF) +
 ################# Singleton Analysis ##############################
 
 ## Need to filter out version variants which have choices for rq1
-rq3DF <- data %>% filter(ChcCount == 0) %>%
+rq3DF <- data %>% head(-4) %>% filter(Variants <= 2) %>%
   mutate(plotOrdering = as.numeric(substring(Config, 2))) %>%
   mutate(Config = factor(Config, levels = c("V1", "V2", "V3", "V4", "V5", "V6",
                                             "V7", "V8", "V9", "V10")))
@@ -107,7 +108,7 @@ breaksRq3 <- function(x) {
     ## then we are in fin, NA to just have R find the max
     seq(0, 1.2, 0.10)
   } else {
-    seq(0, 120, 10)
+    seq(0, 150, 10)
   }
 }
 
@@ -130,7 +131,7 @@ rq3 <- ggplot(rq3DF, aes(x=Config, y=Mean, fill=Algorithm, shape=Algorithm, colo
   theme(panel.grid.major.y = element_line(color = "grey")) +
   coord_flip()
 
-ggsave("../plots/RQ3.png", plot = rq3, height = 4, width = 7, device = "png")
+## ggsave("../plots/RQ3.png", plot = rq3, height = 4, width = 7, device = "png")
 
 slow_down <- rq3DF %>% group_by(data,Algorithm) %>%  summarise(AvgMean = mean(Mean))
 
@@ -234,64 +235,5 @@ aov.auto.resids <- residuals(object=res.auto.aov)
 ## Shapiro-Wilk normality test
 res.auto.shaps <- shapiro.test(x = aov.auto.resids)
 
-
-########################## Plot p-values ##################
-options(scipen = 999)
-rq3pvDF <- rbind(auto.tuk_res, fin.tuk_res) %>%
-  arrange(pVal) %>%
-  mutate(Significance = case_when(adj.p.value <= 0.05 ~ "Significant",
-                                  TRUE ~ "Not Significant"),
-         SigLabel = case_when(Significance == "Significant" ~ Comparison,
-                              TRUE ~ ""),
-         SigColor = paste(AlgLeft,":",Significance,sep=""),
-         Version = factor(ConfigLeft, levels = c("V1", "V2", "V3", "V4", "V5", "V6", "V7", "V8", "V9", "V10")))
-
-
-
-## fin.pval.plt <- ggdotchart(rq3pvDF %>% filter(Significance == "Significant"),
-##                            x="ConfigLeft", y="AlgComparison",
-##                            shape="AlgLeft",
-##                            dot.size=3, label="pVal", fill="adj.p.value",
-##                            font.label = list(rotate=TRUE, color ="AlgLeft" , vjust=2,rotate=TRUE),
-##                            ggtheme=theme_pubr(), y.text.col=TRUE) +
-##   facet_wrap(. ~ data, scales = "free") +
-##   theme_classic() +
-##   ## theme(legend.position="none") +
-##   theme(panel.grid.major.y = element_line(color = "grey")) +
-##   scale_shape_manual(values = c(2,5,17))
-
-
-pval.plt <- ggplot(rq3pvDF, aes(x=AlgLeft, y=AlgRight, size=(1-adj.p.value),
-                                shape=SigColor, color=Significance)) +
-  geom_point() +
-  geom_jitter() +
-  ## geom_text(size=5) +
-  ## geom_tile()
-  ## scale_shape_manual(values = c(6,5,2)) +
-  ## scale_color_manual
-  theme_classic() +
-  facet_grid(data ~ Version, scales="free") +
-  scale_size_continuous(range=c(2,4)) +
-  scale_shape_manual(values = c(6,5,18,2,17)) +
-  ## scale_shape_discrete(name = "Algorithm",
-  ##                      labels=c("p\U27f6v","v\U27f6p", "v\U27f6v", "", "", "")) +
-  guides(size=FALSE, shape=FALSE) +
-  ## scale_color_manual(values = c("white", "lightblue2"))
-  ## stat_summary(fun.data="mean_sdl"
-  ##            , fun.args = list(mult=2)
-  ##              , geom="pointrange"
-  ##              , color="black"
-  ##              , size=0.65) +
-  ggtitle("RQ3: Statistical significance comparison matrix") +
-  ylab("Algorithm") +
-  theme(panel.grid.major.y = element_line(color = "lightgrey", linetype="dashed"),
-        axis.text.x = element_text(angle = 90, hjust = 1),
-        axis.title.x = element_blank(),
-        legend.position = c(0.88, 0.75),
-        legend.key.size = unit(.85,'cm')
-        ## legend.text = element_text(size=14),
-        ## legend.key.size = unit(3,"line")
-        ) + guides(colour = guide_legend(override.aes = list(size=7)))
-
-
-## ggsave("../plots/RQ3_PVal.png", plot = pval.plt, height = 4, width = 7, device = "png")
+## also fails, we'll do a one-way kruskall walis test
+## Please see sigTest.R
