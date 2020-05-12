@@ -266,11 +266,13 @@ main = do
                  , ("V1*V2*V3*V4: ", bProp)
                  ]
       newline = flip (++) "\n"
-      runner f (desc,prb) = f prb >>= T.appendFile countFile . pack . newline . ((++) desc) . show
+      runner f (desc,prb) = f prb >>= T.appendFile countFile . pack . newline . ((++) desc)
 
       diagnostics p = do res <- sat p
-                         return $ "Num not changed: " ++ (show $ numUnChanged res) ++ "\n" ++
-                           "Maximum clause " ++ (show $ maxClauseSize res)
+                         return $ "Num not changed: " ++
+                           (show $ numUnChanged res) ++ "\n" ++
+                           "Maximum clause " ++ (show $ maxClauseSize res) ++ "\n" ++
+                           "Total Count" ++ (show $ Result.size res)
 
   fileHeader <- fmap (pack . flip (++) "\n"
                       . (++) "Generated on (Year, Month, Day): "
