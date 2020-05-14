@@ -51,14 +51,12 @@ rq1 <- ggplot(rq1DF) +
 ## ggsave("../plots/RQ1.png", plot = rq1, height = 4, width = 7, device = "png")
 
 ################# Singleton Analysis ##############################
-
+## head(-4) %>%
 ## Need to filter out version variants which have choices for rq1
-rq3DF <- data %>% head(-4) %>% filter(Variants <=2) %>%
+rq3DF <- data %>% filter(ChcCount == 0) %>%
   mutate(plotOrdering = as.numeric(substring(Config, 2))) %>%
   mutate(Config = factor(Config, levels = c("V1", "V2", "V3", "V4", "V5", "V6",
-                                            "V7", "V8", "V9", "V10"))) %>%
-  ## have to filter our version variant for rq1 for financial
-  filter(Config != "V1",ChcCount >= 0)
+                                            "V7", "V8", "V9", "V10")))
 
 ## custom breaks for the facets
 breaksRq3 <- function(x) {
@@ -89,7 +87,7 @@ rq3 <- ggplot(rq3DF, aes(x=Config, y=Mean, fill=Algorithm, shape=Algorithm, colo
   theme(panel.grid.major.y = element_line(color = "grey")) +
   coord_flip()
 
-## ggsave("../plots/RQ3.png", plot = rq3, height = 4, width = 7, device = "png")
+ggsave("../plots/RQ3.png", plot = rq3, height = 4, width = 7, device = "png")
 
 slow_down <- rq3DF %>% group_by(data,Algorithm) %>%  summarise(AvgMean = mean(Mean))
 
