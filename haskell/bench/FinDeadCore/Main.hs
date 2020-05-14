@@ -1,9 +1,7 @@
 module Main where
 
 import           Control.Arrow           (first, second)
-import           Criterion.Main
-import           Criterion.Main.Options
-import           Criterion.Types         (Config (..))
+import           Gauge.Main
 import           Data.Aeson              (decodeStrict)
 import           Control.Monad           (replicateM, foldM, liftM2)
 import           Data.Bifunctor          (bimap)
