@@ -1,8 +1,7 @@
-{ nixpkgs ? import <nixpkgs> {} }:
+{ nixpkgs ? import ./nixos-20-03.nix }:
 let
-  inherit (nixpkgs) pkgs;
+  pkgs   = import nixpkgs {};
   inherit (pkgs) haskellPackages;
-
   project = import ./release.nix;
 in
 pkgs.stdenv.mkDerivation {

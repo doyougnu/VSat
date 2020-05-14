@@ -1,13 +1,6 @@
+{ nixpkgs ? import ./nixos-20-03.nix }:
 let
-  pkgs   = let
-    hostPkgs = import <nixpkgs> {};
-    pinnedPkgs = hostPkgs.pkgs.lib.importJSON ./nixos-20-03.json;
-    _pkgs = hostPkgs.pkgs.fetchFromGitHub {
-    owner = "NixOS";
-    repo  = "nixpkgs-channels";
-    inherit (pinnedPkgs) rev sha256;
-  };
-  in import _pkgs {};
+  pkgs   = import nixpkgs {};
   stdenv = pkgs.stdenv;
 in with pkgs; {
   myProject = stdenv.mkDerivation {
