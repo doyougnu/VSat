@@ -119,11 +119,10 @@ main = do
         , mkBench' "v-->p" "V1*V2*V3*V4"  (vOnPWithConf (toDimProp singleVersionConf) solverConf) bProp
         ]
 
-  -- defaultMain
-  --   [  bgroup "Z3" (benches z3DefConf)
-  --     -- bgroup "Z3" (compRatioBenches z3DefConf)
-  --   -- , bgroup "CVC4" (benches cvc4DefConf)
-  --   -- , bgroup "Yices" (benches yicesDefConf)
-  --   -- , bgroup "Boolector" (benches boolectorDefConf)
-  --   ]
-  genConfigPool singleVersionConf >>= putStrLn . show
+  defaultMain
+    [  bgroup "Z3" (benches z3DefConf)
+      -- bgroup "Z3" (compRatioBenches z3DefConf)
+    -- , bgroup "CVC4" (benches cvc4DefConf)
+    -- , bgroup "Yices" (benches yicesDefConf)
+    -- , bgroup "Boolector" (benches boolectorDefConf)
+    ]
