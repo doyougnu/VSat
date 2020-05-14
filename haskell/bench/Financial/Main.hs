@@ -102,6 +102,7 @@ mkConf x xs = x &&& (conjoin $ bnot <$> (delete x xs))
 confs = fmap (flip mkConf ds) ds
 
 [d0Conf, d1Conf, d2Conf, d3Conf, d4Conf, d5Conf, d6Conf, d7Conf, d8Conf, d9Conf] = confs
+
 -- run with stack bench --profile vsat:auto --benchmark-arguments='+RTS -S -RTS --output timings.html'
 main = do
   -- readfile is strict
@@ -113,7 +114,7 @@ main = do
       bPs = rights bPs'
 
       -- | Hardcoding equivalencies in generated dimensions to reduce number of
-      -- dimensions to 4
+      -- dimensions to 4, this was manually done by inspecting parser results
       sameDims :: Text -> Text
       sameDims d
         | d == "D_16" = "D_1"
@@ -126,9 +127,8 @@ main = do
         | d == "D_14" = "D_9"
         | otherwise = d
 
-      -- !bProp = ((renameDims sameDims) . naiveEncode . autoToVSat) $ autoAndJoin bPs
       !bProp = ((renameDims sameDims) . naiveEncode . autoToVSat) $ autoAndJoin bPs
-      dmapping = getDimMap $ autoAndJoin (bPs)
+      dmapping = getDimMap $ autoAndJoin bPs
       !bPropOpts = applyOpts defConf bProp
 
   -- | convert choice preserving fmfs to actual confs
@@ -293,7 +293,7 @@ main = do
       ]
 
 
-    -- | Compression Ratio props, we start counting by 1 here
+    -- | Compression Ratio props, we start counting by 1 instead of 0 here
     justbPropV12'  = selectVariant v01Conf bProp
     justbPropV23   = selectVariant v12Conf bProp
     !justbPropV34  = selectVariant v23Conf bProp
@@ -365,14 +365,14 @@ main = do
   let countFile = "fin_diagnostics.csv"
       problems = [ ("V1: "                         , justbPropV1)
                  , ("V1*V2: "                         , justbPropV12)
-                 , ("V1*V2*V3: "                      , justbPropV123)
-                 , ("V1*V2*V3*V4: "                   , justbPropV1234)
-                 , ("V1*V2*V3*V4*V5: "                , justbPropV12345)
-                 , ("V1*V2*V3*V4*V5*V6: "             , justbPropV123456)
-                 , ("V1*V2*V3*V4*V5*V6*V7: "          , justbPropV1234567)
-                 , ("V1*V2*V3*V4*V5*V6*V7*V8: "       , justbPropV12345678)
-                 , ("V1*V2*V3*V4*V5*V6*V7*V8*V9: "    , justbPropV123456789)
-                 , ("V1*V2*V3*V4*V5*V6*V7*V8*V9*V10: ", bProp)
+                 -- , ("V1*V2*V3: "                      , justbPropV123)
+                 -- , ("V1*V2*V3*V4: "                   , justbPropV1234)
+                 -- , ("V1*V2*V3*V4*V5: "                , justbPropV12345)
+                 -- , ("V1*V2*V3*V4*V5*V6: "             , justbPropV123456)
+                 -- , ("V1*V2*V3*V4*V5*V6*V7: "          , justbPropV1234567)
+                 -- , ("V1*V2*V3*V4*V5*V6*V7*V8: "       , justbPropV12345678)
+                 -- , ("V1*V2*V3*V4*V5*V6*V7*V8*V9: "    , justbPropV123456789)
+                 -- , ("V1*V2*V3*V4*V5*V6*V7*V8*V9*V10: ", bProp)
                  ]
       newline = flip (++) "\n"
       runner f (desc,prb) = f prb >>= T.appendFile countFile . pack . newline . ((++) desc)
@@ -387,9 +387,11 @@ main = do
                       . (++) "Generated on (Year, Month, Day): "
                       . show . toGregorian . utctDay) getCurrentTime
 
-  T.appendFile countFile fileHeader
+  -- T.appendFile countFile fileHeader
   -- v-->v
-  mapM_ (runner diagnostics) problems
+  -- mapM_ (runner diagnostics) problems
+  mapM (sat) [bChc "A" (bRef "a") (bnot $ bRef "a") &&& (bChc "D" (bRef "d") (bRef "d"))
+              :: ReadableProp Text] >>= putStrLn . show
   -- putStrLn $ show $ ds
   -- putStrLn "-------- Clauses -----"
   -- mapM (putStrLn . show) $ getSignificantClauses res
