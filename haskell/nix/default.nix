@@ -1,4 +1,3 @@
-{ nixpkgs ? import ./nixos-20-03.json, compiler ? "ghc 0k"}
 { mkDerivation, aeson, aeson-pretty, base, bytestring, cassava
 , containers, gauge, deepseq, genifunctors, hashable, hpack
 , megaparsec, mtl, QuickCheck, sbv, Spock, stdenv, tasty, hoogle
