@@ -154,10 +154,10 @@ main = do
 
 
   let countFile = "auto_diagnostics.csv"
-      problems = [ ("V1: "               , bPropJustV1)
-                 , ("V1*V2: "            , bPropJustV12)
-                 , ("V1*V2*V3: "         , bPropJustV123)
-                 , ("V1*V2*V3*V4: "      , bProp)
+      problems = [ ("V1"               , bPropJustV1)
+                 , ("V1*V2"            , bPropJustV12)
+                 , ("V1*V2*V3"         , bPropJustV123)
+                 , ("V1*V2*V3*V4"      , bProp)
                  ]
       newline = flip (++) "\n"
       runner f (desc,prb) = f prb >>= T.appendFile countFile . pack . newline . ((++) desc)
@@ -167,11 +167,12 @@ main = do
                            (show $ maxClauseSize res) ++ "," ++
                            (show $ Result.size res)
 
+      labels = pack "Config,NumUnchanged,MaximumClause,TotalClauseCount"
+
   fileHeader <- fmap (pack . flip (++) "\n"
                       . (++) "Generated on (Year, Month, Day): "
                       . show . toGregorian . utctDay) getCurrentTime
 
-  let labels = pack "NumUnchanged,MaximumClause,TotalClauseCount"
 
   -- time stamp
   T.appendFile countFile fileHeader

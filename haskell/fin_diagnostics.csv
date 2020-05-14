@@ -29,3 +29,7 @@ Total Count1084
 V1*V2*V3*V4*V5*V6*V7*V8*V9*V10: Num not changed: 851
 Maximum clause 132
 Total Count1084
+Generated on (Year, Month, Day): (2020,5,14)
+NumUnchanged,MaximumClause,TotalClauseCountV1: 1029,1,1072
+V1*V2: 1038,2,1075
+V1*V2*V3: 1036,4,1079
