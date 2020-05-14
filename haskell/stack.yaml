@@ -21,7 +21,7 @@ extra-deps:
 
 ## uncomment the following lines to tell stack you are in a nix environment
 nix:
-  enable: false
+  enable: true
   pure: true
   # packages: [ z3, pkgconfig, zlib, abc-verifier, cvc4, yices, boolector, haskellPackages.hoogle haskellPackages.hasktags]
   packages: [ z3, pkgconfig, zlib ]

@@ -80,11 +80,11 @@ benchmarks:
     - gauge
     - vsat
 
-  auto-dead:
+  auto-diag:
     main:                Main.hs
     source-dirs:
       - bench/Bench
-      - bench/AutoDead
+      - bench/AutoDiag
       - src
     ghc-options:
     - -O2
@@ -92,24 +92,8 @@ benchmarks:
     - -rtsopts
     - -with-rtsopts=-N
     dependencies:
-    - criterion
-    - random
-    - vsat
-
-  auto-core:
-    main:                Main.hs
-    source-dirs:
-      - bench/Bench
-      - bench/AutoCore
-      - src
-    ghc-options:
-    - -O2
-    - -threaded
-    - -rtsopts
-    - -with-rtsopts=-N
-    dependencies:
-    - criterion
-    - random
+    - gauge
+    - time
     - vsat
 
   auto-dead-core:
@@ -124,7 +108,7 @@ benchmarks:
     - -rtsopts
     - -with-rtsopts=-N
     dependencies:
-    - criterion
+    - gauge
     - random
     - vsat
 
@@ -144,11 +128,11 @@ benchmarks:
     - gauge
     - vsat
 
-  fin-dead:
+  fin-diag:
     main:                Main.hs
     source-dirs:
       - bench/Bench
-      - bench/FinDead
+      - bench/FinDiag
       - src
     ghc-options:
     - -O2
@@ -156,27 +140,9 @@ benchmarks:
     - -rtsopts
     - -with-rtsopts=-N
     dependencies:
-    - criterion
-    - random
+    - gauge
+    - time
     - vsat
-
-
-  fin-core:
-    main:                Main.hs
-    source-dirs:
-      - bench/Bench
-      - bench/FinCore
-      - src
-    ghc-options:
-    - -O2
-    - -threaded
-    - -rtsopts
-    - -with-rtsopts=-N
-    dependencies:
-    - criterion
-    - random
-    - vsat
-
 
   fin-dead-core:
     main:                Main.hs
@@ -190,7 +156,7 @@ benchmarks:
     - -rtsopts
     - -with-rtsopts=-N
     dependencies:
-    - criterion
+    - gauge
     - random
     - vsat
 
