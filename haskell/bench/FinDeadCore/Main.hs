@@ -143,7 +143,8 @@ main = do
     (featIndex,_) = randomR (0, bPropLength) (mkStdGen 1111)
     deadFeature   = Set.elemAt featIndex features
   -- construct the dead feature proposition
-    bProp         = bProp' &&& bChc "DeadCore" (bRef deadFeature) (bnot $ bRef deadFeature)
+    -- bProp         = bProp' &&& bChc "DeadCore" (bRef deadFeature) (bnot $ bRef deadFeature)
+    bProp         = bProp' &&& bChc "DeadCore" (conjoin $ fmap bRef features) (conjoin $ fmap (bnot . bRef) features)
 
     benches :: ReadableSMTConf Text -> [Benchmark]
     benches solverConf =
