@@ -87,7 +87,7 @@ rq3pvDF <- rbind(auto.pairs, fin.pairs) %>%
                                           "V7", "V8", "V9", "V10")))
 
 ### It seems strange given rq3 plot that only v1 is significant for auto by
-### algorithms given that the averages between groups are so different. This is
+### algorithms, given that the averages between groups are so different. This is
 ### because there is a high degree of variance between the samples, you can
 ### observe this here:
 

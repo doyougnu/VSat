@@ -13,34 +13,22 @@ finResultsFile <- "../data/fin_data.csv"
 autoResultsFile <- "../data/auto_data.csv"
 finRawFile <- "../data/fin_rq3_singletons.csv"
 autoRawFile <- "../data/auto_rq3_singletons.csv"
-finCountsFile <- "../data/fin_counts.csv"
-autoCountsFile <- "../data/auto_counts.csv"
 
-finData <- read.csv(file=finResultsFile) %>% mutate(Algorithm = as.factor(Algorithm), Config = as.factor(Config)) %>% mutate(Algorithm = gsub("-->", "\U27f6", Algorithm))
-autoData <- read.csv(file=autoResultsFile) %>% mutate(Algorithm = as.factor(Algorithm), Config = as.factor(Config)) %>% mutate(Algorithm = gsub("-->", "\U27f6", Algorithm))
+finData <- read.csv(file=finResultsFile) %>%
+  mutate(Algorithm = as.factor(Algorithm), Config = as.factor(Config)) %>%
+  mutate(Algorithm = gsub("-->", "\U27f6", Algorithm))
 
-finDF <- finData %>% mutate(data = "Financial") # %>% select(Mean, Algorithm, CompressionRatio, data, ChcCount, PlainCount, Config)
-autoDF <- autoData %>% mutate(data = "Auto") # %>% select(Mean, Algorithm, CompressionRatio, data, ChcCount, PlainCount, Config)
+autoData <- read.csv(file=autoResultsFile) %>%
+  mutate(Algorithm = as.factor(Algorithm), Config = as.factor(Config)) %>%
+  mutate(Algorithm = gsub("-->", "\U27f6", Algorithm))
 
-finCountData  <- read.csv(file=finCountsFile) %>% mutate(data = "Financial")
-autoCountData <- read.csv(file=autoCountsFile) %>% mutate(data = "Auto")
-
-autoRatio <- autoCountData %>%
-  group_by(Variants) %>%
-  count(Satisfiable) %>%
-  pivot_wider(names_from=Satisfiable, values_from=n) %>%
-  mutate(UnSatRatio = UnSat / (UnSat + Sat)) %>%
-  replace_na(list(UnSatRatio = 0, UnSat = 0))
-
-finRatio <- finCountData %>%
-  group_by(Variants) %>%
-  count(Satisfiable) %>%
-  pivot_wider(names_from=Satisfiable, values_from=n) %>%
-  mutate(UnSatRatio = signif(UnSat / (UnSat + Sat), 3)) %>%
-  replace_na(list(UnSatRatio = 0, UnSat = 0))
+finDF <- finData %>% mutate(data = "Fin")
+autoDF <- autoData %>% mutate(data = "Auto")
 
 data <- rbind(finDF, autoDF)
-rq1DF <- data %>% filter(Variants >= 2) %>% group_by(Algorithm) %>% arrange(Variants)
+
+rq1DF <- data %>% filter(Variants >= 2) %>% group_by(Algorithm) %>%
+  arrange(Variants)
 
 breaksRq1 <- function(x) {
   if (max(x) > 16) {
@@ -59,48 +47,18 @@ rq1 <- ggplot(rq1DF) +
   ggtitle("RQ1: Performance as variants increase") +
   ylab("Time [Min.] to solve all Variants") +
   theme(legend.position = c(0.6,0.75))
-  ## theme(axis.title.x = element_blank(),axis.text.x = element_blank(),
-  ##       axis.line.x = element_blank(), axis.ticks.x = element_blank())
-
-## rq1AutoBottom <- ggplot(autoCountData, aes(x=Variants)) +
-##   geom_bar(aes(fill=Satisfiable), stat="count", width=0.5) +
-##   geom_text(data=autoRatio, aes(label=paste(UnSatRatio, "%"), angle=90, y=20)) +
-##   ## stat_bin(aes()),
-##   ##          geom="text", position="identity") +
-##   theme_classic() +
-##   theme(legend.position = "none") +
-##   scale_y_continuous(expand=c(0.3,0))
-
-## rq1FinBottom <- ggplot(finCountData, aes(x=Variants)) +
-##   geom_bar(aes(fill=Satisfiable), stat="count", width=40) +
-##   geom_text(data=finRatio
-##           , aes(label=paste(UnSatRatio, "%"), angle=90, y=1300)
-##           , position=position_dodge(width=10)) +
-##   theme_classic() +
-##   theme(axis.title.y = element_blank()) +
-##   scale_y_continuous(expand=c(0.3,0))
-
-## legend1 <- get_legend(rq1FinBottom)
-## legend2 <- get_legend(rq1Top)
-
-## rq1 <- ggarrange(rq1Top,
-##                  ggarrange(rq1AutoBottom, rq1FinBottom, common.legend=TRUE, legend="bottom"),
-##                  ncol=1,
-##                  common.legend=TRUE,
-##                  legend = "right",
-##                  align="hv"
-##                  ## heights = c(4,2)
-##                  )
 
 ## ggsave("../plots/RQ1.png", plot = rq1, height = 4, width = 7, device = "png")
 
 ################# Singleton Analysis ##############################
 
 ## Need to filter out version variants which have choices for rq1
-rq3DF <- data %>% head(-4) %>% filter(Variants <= 2) %>%
+rq3DF <- data %>% head(-4) %>% filter(Variants <=2) %>%
   mutate(plotOrdering = as.numeric(substring(Config, 2))) %>%
   mutate(Config = factor(Config, levels = c("V1", "V2", "V3", "V4", "V5", "V6",
-                                            "V7", "V8", "V9", "V10")))
+                                            "V7", "V8", "V9", "V10"))) %>%
+  ## have to filter our version variant for rq1 for financial
+  filter(Config != "V1",ChcCount >= 0)
 
 ## custom breaks for the facets
 breaksRq3 <- function(x) {
