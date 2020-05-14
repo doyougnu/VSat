@@ -60,22 +60,19 @@ ds = bRef <$> ["D_0","D_1","D_2","D_3"]
 
 [d0, d2, d4, d5] = ds
 
+-- | This is bittner's encoding, see section 2 of:
+-- https://link.springer.com/chapter/10.1007%2F978-3-030-30446-1_7
+confs' =  (conjoin $ (disjoin ds):[(bnot x ||| bnot y) | x <- ds, y <- ds, x /= y])
+singleVersionConf' = (deadCore &&& confs') ||| (bnot deadCore &&& confs')
+
 deadCore = bRef "DeadCore"
-
-mkConf x xs = (x &&& (conjoin $ bnot <$> (delete x xs)))
-
-mkConf' x xs = (disjoin $ bnot <$> (delete x xs))
+mkConf x xs = (deadCore ||| x) &&& x &&& (conjoin $ bnot <$> (delete x xs))
 
 confs = fmap (flip mkConf ds) ds
 
-confs' = fmap (flip mkConf' ds) ds
+[d0Conf, d1Conf, d2Conf, d3Conf, d4Conf, d5Conf, d6Conf, d7Conf, d8Conf, d9Conf] = confs
 
-[d0Conf, d1Conf, d2Conf, d3Conf] = confs
-
-singleVersionConf = deadCore ||| disjoin confs
-
-singleVersionConf' = deadCore ||| VProp.Core.atMost1 ds
-
+singleVersionConf = disjoin confs
 
 -- run with stack bench --profile vsat:auto --benchmark-arguments='+RTS -S -RTS --output timings.html'
 main = do
@@ -96,12 +93,12 @@ main = do
 
       bProp' :: ReadableProp Text
       !bProp' = (naiveEncode . autoToVSat) $ autoAndJoin (bPs)
-      features = vars bProp'
-      bPropLength = Set.size features
+      features = Set.toList $ vars bProp'
+      -- bPropLength = Set.size features
 
   let
-    (featIndex,_) = randomR (0, bPropLength) (mkStdGen 1111)
-    deadFeature   = Set.elemAt featIndex features
+    -- (featIndex,_) = randomR (0, bPropLength) (mkStdGen 1111)
+    -- deadFeature   = Set.elemAt featIndex features
   -- construct the dead feature proposition
 --  bProp         = bProp' &&& bChc "DeadCore" (bRef deadFeature) (bnot $ bRef deadFeature)
     bProp         = bProp' &&& bChc "DeadCore" (conjoin $ fmap bRef features) (conjoin $ fmap (bnot . bRef) features)
@@ -122,10 +119,11 @@ main = do
         , mkBench' "v-->p" "V1*V2*V3*V4"  (vOnPWithConf (toDimProp singleVersionConf) solverConf) bProp
         ]
 
-  defaultMain
-    [  bgroup "Z3" (benches z3DefConf)
-      -- bgroup "Z3" (compRatioBenches z3DefConf)
-    -- , bgroup "CVC4" (benches cvc4DefConf)
-    -- , bgroup "Yices" (benches yicesDefConf)
-    -- , bgroup "Boolector" (benches boolectorDefConf)
-    ]
+  -- defaultMain
+  --   [  bgroup "Z3" (benches z3DefConf)
+  --     -- bgroup "Z3" (compRatioBenches z3DefConf)
+  --   -- , bgroup "CVC4" (benches cvc4DefConf)
+  --   -- , bgroup "Yices" (benches yicesDefConf)
+  --   -- , bgroup "Boolector" (benches boolectorDefConf)
+  --   ]
+  genConfigPool singleVersionConf >>= putStrLn . show

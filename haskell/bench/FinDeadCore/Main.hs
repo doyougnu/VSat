@@ -133,13 +133,13 @@ main = do
       -- !bProp = ((renameDims sameDims) . naiveEncode . autoToVSat) $ autoAndJoin bPs
       bProp' :: ReadableProp Text
       !bProp' = (renameDims sameDims . naiveEncode . autoToVSat) $ autoAndJoin bPs
-      features = vars bProp'
-      bPropLength = Set.size features
+      features = Set.toList $ vars bProp'
+      -- bPropLength = Set.size features
 
   -- select a random feature to check for dead
   let
-    (featIndex,_) = randomR (0, bPropLength) (mkStdGen 1111)
-    deadFeature   = Set.elemAt featIndex features
+    -- (featIndex,_) = randomR (0, bPropLength) (mkStdGen 1111)
+    -- deadFeature   = Set.elemAt featIndex features
   -- construct the dead feature proposition
     -- bProp         = bProp' &&& bChc "DeadCore" (bRef deadFeature) (bnot $ bRef deadFeature)
     bProp         = bProp' &&& bChc "DeadCore" (conjoin $ fmap bRef features) (conjoin $ fmap (bnot . bRef) features)
