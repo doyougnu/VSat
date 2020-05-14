@@ -1,9 +1,7 @@
 module Main where
 
 import           Control.Arrow           (first, second)
-import           Criterion.Main
-import           Criterion.Main.Options
-import           Criterion.Types         (Config (..))
+import           Gauge.Main
 import           Data.Aeson              (decodeStrict)
 import           Control.Monad           (replicateM, foldM, liftM2)
 import           Data.Bifunctor          (bimap)
@@ -63,13 +61,20 @@ ds = bRef <$> ["D_0","D_1","D_2","D_3"]
 [d0, d2, d4, d5] = ds
 
 deadCore = bRef "DeadCore"
-mkConf x xs = (deadCore ||| x) &&& x &&& (conjoin $ bnot <$> (delete x xs))
+
+mkConf x xs = (x &&& (conjoin $ bnot <$> (delete x xs)))
+
+mkConf' x xs = (disjoin $ bnot <$> (delete x xs))
 
 confs = fmap (flip mkConf ds) ds
 
+confs' = fmap (flip mkConf' ds) ds
+
 [d0Conf, d1Conf, d2Conf, d3Conf] = confs
 
-singleVersionConf = disjoin confs
+singleVersionConf = deadCore ||| disjoin confs
+
+singleVersionConf' = deadCore ||| VProp.Core.atMost1 ds
 
 
 -- run with stack bench --profile vsat:auto --benchmark-arguments='+RTS -S -RTS --output timings.html'
@@ -98,7 +103,8 @@ main = do
     (featIndex,_) = randomR (0, bPropLength) (mkStdGen 1111)
     deadFeature   = Set.elemAt featIndex features
   -- construct the dead feature proposition
-    bProp         = bProp' &&& bChc "DeadCore" (bRef deadFeature) (bnot $ bRef deadFeature)
+--  bProp         = bProp' &&& bChc "DeadCore" (bRef deadFeature) (bnot $ bRef deadFeature)
+    bProp         = bProp' &&& bChc "DeadCore" (conjoin $ fmap bRef features) (conjoin $ fmap (bnot . bRef) features)
 
   -- Convert the fmf's to actual configurations
     benches :: ReadableSMTConf Text -> [Benchmark]
@@ -123,5 +129,3 @@ main = do
     -- , bgroup "Yices" (benches yicesDefConf)
     -- , bgroup "Boolector" (benches boolectorDefConf)
     ]
-
-  -- putStrLn . show $ singleVersionConf
