@@ -1,5 +1,6 @@
+{ nixpkgs ? import ./nixos-20-03.json, compiler ? "ghc 0k"}
 { mkDerivation, aeson, aeson-pretty, base, bytestring, cassava
-, containers, criterion, deepseq, genifunctors, hashable, hpack
+, containers, gauge, deepseq, genifunctors, hashable, hpack
 , megaparsec, mtl, QuickCheck, sbv, Spock, stdenv, tasty, hoogle
 , tasty-hspec, tasty-hunit, tasty-quickcheck, tasty-smallcheck
 , text, time, unicode-show, unordered-containers, vector, wai-extra
@@ -29,7 +30,7 @@ mkDerivation {
     unicode-show unordered-containers vector wai-extra
   ];
   benchmarkHaskellDepends = [
-    aeson aeson-pretty base bytestring cassava containers criterion
+    aeson aeson-pretty base bytestring cassava containers gauge
     deepseq genifunctors hashable megaparsec mtl sbv Spock
     tasty-quickcheck text time unicode-show unordered-containers vector
     wai-extra
