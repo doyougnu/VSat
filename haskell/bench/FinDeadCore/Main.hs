@@ -2,7 +2,7 @@ module Main where
 
 import           Control.Arrow           (first, second)
 import           Gauge.Main
-import           Data.Aeson              (decodeStrict)
+import           Data.Aeson              (decodeStrict, encodeFile)
 import           Control.Monad           (replicateM, foldM, liftM2)
 import           Data.Bifunctor          (bimap)
 import           Data.Bitraversable      (bimapM)
@@ -28,6 +28,7 @@ import           CaseStudy.Auto.Run
 import           CaseStudy.Auto.CompactEncode
 import           Config
 import           Opts
+import           Json
 import           Run                     (runAD, runBF)
 import           Result
 import           Utils
@@ -165,7 +166,4 @@ main = do
     -- , bgroup "Boolector" (benches boolectorDefConf)
     ]
 
-  -- (genConfigPool $ disjoin confs) >>= mapM_ (putStrLn . show)
-  -- putStrLn $ show $ pairs
-  -- ts <- (mkCompRatioConfs ds pairs :: IO [VProp.Types.Config Text])
-  -- mapM_ (putStrLn . show) ts
+  (satWithConf (toDimProp singleVersionConf) z3DefConf) bProp >>= encodeFile "data/fin_vmodel_dead_core.json"

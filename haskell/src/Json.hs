@@ -34,7 +34,7 @@ instance (Show d, ToJSON d) => ToJSON (R.ResultProp d) where
 
 instance (FromJSON d, FromJSONKey d) => FromJSONKey (R.ResultProp d)
 instance (Show d, ToJSON d, ToJSONKey d) => ToJSONKey (R.ResultProp d)
-instance (R.Resultable d, ToJSONKey d, ToJSON d) => ToJSON (R.ResultMap d) where
+instance (R.Resultable d, ToJSONKey d, ToJSON d) => ToJSON (R.ResultMap d)
 instance (R.Resultable d, ToJSONKey d, ToJSON d) => ToJSON (R.UnSatResult d)
 instance (R.Resultable d, FromJSONKey d, FromJSON d) => FromJSON (R.UnSatResult d)
 instance (R.Resultable d, FromJSONKey d, FromJSON d) => FromJSON (R.Result d)

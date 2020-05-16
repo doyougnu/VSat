@@ -2,7 +2,7 @@ module Main where
 
 import           Control.Arrow           (first, second)
 import           Gauge
-import           Data.Aeson              (decodeStrict)
+import           Data.Aeson              (decodeStrict, encodeFile)
 import           Control.Monad           (replicateM, foldM, liftM2)
 import           Data.Bifunctor          (bimap)
 import           Data.Bitraversable      (bimapM)

@@ -2,7 +2,7 @@ module Main where
 
 import           Control.Arrow           (first, second)
 import           Gauge.Main
-import           Data.Aeson              (decodeStrict)
+import           Data.Aeson              (decodeStrict, encodeFile)
 import           Control.Monad           (replicateM, foldM, liftM2)
 import           Data.Bifunctor          (bimap)
 import           Data.Bitraversable      (bimapM)
@@ -29,6 +29,7 @@ import           CaseStudy.Auto.Run
 import           CaseStudy.Auto.CompactEncode
 import           Config
 import           Opts
+import           Json
 import           Run                     (runAD, runBF)
 import           Result
 import           Utils
@@ -126,3 +127,5 @@ main = do
     -- , bgroup "Yices" (benches yicesDefConf)
     -- , bgroup "Boolector" (benches boolectorDefConf)
     ]
+
+  (satWithConf (toDimProp singleVersionConf) z3DefConf) bProp >>= encodeFile "../../data/auto_vmodel_dead_core.json"

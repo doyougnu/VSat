@@ -1,13 +1,6 @@
 library(ggplot2)
 library(dplyr)
-library(cowplot)
 library(tidyr)
-library(latex2exp)
-library(Hmisc)
-library(broom)
-library(ggpubr)
-library(scales)
-library(rstatix)
 
 finResultsFile <- "../data/fin_data.csv"
 autoResultsFile <- "../data/auto_data.csv"
