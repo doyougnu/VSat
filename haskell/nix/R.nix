@@ -9,6 +9,7 @@ in with pkgs; {
     src = if pkgs.lib.inNixShell then null else nix;
 
     buildInputs = with rPackages; [
+      pandoc
       R
       ggplot2
       knitr

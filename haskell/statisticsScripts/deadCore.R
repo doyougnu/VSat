@@ -4,15 +4,15 @@ library(cowplot)
 library(tidyr)
 library(latex2exp)
 
-finResultsFile <- "../data/fin_dead_core_data.csv"
-autoResultsFile <- "../data/auto_dead_core_data.csv"
+finResultsFile <- "../data/fin_dead_core.csv"
+autoResultsFile <- "../data/auto_dead_core.csv"
 
 finData <- read.csv(file=finResultsFile) %>% mutate(Algorithm = as.factor(Algorithm), Config = as.factor(Config)) %>% mutate(Algorithm = gsub("-->", "\U27f6", Algorithm))
 
 autoData <- read.csv(file=autoResultsFile) %>% mutate(Algorithm = as.factor(Algorithm), Config = as.factor(Config)) %>% mutate(Algorithm = gsub("-->", "\U27f6", Algorithm))
 
-finDF <- finData %>% mutate(data = "Fin") # %>% select(Mean, Algorithm, CompressionRatio, data, ChcCount, PlainCount, Config)
-autoDF <- autoData %>% mutate(data = "Auto") # %>% select(Mean, Algorithm, CompressionRatio, data, ChcCount, PlainCount, Config)
+finDF <- finData %>% mutate(data = "Fin")
+autoDF <- autoData %>% mutate(data = "Auto")
 
 data <- rbind(finDF, autoDF)
 
@@ -41,13 +41,5 @@ dc <- ggplot(deadCoreDF
 
 ggsave("../plots/DeadCore.png", plot = dc, height = 4, width = 7, device = "png")
 
-## dcAuto <- ggplot(deadCoreDF %>% filter(data =="Auto"), mapping = aes(x=Algorithm, y=Mean, shape=Algorithm, color=Algorithm)) +
-##   ylab("Mean [s]") +
-##   geom_point(size=3) +
-##   geom_line() +
-##   scale_shape_manual(values = c(1,2,5,17)) +
-##   scale_x_continuous(breaks=seq(0, 32, 8)) +
-##   theme_classic() +
-##   ggtitle("Dead Core Demonstration") +
-##   ylab("Time [s] to solve all Variants") +
-##   theme(legend.position = "bottom")
+deadCoreDF %>% select(data,Algorithm, Mean) %>% group_by(data) %>%
+  spread(Algorithm, Mean) %>% mutate(speedup = `v⟶p` / `v⟶v`)

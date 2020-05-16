@@ -2,7 +2,7 @@ module Main where
 
 import           Control.Arrow           (first, second)
 import           Gauge
-import           Data.Aeson              (decodeStrict)
+import           Data.Aeson              (decodeStrict, encodeFile)
 import           Control.Monad           (replicateM, foldM, liftM2)
 import           Data.Bifunctor          (bimap)
 import           Data.Bitraversable      (bimapM)
@@ -35,6 +35,7 @@ import           Utils
 import           VProp.Core
 import           VProp.SBV               (toPredicate)
 import           VProp.Types
+import           Json
 
 import           Core
 
@@ -165,9 +166,9 @@ main = do
        , mkBench "v-->v" "V3" d3Conf (satWithConf (toDimProp d3Conf) solverConf) bProp
        , mkBench "v-->v" "V4" d4Conf (satWithConf (toDimProp d4Conf) solverConf) bProp
 --        -- , mkBench' "v-->v" "EvolutionAware" (satWithConf (toDimProp sumConf) solverConf) bProp
---        , mkBench "v-->v" "V1*V2"        justV12Conf  (satWith solverConf) bPropJustV12
---        , mkBench "v-->v" "V1*V2*V3"     justV123Conf (satWith solverConf) bPropJustV123
---        , mkBench' "v-->v" "V1*V2*V3*V4"  (satWith solverConf) bProp
+       , mkBench "v-->v" "V1*V2"        justV12Conf  (satWith solverConf) bPropJustV12
+       , mkBench "v-->v" "V1*V2*V3"     justV123Conf (satWith solverConf) bPropJustV123
+       , mkBench' "v-->v" "V1*V2*V3*V4"  (satWith solverConf) bProp
 
         -- -- p - v
        , mkBench "p-->v" "V1"  justV1Conf (pOnV solverConf) bPropV1
@@ -175,9 +176,9 @@ main = do
        , mkBench "p-->v" "V3"  justV3Conf (pOnV solverConf) bPropV3
        , mkBench "p-->v" "V4"  justV4Conf (pOnV solverConf) bPropV4
 --        -- , mkBench' "p-->v" "EvolutionAware" (pOnVWithConf (toDimProp sumConf) solverConf) bProp
---        , mkBench "p-->v" "V1*V2"        justV12Conf (pOnV solverConf) bPropJustV12
---        , mkBench "p-->v" "V1*V2*V3"     justV123Conf (pOnV solverConf) bPropJustV123
-          -- mkBench' "p-->v" "V1*V2*V3*V4"  (pOnV solverConf) bProp
+       , mkBench "p-->v" "V1*V2"        justV12Conf (pOnV solverConf) bPropJustV12
+       , mkBench "p-->v" "V1*V2*V3"     justV123Conf (pOnV solverConf) bPropJustV123
+       , mkBench' "p-->v" "V1*V2*V3*V4"  (pOnV solverConf) bProp
 
         -- -- p - p
         , mkBench "p-->p" "V1"  justV1Conf (bfWith solverConf) bPropV1
@@ -185,9 +186,9 @@ main = do
         , mkBench "p-->p" "V3"  justV3Conf (bfWith solverConf) bPropV3
         , mkBench "p-->p" "V4"  justV4Conf (bfWith solverConf) bPropV4
         -- , mkBench' "p-->p" "EvolutionAware"  (bfWithConf (toDimProp sumConf) solverConf) bProp
-        -- , mkBench "p-->p" "V1*V2"        justV12Conf (bfWith solverConf) bPropJustV12
-        -- , mkBench "p-->p" "V1*V2*V3"     justV123Conf (bfWith solverConf) bPropJustV123
-        -- , mkBench' "p-->p" "V1*V2*V3*V4"  (bfWith solverConf) bProp
+        , mkBench "p-->p" "V1*V2"        justV12Conf (bfWith solverConf) bPropJustV12
+        , mkBench "p-->p" "V1*V2*V3"     justV123Conf (bfWith solverConf) bPropJustV123
+        , mkBench' "p-->p" "V1*V2*V3*V4"  (bfWith solverConf) bProp
 
         -- v - p
         , mkBench "v-->p" "V1"  justV1Conf (vOnPWithConf (toDimProp d0Conf) solverConf) bPropV1
@@ -195,9 +196,9 @@ main = do
         , mkBench "v-->p" "V3"  justV3Conf (vOnPWithConf (toDimProp d3Conf) solverConf) bPropV3
         , mkBench "v-->p" "V4"  justV4Conf (vOnPWithConf (toDimProp d4Conf) solverConf) bPropV4
         -- , mkBench' "v-->p" "EvolutionAware"  (vOnPWithConf (toDimProp sumConf) solverConf) bProp
-        -- , mkBench "v-->p" "V1*V2"        justV12Conf (vOnPWith solverConf) bPropJustV12
-        -- , mkBench "v-->p" "V1*V2*V3"     justV123Conf (vOnPWith solverConf) bPropJustV123
-        -- , mkBench' "v-->p" "V1*V2*V3*V4"  (vOnPWith solverConf) bProp
+        , mkBench "v-->p" "V1*V2"        justV12Conf (vOnPWith solverConf) bPropJustV12
+        , mkBench "v-->p" "V1*V2*V3"     justV123Conf (vOnPWith solverConf) bPropJustV123
+        , mkBench' "v-->p" "V1*V2*V3*V4"  (vOnPWith solverConf) bProp
         ]
 
     -- | Compression Ratio props
@@ -228,57 +229,13 @@ main = do
         , mkCompBench "p-->p" "V2*V3"  (bfWithConf (toDimProp pD12Conf) solverConf) justbPropV23
         , mkCompBench "p-->p" "V3*V4"  (bfWithConf (toDimProp pD23Conf) solverConf) justbPropV34
         ]
-  -- mdl <- baselineSolve bPs
-  -- print mdl
-  -- putStrLn $ "Done with parse: "
-  -- mapM_ (putStrLn . show) $ (sPs)
-  -- putStrLn $! show bProp
-  -- putStrLn $ "------------------"
-  -- putStrLn $ "Solving: "
-  -- res' <- satWithConf (toDimProp d0Conf) emptyConf bProp
-  -- res' <- ad id bProp
-  -- res' <- bfWithConf (toDimProp d0Conf) emptyConf bProp
-  -- res' <- satWith emptyConf sProp
-  -- putStrLn "DONE!"
-  -- print $ (length $ show res')
-  -- print "done"
-  -- let !p = prop 6000
-  -- print $ length p
-  -- -- res <- test 10
-  -- res <- S.runSMT $ do p' <- mapM S.sBool p
-  -- genConfigPool pD01Conf >>= putStrLn . show
-  -- putStrLn $ show $ mkCompRatioPairs ds pairs
-  -- putStrLn "Running Good:\n"
-  -- goodRes <- testS goodS 1000
 
-  -- defaultMain
-  --   [  bgroup "Z3" (benches z3DefConf)
-  --     -- bgroup "Z3" (compRatioBenches z3DefConf)
-  --   -- , bgroup "CVC4" (benches cvc4DefConf)
-  --   -- , bgroup "Yices" (benches yicesDefConf)
-  --   -- , bgroup "Boolector" (benches boolectorDefConf)
-  --   ]
+  defaultMain
+    [  bgroup "Z3" (benches z3DefConf)
+      -- bgroup "Z3" (compRatioBenches z3DefConf)
+    -- , bgroup "CVC4" (benches cvc4DefConf)
+    -- , bgroup "Yices" (benches yicesDefConf)
+    -- , bgroup "Boolector" (benches boolectorDefConf)
+    ]
 
-  let countFile = "auto_diagnostics.csv"
-      problems = [ ("V1: "                         , bPropJustV1)
-                 , ("V1*V2: "                         , bPropJustV12)
-                 , ("V1*V2*V3: "                      , bPropJustV123)
-                 , ("V1*V2*V3*V4: ", bProp)
-                 ]
-      newline = flip (++) "\n"
-      runner f (desc,prb) = f prb >>= T.appendFile countFile . pack . newline . ((++) desc)
-
-      diagnostics p = do res <- sat p
-                         return $ "Num not changed: " ++
-                           (show $ numUnChanged res) ++ "\n" ++
-                           "Maximum clause " ++ (show $ maxClauseSize res) ++ "\n" ++
-                           "Total Count" ++ (show $ Result.size res)
-
-  fileHeader <- fmap (pack . flip (++) "\n"
-                      . (++) "Generated on (Year, Month, Day): "
-                      . show . toGregorian . utctDay) getCurrentTime
-
-
-  T.appendFile countFile fileHeader
-  -- v-->v
-  mapM_ (runner diagnostics) problems
+  (satWith z3DefConf) bProp >>= encodeFile "data/auto_vmodel.json"

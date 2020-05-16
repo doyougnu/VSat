@@ -41,7 +41,8 @@ fin.inters.res <- kruskal.test(TimeCalc ~ fin.inters, finSingData)
 
 ## Find the pairs which are significant
 fin.pairs <- pairwise.wilcox.test(finSingData$TimeCalc, fin.inters,
-                                  method="holm", exact=FALSE, paired=FALSE) %>%
+                                  p.adj="bonf", exact=FALSE,
+                                  paired=FALSE) %>%
   tidy %>%
   separate(group1, sep=c(3,4), into = c("AlgLeft", "Dump", "ConfigLeft")) %>%
   separate(group2, sep=c(3,4), into = c("AlgRight", "Dump2", "ConfigRight")) %>%
