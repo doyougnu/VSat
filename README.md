@@ -1,7 +1,9 @@
 # DISCLAIMER
 This project is deprecated, and this repository serves only as an archive. See
 [this repo](https://github.com/lambda-land/VSat-Papers/tree/master/SPLC2020) for
-instructions on running this version of the solver.
+instructions on running this version of the solver. See [this
+repo](https://github.com/doyougnu/VSmt) for next iteration of variational
+satisfiability solving.
 
 # What
 This project provides variational sat solving using the [Choice
