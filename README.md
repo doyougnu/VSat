@@ -1,3 +1,8 @@
+# DISCLAIMER
+This project is deprecated, and this repository serves only as an archive. See
+[this repo](https://github.com/lambda-land/VSat-Papers/tree/master/SPLC2020) for
+instructions on running this version of the solver.
+
 # What
 This project provides variational sat solving using the [Choice
 Calculus](http://web.engr.oregonstate.edu/~walkiner/projects/choice-calculus.html)
