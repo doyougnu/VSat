@@ -24,3 +24,5 @@ R/plots/*
 *.shadow-cljs/*
 node_modules
 *.js*
+*/MAlonzo/*
+*.agdai
