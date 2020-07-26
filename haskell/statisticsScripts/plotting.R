@@ -1,6 +1,8 @@
 library(ggplot2)
 library(dplyr)
 library(tidyr)
+library(broom)
+library(scales)
 
 finResultsFile <- "../data/fin_data.csv"
 autoResultsFile <- "../data/auto_data.csv"
@@ -24,24 +26,24 @@ rq1DF <- data %>% filter(Variants >= 2) %>% group_by(Algorithm) %>%
   arrange(Variants)
 
 breaksRq1 <- function(x) {
-  if (max(x) > 16) {
-    2^(1:10)
+  if (max(x) < 17) {
+    2^(1:4)
   } else {
-    2^(1:4)}
+    2^(5:10)}
   }
 
 rq1 <- ggplot(rq1DF) +
   geom_line(aes(x=Variants, y=Mean/60, color=Algorithm)) +
   geom_point(aes(x=Variants, y=Mean/60, shape=Algorithm, color=Algorithm),size=3) +
   scale_shape_manual(values = c(1,6,5,17)) +
-  scale_x_continuous(breaks=breaksRq1, limits=c(2,NA)) +
   facet_wrap(. ~ data, scales = "free") +
   theme_classic() +
+  scale_x_continuous(breaks=breaksRq1, limits=c(2,NA)) +
   ggtitle("RQ1: Performance as variants increase") +
   ylab("Time [Min.] to solve all Variants") +
   theme(legend.position = c(0.6,0.75))
 
-## ggsave("../plots/RQ1.png", plot = rq1, height = 4, width = 7, device = "png")
+ggsave("../plots/RQ1.png", plot = rq1, height = 4, width = 7, device = "png")
 
 ################# Singleton Analysis ##############################
 ## head(-4) %>%
@@ -80,7 +82,7 @@ rq3 <- ggplot(rq3DF, aes(x=Config, y=Mean, fill=Algorithm, shape=Algorithm, colo
   theme(panel.grid.major.y = element_line(color = "grey")) +
   coord_flip()
 
-ggsave("../plots/RQ3.png", plot = rq3, height = 4, width = 7, device = "png")
+## ggsave("../plots/RQ3.png", plot = rq3, height = 4, width = 7, device = "png")
 
 slow_down <- rq3DF %>% group_by(data,Algorithm) %>%  summarise(AvgMean = mean(Mean))
 
