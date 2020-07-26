@@ -29,7 +29,7 @@ breaksRq1 <- function(x) {
   if (max(x) < 17) {
     2^(1:4)
   } else {
-    2^(5:10)}
+    2^(6:10)}
   }
 
 rq1 <- ggplot(rq1DF) +
