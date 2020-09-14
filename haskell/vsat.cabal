@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 531f6e0f3fcc8c856e3883ac2d0ad6e51128004e9bdb1e2b135c20e2e6560614
+-- hash: 115771d30561a1d43a3a8c5cfbcc3c9ac8aeaebe6917f146d4c516e4315917ac
 
 name:           vsat
 version:        0.1.0.0
@@ -30,6 +30,7 @@ library
       CaseStudy.Auto.Lang
       CaseStudy.Auto.Parser
       CaseStudy.Auto.Run
+      CaseStudy.BusyBox.Parser
       Config
       Json
       Opts
@@ -98,6 +99,7 @@ test-suite vsat-test
   other-modules:
       CaseStudy.Auto.Parser.Test
       CaseStudy.Auto.Run.Test
+      CaseStudy.BusyBox.Parser.Test
       Opts.Test
       Run.Test
       VProp.Core.Test
@@ -141,6 +143,7 @@ benchmark auto
       CaseStudy.Auto.Lang
       CaseStudy.Auto.Parser
       CaseStudy.Auto.Run
+      CaseStudy.BusyBox.Parser
       Config
       Json
       Opts
@@ -193,6 +196,7 @@ benchmark auto-dead-core
       CaseStudy.Auto.Lang
       CaseStudy.Auto.Parser
       CaseStudy.Auto.Run
+      CaseStudy.BusyBox.Parser
       Config
       Json
       Opts
@@ -245,6 +249,7 @@ benchmark auto-diag
       CaseStudy.Auto.Lang
       CaseStudy.Auto.Parser
       CaseStudy.Auto.Run
+      CaseStudy.BusyBox.Parser
       Config
       Json
       Opts
@@ -297,6 +302,7 @@ benchmark fin
       CaseStudy.Auto.Lang
       CaseStudy.Auto.Parser
       CaseStudy.Auto.Run
+      CaseStudy.BusyBox.Parser
       Config
       Json
       Opts
@@ -349,6 +355,7 @@ benchmark fin-dead-core
       CaseStudy.Auto.Lang
       CaseStudy.Auto.Parser
       CaseStudy.Auto.Run
+      CaseStudy.BusyBox.Parser
       Config
       Json
       Opts
@@ -401,6 +408,7 @@ benchmark fin-diag
       CaseStudy.Auto.Lang
       CaseStudy.Auto.Parser
       CaseStudy.Auto.Run
+      CaseStudy.BusyBox.Parser
       Config
       Json
       Opts
@@ -453,6 +461,7 @@ benchmark linux
       CaseStudy.Auto.Lang
       CaseStudy.Auto.Parser
       CaseStudy.Auto.Run
+      CaseStudy.BusyBox.Parser
       Config
       Json
       Opts
