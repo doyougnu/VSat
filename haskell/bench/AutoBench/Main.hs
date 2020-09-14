@@ -85,14 +85,6 @@ justV123Conf = (bnot d5)
 
 negConf = conjoin $ bnot <$> ds
 
-baselineSolve :: [AutoLang Text Text] -> IO S.SatResult
-baselineSolve props = S.runSMT $
-  do assocMap <- makeAssocMap props
-     SC.query $
-       do
-         (assocMap ! plainHandle) >>= S.constrain
-         fmap S.SatResult SC.getSMTResult
-
 -- | Compression Ratio setup
 [pD01Conf, pD12Conf, pD23Conf] = mkCompRatioPairs ds pairs
 
@@ -165,9 +157,9 @@ main = do
         -- , mkBench "v-->v" "V3" d3Conf (satWithConf (toDimProp d3Conf) solverConf) bProp
         -- , mkBench "v-->v" "V4" d4Conf (satWithConf (toDimProp d4Conf) solverConf) bProp
         -- , mkBench' "v-->v" "EvolutionAware" (satWithConf (toDimProp sumConf) solverConf) bProp
-        -- , mkBench "v-->v" "V1*V2"        justV12Conf  (satWith solverConf) bPropJustV12
-        -- , mkBench "v-->v" "V1*V2*V3"     justV123Conf (satWith solverConf) bPropJustV123
-        -- , mkBench' "v-->v" "V1*V2*V3*V4"  (satWith solverConf) bProp
+          mkBench "v-->v" "V1*V2"        (getThreads solverConf) justV12Conf  (satWith solverConf) bPropJustV12
+        , mkBench "v-->v" "V1*V2*V3"     (getThreads solverConf) justV123Conf (satWith solverConf) bPropJustV123
+        , mkBench' "v-->v" "V1*V2*V3*V4"  (getThreads solverConf) (satWith solverConf) bProp
 
         -- -- p - v
         -- , mkBench "p-->v" "V1"  justV1Conf (pOnV solverConf) bPropV1
@@ -187,17 +179,17 @@ main = do
         -- , mkBench' "p-->p" "EvolutionAware"  (bfWithConf (toDimProp sumConf) solverConf) bProp
         -- , mkBench "p-->p" "V1*V2"        justV12Conf (bfWith solverConf) bPropJustV12
           -- mkBench "p-->p" "V1*V2*V3"     justV123Conf (bfWith solverConf) bPropJustV123
-          mkBench' "p-->p" "V1*V2*V3*V4"  (bfWith solverConf) bProp
+          -- mkBench' "p-->p" "V1*V2*V3*V4"  (bfWith solverConf) bProp
 
         -- v - p
-        , mkBench "v-->p" "V1"  justV1Conf (vOnPWithConf (toDimProp d0Conf) solverConf) bProp
-        , mkBench "v-->p" "V2"  justV2Conf (vOnPWithConf (toDimProp d2Conf) solverConf) bProp
-        , mkBench "v-->p" "V3"  justV3Conf (vOnPWithConf (toDimProp d3Conf) solverConf) bProp
-        , mkBench "v-->p" "V4"  justV4Conf (vOnPWithConf (toDimProp d4Conf) solverConf) bProp
-        , mkBench' "v-->p" "EvolutionAware"  (vOnPWithConf (toDimProp sumConf) solverConf) bProp
-        , mkBench "v-->p" "V1*V2"        justV12Conf (vOnPWith solverConf) bPropJustV12
-        , mkBench "v-->p" "V1*V2*V3"     justV123Conf (vOnPWith solverConf) bPropJustV123
-        , mkBench' "v-->p" "V1*V2*V3*V4"  (vOnPWith solverConf) bProp
+        -- , mkBench "v-->p" "V1"  justV1Conf (vOnPWithConf (toDimProp d0Conf) solverConf) bProp
+        -- , mkBench "v-->p" "V2"  justV2Conf (vOnPWithConf (toDimProp d2Conf) solverConf) bProp
+        -- , mkBench "v-->p" "V3"  justV3Conf (vOnPWithConf (toDimProp d3Conf) solverConf) bProp
+        -- , mkBench "v-->p" "V4"  justV4Conf (vOnPWithConf (toDimProp d4Conf) solverConf) bProp
+        -- , mkBench' "v-->p" "EvolutionAware"  (vOnPWithConf (toDimProp sumConf) solverConf) bProp
+        -- , mkBench "v-->p" "V1*V2"        justV12Conf (vOnPWith solverConf) bPropJustV12
+        -- , mkBench "v-->p" "V1*V2*V3"     justV123Conf (vOnPWith solverConf) bPropJustV123
+        -- , mkBench' "v-->p" "V1*V2*V3*V4"  (vOnPWith solverConf) bProp
         ]
 
     -- | Compression Ratio props
@@ -209,26 +201,26 @@ main = do
       compRatioBenches solverConf =
         [
           -- v --> v
-          mkCompBench "v-->v" "V1*V2"  (satWithConf (toDimProp pD01Conf) solverConf) justbPropV12
-        , mkCompBench "v-->v" "V2*V3"  (satWithConf (toDimProp pD12Conf) solverConf) justbPropV23
-        , mkCompBench "v-->v" "V3*V4"  (satWithConf (toDimProp pD23Conf) solverConf) justbPropV34
+          mkCompBench "v-->v" "V1*V2" 0 (satWithConf (toDimProp pD01Conf) solverConf) justbPropV12
+        , mkCompBench "v-->v" "V2*V3" 0 (satWithConf (toDimProp pD12Conf) solverConf) justbPropV23
+        , mkCompBench "v-->v" "V3*V4" 0 (satWithConf (toDimProp pD23Conf) solverConf) justbPropV34
 
           -- v --> p
-        , mkCompBench "v-->p" "V1*V2"  (vOnPWithConf (toDimProp pD01Conf) solverConf) justbPropV12
-        , mkCompBench "v-->p" "V2*V3"  (vOnPWithConf (toDimProp pD12Conf) solverConf) justbPropV23
-        , mkCompBench "v-->p" "V3*V4"  (vOnPWithConf (toDimProp pD23Conf) solverConf) justbPropV34
+        , mkCompBench "v-->p" "V1*V2" 0 (vOnPWithConf (toDimProp pD01Conf) solverConf) justbPropV12
+        , mkCompBench "v-->p" "V2*V3" 0 (vOnPWithConf (toDimProp pD12Conf) solverConf) justbPropV23
+        , mkCompBench "v-->p" "V3*V4" 0 (vOnPWithConf (toDimProp pD23Conf) solverConf) justbPropV34
 
           -- p --> v
-        , mkCompBench "p-->v" "V1*V2"  (pOnVWithConf (toDimProp pD01Conf) solverConf) justbPropV12
-        , mkCompBench "p-->v" "V2*V3"  (pOnVWithConf (toDimProp pD12Conf) solverConf) justbPropV23
-        , mkCompBench "p-->v" "V3*V4"  (pOnVWithConf (toDimProp pD23Conf) solverConf) justbPropV34
+        , mkCompBench "p-->v" "V1*V2" 0 (pOnVWithConf (toDimProp pD01Conf) solverConf) justbPropV12
+        , mkCompBench "p-->v" "V2*V3" 0 (pOnVWithConf (toDimProp pD12Conf) solverConf) justbPropV23
+        , mkCompBench "p-->v" "V3*V4" 0 (pOnVWithConf (toDimProp pD23Conf) solverConf) justbPropV34
 
           -- p --> p
-        , mkCompBench "p-->p" "V1*V2"  (bfWithConf (toDimProp pD01Conf) solverConf) justbPropV12
-        , mkCompBench "p-->p" "V2*V3"  (bfWithConf (toDimProp pD12Conf) solverConf) justbPropV23
-        , mkCompBench "p-->p" "V3*V4"  (bfWithConf (toDimProp pD23Conf) solverConf) justbPropV34
+        , mkCompBench "p-->p" "V1*V2" 0 (bfWithConf (toDimProp pD01Conf) solverConf) justbPropV12
+        , mkCompBench "p-->p" "V2*V3" 0 (bfWithConf (toDimProp pD12Conf) solverConf) justbPropV23
+        , mkCompBench "p-->p" "V3*V4" 0 (bfWithConf (toDimProp pD23Conf) solverConf) justbPropV34
         ]
-  -- mdl <- baselineSolve bPs
+
   -- print mdl
   -- putStrLn $ "Done with parse: "
   -- mapM_ (putStrLn . show) $ (sPs)
@@ -253,9 +245,13 @@ main = do
 
   defaultMain
     [
-      -- bgroup "Z3" (benches z3DefConf)
-      bgroup "Z3" (compRatioBenches z3DefConf)
-    -- , bgroup "CVC4" (benches cvc4DefConf)
-    -- , bgroup "Yices" (benches yicesDefConf)
-    -- , bgroup "Boolector" (benches boolectorDefConf)
+  --     bgroup "Z3" $ [2,4,..16] >>= (\x -> benches $ setThreads x $ z3DefConf)
+      bgroup "Z3" $ benches z3DefConf
+  --     -- bgroup "Z3" (compRatioBenches z3DefConf)
+  --   -- , bgroup "CVC4" (benches cvc4DefConf)
+  --   -- , bgroup "Yices" (benches yicesDefConf)
+  --   -- , bgroup "Boolector" (benches boolectorDefConf)
     ]
+
+  -- res <- (satWith z3DefConf) bProp
+  -- putStrLn $ show $ length $ show res

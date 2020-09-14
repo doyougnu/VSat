@@ -15,7 +15,7 @@ mkDerivation {
     aeson aeson-pretty base bytestring cassava containers deepseq
     genifunctors hashable megaparsec mtl sbv Spock tasty-quickcheck
     text time unicode-show unordered-containers vector wai-extra
-    hoogle
+    hoogle QuickCheck
   ];
   libraryToolDepends = [ hpack ];
   executableHaskellDepends = [

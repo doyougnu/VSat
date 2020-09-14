@@ -263,8 +263,8 @@ runVSMTSolve !configPool !prop =
      -- run the inner driver
      let
        pprop :: S.Symbolic (Loc Text)
-       -- !pprop = findPrincipleChoice . mkTop <$> (vCore >>= (evaluate . toBValue))
-       !pprop = mkTop <$> (vCore >>= (evaluate . toBValue))
+       !pprop = findPrincipleChoice . mkTop <$> (vCore >>= (evaluate . toBValue))
+       -- !pprop = mkTop <$> (vCore >>= (evaluate . toBValue))
        run = \configuration -> vSMTSolve pprop configuration cnf dCount
 
      -- run configurations in parallel after making the variational core. Note
@@ -296,11 +296,13 @@ type GenModel = Bool
 data PackState a = PackState { usedBools  :: UsedVars a S.SBool
                              , usedNums   :: UsedVars a SNum
                              , variantCount  :: Int
+                             , dimensionsSeen :: Set.Set (Dim Text)
                              }
 
 emptyPackState = PackState {usedBools=mempty
                            ,usedNums=mempty
                            ,variantCount=0
+                           ,dimensionsSeen=mempty
                            }
 
 onUsedNums :: (UsedVars a SNum -> UsedVars a SNum) -> PackState a -> PackState a
@@ -313,9 +315,17 @@ onUsedBools f PackState{..} = PackState{usedBools=f usedBools, ..}
 onCount :: (Int -> Int) -> PackState a -> PackState a
 onCount f PackState{..} = PackState{variantCount=f variantCount, ..}
 
-incrementConfCount :: MonadState (PackState a) m => m ()
-incrementConfCount = St.modify' (onCount succ)
+onObservedDims :: (Set.Set (Dim Text) -> Set.Set (Dim Text)) -> PackState a -> PackState a
+onObservedDims f PackState{..} = PackState{dimensionsSeen=f dimensionsSeen, ..}
 
+incrementVariantCount :: MonadState (PackState a) m => m ()
+incrementVariantCount = St.modify' (onCount succ)
+
+hasNotBeenObserved :: MonadState (PackState a) m => Dim Text -> m Bool
+hasNotBeenObserved d = gets dimensionsSeen >>= return . Set.notMember d
+
+observe :: MonadState (PackState a) m => Dim Text -> m ()
+observe d = St.modify' (onObservedDims $ Set.insert d)
 
 type IncPack a = StateT (PackState a) S.Symbolic
 
@@ -418,23 +428,24 @@ vSMTSolve prop propConf cnf variantCount =
                  -- construct an empty state
                       (emptySt reqChanIn resChanIn))
 
-        -- continuation to run in worker thread, takes a state and query computation
-
         propConfSize = length propConf
-        possibleMax = if variantCount >= propConfSize
-                      then propConfSize
-                      else variantCount
+
+        possibleMax = variantCount
+          -- if variantCount >= propConfSize
+          --             then variantCount
+          --             else propConfSize
 
         maxResults = if variantCount == 0 || possibleMax == 0
                      then 1 else possibleMax
 
-        numWorkers = numThreads
+        numWorkers = numThreads `div` 2
           -- if dimensionCount == 0 || possibleMax == 0
           --             then 1
           --             else possibleMax `div` 2
-        numListeners = if maxResults <= numThreads
-                       then maxResults
-                       else numThreads
+        numListeners = 4
+          -- if maxResults <= numThreads
+          --              then maxResults `div` 2
+          --              else numThreads
           -- if dimensionCount == 0 || possibleMax == 0
           --              then 1
           --              else possibleMax `div` 2
@@ -475,8 +486,8 @@ listener :: OutChan (Result Text) -> Int -> Result Text -> IO (Result Text)
 listener chan 0  !results = return results
 listener chan !i !results = do
   -- dbg "Listening for " i
-  newResult <- readChan chan
-  listener chan (i - 1) (newResult <> results)
+  !newResult <- readChan chan
+  listener chan (i - 1) (force $ newResult <> results)
 
 worker :: S.Symbolic (Loc Text) ->
           Ts.SMTConfig ->
@@ -509,9 +520,15 @@ propToSBool (OpB o e)    = propToSBool e >>= return . OpB o
 propToSBool (OpBB o l r) = do l' <- propToSBool l
                               r' <- propToSBool r
                               return $ OpBB o l' r'
-propToSBool (ChcB d l r) = do incrementConfCount
+propToSBool (ChcB d l r) = do b <- hasNotBeenObserved d
+                              -- if we have not seen the dimension then we
+                              -- increment the variant count. If we do not check
+                              -- then we do not uphold the law of synchronicity
+                              when b $
+                                do incrementVariantCount
+                                   incrementVariantCount
+                                   observe d
                               l' <- propToSBool l
-                              incrementConfCount
                               r' <- propToSBool r
                               return $ ChcB d l' r'
 propToSBool (OpIB o l r) = do l' <- propToSBool' l
@@ -524,8 +541,8 @@ propToSBool' (Ref RefI i) = Ref RefI <$> smtInt i
 propToSBool' (Ref RefD d) = Ref RefD <$> smtDouble d
 propToSBool' (OpI o e)    = OpI o    <$> propToSBool' e
 propToSBool' (OpII o l r) = OpII o <$> propToSBool' l <*> propToSBool' r
-propToSBool' (ChcI d l r) = do incrementConfCount
-                               incrementConfCount
+propToSBool' (ChcI d l r) = do incrementVariantCount
+                               incrementVariantCount
                                ChcI d <$> propToSBool' l <*> propToSBool' r
 propToSBool' (LitI x)     = return $ LitI x
 
@@ -625,13 +642,13 @@ solveVariant go = do
            !modelsEnabled <- asks genModelMaps
 
            -- grab the model if there is one
-           resMap <- if modelsEnabled
-                     then getResult prop
-                     else getResultOnlySat prop
+           resMap <- force <$> if modelsEnabled
+                               then getResult prop
+                               else getResultOnlySat prop
            -- dbg "Got model for: " prop
 
            -- return the result
-           resChan <- asks resultChan
+           !resChan <- asks resultChan
            liftIO $! writeChan resChan resMap
 
 
@@ -646,8 +663,8 @@ handleChc goLeft goRight d =
        Just True  -> goLeft
        Just False -> goRight
        Nothing    -> do
-         chan' <- asks workerChan
-         st <- ask
+         !chan' <- asks workerChan
+         !st <- ask
          liftIO $! writeChan chan' (insertToConfig d False st, goRight)
 
          -- liftIO $! writeChan chan' (insertToConfig d True st, goLeft)
