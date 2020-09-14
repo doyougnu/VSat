@@ -3,6 +3,7 @@ import           Test.Tasty
 import           Test.Tasty.QuickCheck
 
 import qualified CaseStudy.Auto.Parser.Test as CAP
+import qualified CaseStudy.BusyBox.Parser.Test as CBP
 import qualified CaseStudy.Auto.Run.Test as CAR
 import qualified Run.Test as R
 import qualified Opts.Test as O
@@ -16,7 +17,7 @@ main = do
   where tests = testGroup "All" [ -- jsonProperties
                                  -- R.unitTests
                                 -- , R.specTests
-                                  CAP.unitTests
+                                  CBP.unitTests
                                 -- CAR.unitTests
                                 -- , CAP.unitTests
                                 -- R.runProperties
