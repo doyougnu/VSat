@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 115771d30561a1d43a3a8c5cfbcc3c9ac8aeaebe6917f146d4c516e4315917ac
+-- hash: f809693160036101ab5d8bb5441ed4bcb95a662a987d6eaee07b478242370c8c
 
 name:           vsat
 version:        0.1.0.0
@@ -286,6 +286,59 @@ benchmark auto-diag
     , tasty-quickcheck
     , text
     , time
+    , unicode-show
+    , unordered-containers
+    , vsat
+  default-language: Haskell2010
+
+benchmark busybox
+  type: exitcode-stdio-1.0
+  main-is: Main.hs
+  other-modules:
+      Core
+      Api
+      CaseStudy.Auto.Auto
+      CaseStudy.Auto.CompactEncode
+      CaseStudy.Auto.Lang
+      CaseStudy.Auto.Parser
+      CaseStudy.Auto.Run
+      CaseStudy.BusyBox.Parser
+      Config
+      Json
+      Opts
+      Parser
+      Result
+      Run
+      SAT
+      Server
+      Utils
+      VProp.Boolean
+      VProp.Core
+      VProp.Gen
+      VProp.SBV
+      VProp.Types
+      Paths_vsat
+  hs-source-dirs:
+      bench/Bench
+      bench/BusyBox
+      src
+  default-extensions: NamedFieldPuns OverloadedStrings FlexibleContexts DeriveFunctor DeriveGeneric BangPatterns GeneralizedNewtypeDeriving DeriveTraversable FlexibleInstances DeriveDataTypeable MultiParamTypeClasses RecordWildCards TemplateHaskell ViewPatterns
+  ghc-options: -O2 -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      aeson
+    , base >=4.7 && <5
+    , bytestring
+    , containers
+    , deepseq
+    , gauge
+    , genifunctors >=0.4
+    , megaparsec >=8.0.0
+    , mtl
+    , parser-combinators >=1.2.1
+    , random
+    , sbv >=8.6
+    , tasty-quickcheck
+    , text
     , unicode-show
     , unordered-containers
     , vsat

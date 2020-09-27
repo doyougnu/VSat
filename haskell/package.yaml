@@ -160,6 +160,22 @@ benchmarks:
     - random
     - vsat
 
+  busybox:
+    main:                Main.hs
+    source-dirs:
+      - bench/Bench
+      - bench/BusyBox
+      - src
+    ghc-options:
+    - -O2
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - gauge
+    - random
+    - vsat
+
   linux:
     main:                Main.hs
     source-dirs:
