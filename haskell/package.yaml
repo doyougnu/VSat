@@ -156,8 +156,8 @@ benchmarks:
     - -rtsopts
     - -with-rtsopts=-N
     dependencies:
+    - time
     - gauge
-    - random
     - vsat
 
   busybox:
