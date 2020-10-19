@@ -67,15 +67,35 @@ newtype Analysis = Analysis { getAnalysis :: M.Map QueryMode [ReadableProp T.Tex
 instance Semigroup Analysis where (getAnalysis -> a) <> (getAnalysis -> b) = Analysis $! M.unionWith (<>) a b
 instance Monoid Analysis where mempty = Analysis M.empty
 
-data QueryMode = Lexing
+data QueryMode = NoMode
+               | FeatureModel
+               | Lexing
                | Parsing
                | TypeChecking
-               | NoMode
-               | FeatureModel
                deriving (Eq,Ord,Show)
 
--- | a record to store an analysis. I've hardcoded these particular to busybox,
--- if the analysis done in type chef changes these will also have to change
+-- | don't feel like making the correct semigorup and monoid instances for maybe
+-- here
+get :: QueryMode -> Analysis -> [ReadableProp T.Text]
+get m ( getAnalysis -> a) = case m `M.lookup` a of
+                              Nothing -> true
+                              Just xs -> xs
+
+
+featureModel :: Analysis -> ReadableProp T.Text
+featureModel = head . get FeatureModel
+
+lexing :: Analysis -> [ReadableProp T.Text]
+lexing = get Lexing
+
+parsing :: Analysis -> [ReadableProp T.Text]
+parsing = get Parsing
+
+typeChecking :: Analysis -> [ReadableProp T.Text]
+typeChecking = get TypeChecking
+
+noMode :: Analysis -> [ReadableProp T.Text]
+noMode = get NoMode
 
 dataFiles :: IO [Directory]
 dataFiles = fmap (Directory . (home </>)) <$> D.listDirectory home

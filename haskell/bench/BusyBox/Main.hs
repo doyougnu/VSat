@@ -42,49 +42,24 @@ dataFile :: FilePath
 -- dataFile = "bench/BusyBox/SAT_uniq_sorted.txt"
 dataFile = "bench/BusyBox/SAT_problems.txt"
 
+-- | I wonder if having an alternative with all the queries is better than
+-- having a list of choices with all the same alternatives...
+analysisToVariational :: Analysis -> ReadableProp T.Text
+analysisToVariational (getAnalysis -> a) = fm &&& nM &&& lexProblems &&& parseProblems &&& tcProblems
+  where fm            = featureModel a
+        nM            = mconcat $ noMode a
+        lexProblems   = mconcat $ (\p -> chcB "Lexing" p true)       <$> lexing       a
+        parseProblems = mconcat $ (\p -> chcB "Parsing" p true)      <$> parsing      a
+        tcProblems    = mconcat $ (\p -> chcB "TypeChecking" p true) <$> typeChecking a
+
 -- run with stack bench --profile vsat:busybox --benchmark-arguments='+RTS -S -RTS --output timings.html'
 main = do
-  -- txtProblems <- T.lines <$> TIO.readFile dataFile
-  -- let problems' = parse langParser "" <$> txtProblems
-  --     !problems = rights problems'
-
-  --     base :: Integer -> Integer -> Integer
-  --     base b = ceiling . logBase (fromInteger b) . fromInteger
-
-  --     hole :: ReadableProp T.Text
-  --     hole = bRef "__"
-
-
-  --     prop :: [ReadableProp T.Text] -> ReadableProp T.Text
-  --     prop xs = outer 0 xs
-  --       where
-  --         outer i [x] = x
-  --         outer i xs  = outer (succ i) (inner (T.pack $ show i) xs)
-
-
-  --         inner :: T.Text -> [ReadableProp T.Text] -> [ReadableProp T.Text]
-  --         inner _ [] = []
-  --         inner _ [x] = [x]
-  --         inner d (x:y:xs) = ChcB (Dim d) x y : inner d xs
-
-  --     propOpts :: [ReadableProp T.Text] -> ReadableProp T.Text
-  --     propOpts = atomize . outer 0
-  --       where
-  --         outer _ [x] = x
-  --         outer i ys  = outer (succ i) (atomize <$> inner (T.pack $ show i) ys)
-
-
-  --         inner :: T.Text -> [ReadableProp T.Text] -> [ReadableProp T.Text]
-  --         inner _ [] = []
-  --         inner _ [x] = [x]
-  --         inner d (x:y:ys) = ChcB (Dim d) x y : inner d ys
-
-  --     benches :: ReadableSMTConf T.Text -> [Benchmark]
-  --     benches solverConf =
-  --       [ mkBench' "Variational" "BusyBox.Uniques.Opts" (satWith solverConf) (propOpts problems)
-  --       , mkBench' "Variational" "BusyBox.Uniques" (satWith solverConf) (prop problems)
-  --       , mkBench' "BruteForce"  "BusyBox.Uniques" (bfWith  solverConf) (prop problems)
-  --       ]
+  let benches :: ReadableSMTConf T.Text -> [Benchmark]
+      benches solverConf =
+        [ mkBench' "Variational" "BusyBox.Uniques.Opts" (satWith solverConf) (propOpts problems)
+        , mkBench' "Variational" "BusyBox.Uniques" (satWith solverConf) (prop problems)
+        , mkBench' "BruteForce"  "BusyBox.Uniques" (bfWith  solverConf) (prop problems)
+        ]
 
   -- defaultMain
   --   [ bgroup "Z3" (benches z3DefConf)
