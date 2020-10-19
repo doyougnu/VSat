@@ -1,10 +1,10 @@
 cabal-version: 1.12
 
--- This file has been generated from package.yaml by hpack version 0.33.0.
+-- This file has been generated from package.yaml by hpack version 0.34.2.
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 6aa4a0c9dec82a73da9c9e98eecd82ad1001f6835a3a096a9b02892fccba3249
+-- hash: a8f74e7a98178ce832621607f45d6c7f2c257debef456e927771965dfbfecc79
 
 name:           vsat
 version:        0.1.0.0
@@ -171,6 +171,7 @@ benchmark auto
     , bytestring
     , containers
     , deepseq
+    , directory
     , gauge
     , genifunctors >=0.4
     , megaparsec >=8.0.0
@@ -296,6 +297,9 @@ benchmark busybox
   main-is: Main.hs
   other-modules:
       Core
+      BruteForce
+      BusyBox
+      Incremental
       Api
       CaseStudy.Auto.Auto
       CaseStudy.Auto.CompactEncode
@@ -330,6 +334,7 @@ benchmark busybox
     , bytestring
     , containers
     , deepseq
+    , directory
     , gauge
     , genifunctors >=0.4
     , megaparsec >=8.0.0

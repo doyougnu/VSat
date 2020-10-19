@@ -78,6 +78,7 @@ benchmarks:
     dependencies:
     - time
     - gauge
+    - directory
     - vsat
 
   auto-diag:
@@ -173,6 +174,7 @@ benchmarks:
     - -with-rtsopts=-N
     dependencies:
     - gauge
+    - directory
     - random
     - vsat
 
