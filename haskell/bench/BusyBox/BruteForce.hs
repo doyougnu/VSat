@@ -67,7 +67,7 @@ propOpts = atomize . outer 0
 
 -- | construct a brute force analysis for an analysis. Check if there is a
 -- feature model, if so then prepend it to all the queries
-analysisToBF :: Analysis -> [ReadableProp T.Text]
+analysisToBF :: Analysis Readable Readable -> [ReadableProp T.Text]
 analysisToBF (getAnalysis -> a) = problems
   where
     queries = M.elems a
@@ -75,5 +75,5 @@ analysisToBF (getAnalysis -> a) = problems
                  Nothing -> mconcat queries
                  Just (f:_)  -> concatMap (fmap ((&&&) f)) queries
 
-constructBF :: [Analysis] -> ReadableProp T.Text
+constructBF :: [Analysis Readable Readable] -> ReadableProp T.Text
 constructBF = prop . concatMap analysisToBF

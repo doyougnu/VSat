@@ -37,6 +37,7 @@ import           VProp.Types
 import           Core
 import           BruteForce
 import           BusyBox
+import           Incremental
 
 dataFile :: FilePath
 -- dataFile = "bench/BusyBox/SAT_uniq_sorted.txt"
@@ -44,22 +45,27 @@ dataFile = "bench/BusyBox/SAT_problems.txt"
 
 -- | I wonder if having an alternative with all the queries is better than
 -- having a list of choices with all the same alternatives...
-analysisToVariational :: Analysis -> ReadableProp T.Text
-analysisToVariational (getAnalysis -> a) = fm &&& nM &&& lexProblems &&& parseProblems &&& tcProblems
+analysisToVariational :: Analysis Readable Readable -> ReadableProp T.Text
+analysisToVariational a = fm &&& nM &&& lexProblems &&& parseProblems &&& tcProblems
   where fm            = featureModel a
-        nM            = mconcat $ noMode a
-        lexProblems   = mconcat $ (\p -> chcB "Lexing" p true)       <$> lexing       a
-        parseProblems = mconcat $ (\p -> chcB "Parsing" p true)      <$> parsing      a
-        tcProblems    = mconcat $ (\p -> chcB "TypeChecking" p true) <$> typeChecking a
+        nM            = conjoin $ noMode a
+        lexProblems   = conjoin $ (\p -> bChc "Lexing" p true)       <$> lexing       a
+        parseProblems = conjoin $ (\p -> bChc "Parsing" p true)      <$> parsing      a
+        tcProblems    = conjoin $ (\p -> bChc "TypeChecking" p true) <$> typeChecking a
+
+
+constructVariational :: [Analysis Readable Readable] -> ReadableProp T.Text
+constructVariational = conjoin . fmap analysisToVariational
+
 
 -- run with stack bench --profile vsat:busybox --benchmark-arguments='+RTS -S -RTS --output timings.html'
 main = do
-  let benches :: ReadableSMTConf T.Text -> [Benchmark]
-      benches solverConf =
-        [ mkBench' "Variational" "BusyBox.Uniques.Opts" (satWith solverConf) (propOpts problems)
-        , mkBench' "Variational" "BusyBox.Uniques" (satWith solverConf) (prop problems)
-        , mkBench' "BruteForce"  "BusyBox.Uniques" (bfWith  solverConf) (prop problems)
-        ]
+  -- let benches :: ReadableSMTConf T.Text -> [Benchmark]
+  --     benches solverConf =
+  --       [ mkBench' "Variational" "BusyBox.Uniques.Opts" (satWith solverConf) (propOpts problems)
+  --       , mkBench' "Variational" "BusyBox.Uniques" (satWith solverConf) (prop problems)
+  --       , mkBench' "BruteForce"  "BusyBox.Uniques" (bfWith  solverConf) (prop problems)
+  --       ]
 
   -- defaultMain
   --   [ bgroup "Z3" (benches z3DefConf)
@@ -67,7 +73,8 @@ main = do
   -- satWith z3DefConf (propOpts problems)
   -- dir >>= print
   ps <- getProblems
-  print $ dimensions $ constructBF ps
+  results <- constructIncremental ps
+  print results
 
 
   -- print $ pivotList . prop $ ts

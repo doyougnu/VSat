@@ -55,17 +55,17 @@ prefix = "SAT_problems_"
 suffix = ".txt"
 mkFileConst a = prefix <> a <> suffix
 
-featureModel   = mkFileConst "FEATURE_MODEL"
+featureModelLbl   = mkFileConst "FEATURE_MODEL"
 parseProblems  = mkFileConst "PARSING"
 lexingProblems = mkFileConst "LEXING"
 tcProblems     = mkFileConst "TYPE_CHECKING"
 noModeProblems     = mkFileConst "NO_MODE"
 
-newtype Analysis = Analysis { getAnalysis :: M.Map QueryMode [ReadableProp T.Text] }
+newtype Analysis a b = Analysis { getAnalysis :: M.Map QueryMode [VProp T.Text a b] }
   deriving (Eq,Ord,Show)
 
-instance Semigroup Analysis where (getAnalysis -> a) <> (getAnalysis -> b) = Analysis $! M.unionWith (<>) a b
-instance Monoid Analysis where mempty = Analysis M.empty
+instance Semigroup (Analysis a b) where (getAnalysis -> a) <> (getAnalysis -> b) = Analysis $! M.unionWith (<>) a b
+instance Monoid (Analysis a b) where mempty = Analysis M.empty
 
 data QueryMode = NoMode
                | FeatureModel
@@ -76,25 +76,27 @@ data QueryMode = NoMode
 
 -- | don't feel like making the correct semigorup and monoid instances for maybe
 -- here
-get :: QueryMode -> Analysis -> [ReadableProp T.Text]
+get :: QueryMode -> Analysis a b -> [VProp T.Text a b]
 get m ( getAnalysis -> a) = case m `M.lookup` a of
-                              Nothing -> true
+                              Nothing -> mempty
                               Just xs -> xs
 
 
-featureModel :: Analysis -> ReadableProp T.Text
-featureModel = head . get FeatureModel
+featureModel :: Analysis a b -> VProp T.Text a b
+featureModel a = case get FeatureModel a of
+                   [] -> true
+                   xs -> head xs
 
-lexing :: Analysis -> [ReadableProp T.Text]
+lexing :: Analysis a b -> [VProp T.Text a b]
 lexing = get Lexing
 
-parsing :: Analysis -> [ReadableProp T.Text]
+parsing :: Analysis a b -> [VProp T.Text a b]
 parsing = get Parsing
 
-typeChecking :: Analysis -> [ReadableProp T.Text]
+typeChecking :: Analysis a b -> [VProp T.Text a b]
 typeChecking = get TypeChecking
 
-noMode :: Analysis -> [ReadableProp T.Text]
+noMode :: Analysis a b -> [VProp T.Text a b]
 noMode = get NoMode
 
 dataFiles :: IO [Directory]
@@ -108,7 +110,7 @@ readPropFile f = do txtProblems <- T.lines <$> TIO.readFile f
 
 readFM :: Directory -> IO (ReadableProp T.Text)
 readFM (unDir -> d) = go `E.catch` \e -> print (e :: E.IOException) >> return true
-  where go = readPropFile (d </> featureModel) >>= \c ->
+  where go = readPropFile (d </> featureModelLbl) >>= \c ->
           return $
           case c of
             [] -> true     -- then we were in the plain directory
@@ -141,11 +143,19 @@ handlePlain dir = do fs <- fm
                        \e -> print (e :: E.IOException) >> return []
   where
     d  = unDir dir
-    fm = readPropFile (d </> featureModel)
+    fm = readPropFile (d </> featureModelLbl)
     nm = readNoModeProblems dir
 
+findPlain :: [Analysis a b] -> Analysis a b
+findPlain xs = go
+  where isAnaPlain (getAnalysis -> a) = M.member FeatureModel a &&
+                                        M.member NoMode a &&
+                                        M.notMember TypeChecking a &&
+                                        M.notMember Lexing a &&
+                                        M.notMember Parsing a
+        go = head $ filter isAnaPlain xs
 
-mkAnalysis :: Directory -> IO Analysis
+mkAnalysis :: Directory -> IO (Analysis Readable Readable)
 mkAnalysis d = do putStrLn $ "Reading: " ++ (unDir d)
                   if (isDirPlain d)
 
@@ -160,5 +170,5 @@ mkAnalysis d = do putStrLn $ "Reading: " ++ (unDir d)
                             return $ Analysis $ mconcat [pp,lp,tp,np]
 
 
-getProblems :: IO [Analysis]
+getProblems :: IO [Analysis Readable Readable]
 getProblems = dataFiles >>= mapM mkAnalysis

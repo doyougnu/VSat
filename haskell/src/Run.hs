@@ -15,6 +15,7 @@ module Run ( SatDict
            , runPonV
            , runVonP
            , vCoreMetrics
+           , Name
            ) where
 
 import           Control.Arrow (first, second)
