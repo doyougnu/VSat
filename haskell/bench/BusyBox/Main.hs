@@ -57,24 +57,32 @@ analysisToVariational a = fm &&& nM &&& lexProblems &&& parseProblems &&& tcProb
 constructVariational :: [Analysis Readable Readable] -> ReadableProp T.Text
 constructVariational = conjoin . fmap analysisToVariational
 
+onlyLex = bRef "Lexing" &&& bnot (bRef "Parsing") &&& bnot (bRef "TypeChecking")
+onlyParse = bnot (bRef "Lexing") &&& bRef "Parsing" &&& bnot (bRef "TypeChecking")
+onlyTypeCheck = bnot (bRef "Lexing") &&& bnot (bRef "Parsing") &&& bRef "TypeChecking"
+
+vc = onlyLex |||
+     (onlyLex &&& onlyParse) |||
+     (onlyLex &&& onlyParse &&& onlyTypeCheck)
+
 
 -- run with stack bench --profile vsat:busybox --benchmark-arguments='+RTS -S -RTS --output timings.html'
 main = do
-  -- let benches :: ReadableSMTConf T.Text -> [Benchmark]
-  --     benches solverConf =
-  --       [ mkBench' "Variational" "BusyBox.Uniques.Opts" (satWith solverConf) (propOpts problems)
-  --       , mkBench' "Variational" "BusyBox.Uniques" (satWith solverConf) (prop problems)
-  --       , mkBench' "BruteForce"  "BusyBox.Uniques" (bfWith  solverConf) (prop problems)
-  --       ]
+  let benches :: ReadableSMTConf T.Text -> [Analysis Readable Readable] -> [Benchmark]
+      benches solverConf as =
+        [ mkBench "BruteForce"  "BusyBox" vc (bfWith solverConf) (constructBF as)
+        , mkBench "Variational" "BusyBox" vc (satWith solverConf) (constructVariational as)
+        , bench "Incremental/BusyBox" (nfIO (constructIncremental as))
+        ]
 
-  -- defaultMain
-  --   [ bgroup "Z3" (benches z3DefConf)
-  --   ]
+  ps <- getProblems
+  defaultMain
+    [ bgroup "Z3" (benches z3DefConf ps)
+    ]
   -- satWith z3DefConf (propOpts problems)
   -- dir >>= print
-  ps <- getProblems
-  results <- constructIncremental ps
-  print results
+  -- results <- constructIncremental ps
+  -- print results
 
 
   -- print $ pivotList . prop $ ts
