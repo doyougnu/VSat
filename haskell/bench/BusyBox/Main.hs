@@ -92,7 +92,7 @@ main = do
   -- satWith z3DefConf (propOpts problems)
   -- dir >>= print
   ps <- getProblems
-  mapM print ps
+  print $ dimensions $ constructBF ps
 
 
   -- print $ pivotList . prop $ ts
