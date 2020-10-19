@@ -61,23 +61,25 @@ lexingProblems = mkFileConst "LEXING"
 tcProblems     = mkFileConst "TYPE_CHECKING"
 noModeProblems     = mkFileConst "NO_MODE"
 
-type Queries = M.Map QueryMode [ReadableProp T.Text]
+newtype Analysis = Analysis { getAnalysis :: M.Map QueryMode [ReadableProp T.Text] }
+  deriving (Eq,Ord,Show)
+
+instance Semigroup Analysis where (getAnalysis -> a) <> (getAnalysis -> b) = Analysis $! M.unionWith (<>) a b
+instance Monoid Analysis where mempty = Analysis M.empty
 
 data QueryMode = Lexing
                | Parsing
                | TypeChecking
                | NoMode
+               | FeatureModel
                deriving (Eq,Ord,Show)
 
 -- | a record to store an analysis. I've hardcoded these particular to busybox,
 -- if the analysis done in type chef changes these will also have to change
-data Analysis = Analysis { feature_model :: ReadableProp T.Text
-                         , queries       :: Queries
-                         } deriving Show
 
 dataFiles :: IO [Directory]
 dataFiles = fmap (Directory . (home </>)) <$> D.listDirectory home
-  where home = "bench/BusyBox/sat_queries/"
+  where home = "bench/BusyBox/sat_queries"
 
 readPropFile :: FilePath -> IO [ReadableProp T.Text]
 readPropFile f = do txtProblems <- T.lines <$> TIO.readFile f
@@ -128,20 +130,15 @@ mkAnalysis d = do putStrLn $ "Reading: " ++ (unDir d)
                   if (isDirPlain d)
 
                     then do qs <- handlePlain d
-                            return $ Analysis { feature_model = true
-                                              , queries       = M.singleton NoMode qs}
+                            return $ Analysis $ M.singleton NoMode qs
 
-                    else do fm <- readFM d
+                    else do fm <- M.singleton FeatureModel <$> readFM             d
                             pp <- M.singleton Parsing      <$> readParseProblems  d
                             lp <- M.singleton Lexing       <$> readLexingProblems d
                             tp <- M.singleton TypeChecking <$> readTcProblems     d
                             np <- M.singleton NoMode       <$> readNoModeProblems d
-                            return $ Analysis { feature_model = fm
-                                              , queries       = mconcat [pp,lp,tp,np]
-                                              }
+                            return $ Analysis $ mconcat [pp,lp,tp,np]
 
 
-
-test = do files <- dataFiles
-          putStrLn $ "Files: " ++ show files
-          (mkAnalysis . head . drop 1 $ files) >>= print
+getProblems :: IO [Analysis]
+getProblems = dataFiles >>= mapM mkAnalysis

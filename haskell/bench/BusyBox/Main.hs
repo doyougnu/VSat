@@ -36,6 +36,7 @@ import           VProp.Types
 
 import           Core
 import           BruteForce
+import           BusyBox
 
 dataFile :: FilePath
 -- dataFile = "bench/BusyBox/SAT_uniq_sorted.txt"
@@ -90,7 +91,9 @@ main = do
   --   ]
   -- satWith z3DefConf (propOpts problems)
   -- dir >>= print
-  test
+  ps <- getProblems
+  mapM print ps
+
 
   -- print $ pivotList . prop $ ts
   -- print $ dimensions $ prop ts
