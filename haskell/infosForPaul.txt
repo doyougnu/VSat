@@ -1,0 +1,6 @@
+stack bench vsat:auto
+stack bench vsat:auto --benchmark-arguments='+RTS -qg -A64m -AL127m -n8m -RTS'
+
+
+Run this:
+stack bench vsat:pauldebug --benchmark-arguments='+RTS -qg -A64m -AL127m -n8m -RTS'

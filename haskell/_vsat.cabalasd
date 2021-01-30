@@ -1,0 +1,561 @@
+cabal-version: 1.12
+
+-- This file has been generated from package.yaml by hpack version 0.34.2.
+--
+-- see: https://github.com/sol/hpack
+--
+-- hash: a8f74e7a98178ce832621607f45d6c7f2c257debef456e927771965dfbfecc79
+
+name:           vsat
+version:        0.1.0.0
+description:    Please see the README on Github at https://github.com/doyougnu/VSat
+homepage:       https://github.com/doyougnu/vsat#readme
+bug-reports:    https://github.com/doyougnu/vsat/issues
+author:         Jeffrey Young
+maintainer:     youngjef@oregonstate.edu
+copyright:      2018 Jeffrey Young
+license:        BSD3
+license-file:   LICENSE
+build-type:     Simple
+
+source-repository head
+  type: git
+  location: https://github.com/doyougnu/vsat
+
+library
+  exposed-modules:
+      Api
+      CaseStudy.Auto.Auto
+      CaseStudy.Auto.CompactEncode
+      CaseStudy.Auto.Lang
+      CaseStudy.Auto.Parser
+      CaseStudy.Auto.Run
+      CaseStudy.BusyBox.Parser
+      Config
+      Json
+      Opts
+      Parser
+      Result
+      Run
+      SAT
+      Server
+      Utils
+      VProp.Boolean
+      VProp.Core
+      VProp.Gen
+      VProp.SBV
+      VProp.Types
+  other-modules:
+      Paths_vsat
+  hs-source-dirs:
+      src
+  default-extensions: NamedFieldPuns OverloadedStrings FlexibleContexts DeriveFunctor DeriveGeneric BangPatterns GeneralizedNewtypeDeriving DeriveTraversable FlexibleInstances DeriveDataTypeable MultiParamTypeClasses RecordWildCards TemplateHaskell ViewPatterns
+  build-depends:
+      aeson
+    , base >=4.7 && <5
+    , bytestring
+    , containers
+    , deepseq
+    , genifunctors >=0.4
+    , megaparsec >=8.0.0
+    , mtl
+    , parser-combinators >=1.2.1
+    , sbv >=8.6
+    , tasty-quickcheck
+    , text
+    , unicode-show
+    , unordered-containers
+  default-language: Haskell2010
+
+executable vsat
+  main-is: Main.hs
+  other-modules:
+      Paths_vsat
+  hs-source-dirs:
+      app
+  default-extensions: NamedFieldPuns OverloadedStrings FlexibleContexts DeriveFunctor DeriveGeneric BangPatterns GeneralizedNewtypeDeriving DeriveTraversable FlexibleInstances DeriveDataTypeable MultiParamTypeClasses RecordWildCards TemplateHaskell ViewPatterns
+  ghc-options: -threaded -rtsopts -with-rtsopts=-N -Wall -fno-warn-orphans
+  build-depends:
+      aeson
+    , base >=4.7 && <5
+    , bytestring
+    , containers
+    , deepseq
+    , genifunctors >=0.4
+    , megaparsec >=8.0.0
+    , mtl
+    , parser-combinators >=1.2.1
+    , sbv >=8.6
+    , tasty-quickcheck
+    , text
+    , unicode-show
+    , unordered-containers
+    , vsat
+  default-language: Haskell2010
+
+test-suite vsat-test
+  type: exitcode-stdio-1.0
+  main-is: Spec.hs
+  other-modules:
+      CaseStudy.Auto.Parser.Test
+      CaseStudy.Auto.Run.Test
+      CaseStudy.BusyBox.Parser.Test
+      Opts.Test
+      Run.Test
+      VProp.Core.Test
+      VProp.Json.Test
+      Paths_vsat
+  hs-source-dirs:
+      test
+  default-extensions: NamedFieldPuns OverloadedStrings FlexibleContexts DeriveFunctor DeriveGeneric BangPatterns GeneralizedNewtypeDeriving DeriveTraversable FlexibleInstances DeriveDataTypeable MultiParamTypeClasses RecordWildCards TemplateHaskell ViewPatterns
+  ghc-options: -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      QuickCheck
+    , aeson
+    , base >=4.7 && <5
+    , bytestring
+    , containers
+    , deepseq
+    , genifunctors >=0.4
+    , megaparsec >=8.0.0
+    , mtl
+    , parser-combinators >=1.2.1
+    , sbv >=8.6
+    , tasty
+    , tasty-hspec
+    , tasty-hunit
+    , tasty-quickcheck
+    , tasty-smallcheck
+    , text
+    , unicode-show
+    , unordered-containers
+    , vsat
+  default-language: Haskell2010
+
+benchmark auto
+  type: exitcode-stdio-1.0
+  main-is: Main.hs
+  other-modules:
+      Core
+      Api
+      CaseStudy.Auto.Auto
+      CaseStudy.Auto.CompactEncode
+      CaseStudy.Auto.Lang
+      CaseStudy.Auto.Parser
+      CaseStudy.Auto.Run
+      CaseStudy.BusyBox.Parser
+      Config
+      Json
+      Opts
+      Parser
+      Result
+      Run
+      SAT
+      Server
+      Utils
+      VProp.Boolean
+      VProp.Core
+      VProp.Gen
+      VProp.SBV
+      VProp.Types
+      Paths_vsat
+  hs-source-dirs:
+      bench/Bench
+      bench/AutoBench
+      src
+  default-extensions: NamedFieldPuns OverloadedStrings FlexibleContexts DeriveFunctor DeriveGeneric BangPatterns GeneralizedNewtypeDeriving DeriveTraversable FlexibleInstances DeriveDataTypeable MultiParamTypeClasses RecordWildCards TemplateHaskell ViewPatterns
+  ghc-options: -O2 -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      aeson
+    , base >=4.7 && <5
+    , bytestring
+    , containers
+    , deepseq
+    , directory
+    , gauge
+    , genifunctors >=0.4
+    , megaparsec >=8.0.0
+    , mtl
+    , parser-combinators >=1.2.1
+    , sbv >=8.6
+    , tasty-quickcheck
+    , text
+    , time
+    , unicode-show
+    , unordered-containers
+    , vsat
+  default-language: Haskell2010
+
+benchmark auto-dead-core
+  type: exitcode-stdio-1.0
+  main-is: Main.hs
+  other-modules:
+      Core
+      Api
+      CaseStudy.Auto.Auto
+      CaseStudy.Auto.CompactEncode
+      CaseStudy.Auto.Lang
+      CaseStudy.Auto.Parser
+      CaseStudy.Auto.Run
+      CaseStudy.BusyBox.Parser
+      Config
+      Json
+      Opts
+      Parser
+      Result
+      Run
+      SAT
+      Server
+      Utils
+      VProp.Boolean
+      VProp.Core
+      VProp.Gen
+      VProp.SBV
+      VProp.Types
+      Paths_vsat
+  hs-source-dirs:
+      bench/Bench
+      bench/AutoDeadCore
+      src
+  default-extensions: NamedFieldPuns OverloadedStrings FlexibleContexts DeriveFunctor DeriveGeneric BangPatterns GeneralizedNewtypeDeriving DeriveTraversable FlexibleInstances DeriveDataTypeable MultiParamTypeClasses RecordWildCards TemplateHaskell ViewPatterns
+  ghc-options: -O2 -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      aeson
+    , base >=4.7 && <5
+    , bytestring
+    , containers
+    , deepseq
+    , gauge
+    , genifunctors >=0.4
+    , megaparsec >=8.0.0
+    , mtl
+    , parser-combinators >=1.2.1
+    , random
+    , sbv >=8.6
+    , tasty-quickcheck
+    , text
+    , unicode-show
+    , unordered-containers
+    , vsat
+  default-language: Haskell2010
+
+benchmark auto-diag
+  type: exitcode-stdio-1.0
+  main-is: Main.hs
+  other-modules:
+      Core
+      Api
+      CaseStudy.Auto.Auto
+      CaseStudy.Auto.CompactEncode
+      CaseStudy.Auto.Lang
+      CaseStudy.Auto.Parser
+      CaseStudy.Auto.Run
+      CaseStudy.BusyBox.Parser
+      Config
+      Json
+      Opts
+      Parser
+      Result
+      Run
+      SAT
+      Server
+      Utils
+      VProp.Boolean
+      VProp.Core
+      VProp.Gen
+      VProp.SBV
+      VProp.Types
+      Paths_vsat
+  hs-source-dirs:
+      bench/Bench
+      bench/AutoDiag
+      src
+  default-extensions: NamedFieldPuns OverloadedStrings FlexibleContexts DeriveFunctor DeriveGeneric BangPatterns GeneralizedNewtypeDeriving DeriveTraversable FlexibleInstances DeriveDataTypeable MultiParamTypeClasses RecordWildCards TemplateHaskell ViewPatterns
+  ghc-options: -O2 -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      aeson
+    , base >=4.7 && <5
+    , bytestring
+    , containers
+    , deepseq
+    , gauge
+    , genifunctors >=0.4
+    , megaparsec >=8.0.0
+    , mtl
+    , parser-combinators >=1.2.1
+    , sbv >=8.6
+    , tasty-quickcheck
+    , text
+    , time
+    , unicode-show
+    , unordered-containers
+    , vsat
+  default-language: Haskell2010
+
+benchmark busybox
+  type: exitcode-stdio-1.0
+  main-is: Main.hs
+  other-modules:
+      Core
+      BruteForce
+      BusyBox
+      Incremental
+      Api
+      CaseStudy.Auto.Auto
+      CaseStudy.Auto.CompactEncode
+      CaseStudy.Auto.Lang
+      CaseStudy.Auto.Parser
+      CaseStudy.Auto.Run
+      CaseStudy.BusyBox.Parser
+      Config
+      Json
+      Opts
+      Parser
+      Result
+      Run
+      SAT
+      Server
+      Utils
+      VProp.Boolean
+      VProp.Core
+      VProp.Gen
+      VProp.SBV
+      VProp.Types
+      Paths_vsat
+  hs-source-dirs:
+      bench/Bench
+      bench/BusyBox
+      src
+  default-extensions: NamedFieldPuns OverloadedStrings FlexibleContexts DeriveFunctor DeriveGeneric BangPatterns GeneralizedNewtypeDeriving DeriveTraversable FlexibleInstances DeriveDataTypeable MultiParamTypeClasses RecordWildCards TemplateHaskell ViewPatterns
+  ghc-options: -O2 -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      aeson
+    , base >=4.7 && <5
+    , bytestring
+    , containers
+    , deepseq
+    , directory
+    , gauge
+    , genifunctors >=0.4
+    , megaparsec >=8.0.0
+    , mtl
+    , parser-combinators >=1.2.1
+    , random
+    , sbv >=8.6
+    , tasty-quickcheck
+    , text
+    , unicode-show
+    , unordered-containers
+    , vsat
+  default-language: Haskell2010
+
+benchmark fin
+  type: exitcode-stdio-1.0
+  main-is: Main.hs
+  other-modules:
+      Core
+      Api
+      CaseStudy.Auto.Auto
+      CaseStudy.Auto.CompactEncode
+      CaseStudy.Auto.Lang
+      CaseStudy.Auto.Parser
+      CaseStudy.Auto.Run
+      CaseStudy.BusyBox.Parser
+      Config
+      Json
+      Opts
+      Parser
+      Result
+      Run
+      SAT
+      Server
+      Utils
+      VProp.Boolean
+      VProp.Core
+      VProp.Gen
+      VProp.SBV
+      VProp.Types
+      Paths_vsat
+  hs-source-dirs:
+      bench/Bench
+      bench/Financial
+      src
+  default-extensions: NamedFieldPuns OverloadedStrings FlexibleContexts DeriveFunctor DeriveGeneric BangPatterns GeneralizedNewtypeDeriving DeriveTraversable FlexibleInstances DeriveDataTypeable MultiParamTypeClasses RecordWildCards TemplateHaskell ViewPatterns
+  ghc-options: -O2 -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      aeson
+    , base >=4.7 && <5
+    , bytestring
+    , containers
+    , deepseq
+    , gauge
+    , genifunctors >=0.4
+    , megaparsec >=8.0.0
+    , mtl
+    , parser-combinators >=1.2.1
+    , sbv >=8.6
+    , tasty-quickcheck
+    , text
+    , time
+    , unicode-show
+    , unordered-containers
+    , vsat
+  default-language: Haskell2010
+
+benchmark fin-dead-core
+  type: exitcode-stdio-1.0
+  main-is: Main.hs
+  other-modules:
+      Core
+      Api
+      CaseStudy.Auto.Auto
+      CaseStudy.Auto.CompactEncode
+      CaseStudy.Auto.Lang
+      CaseStudy.Auto.Parser
+      CaseStudy.Auto.Run
+      CaseStudy.BusyBox.Parser
+      Config
+      Json
+      Opts
+      Parser
+      Result
+      Run
+      SAT
+      Server
+      Utils
+      VProp.Boolean
+      VProp.Core
+      VProp.Gen
+      VProp.SBV
+      VProp.Types
+      Paths_vsat
+  hs-source-dirs:
+      bench/Bench
+      bench/FinDeadCore
+      src
+  default-extensions: NamedFieldPuns OverloadedStrings FlexibleContexts DeriveFunctor DeriveGeneric BangPatterns GeneralizedNewtypeDeriving DeriveTraversable FlexibleInstances DeriveDataTypeable MultiParamTypeClasses RecordWildCards TemplateHaskell ViewPatterns
+  ghc-options: -O2 -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      aeson
+    , base >=4.7 && <5
+    , bytestring
+    , containers
+    , deepseq
+    , gauge
+    , genifunctors >=0.4
+    , megaparsec >=8.0.0
+    , mtl
+    , parser-combinators >=1.2.1
+    , sbv >=8.6
+    , tasty-quickcheck
+    , text
+    , time
+    , unicode-show
+    , unordered-containers
+    , vsat
+  default-language: Haskell2010
+
+benchmark fin-diag
+  type: exitcode-stdio-1.0
+  main-is: Main.hs
+  other-modules:
+      Core
+      Api
+      CaseStudy.Auto.Auto
+      CaseStudy.Auto.CompactEncode
+      CaseStudy.Auto.Lang
+      CaseStudy.Auto.Parser
+      CaseStudy.Auto.Run
+      CaseStudy.BusyBox.Parser
+      Config
+      Json
+      Opts
+      Parser
+      Result
+      Run
+      SAT
+      Server
+      Utils
+      VProp.Boolean
+      VProp.Core
+      VProp.Gen
+      VProp.SBV
+      VProp.Types
+      Paths_vsat
+  hs-source-dirs:
+      bench/Bench
+      bench/FinDiag
+      src
+  default-extensions: NamedFieldPuns OverloadedStrings FlexibleContexts DeriveFunctor DeriveGeneric BangPatterns GeneralizedNewtypeDeriving DeriveTraversable FlexibleInstances DeriveDataTypeable MultiParamTypeClasses RecordWildCards TemplateHaskell ViewPatterns
+  ghc-options: -O2 -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      aeson
+    , base >=4.7 && <5
+    , bytestring
+    , containers
+    , deepseq
+    , gauge
+    , genifunctors >=0.4
+    , megaparsec >=8.0.0
+    , mtl
+    , parser-combinators >=1.2.1
+    , sbv >=8.6
+    , tasty-quickcheck
+    , text
+    , time
+    , unicode-show
+    , unordered-containers
+    , vsat
+  default-language: Haskell2010
+
+benchmark linux
+  type: exitcode-stdio-1.0
+  main-is: Main.hs
+  other-modules:
+      Core
+      Api
+      CaseStudy.Auto.Auto
+      CaseStudy.Auto.CompactEncode
+      CaseStudy.Auto.Lang
+      CaseStudy.Auto.Parser
+      CaseStudy.Auto.Run
+      CaseStudy.BusyBox.Parser
+      Config
+      Json
+      Opts
+      Parser
+      Result
+      Run
+      SAT
+      Server
+      Utils
+      VProp.Boolean
+      VProp.Core
+      VProp.Gen
+      VProp.SBV
+      VProp.Types
+      Paths_vsat
+  hs-source-dirs:
+      bench/Bench
+      bench/Linux
+      src
+  default-extensions: NamedFieldPuns OverloadedStrings FlexibleContexts DeriveFunctor DeriveGeneric BangPatterns GeneralizedNewtypeDeriving DeriveTraversable FlexibleInstances DeriveDataTypeable MultiParamTypeClasses RecordWildCards TemplateHaskell ViewPatterns
+  ghc-options: -O2 -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      aeson
+    , base >=4.7 && <5
+    , bytestring
+    , containers
+    , criterion
+    , deepseq
+    , genifunctors >=0.4
+    , megaparsec >=8.0.0
+    , mtl
+    , parser-combinators >=1.2.1
+    , sbv >=8.6
+    , tasty-quickcheck
+    , text
+    , unicode-show
+    , unordered-containers
+    , vsat
+  default-language: Haskell2010
