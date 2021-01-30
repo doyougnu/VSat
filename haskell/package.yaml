@@ -193,6 +193,21 @@ benchmarks:
     - criterion
     - vsat
 
+  pauldebug:
+    main:                Main.hs
+    source-dirs:
+      - bench/PaulDebug
+      - src
+    ghc-options:
+    - -O2
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - time
+    - gauge
+    - vsat
+
 tests:
   vsat-test:
     main:                Spec.hs

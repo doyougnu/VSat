@@ -1,10 +1,11 @@
 flags: {}
 packages:
   - '.'
-  - /home/doyougnu/programming/sbv
+  # - /home/doyougnu/programming/sbv
 system-ghc: true
 extra-deps:
   - genifunctors-0.4
+  - sbv-8.8@sha256:32b3930aa358d57b21d9797cd46bd1e4866b536b1eea50686c39af07f1ca4882,28975
   # - sbv-8.6
 
   # spock dependencies
@@ -21,7 +22,7 @@ extra-deps:
 
 # ## uncomment the following lines to tell stack you are in a nix environment
 nix:
-  enable: true
+  enable: false
   pure: true
   packages: [ z3, pkgconfig, zlib, abc-verifier, cvc4, yices, boolector]
   # packages: [ z3, pkgconfig, zlib ]
