@@ -196,6 +196,7 @@ benchmarks:
   pauldebug:
     main:                Main.hs
     source-dirs:
+      - bench/Bench
       - bench/PaulDebug
       - src
     ghc-options:

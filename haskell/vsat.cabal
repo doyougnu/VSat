@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 3d456bf4ca8646ca20ca7a9dbb7b285a74c57adbc7efaa435e734ed46bc1133c
+-- hash: f3fa42f2ed116f4df19ba8bda5621be7710bba82327d0752df215b2e12d84a04
 
 name:           vsat
 version:        0.1.0.0
@@ -564,6 +564,7 @@ benchmark pauldebug
   type: exitcode-stdio-1.0
   main-is: Main.hs
   other-modules:
+      Core
       Api
       CaseStudy.Auto.Auto
       CaseStudy.Auto.CompactEncode
@@ -587,6 +588,7 @@ benchmark pauldebug
       VProp.Types
       Paths_vsat
   hs-source-dirs:
+      bench/Bench
       bench/PaulDebug
       src
   default-extensions: NamedFieldPuns OverloadedStrings FlexibleContexts DeriveFunctor DeriveGeneric BangPatterns GeneralizedNewtypeDeriving DeriveTraversable FlexibleInstances DeriveDataTypeable MultiParamTypeClasses RecordWildCards TemplateHaskell ViewPatterns
