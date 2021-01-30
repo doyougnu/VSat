@@ -1,5 +1,0 @@
-Config,NumFeatures,NumUnchange,MaxClause,Variants
-V1,23300,21159,1,2
-V1*V2,23858,22755,2,4
-V1*V2*V3,24054,22746,3,8
-V1*V2*V3*V4,24054,22592,7,16
