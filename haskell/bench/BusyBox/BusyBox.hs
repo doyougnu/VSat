@@ -1,7 +1,11 @@
+{-# LANGUAGE DeriveAnyClass #-}
+
 module BusyBox where
 
 
 import           Control.Arrow           (first, second)
+import           Control.DeepSeq         (force,NFData)
+import           GHC.Generics            (Generic)
 import           Gauge
 import           Data.Aeson              (decodeStrict, encodeFile)
 import           Control.Monad           (replicateM, foldM, liftM2)
@@ -41,7 +45,7 @@ import           Core
 
 
 newtype Directory = Directory { unDir :: FilePath }
-  deriving (Eq, Show)
+  deriving (Eq, Show,Generic,NFData)
 
 -- some constants
 (</>) :: FilePath -> FilePath -> FilePath
@@ -55,14 +59,14 @@ prefix = "SAT_problems_"
 suffix = ".txt"
 mkFileConst a = prefix <> a <> suffix
 
-featureModelLbl   = mkFileConst "FEATURE_MODEL"
+featureModelLbl   = "FEATURE_MODEL.txt"
 parseProblems  = mkFileConst "PARSING"
 lexingProblems = mkFileConst "LEXING"
 tcProblems     = mkFileConst "TYPE_CHECKING"
 noModeProblems     = mkFileConst "NO_MODE"
 
 newtype Analysis a b = Analysis { getAnalysis :: M.Map QueryMode [VProp T.Text a b] }
-  deriving (Eq,Ord,Show)
+  deriving (Eq,Ord,Show,Generic,NFData)
 
 instance Semigroup (Analysis a b) where (getAnalysis -> a) <> (getAnalysis -> b) = Analysis $! M.unionWith (<>) a b
 instance Monoid (Analysis a b) where mempty = Analysis M.empty
@@ -72,7 +76,7 @@ data QueryMode = NoMode
                | Lexing
                | Parsing
                | TypeChecking
-               deriving (Eq,Ord,Show)
+               deriving (Eq,Ord,Show,Generic,NFData)
 
 -- | don't feel like making the correct semigorup and monoid instances for maybe
 -- here
@@ -102,11 +106,12 @@ noMode = get NoMode
 dataFiles :: IO [Directory]
 dataFiles = fmap (Directory . (home </>)) <$> D.listDirectory home
   where home = "bench/BusyBox/sat_queries"
+  -- where home = "/home/doyougnu/research/TypeChef-BusyboxAnalysis/sat_queries"
 
 readPropFile :: FilePath -> IO [ReadableProp T.Text]
 readPropFile f = do txtProblems <- T.lines <$> TIO.readFile f
-                    let problems' = parse langParser "" <$> txtProblems
-                    return $ rights problems'
+                    let !problems' = parse langParser "" <$> txtProblems
+                    return $! rights problems'
 
 readFM :: Directory -> IO (ReadableProp T.Text)
 readFM (unDir -> d) = go `E.catch` \e -> print (e :: E.IOException) >> return true
@@ -153,22 +158,61 @@ findPlain xs = go
                                         M.notMember TypeChecking a &&
                                         M.notMember Lexing a &&
                                         M.notMember Parsing a
-        go = head $ filter isAnaPlain xs
+        go = case filter isAnaPlain xs of
+               []    -> mempty
+               (x:_) -> x
 
 mkAnalysis :: Directory -> IO (Analysis Readable Readable)
 mkAnalysis d = do putStrLn $ "Reading: " ++ (unDir d)
                   if (isDirPlain d)
 
-                    then do qs <- handlePlain d
-                            return $ Analysis $ M.singleton NoMode qs
+                    then do !qs <- handlePlain d
+                            return $! Analysis $! M.singleton NoMode qs
 
-                    else do fm <- M.singleton FeatureModel <$> readFM             d
-                            pp <- M.singleton Parsing      <$> readParseProblems  d
-                            lp <- M.singleton Lexing       <$> readLexingProblems d
-                            tp <- M.singleton TypeChecking <$> readTcProblems     d
-                            np <- M.singleton NoMode       <$> readNoModeProblems d
-                            return $ Analysis $ mconcat [pp,lp,tp,np]
+                    else do !fm <- M.singleton FeatureModel <$> readFM             d
+                            putStrLn "Got fm"
+                            !pp <- M.singleton Parsing      <$> readParseProblems  d
+                            putStrLn "Got parsing"
+                            !lp <- M.singleton Lexing       <$> readLexingProblems d
+                            putStrLn "Got lexing"
+                            !tp <- M.singleton TypeChecking <$> readTcProblems     d
+                            putStrLn "Got type checking"
+                            !np <- M.singleton NoMode       <$> readNoModeProblems d
+                            putStrLn "Got no mode"
+                            return $ Analysis $! mconcat [pp,lp,tp,np]
 
+
+base :: Integer -> Integer -> Integer
+base b = ceiling . logBase (fromInteger b) . fromInteger
+
+hole :: ReadableProp T.Text
+hole = bRef "__"
+
+prop :: Maybe Int -> [ReadableProp T.Text] -> ReadableProp T.Text
+prop Nothing xs  = prop (Just 0) xs
+prop (Just !i) xs = outer i xs
+  where
+    outer !i [x] = x
+    outer !i xs  = outer (succ i) (inner (T.pack $ show i) xs)
+
+
+    inner :: T.Text -> [ReadableProp T.Text] -> [ReadableProp T.Text]
+    inner _ [] = []
+    inner _ [x] = [x]
+    inner !d (x:y:xs) = ChcB (Dim d) x y : inner d xs
+
+propOpts :: Maybe Int -> [ReadableProp T.Text] -> ReadableProp T.Text
+propOpts Nothing xs  = atomize $ propOpts (Just 0) xs
+propOpts (Just !i) xs = atomize $ outer i xs
+  where
+    outer _ [x] = x
+    outer !i ys  = outer (succ i) (atomize <$> inner (T.pack $ show i) ys)
+
+
+    inner :: T.Text -> [ReadableProp T.Text] -> [ReadableProp T.Text]
+    inner _ [] = []
+    inner _ [x] = [x]
+    inner !d (x:y:ys) = ChcB (Dim d) x y : inner d ys
 
 getProblems :: IO [Analysis Readable Readable]
-getProblems = dataFiles >>= mapM mkAnalysis
+getProblems = dataFiles >>= mapM (force mkAnalysis) -- . take 20

@@ -1,1 +1,0 @@
-(def(CONFIG_AR_MODULE)|def(CONFIG_AR))

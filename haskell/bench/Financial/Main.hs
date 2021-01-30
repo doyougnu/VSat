@@ -354,13 +354,12 @@ main = do
       , mkCompBench "v-->p" "V9*V10" (vOnPWithConf (toDimProp pD89Conf) solverConf) justbPropV910
       ]
 
-  defaultMain
-    [ -- bgroup "ABC" (benches abcDefConf)
-    --   bgroup "Yices" (benches yicesDefConf)
-    -- , bgroup "CVC4" (benches cvc4DefConf)
-        bgroup "Z3" (benches z3DefConf)
-      -- , bgroup "Z3" (compRatioBenches z3DefConf)
-    -- , bgroup "Boolector" (benches boolectorDefConf)
+  defaultMainWith benchConfig $
+    [  bgroup "Z3" (benches z3DefConf)
+      -- bgroup "Z3" (compRatioBenches z3DefConf)
+    , bgroup "Yices" (benches yicesDefConf)
+    , bgroup "CVC4" (benches cvc4DefConf)
+    , bgroup "Boolector" (benches boolectorDefConf)
     ]
 
-  (satWith z3DefConf) bProp >>= encodeFile "data/fin_vmodel.json"
+  -- (satWith z3DefConf) bProp >>= encodeFile "data/fin_vmodel.json"

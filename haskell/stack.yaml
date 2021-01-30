@@ -1,11 +1,11 @@
 flags: {}
 packages:
   - '.'
-  # - /home/doyougnu/Research/VSat/haskell/lib/sbv
+  - /home/doyougnu/programming/sbv
 system-ghc: true
 extra-deps:
   - genifunctors-0.4
-  - sbv-8.6
+  # - sbv-8.6
 
   # spock dependencies
   # - Spock-0.13.0.0
@@ -23,8 +23,8 @@ extra-deps:
 nix:
   enable: true
   pure: true
-  # packages: [ z3, pkgconfig, zlib, abc-verifier, cvc4, yices, boolector, haskellPackages.hoogle haskellPackages.hasktags]
-  packages: [ z3, pkgconfig, zlib ]
+  packages: [ z3, pkgconfig, zlib, abc-verifier, cvc4, yices, boolector]
+  # packages: [ z3, pkgconfig, zlib ]
 
 # resolver: lts-11.22
 # resolver: lts-12.25

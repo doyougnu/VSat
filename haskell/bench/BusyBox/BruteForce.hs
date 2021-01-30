@@ -34,39 +34,11 @@ import Core
 import BusyBox
 
 
-base :: Integer -> Integer -> Integer
-base b = ceiling . logBase (fromInteger b) . fromInteger
-
-hole :: ReadableProp T.Text
-hole = bRef "__"
-
-
-prop :: [ReadableProp T.Text] -> ReadableProp T.Text
-prop xs = outer 0 xs
-  where
-    outer i [x] = x
-    outer i xs  = outer (succ i) (inner (T.pack $ show i) xs)
-
-
-    inner :: T.Text -> [ReadableProp T.Text] -> [ReadableProp T.Text]
-    inner _ [] = []
-    inner _ [x] = [x]
-    inner d (x:y:xs) = ChcB (Dim d) x y : inner d xs
-
-propOpts :: [ReadableProp T.Text] -> ReadableProp T.Text
-propOpts = atomize . outer 0
-  where
-    outer _ [x] = x
-    outer i ys  = outer (succ i) (atomize <$> inner (T.pack $ show i) ys)
-
-
-    inner :: T.Text -> [ReadableProp T.Text] -> [ReadableProp T.Text]
-    inner _ [] = []
-    inner _ [x] = [x]
-    inner d (x:y:ys) = ChcB (Dim d) x y : inner d ys
-
 -- | construct a brute force analysis for an analysis. Check if there is a
--- feature model, if so then prepend it to all the queries
+-- feature model, if so then prepend it to all the queries, then we wrap all
+-- queries into unique choices. The brute force algorithm in vsat for the splc
+-- paper will unwind all the choices and perform then interface to the solver
+-- for us
 analysisToBF :: Analysis Readable Readable -> [ReadableProp T.Text]
 analysisToBF (getAnalysis -> a) = problems
   where
@@ -76,4 +48,4 @@ analysisToBF (getAnalysis -> a) = problems
                  Just (f:_)  -> concatMap (fmap ((&&&) f)) queries
 
 constructBF :: [Analysis Readable Readable] -> ReadableProp T.Text
-constructBF = prop . concatMap analysisToBF
+constructBF = prop Nothing . concatMap analysisToBF

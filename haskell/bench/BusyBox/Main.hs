@@ -1,6 +1,7 @@
 module Main where
 
 import           Control.Arrow           (first, second)
+import           Control.DeepSeq         (force)
 import           Gauge
 import           Data.Aeson              (decodeStrict, encodeFile)
 import           Control.Monad           (replicateM, foldM, liftM2)
@@ -46,49 +47,55 @@ dataFile = "bench/BusyBox/SAT_problems.txt"
 -- | I wonder if having an alternative with all the queries is better than
 -- having a list of choices with all the same alternatives...
 analysisToVariational :: Analysis Readable Readable -> ReadableProp T.Text
-analysisToVariational a = fm &&& nM &&& lexProblems &&& parseProblems &&& tcProblems
+analysisToVariational a = fm &&&
+                          nM &&&
+                          lexProblems &&&
+                          parseProblems &&&
+                          tcProblems
   where fm            = featureModel a
-        nM            = conjoin $ noMode a
-        lexProblems   = conjoin $ (\p -> bChc "Lexing" p true)       <$> lexing       a
-        parseProblems = conjoin $ (\p -> bChc "Parsing" p true)      <$> parsing      a
-        tcProblems    = conjoin $ (\p -> bChc "TypeChecking" p true) <$> typeChecking a
+        handleEmpty a = if null a then [true] else a
+        nM            = prop Nothing $ handleEmpty $ noMode a
+        nmLength      = length $ noMode a
+        lexLength     = nmLength + (length $ lexing a)
+        tcLength      = lexLength + (length $ typeChecking a)
+        lexProblems   = (\p -> bChc "Lexing" p true)       $ prop (Just nmLength)  $ handleEmpty $ lexing       a
+        parseProblems = (\p -> bChc "Parsing" p true)      $ prop (Just lexLength) $ handleEmpty $ parsing      a
+        tcProblems    = (\p -> bChc "TypeChecking" p true) $ prop (Just tcLength)  $ handleEmpty $ typeChecking a
 
 
 constructVariational :: [Analysis Readable Readable] -> ReadableProp T.Text
 constructVariational = conjoin . fmap analysisToVariational
 
-onlyLex = bRef "Lexing" &&& bnot (bRef "Parsing") &&& bnot (bRef "TypeChecking")
-onlyParse = bnot (bRef "Lexing") &&& bRef "Parsing" &&& bnot (bRef "TypeChecking")
+onlyLex       = bRef "Lexing" &&& bnot (bRef "Parsing") &&& bnot (bRef "TypeChecking")
+onlyParse     = bnot (bRef "Lexing") &&& bRef "Parsing" &&& bnot (bRef "TypeChecking")
 onlyTypeCheck = bnot (bRef "Lexing") &&& bnot (bRef "Parsing") &&& bRef "TypeChecking"
 
-vc = onlyLex |||
+vc :: Maybe (DimProp T.Text)
+vc = toDimProp vc'
+
+vc' = onlyLex |||
      (onlyLex &&& onlyParse) |||
      (onlyLex &&& onlyParse &&& onlyTypeCheck)
-
 
 -- run with stack bench --profile vsat:busybox --benchmark-arguments='+RTS -S -RTS --output timings.html'
 main = do
   let benches :: ReadableSMTConf T.Text -> [Analysis Readable Readable] -> [Benchmark]
       benches solverConf as =
-        [ mkBench "BruteForce"  "BusyBox" vc (bfWith solverConf) (constructBF as)
-        , mkBench "Variational" "BusyBox" vc (satWith solverConf) (constructVariational as)
+        [ mkBench "Variational" "BusyBox" vc' (satWith solverConf) (constructVariational as)
         , bench "Incremental/BusyBox" (nfIO (constructIncremental as))
+        , mkBench' "BruteForce"  "BusyBox" (bfWith solverConf) (constructBF as) -- notice no vc for bf because the dimensions are synthetic
         ]
 
-  ps <- getProblems
-  defaultMain
-    [ bgroup "Z3" (benches z3DefConf ps)
-    ]
-  -- satWith z3DefConf (propOpts problems)
-  -- dir >>= print
+  !ps <- getProblems
+  let !bf = force $! constructBF ps
+
+  putStrLn $!  "BF Made!!!" ++ (show $ length ps)
+  -- defaultMain [ bgroup "Z3" (benches z3DefConf ps)
+  --             ]
+
+  putStrLn "Solving!!"
   -- results <- constructIncremental ps
-  -- print results
-
-
-  -- print $ pivotList . prop $ ts
-  -- print $ dimensions $ prop ts
-  -- print $ prop ts
-  -- print $ Set.size $ dimensions $ prop problems
-  -- print $ length problems
-  -- print $ prop ts
-  -- (satWith z3DefConf) bProp >>= encodeFile "data/fin_vmodel.json"
+  -- results <- satWithConf vc minConf (constructVariational ps)
+  -- results <- satWithConf vc minConf (constructIncremental ps)
+  -- putStrLn $ "Results !!" ++ show results
+  bfWith z3DefConfOnlySat bf

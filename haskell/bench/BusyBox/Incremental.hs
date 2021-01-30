@@ -54,21 +54,21 @@ constructIncremental xs = S.runSMT $ do
       symbolicAnalyses = St.evalStateT (mapM analysisToIncremental xs) (mempty,mempty)
 
       doAnalysis analysis = do
-        let fm            = featureModel analysis
-            nM            = noMode analysis
-            lexProblems   = lexing analysis
-            parseProblems = parsing analysis
-            tcProblems    = typeChecking analysis
+        let !fm            = featureModel analysis
+            !nM            = noMode analysis
+            !lexProblems   = lexing analysis
+            !parseProblems = parsing analysis
+            !tcProblems    = typeChecking analysis
 
-            runQuery qry  = SC.inNewAssertionStack $ do
-              S.constrain $ eval qry
+            runQuery !qry  = SC.inNewAssertionStack $! do
+              S.constrain $! eval qry
               S.SatResult <$> SC.getSMTResult
 
         S.constrain (eval fm)
         mapM_ (S.constrain . eval) nM
-        lexResults   <- mapM runQuery lexProblems
-        parseResults <- mapM runQuery parseProblems
-        tcResults    <- mapM runQuery tcProblems
+        !lexResults   <- mapM runQuery lexProblems
+        !parseResults <- mapM runQuery parseProblems
+        !tcResults    <- mapM runQuery tcProblems
         return $ lexResults <> parseResults <> tcResults
 
   -- make all variables known to sbv
@@ -80,6 +80,9 @@ constructIncremental xs = S.runSMT $ do
   -- constrain the plain stuff
   S.constrain $ eval $ featureModel plainAnalysis
   mapM_ (S.constrain . eval) $ noMode plainAnalysis
+  mapM_ (S.constrain . eval) $ lexing plainAnalysis
+  mapM_ (S.constrain . eval) $ parsing plainAnalysis
+  mapM_ (S.constrain . eval) $ typeChecking plainAnalysis
 
   -- off we go
   SC.query $ mapM doAnalysis $ filter (/= plainAnalysis) s'

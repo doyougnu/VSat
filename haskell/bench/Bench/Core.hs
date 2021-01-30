@@ -34,6 +34,8 @@ run !desc !f prop = bench desc $! nfIO (f prop)
 average :: (Real a, Fractional b) => [a] -> b
 average xs = realToFrac (sum xs) / genericLength xs
 
+benchConfig :: Gauge.Config
+benchConfig = defaultConfig{minSamples=Just 3}
 -- | make a description for the benchmark, we input pass through variables alg,
 -- and confDesc that are hand written names for the algorithm being used and the
 -- configuration/prop description. We then input the prop and get a bunch of

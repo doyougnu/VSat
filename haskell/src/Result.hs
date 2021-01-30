@@ -336,7 +336,7 @@ deriveSatValues :: ResultMap Text -> IO [M.Map String Bool]
 deriveSatValues m =
   do
     let prop = getProp $ getResSat m
-    AllSatResult (_,_,_,allRes) <- allSat $ toPredicate prop
+    (AllSatResult _ _ _ _ allRes) <- allSat $ toPredicate prop
     let resMaps = getModelDictionary <$> allRes
     return $! fmap cvToBool <$> resMaps
 

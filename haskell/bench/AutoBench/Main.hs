@@ -230,12 +230,12 @@ main = do
         , mkCompBench "p-->p" "V3*V4"  (bfWithConf (toDimProp pD23Conf) solverConf) justbPropV34
         ]
 
-  defaultMain
+  defaultMainWith benchConfig $
     [  bgroup "Z3" (benches z3DefConf)
       -- bgroup "Z3" (compRatioBenches z3DefConf)
-    -- , bgroup "CVC4" (benches cvc4DefConf)
-    -- , bgroup "Yices" (benches yicesDefConf)
-    -- , bgroup "Boolector" (benches boolectorDefConf)
+    , bgroup "Yices" (benches yicesDefConf)
+    , bgroup "CVC4" (benches cvc4DefConf)
+    , bgroup "Boolector" (benches boolectorDefConf)
     ]
 
-  (satWith z3DefConf) bProp >>= encodeFile "data/auto_vmodel.json"
+  -- (satWith z3DefConf) bProp >>= encodeFile "data/auto_vmodel.json"

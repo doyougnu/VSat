@@ -7,6 +7,7 @@ import Data.SBV ( SatResult(..)
 import Data.SBV.Internals (showModel)
 import Data.Text
 import Data.Aeson hiding (json)
+import Data.Aeson.Types  (emptyObject)
 
 import VProp.Types
 import qualified Result as R
@@ -22,7 +23,7 @@ instance ToJSON SMTResult where
   toJSON (Unknown _ msg) = object [("Unknown Error" :: Text) .= msg]
   toJSON (ProofError _ _ msg) = object [("Prover Error" :: Text) .= msg]
 
-instance ToJSON SMTReasonUnknown
+instance ToJSON SMTReasonUnknown where toJSON _ = object [("Result" :: Text, emptyObject)]
 instance ToJSON SatResult where toJSON (SatResult x) = toJSON x
 instance ToJSON ThmResult where toJSON (ThmResult x) = toJSON x
 

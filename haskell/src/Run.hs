@@ -342,7 +342,7 @@ vSMTSolve :: (Show d, Resultable d) =>
   ConfigPool d -> Settings -> S.Symbolic (Result d)
 vSMTSolve prop configPool ss =
   do prop' <- prop
-     S.setOption $ SC.ProduceUnsatCores True
+     -- S.setOption $ SC.ProduceUnsatCores True
      -- trace ("Solving with configPool: " ++ show configPool) $ return ()
      SC.query $
        do

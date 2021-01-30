@@ -35,6 +35,7 @@ import           Run
 import           SAT
 import           Utils              (fst')
 
+import Debug.Trace (trace)
 -- | a newtype wrapper to denote that this proposition can only have dimensions
 -- as variables
 newtype DimProp d = DimProp {getDimProp :: VProp d (Dim Text) (Dim Text)}
@@ -51,10 +52,11 @@ genConfigPool' :: (Resultable d) => Maybe (DimProp d) -> IO [Config d]
 genConfigPool' Nothing  = return mempty
 genConfigPool' (Just p) =
   do
-    S.AllSatResult (_,_,_,allRes) <- S.allSat $ toPredicate p
-    let resMaps = S.getModelDictionary <$> allRes
-    return $!
-      M.foldMapWithKey (\k a -> M.singleton (Dim $ fromString k) (cvToBool a)) <$> resMaps
+    (S.AllSatResult _ _ _ _ allRes) <- S.allSat $ toPredicate p
+    let !resMaps = S.getModelDictionary <$> allRes
+        !results = M.foldMapWithKey (\k a -> M.singleton (Dim $ fromString k) (cvToBool a)) <$> resMaps
+    return results
+
 
 genConfigPool :: (Resultable d) => ReadableProp d -> IO [Config d]
 genConfigPool = genConfigPool' . toDimProp
