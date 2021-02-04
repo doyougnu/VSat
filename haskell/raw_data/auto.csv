@@ -8,3 +8,10 @@ Yices/v-->v/V1*V2*V3*V4/Chc/4212/numPlain/26808/Compression/0.12398757051810842/
 Yices/p-->v/V1/Chc/0/numPlain/479622/Compression/0.0/VCore_Total/1/VCorePlain/1/VCoreVar/0/Variants/1,94.44007599033334
 Yices/p-->v/V1*V2/Chc/3250/numPlain/27749/Compression/0.4893513832228362/VCore_Total/5633/VCorePlain/2383/VCoreVar/3250/Variants/4,449.310250874
 Yices/p-->v/V1*V2*V3/Chc/4015/numPlain/27005/Compression/0.24787976051561864/VCore_Total/6030/VCorePlain/2036/VCoreVar/3994/Variants/8,890.0660502406666
+Yices/p-->v/V1*V2*V3*V4/Chc/4212/numPlain/26808/Compression/0.12398757051810842/VCore_Total/6137/VCorePlain/1946/VCoreVar/4191/Variants/16,1773.7317423653333
+Yices/p-->p/V1/Chc/0/numPlain/479622/Compression/0.0/VCore_Total/1/VCorePlain/1/VCoreVar/0/Variants/1,99.14951114266667
+Yices/p-->p/V1*V2/Chc/3250/numPlain/27749/Compression/0.4893513832228362/VCore_Total/5633/VCorePlain/2383/VCoreVar/3250/Variants/4,486.7597273353333
+Yices/p-->p/V1*V2*V3/Chc/4015/numPlain/27005/Compression/0.24787976051561864/VCore_Total/6030/VCorePlain/2036/VCoreVar/3994/Variants/8,976.4427911443332
+Yices/p-->p/V1*V2*V3*V4/Chc/4212/numPlain/26808/Compression/0.12398757051810842/VCore_Total/6137/VCorePlain/1946/VCoreVar/4191/Variants/16,1962.5408673786667
+Yices/v-->p/V1*V2/Chc/3250/numPlain/27749/Compression/0.4893513832228362/VCore_Total/5633/VCorePlain/2383/VCoreVar/3250/Variants/4,497.6130789156667
+Yices/v-->p/V1*V2*V3/Chc/4015/numPlain/27005/Compression/0.24787976051561864/VCore_Total/6030/VCorePlain/2036/VCoreVar/3994/Variants/8,992.5714370583333
