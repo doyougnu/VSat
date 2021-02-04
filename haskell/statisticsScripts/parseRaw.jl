@@ -1,10 +1,14 @@
-using CSV    # read in a csv
+using CSV        # read in a csv
 using DataFrames # for rename!
-using Query  # Tidyverse
-using Plots  # for plotting
+using Query      # Tidyverse
+using Plots      # for plotting
 
 ### get the data in a data frame
-dataFile = "../fin_dead_core_timings.csv"
+inputDirectory  = "raw_data"
+outputDirectory = "munged_data"
+fileName        = "financial.csv"
+sep             = "/"
+dataFile = inputDirectory * sep * fileName
 df = CSV.File(dataFile) |> DataFrame
 
 ### helper functions
@@ -13,7 +17,7 @@ id = x -> x
 function mungeName(nameString) arr = split(nameString, "/") end
 
 function genCol(df, colName, index, f)
-    df[colName] = map(name -> mungeName(name) |> x -> getindex(x,index) |> f, df[:Name])
+    df[!,colName] = map(name -> mungeName(name) |> x -> getindex(x,index) |> f, df[!,:Name])
     df
 end
 
@@ -63,4 +67,4 @@ end
 data = mungeDF!(df)
 
 ## write the file
-data |> CSV.write("../data/fin_dead_core.csv")
+data |> CSV.write(outputDirectory * sep * fileName)
