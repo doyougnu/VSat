@@ -4,9 +4,9 @@ using Query      # Tidyverse
 using Plots      # for plotting
 
 ### get the data in a data frame
-inputDirectory  = "raw_data"
-outputDirectory = "munged_data"
-fileName        = "financial.csv"
+inputDirectory  = "../raw_data"
+outputDirectory = "../munged_data"
+fileName        = "auto.csv"
 sep             = "/"
 dataFile = inputDirectory * sep * fileName
 df = CSV.File(dataFile) |> DataFrame
@@ -67,4 +67,6 @@ end
 data = mungeDF!(df)
 
 ## write the file
-data |> CSV.write(outputDirectory * sep * fileName)
+outPath = outputDirectory * sep * fileName
+# mkpath(outPath)
+data |> CSV.write(outPath)
