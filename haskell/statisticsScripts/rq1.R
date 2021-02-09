@@ -5,7 +5,7 @@ library(broom)
 library(scales)
 
 finResultsFile <- "../munged_data/financial.csv"
-autoResultsFile <- "~/research/VSmt/haskell/vsmt/munged_data/auto.csv"
+autoResultsFile <- "../munged_data/auto.csv"
 ## finRawFile <- "../data/fin_rq3_singletons.csv"
 ## autoRawFile <- "../data/auto_rq3_singletons.csv"
 
@@ -15,35 +15,50 @@ finData <- read.csv(file=finResultsFile) %>%
 
 autoData <- read.csv(file=autoResultsFile) %>%
   mutate(Algorithm = as.factor(Algorithm), Config = as.factor(Config)) %>%
-  mutate(Algorithm = gsub("-->", "\U27f6", Algorithm)) %>% select(Name,Mean,Config,ChcCount,PlainCount,CompressionRatio,VCoreSize,VCorePlain,VCoreVar,Variants,Algorithm,DataSet)
+  mutate(Algorithm = gsub("-->", "\U27f6", Algorithm), Mean = Time) %>% select(-Time)
 
 finDF <- finData %>% mutate(data = "Fin")
 autoDF <- autoData %>% mutate(data = "Auto")
 
 data <- rbind(finDF, autoDF)
 
-rq1DF <- data %>% filter(Variants >= 2) %>% group_by(Algorithm) %>%
+rq1DF <- data %>% filter(ChcCount != 0) %>% group_by(Algorithm) %>%
   arrange(Variants)
+
+rq1DFAuto <- rq1DF %>% filter(data == "Auto")
+rq1DFFin <- rq1DF %>% filter(data == "Fin")
 
 breaksRq1 <- function(x) {
   if (max(x) < 17) {
     2^(1:4)
   } else {
-    2^(6:10)}
+    2^(7:10)}
   }
 
-rq1 <- ggplot(rq1DF %>% filter(data == "Fin")) +
-  geom_line(aes(x=sqrt(Variants), y=Mean/60, color=Algorithm)) +
-  geom_point(aes(x=sqrt(Variants), y=Mean/60, shape=Algorithm, color=Algorithm),size=3) +
+rq1Auto <- ggplot(rq1DFAuto) +
+  geom_line(aes(x=Variants, y=Mean/60, color=Algorithm)) +
+  geom_point(aes(x=Variants, y=Mean/60, shape=Algorithm, color=Algorithm),size=3) +
   scale_shape_manual(values = c(1,6,5,17)) +
-  facet_grid(data ~ DataSet) +
+  facet_grid(data ~ DataSet, scales = "free_x") +
   theme_classic() +
   scale_x_continuous(breaks=breaksRq1, limits=c(2,NA)) +
-  ggtitle("RQ1: Performance as variants increase") +
+  ggtitle("RQ1: Performance as variants increase per base solver") +
   ylab("Time [Min.] to solve all Variants") +
-  theme(legend.position = c(0.6,0.75))
+  theme(legend.position = c(0.10,0.75))
 
-## ggsave("../plots/RQ1.png", plot = rq1, height = 4, width = 7, device = "png")
+rq1Fin <- ggplot(rq1DFFin) +
+  geom_line(aes(x=Variants, y=Mean/60, color=Algorithm)) +
+  geom_point(aes(x=Variants, y=Mean/60, shape=Algorithm, color=Algorithm),size=3) +
+  scale_shape_manual(values = c(1,6,5,17)) +
+  facet_grid(data ~ DataSet,scales="free") +
+  theme_classic() +
+  scale_x_continuous(breaks=breaksRq1, limits=c(2,NA)) +
+  ggtitle("RQ1: Performance as variants increase per base solver") +
+  ylab("Time [Min.] to solve all Variants") +
+  theme(legend.position = c(0.10,0.75), axis.text.x = element_text(angle = 90,vjust=0.5,hjust=1))
+
+ggsave("../plots/RQ1Auto.png", plot = rq1Auto, height = 4, width = 7, device = "png")
+ggsave("../plots/RQ1Fin.png", plot = rq1Fin, height = 4, width = 7, device = "png")
 
 ################# Singleton Analysis ##############################
 ## head(-4) %>%
@@ -68,19 +83,19 @@ rq1 <- ggplot(rq1DF %>% filter(data == "Fin")) +
 ##   scale_shape_manual(values = c(1,6,5,17)) +
 ##   theme_classic() +
 ##   scale_y_continuous(limits=c(0, NA), breaks=breaksRq3) +
-##   facet_wrap(.~ data, scales="free") +
-##   ## stat_summary(fun.data="mean_sdl"
-##   ##            , fun.args = list(mult=2)
-##   ##              , geom="pointrange"
-##   ##              , color="black"
-##   ##              , size=0.65) +
-##   ggtitle("RQ3: Overhead of Variational Solving on Plain Formulas") +
-##   ylab("Time [s] to solve single version variant") +
-##   xlab("Feature Model Version") +
-##   theme(legend.position = c(0.42,0.75),
-##         legend.key.size = unit(.65,'cm')) +
-##   theme(panel.grid.major.y = element_line(color = "grey")) +
-##   coord_flip()
+##   facet_wrap(DataSet ~ data, scales="free") +
+  ## stat_summary(fun.data="mean_sdl"
+  ##            , fun.args = list(mult=2)
+  ##              , geom="pointrange"
+  ##              , color="black"
+  ##              , size=0.65) +
+  ## ggtitle("RQ3: Overhead of Variational Solving on Plain Formulas") +
+  ## ylab("Time [s] to solve single version variant") +
+  ## xlab("Feature Model Version") +
+  ## theme(legend.position = c(0.42,0.75),
+  ##       legend.key.size = unit(.65,'cm')) +
+  ## theme(panel.grid.major.y = element_line(color = "grey"))
+  ## coord_flip()
 
 ## ## ggsave("../plots/RQ3.png", plot = rq3, height = 4, width = 7, device = "png")
 
