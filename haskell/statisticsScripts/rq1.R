@@ -44,7 +44,7 @@ rq1Auto <- ggplot(rq1DFAuto) +
   scale_x_continuous(breaks=breaksRq1, limits=c(2,NA)) +
   ggtitle("RQ1: Performance as variants increase per base solver") +
   ylab("Time [Min.] to solve all Variants") +
-  theme(legend.position = c(0.10,0.75))
+  theme(legend.position = c(0.08,0.75))
 
 rq1Fin <- ggplot(rq1DFFin) +
   geom_line(aes(x=Variants, y=Mean/60, color=Algorithm)) +
@@ -55,7 +55,7 @@ rq1Fin <- ggplot(rq1DFFin) +
   scale_x_continuous(breaks=breaksRq1, limits=c(2,NA)) +
   ggtitle("RQ1: Performance as variants increase per base solver") +
   ylab("Time [Min.] to solve all Variants") +
-  theme(legend.position = c(0.10,0.75), axis.text.x = element_text(angle = 90,vjust=0.5,hjust=1))
+  theme(legend.position = c(0.08,0.75), axis.text.x = element_text(angle = 90,vjust=0.5,hjust=1))
 
 ggsave("../plots/RQ1Auto.png", plot = rq1Auto, height = 4, width = 7, device = "png")
 ggsave("../plots/RQ1Fin.png", plot = rq1Fin, height = 4, width = 7, device = "png")
