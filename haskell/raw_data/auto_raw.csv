@@ -1,6 +1,4 @@
-name,iters,time,cycles,cpuTime,utime,stime,maxrss,minflt,majflt,nvcsw,nivcsw,allocated,numGcs,bytesCopied,mutatorWallSeconds,mutatorCpuSeconds,gcWallSeconds,gcCpuSeconds
-name,iters,time,cycles,cpuTime,utime,stime,maxrss,minflt,majflt,nvcsw,nivcsw,allocated,numGcs,bytesCopied,mutatorWallSeconds,mutatorCpuSeconds,gcWallSeconds,gcCpuSeconds
-name,iters,time,cycles,cpuTime,utime,stime,maxrss,minflt,majflt,nvcsw,nivcsw,allocated,numGcs,bytesCopied,mutatorWallSeconds,mutatorCpuSeconds,gcWallSeconds,gcCpuSeconds
+Name,iters,Time,cycles,cpuTime,utime,stime,maxrss,minflt,majflt,nvcsw,nivcsw,allocated,numGcs,bytesCopied,mutatorWallSeconds,mutatorCpuSeconds,gcWallSeconds,gcCpuSeconds
 Yices/v-->v/V1/Chc/0/numPlain/479622/Compression/0.0/VCore_Total/1/VCorePlain/1/VCoreVar/0/Variants/1,1,23.985049353,95759737720,23.710480574,19.492906,4.217591,1716816,287082,0,1119453,36,,,,,,,
 Yices/v-->v/V1/Chc/0/numPlain/479622/Compression/0.0/VCore_Total/1/VCorePlain/1/VCoreVar/0/Variants/1,2,49.927072323,199332541080,48.443801391,39.769026,8.674789,1716864,435474,0,2238749,73,,,,,,,
 Yices/v-->v/V1/Chc/0/numPlain/479622/Compression/0.0/VCore_Total/1/VCorePlain/1/VCoreVar/0/Variants/1,3,76.570569358,305705813600,74.259746086,61.056483,13.203278,1716880,554103,0,3357666,129,,,,,,,
