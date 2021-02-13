@@ -134,8 +134,6 @@ Boolector/v-->p/V1*V2*V3/Chc/4015/numPlain/27005/Compression/0.24787976051561864
 Boolector/v-->p/V1*V2*V3*V4/Chc/4212/numPlain/26808/Compression/0.12398757051810842/VCore_Total/6137/VCorePlain/1946/VCoreVar/4191/Variants/16,1,2033.80481308,8119864961280,1990.698377995,1926.738972,63.959423,8012720,1321729,0,20643445,8111,,,,,,,
 Boolector/v-->p/V1*V2*V3*V4/Chc/4212/numPlain/26808/Compression/0.12398757051810842/VCore_Total/6137/VCorePlain/1946/VCoreVar/4191/Variants/16,2,4090.943878948,16332879298840,3994.554177008,3863.558776,130.995419,8012720,2566400,0,41289498,48161,,,,,,,
 Boolector/v-->p/V1*V2*V3*V4/Chc/4212/numPlain/26808/Compression/0.12398757051810842/VCore_Total/6137/VCorePlain/1946/VCoreVar/4191/Variants/16,3,6140.500538025,24515619012840,5999.82969577,5806.213265,193.616446,8012720,3813375,0,61935429,41276,,,,,,,
-name,iters,time,cycles,cpuTime,utime,stime,maxrss,minflt,majflt,nvcsw,nivcsw,allocated,numGcs,bytesCopied,mutatorWallSeconds,mutatorCpuSeconds,gcWallSeconds,gcCpuSeconds
-name,iters,time,cycles,cpuTime,utime,stime,maxrss,minflt,majflt,nvcsw,nivcsw,allocated,numGcs,bytesCopied,mutatorWallSeconds,mutatorCpuSeconds,gcWallSeconds,gcCpuSeconds
 Z3/v-->v/V1/Chc/0/numPlain/479622/Compression/0.0/VCore_Total/1/VCorePlain/1/VCoreVar/0/Variants/1,1,37.09349042,148093917720,22.023923612,18.125113,3.898825,1553784,209154,0,1103799,45,,,,,,,
 Z3/v-->v/V1/Chc/0/numPlain/479622/Compression/0.0/VCore_Total/1/VCorePlain/1/VCoreVar/0/Variants/1,2,78.416407695,313073602320,46.975667978,39.096515,7.879169,1693048,318708,0,2207987,194,,,,,,,
 Z3/v-->v/V1/Chc/0/numPlain/479622/Compression/0.0/VCore_Total/1/VCorePlain/1/VCoreVar/0/Variants/1,3,122.886160481,490616869600,75.725083139,63.742858,11.982241,1693312,415745,0,3312505,142,,,,,,,
