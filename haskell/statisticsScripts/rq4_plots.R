@@ -38,7 +38,7 @@ breaksRq4 <- function(x) {
 
 rq4 <- function(df,title) {
   ggplot(df, aes(x=Config, y=Mean, fill=Algorithm, shape=Algorithm, color=Algorithm)) +
-    geom_point(size=6) +
+    geom_point(size=4) +
     scale_shape_manual(values = c(1,6,5,17)) +
     theme_classic() +
     scale_y_continuous(limits=c(0, NA), breaks=breaksRq4) +
@@ -51,7 +51,7 @@ rq4 <- function(df,title) {
     ggtitle(title) +
     ylab("Time [s] to solve single version variant") +
     xlab("Feature Model Version") +
-    theme(legend.position = c(0.42,0.85),
+    theme(legend.position = c(0.42,0.80),
           legend.key.size = unit(.65,'cm')) +
     theme(panel.grid.major.y = element_line(color = "grey")) +
     coord_flip()
@@ -60,8 +60,13 @@ rq4 <- function(df,title) {
 rq4_auto <- rq4(rq4DF %>% filter(data == "Auto"), "(Auto) RQ4: Overhead of Variational Solving on Plain Formulas")
 rq4_fin  <- rq4(rq4DF %>% filter(data == "Fin"), "(Financial) RQ4: Overhead of Variational Solving on Plain Formulas")
 
-ggsave("../plots/RQ4_Auto.png", plot = rq4_auto, height = 6, width = 7, device = "png")
-ggsave("../plots/RQ4_Fin.png", plot = rq4_fin, height = 6, width = 7, device = "png")
+ggsave("../plots/RQ4_Auto.png", plot = rq4_auto, height = 5, width = 7, device = "png")
+ggsave("../plots/RQ4_Fin.png", plot = rq4_fin, height = 5, width = 7, device = "png")
 
 
-slow_down <- rq4DF %>% group_by(data,DataSet,Algorithm) %>%  summarise(AvgMean = mean(Mean))
+## slow_down <- rq4DF %>% group_by(data,DataSet,Algorithm) %>%  summarise(AvgMean = mean(Mean))
+slow_down <- rq4DF %>%
+  group_by(data,DataSet,Algorithm) %>%
+  summarise(AvgMean = mean(Mean)) %>% ## calculate the average
+  mutate(SlowDown = AvgMean / lag(AvgMean)) %>% ## find the slowdown, ie 1.14 indicates 14% slowdown
+  filter(Algorithm == "v\U27f6v") ## get only the v->V rows
