@@ -43,7 +43,7 @@ fin.alg.slvr.res    <- kruskal.test(TimeCalc ~ fin.alg.slvr.inters, finRawDF)
 
 ## Find the pairs which are significant
 fin.pairs <- pairwise.wilcox.test(finRawDF$TimeCalc, fin.alg.conf.inters,
-                                  p.adj="bonf", exact=FALSE,
+                                  p.adj="bonf", exact=FALSE, method="holm",
                                   paired=FALSE) %>%
   tidy %>%
   separate(group1, sep=c(3,4), into = c("AlgLeft", "Dump", "ConfigLeft")) %>%
@@ -56,7 +56,7 @@ fin.pairs <- pairwise.wilcox.test(finRawDF$TimeCalc, fin.alg.conf.inters,
 ## We notice here that the p-values are all 1 after the bonferroni adjustment.
 ## Solver is not statistically significant
 fin.slvr.pairs <- pairwise.wilcox.test(finRawDF$TimeCalc, fin.alg.slvr.inters,
-                                  p.adj="bonf", exact=TRUE,
+                                  p.adj="bonf", exact=TRUE, method="holm",
                                   paired=FALSE) %>%
   tidy %>%
   separate(group1, sep="\\.", into = c("SolverLeft", "AlgLeft", "ConfigLeft")) %>%
@@ -75,10 +75,15 @@ auto.vers.res <- kruskal.test(TimeCalc ~ Config, autoRawDF)
 auto.slvr.res <- kruskal.test(TimeCalc ~ DataSet, autoRawDF)
 
 ## Interaction bewtween algorithm and version significant as expected
-auto.alg.conf.inters <- interaction(autoRawDF$Algorithm, autoRawDF$Config)
-auto.alg.slvr.inters <- interaction(autoRawDF$DataSet, autoRawDF$Algorithm, autoRawDF$Config)
-auto.alg.conf.res    <- kruskal.test(TimeCalc ~ auto.alg.conf.inters, autoRawDF)
-auto.alg.slvr.res    <- kruskal.test(TimeCalc ~ auto.alg.slvr.inters, autoRawDF)
+auto.alg.conf.inters  <- interaction(autoRawDF$Algorithm, autoRawDF$Config)
+## solvers with conf is significant, not surprising as they should be convolved
+auto.slvr.conf.inters <- interaction(autoRawDF$DataSet, autoRawDF$Config)
+## unfortunately when checking the correct interaction solvers are not found significant
+auto.alg.slvr.inters  <- interaction(autoRawDF$DataSet, autoRawDF$Algorithm, autoRawDF$Config)
+
+auto.alg.conf.res  <- kruskal.test(TimeCalc ~ auto.alg.conf.inters, autoRawDF)
+auto.slvr.conf.res <- kruskal.test(TimeCalc ~ auto.slvr.conf.inters, autoRawDF)
+auto.alg.slvr.res  <- kruskal.test(TimeCalc ~ auto.alg.slvr.inters, autoRawDF)
 
 ## Autod the pairs which are significant
 auto.pairs <- pairwise.wilcox.test(autoRawDF$TimeCalc, auto.alg.conf.inters,

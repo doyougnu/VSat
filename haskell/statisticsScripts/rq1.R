@@ -42,7 +42,7 @@ rq1Auto <- ggplot(rq1DFAuto) +
   facet_grid(data ~ DataSet, scales = "free_x") +
   theme_classic() +
   scale_x_continuous(breaks=breaksRq1, limits=c(2,NA)) +
-  ggtitle("RQ1: Performance as variants increase per base solver") +
+  ggtitle("(Auto) RQ1: Performance as variants increase per base solver") +
   ylab("Time [Min.] to solve all Variants") +
   theme(legend.position = c(0.08,0.75))
 
@@ -53,12 +53,23 @@ rq1Fin <- ggplot(rq1DFFin) +
   facet_grid(data ~ DataSet,scales="free") +
   theme_classic() +
   scale_x_continuous(breaks=breaksRq1, limits=c(2,NA)) +
-  ggtitle("RQ1: Performance as variants increase per base solver") +
+  ggtitle("(Financial) RQ1: Performance as variants increase per base solver") +
   ylab("Time [Min.] to solve all Variants") +
   theme(legend.position = c(0.08,0.75), axis.text.x = element_text(angle = 90,vjust=0.5,hjust=1))
 
 ggsave("../plots/RQ1Auto.png", plot = rq1Auto, height = 4, width = 7, device = "png")
 ggsave("../plots/RQ1Fin.png", plot = rq1Fin, height = 4, width = 7, device = "png")
+
+### summary tables
+rq1FinTable <- rq1DFFin %>%
+  select(DataSet, Algorithm, Mean, Variants)
+## %>%
+##   filter(Variants == 1024)
+
+rq1AutoTable <- rq1DFAuto %>%
+  select(DataSet, Algorithm, Mean, Variants)
+## %>%
+##   filter(Variants == 16)
 
 ################# Singleton Analysis ##############################
 ## head(-4) %>%
