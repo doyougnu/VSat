@@ -6,8 +6,6 @@ library(scales)
 
 finResultsFile <- "../munged_data/financial.csv"
 autoResultsFile <- "../munged_data/auto.csv"
-## finRawFile <- "../data/fin_rq3_singletons.csv"
-## autoRawFile <- "../data/auto_rq3_singletons.csv"
 
 finData <- read.csv(file=finResultsFile) %>%
   mutate(Algorithm = as.factor(Algorithm), Config = as.factor(Config)) %>%
