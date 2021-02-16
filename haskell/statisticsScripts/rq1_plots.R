@@ -55,32 +55,3 @@ rq1Fin <- ggplot(rq1DFFin) +
 
 ggsave("../plots/RQ1_Auto.png", plot = rq1Auto, height = 4, width = 7, device = "png")
 ggsave("../plots/RQ1_Fin.png", plot = rq1Fin, height = 4, width = 7, device = "png")
-
-### average by solver speedup
-speedupByVariantSolver <- function(df) {
-  df %>%
-    select(DataSet, Algorithm, Variants, Mean) %>%
-    group_by(DataSet,Algorithm,Variants) %>%
-    summarise(Mean = mean(Mean)) %>%
-    mutate(Speedup = lag(Mean, default = first(Mean)) / Mean)
-}
-
-speedupBySolver <- function(df) {
-  df %>%
-    select(DataSet, Algorithm, Variants, Mean) %>%
-    group_by(DataSet,Algorithm) %>%
-    summarise(Mean = mean(Mean)) %>%
-    mutate(Speedup = lag(Mean, default = first(Mean)) / Mean)
-}
-
-rq1AutoSpeedupBySolver <- speedupBySolver(rq1DFAuto)
-rq1FinSpeedupBySolver  <- speedupBySolver(rq1DFFin)
-
-### average speedup
-avgSpeedupFin <- rq1AutoSpeedupBySolver %>%
-  group_by(Algorithm) %>%
-  summarise(Speedup = mean(Speedup))
-
-avgSpeedupAuto <- rq1FinSpeedupBySolver %>%
-  group_by(Algorithm) %>%
-  summarise(Speedup = mean(Speedup))
