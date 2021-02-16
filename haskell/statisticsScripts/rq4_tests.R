@@ -28,6 +28,7 @@ fin.vers.res <- kruskal.test(TimeCalc ~ Config, finRawDF)
 
 ## Solvers are actually not significant by themselves
 fin.slvr.res <- kruskal.test(TimeCalc ~ DataSet, finRawDF)
+fin.slvr.res <- kruskal.test(TimeCalc ~ DataSet, finRawDF %>% filter(Algorithm == "p\U27f6v"))
 
 ## Interaction bewtween algorithm and version significant as expected
 fin.alg.conf.inters <- interaction(finRawDF$Algorithm, finRawDF$Config)
@@ -67,6 +68,7 @@ auto.vers.res <- kruskal.test(TimeCalc ~ Config, autoRawDF)
 
 ## Solvers are actually not significant by themselves
 auto.slvr.res <- kruskal.test(TimeCalc ~ DataSet, autoRawDF)
+auto.slvr.res2 <- kruskal.test(TimeCalc ~ DataSet, autoRawDF %>% filter(Algorithm == "p\U27f6v"))
 
 ## Interaction bewtween algorithm and version significant as expected
 auto.alg.conf.inters <- interaction(autoRawDF$Algorithm, autoRawDF$Config)
