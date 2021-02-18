@@ -16,7 +16,8 @@ finRawFile  <- "../munged_data/financial_raw.csv"
 autoRawFile <- "../munged_data/auto_raw.csv"
 
 ## use scientific notation
-options(scipen = 999)
+## options(scipen = 999)
+
 ################# Singleton Analysis ##############################
 finRawDF <- read.csv(file=finRawFile) %>%
   mutate(Algorithm = gsub("-->", "\U27f6", Algorithm), data = "Financial") %>%
@@ -119,6 +120,19 @@ rq3pvDF <- rbind(auto.algs.conf.pairs, fin.algs.conf.pairs) %>%
                                           "V7", "V8", "V9", "V10")))
 
 ###################### RQ2 speedup significance ###############################
+finResultsFile <- "../munged_data/financial.csv"
+autoResultsFile <- "../munged_data/auto.csv"
+
+finData <- read.csv(file=finResultsFile) %>%
+  mutate(Algorithm = as.factor(Algorithm), Config = as.factor(Config)) %>%
+  mutate(Algorithm = gsub("-->", "\U27f6", Algorithm), Mean = Time) %>% select(-Time)
+
+autoData <- read.csv(file=autoResultsFile) %>%
+  mutate(Algorithm = as.factor(Algorithm), Config = as.factor(Config)) %>%
+  mutate(Algorithm = gsub("-->", "\U27f6", Algorithm), Mean = Time) %>% select(-Time)
+
+finDF <- finData %>% mutate(data = "Fin")
+autoDF <- autoData %>% mutate(data = "Auto")
 
 ### average by solver speedup
 speedupByVariantSolver <- function(df) {
@@ -137,8 +151,8 @@ speedupBySolver <- function(df) {
     mutate(Speedup = lag(Mean, default = first(Mean)) / Mean)
 }
 
-rq1AutoSpeedupBySolver <- speedupBySolver(rq1DFAuto)
-rq1FinSpeedupBySolver  <- speedupBySolver(rq1DFFin)
+rq1AutoSpeedupBySolver <- speedupBySolver(autoDF)
+rq1FinSpeedupBySolver  <- speedupBySolver(finDF)
 
 ### average speedup
 avgSpeedupFin <- rq1AutoSpeedupBySolver %>%
@@ -160,7 +174,7 @@ lmDFAuto <- autoRawDF %>% select(TimeCalc,DataSet,Algorithm,Config)
 ## lmDFAuto$DataSet <- factor(lmDFAuto$DataSet, levels = c("Z3", "Boolector", "CVC4","Yices"))
 lmDFAuto <- within(lmDFAuto, DataSet <- relevel(DataSet, ref="Z3"))
 lmDFAuto <- within(lmDFAuto, Algorithm <- relevel(Algorithm, ref="v\U27f6v"))
-model.auto <- lm(TimeCalc ~ DataSet + Algorithm + Config, lmDFAuto)
+model.auto <- lm(TimeCalc ~ DataSet + Algorithm + Config + Algorithm * Config, lmDFAuto)
 
 ### now the ANOVA
 
@@ -213,4 +227,4 @@ lmDFFin <- finRawDF %>% select(TimeCalc,DataSet,Algorithm,Config)
 ## lmDFFin$DataSet <- factor(lmDFFin$DataSet, levels = c("Z3", "Boolector", "CVC4","Yices"))
 lmDFFin <- within(lmDFFin, DataSet <- relevel(DataSet, ref="Z3"))
 lmDFFin <- within(lmDFFin, Algorithm <- relevel(Algorithm, ref="v\U27f6v"))
-model.fin <- lm(TimeCalc ~ DataSet + Algorithm + Config, lmDFFin)
+model.fin <- lm(TimeCalc ~ DataSet + Algorithm + Config + Algorithm * Config, lmDFFin)
