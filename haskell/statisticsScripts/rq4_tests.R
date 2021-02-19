@@ -38,7 +38,7 @@ fin.alg.slvr.res    <- kruskal.test(TimeCalc ~ fin.alg.slvr.inters, finRawDF)
 
 ## Find the pairs which are significant
 fin.pairs <- pairwise.wilcox.test(finRawDF$TimeCalc, fin.alg.conf.inters,
-                                  p.adj="bonf", exact=FALSE,
+                                  p.adj="bonf", exact=FALSE, method="holm",
                                   paired=FALSE) %>%
   tidy %>%
   separate(group1, sep=c(3,4), into = c("AlgLeft", "Dump", "ConfigLeft")) %>%
@@ -51,12 +51,14 @@ fin.pairs <- pairwise.wilcox.test(finRawDF$TimeCalc, fin.alg.conf.inters,
 ## We notice here that the p-values are all 1 after the bonferroni adjustment.
 ## Solver is not statistically significant
 fin.slvr.pairs <- pairwise.wilcox.test(finRawDF$TimeCalc, fin.alg.slvr.inters,
-                                  p.adj="bonf", exact=TRUE,
+                                  p.adj="bonf", exact=TRUE, method="holm",
                                   paired=FALSE) %>%
   tidy %>%
   separate(group1, sep="\\.", into = c("SolverLeft", "AlgLeft", "ConfigLeft")) %>%
   separate(group2, sep="\\.", into = c("SolverRight", "AlgRight", "ConfigRight")) %>%
-  filter(ConfigRight == ConfigLeft) %>%
+  filter(ConfigRight == ConfigLeft, AlgLeft == AlgRight) %>%
+  mutate(Significance = case_when(p.value <= 0.05 ~ "Significant",
+                                  ... = TRUE ~ "Not Significant")) %>%
   arrange(p.value)
 
 ##################### Auto #############################
@@ -78,7 +80,7 @@ auto.alg.slvr.res    <- kruskal.test(TimeCalc ~ auto.alg.slvr.inters, autoRawDF)
 
 ## Autod the pairs which are significant
 auto.pairs <- pairwise.wilcox.test(autoRawDF$TimeCalc, auto.alg.conf.inters,
-                                  p.adj="bonf", exact=FALSE,
+                                  p.adj="bonf", exact=FALSE, method="holm",
                                   paired=FALSE) %>%
   tidy %>%
   separate(group1, sep=c(3,4), into = c("AlgLeft", "Dump", "ConfigLeft")) %>%
@@ -91,12 +93,14 @@ auto.pairs <- pairwise.wilcox.test(autoRawDF$TimeCalc, auto.alg.conf.inters,
 ## We notice here that the p-values are all 1 after the bonferroni adjustment.
 ## Solver is not statistically significant for both datasets
 auto.slvr.pairs <- pairwise.wilcox.test(autoRawDF$TimeCalc, auto.alg.slvr.inters,
-                                  p.adj="bonf", exact=TRUE,
+                                  p.adj="bonf", exact=TRUE, method="holm",
                                   paired=FALSE) %>%
   tidy %>%
   separate(group1, sep="\\.", into = c("SolverLeft", "AlgLeft", "ConfigLeft")) %>%
   separate(group2, sep="\\.", into = c("SolverRight", "AlgRight", "ConfigRight")) %>%
-  filter(ConfigRight == ConfigLeft) %>%
+  filter(ConfigRight == ConfigLeft, AlgLeft == AlgRight) %>%
+  mutate(Significance = case_when(p.value <= 0.05 ~ "Significant",
+                                  ... = TRUE ~ "Not Significant")) %>%
   arrange(p.value)
 
 ## ########################## Combined data frame ##################
