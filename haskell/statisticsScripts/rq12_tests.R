@@ -65,9 +65,8 @@ fin.pairs <- pairs(finRawDF$TimeCalc, finRawDF$Algorithm)
 
 ####################### Fin comparison considering versions ##################
 fin.algs.conf.pairs <- pairs(finRawDF$TimeCalc, fin.alg.conf.inters) %>%
-  separate(group1, sep=c(3,4), into = c("AlgLeft", "Dump", "ConfigLeft")) %>%
-  separate(group2, sep=c(3,4), into = c("AlgRight", "Dump2", "ConfigRight")) %>%
-  select(-Dump, -Dump2) %>%
+  separate(group1, sep="\\.", into = c("AlgLeft", "ConfigLeft")) %>%
+  separate(group2, sep="\\.", into = c("AlgRight", "ConfigRight")) %>%
   filter(ConfigRight == ConfigLeft) %>%
   mutate(data = "Financial") %>%
   arrange(p.value)
@@ -125,11 +124,11 @@ autoResultsFile <- "../munged_data/auto.csv"
 
 finData <- read.csv(file=finResultsFile) %>%
   mutate(Algorithm = as.factor(Algorithm), Config = as.factor(Config)) %>%
-  mutate(Algorithm = gsub("-->", "\U27f6", Algorithm), Mean = Time) %>% select(-Time)
+  mutate(Algorithm = gsub("-->", "\U27f6", Algorithm), Mean = Time) %>% dplyr::select(-Time)
 
 autoData <- read.csv(file=autoResultsFile) %>%
   mutate(Algorithm = as.factor(Algorithm), Config = as.factor(Config)) %>%
-  mutate(Algorithm = gsub("-->", "\U27f6", Algorithm), Mean = Time) %>% select(-Time)
+  mutate(Algorithm = gsub("-->", "\U27f6", Algorithm), Mean = Time) %>% dplyr::select(-Time)
 
 finDF <- finData %>% mutate(data = "Fin")
 autoDF <- autoData %>% mutate(data = "Auto")
@@ -137,7 +136,7 @@ autoDF <- autoData %>% mutate(data = "Auto")
 ### average by solver speedup
 speedupByVariantSolver <- function(df) {
   df %>%
-    select(DataSet, Algorithm, Variants, Mean) %>%
+    dplyr::select(DataSet, Algorithm, Variants, Mean) %>%
     group_by(DataSet,Algorithm,Variants) %>%
     summarise(Mean = mean(Mean)) %>%
     mutate(Speedup = lag(Mean, default = first(Mean)) / Mean)
@@ -145,7 +144,7 @@ speedupByVariantSolver <- function(df) {
 
 speedupBySolver <- function(df) {
   df %>%
-    select(DataSet, Algorithm, Variants, Mean) %>%
+    dplyr::select(DataSet, Algorithm, Variants, Mean) %>%
     group_by(DataSet,Algorithm) %>%
     summarise(Mean = mean(Mean)) %>%
     mutate(Speedup = lag(Mean, default = first(Mean)) / Mean)
@@ -170,7 +169,7 @@ avgSpeedupAuto <- rq1FinSpeedupBySolver %>%
 ## base solver
 
 ### Perform the anova
-lmDFAuto <- autoRawDF %>% select(TimeCalc,DataSet,Algorithm,Config)
+lmDFAuto <- autoRawDF %>% dplyr::select(TimeCalc,DataSet,Algorithm,Config)
 ## lmDFAuto$DataSet <- factor(lmDFAuto$DataSet, levels = c("Z3", "Boolector", "CVC4","Yices"))
 lmDFAuto <- within(lmDFAuto, DataSet <- relevel(DataSet, ref="Z3"))
 lmDFAuto <- within(lmDFAuto, Algorithm <- relevel(Algorithm, ref="v\U27f6v"))
@@ -223,7 +222,7 @@ model.auto <- lm(TimeCalc ~ DataSet + Algorithm + Config + Algorithm * Config, l
 ## runtime increase, however Boolector and Yices do correlate to a speedup
 ## relative to Z3
 
-lmDFFin <- finRawDF %>% select(TimeCalc,DataSet,Algorithm,Config)
+lmDFFin <- finRawDF %>% dplyr::select(TimeCalc,DataSet,Algorithm,Config)
 ## lmDFFin$DataSet <- factor(lmDFFin$DataSet, levels = c("Z3", "Boolector", "CVC4","Yices"))
 lmDFFin <- within(lmDFFin, DataSet <- relevel(DataSet, ref="Z3"))
 lmDFFin <- within(lmDFFin, Algorithm <- relevel(Algorithm, ref="v\U27f6v"))
