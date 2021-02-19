@@ -31,6 +31,7 @@ fin.slvr.res <- kruskal.test(TimeCalc ~ DataSet, finRawDF)
 
 ## Interaction bewtween algorithm and version significant as expected
 fin.alg.conf.inters      <- interaction(finRawDF$Algorithm, finRawDF$Config)
+fin.alg.slvr.inters      <- interaction(finRawDF$Algorithm, finRawDF$DataSet)
 fin.alg.conf.slvr.inters <- interaction(finRawDF$DataSet, finRawDF$Algorithm, finRawDF$Config)
 
 fin.alg.conf.res      <- kruskal.test(TimeCalc ~ fin.alg.conf.inters, finRawDF)
@@ -51,16 +52,16 @@ fin.pairs <- pairwise.wilcox.test(finRawDF$TimeCalc, fin.alg.conf.inters,
 
 ## We notice here that the p-values are all 1 after the bonferroni adjustment.
 ## Solver is not statistically significant
-fin.slvr.pairs <- pairwise.wilcox.test(finRawDF$TimeCalc, fin.alg.conf.slvr.inters,
+fin.slvr.pairs <- pairwise.wilcox.test(finRawDF$TimeCalc, fin.alg.slvr.inters,
                                   p.adj="bonf", exact=TRUE, method="holm",
                                   paired=FALSE) %>%
   tidy %>%
-  separate(group1, sep="\\.", into = c("SolverLeft", "AlgLeft", "ConfigLeft")) %>%
-  separate(group2, sep="\\.", into = c("SolverRight", "AlgRight", "ConfigRight")) %>%
-  filter(ConfigRight == ConfigLeft, AlgLeft == AlgRight) %>%
+  separate(group1, sep="\\.", into = c("AlgLeft", "SolverLeft")) %>%
+  separate(group2, sep="\\.", into = c("AlgRight", "SolverRight")) %>%
+  filter(AlgLeft == AlgRight) %>%
   mutate(Significance = case_when(p.value <= 0.05 ~ "Significant",
                                   ... = TRUE ~ "Not Significant")) %>%
-  arrange(p.value)
+  arrange(p.value, SolverLeft)
 
 ##################### Auto #############################
 ## Algorithms are significant
@@ -74,6 +75,7 @@ auto.slvr.res <- kruskal.test(TimeCalc ~ DataSet, autoRawDF)
 
 ## Interaction bewtween algorithm and version significant as expected
 auto.alg.conf.inters      <- interaction(autoRawDF$Algorithm, autoRawDF$Config)
+auto.alg.slvr.inters      <- interaction(autoRawDF$Algorithm, autoRawDF$DataSet)
 auto.alg.conf.slvr.inters <- interaction(autoRawDF$DataSet, autoRawDF$Algorithm, autoRawDF$Config)
 
 auto.alg.conf.res      <- kruskal.test(TimeCalc ~ auto.alg.conf.inters, autoRawDF)
@@ -94,20 +96,20 @@ auto.pairs <- pairwise.wilcox.test(autoRawDF$TimeCalc, auto.alg.conf.inters,
 
 ## We notice here that the p-values are all 1 after the bonferroni adjustment.
 ## Solver is not statistically significant for both datasets
-auto.slvr.pairs <- pairwise.wilcox.test(autoRawDF$TimeCalc, auto.alg.conf.slvr.inters,
+auto.slvr.pairs <- pairwise.wilcox.test(autoRawDF$TimeCalc, auto.alg.slvr.inters,
                                   p.adj="bonf", exact=TRUE, method="holm",
                                   paired=FALSE) %>%
   tidy %>%
-  separate(group1, sep="\\.", into = c("SolverLeft", "AlgLeft", "ConfigLeft")) %>%
-  separate(group2, sep="\\.", into = c("SolverRight", "AlgRight", "ConfigRight")) %>%
-  filter(ConfigRight == ConfigLeft, AlgLeft == AlgRight) %>%
+  separate(group1, sep="\\.", into = c("AlgLeft", "SolverLeft")) %>%
+  separate(group2, sep="\\.", into = c("AlgRight", "SolverRight")) %>%
+  filter(AlgLeft == AlgRight) %>%
   mutate(Significance = case_when(p.value <= 0.05 ~ "Significant",
                                   ... = TRUE ~ "Not Significant")) %>%
-  arrange(p.value)
+  arrange(p.value,SolverLeft)
 
 ## ########################## Combined data frame ##################
 options(scipen = 999)
-rq3pvDF <- rbind(auto.pairs, fin.pairs) %>%
+rq4pvDF <- rbind(auto.pairs, fin.pairs) %>%
   arrange(p.value) %>%
   mutate(Significance = case_when(p.value <= 0.05 ~ "Significant",
                                   TRUE ~ "Not Significant"),
@@ -115,9 +117,4 @@ rq3pvDF <- rbind(auto.pairs, fin.pairs) %>%
                                         c("V1", "V2", "V3", "V4", "V5", "V6",
                                           "V7", "V8", "V9", "V10")))
 
-### It seems strange given rq3 plot that only v1 is significant for auto by
-### algorithms, given that the averages between groups are so different. This is
-### because there is a high degree of variance between the samples, you can
-### observe this here:
-
-## ggplot(autoRawDF, aes( x = Config, y = TimeCalc, color=Algorithm)) + geom_boxplot() + geom_jitter()
+rq4_counts <- rq4pvDF %>% count(AlgLeft, data, Significance)
