@@ -1,4 +1,4 @@
-name,iters,time,cycles,cpuTime,utime,stime,maxrss,minflt,majflt,nvcsw,nivcsw,allocated,numGcs,bytesCopied,mutatorWallSeconds,mutatorCpuSeconds,gcWallSeconds,gcCpuSeconds
+Name,iters,Time,cycles,cpuTime,utime,stime,maxrss,minflt,majflt,nvcsw,nivcsw,allocated,numGcs,bytesCopied,mutatorWallSeconds,mutatorCpuSeconds,gcWallSeconds,gcCpuSeconds
 Yices/v-->v/V1/Chc/0/numPlain/479622/Compression/0.0/VCore_Total/1/VCorePlain/1/VCoreVar/0/Variants/1,1,24.102304022,96226844240,23.841084297,19.774973,4.066133,1715492,284409,0,1119615,49,,,,,,,
 Yices/v-->v/V1/Chc/0/numPlain/479622/Compression/0.0/VCore_Total/1/VCorePlain/1/VCoreVar/0/Variants/1,2,48.711644568,194478025400,48.2804577,39.962197,8.318276,1716484,435459,0,2239218,91,,,,,,,
 Yices/v-->v/V1/Chc/0/numPlain/479622/Compression/0.0/VCore_Total/1/VCorePlain/1/VCoreVar/0/Variants/1,3,73.333164051,292777902480,72.272867108,60.201363,12.071517,1716712,554364,0,3358898,249,,,,,,,
