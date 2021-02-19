@@ -6,7 +6,7 @@ using Plots      # for plotting
 ### get the data in a data frame
 inputDirectory  = "../raw_data"
 outputDirectory = "../munged_data"
-fileName        = "auto.csv"
+fileName        = "financial_singletons.csv"
 sep             = "/"
 dataFile = inputDirectory * sep * fileName
 df = CSV.File(dataFile) |> DataFrame

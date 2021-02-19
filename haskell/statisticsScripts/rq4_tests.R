@@ -26,15 +26,16 @@ fin.alg.res <- kruskal.test(TimeCalc ~ Algorithm, finRawDF)
 ## Versions are significant as expected
 fin.vers.res <- kruskal.test(TimeCalc ~ Config, finRawDF)
 
-## Solvers are actually not significant by themselves
+## Solvers also significant
 fin.slvr.res <- kruskal.test(TimeCalc ~ DataSet, finRawDF)
-fin.slvr.res <- kruskal.test(TimeCalc ~ DataSet, finRawDF %>% filter(Algorithm == "p\U27f6v"))
 
 ## Interaction bewtween algorithm and version significant as expected
-fin.alg.conf.inters <- interaction(finRawDF$Algorithm, finRawDF$Config)
-fin.alg.slvr.inters <- interaction(finRawDF$DataSet, finRawDF$Algorithm, finRawDF$Config)
-fin.alg.conf.res    <- kruskal.test(TimeCalc ~ fin.alg.conf.inters, finRawDF)
-fin.alg.slvr.res    <- kruskal.test(TimeCalc ~ fin.alg.slvr.inters, finRawDF)
+fin.alg.conf.inters      <- interaction(finRawDF$Algorithm, finRawDF$Config)
+fin.alg.conf.slvr.inters <- interaction(finRawDF$DataSet, finRawDF$Algorithm, finRawDF$Config)
+
+fin.alg.conf.res      <- kruskal.test(TimeCalc ~ fin.alg.conf.inters, finRawDF)
+fin.alg.slvr.res      <- kruskal.test(TimeCalc ~ fin.alg.slvr.inters, finRawDF)
+fin.alg.conf.slvr.res <- kruskal.test(TimeCalc ~ fin.alg.conf.slvr.inters, finRawDF)
 
 ## Find the pairs which are significant
 fin.pairs <- pairwise.wilcox.test(finRawDF$TimeCalc, fin.alg.conf.inters,
@@ -50,7 +51,7 @@ fin.pairs <- pairwise.wilcox.test(finRawDF$TimeCalc, fin.alg.conf.inters,
 
 ## We notice here that the p-values are all 1 after the bonferroni adjustment.
 ## Solver is not statistically significant
-fin.slvr.pairs <- pairwise.wilcox.test(finRawDF$TimeCalc, fin.alg.slvr.inters,
+fin.slvr.pairs <- pairwise.wilcox.test(finRawDF$TimeCalc, fin.alg.conf.slvr.inters,
                                   p.adj="bonf", exact=TRUE, method="holm",
                                   paired=FALSE) %>%
   tidy %>%
@@ -70,13 +71,14 @@ auto.vers.res <- kruskal.test(TimeCalc ~ Config, autoRawDF)
 
 ## Solvers are actually not significant by themselves
 auto.slvr.res <- kruskal.test(TimeCalc ~ DataSet, autoRawDF)
-auto.slvr.res2 <- kruskal.test(TimeCalc ~ DataSet, autoRawDF %>% filter(Algorithm == "p\U27f6v"))
 
 ## Interaction bewtween algorithm and version significant as expected
-auto.alg.conf.inters <- interaction(autoRawDF$Algorithm, autoRawDF$Config)
-auto.alg.slvr.inters <- interaction(autoRawDF$DataSet, autoRawDF$Algorithm, autoRawDF$Config)
-auto.alg.conf.res    <- kruskal.test(TimeCalc ~ auto.alg.conf.inters, autoRawDF)
-auto.alg.slvr.res    <- kruskal.test(TimeCalc ~ auto.alg.slvr.inters, autoRawDF)
+auto.alg.conf.inters      <- interaction(autoRawDF$Algorithm, autoRawDF$Config)
+auto.alg.conf.slvr.inters <- interaction(autoRawDF$DataSet, autoRawDF$Algorithm, autoRawDF$Config)
+
+auto.alg.conf.res      <- kruskal.test(TimeCalc ~ auto.alg.conf.inters, autoRawDF)
+auto.alg.slvr.res      <- kruskal.test(TimeCalc ~ auto.alg.slvr.inters, autoRawDF)
+auto.alg.conf.slvr.res <- kruskal.test(TimeCalc ~ auto.alg.conf.slvr.inters, autoRawDF)
 
 ## Autod the pairs which are significant
 auto.pairs <- pairwise.wilcox.test(autoRawDF$TimeCalc, auto.alg.conf.inters,
@@ -92,7 +94,7 @@ auto.pairs <- pairwise.wilcox.test(autoRawDF$TimeCalc, auto.alg.conf.inters,
 
 ## We notice here that the p-values are all 1 after the bonferroni adjustment.
 ## Solver is not statistically significant for both datasets
-auto.slvr.pairs <- pairwise.wilcox.test(autoRawDF$TimeCalc, auto.alg.slvr.inters,
+auto.slvr.pairs <- pairwise.wilcox.test(autoRawDF$TimeCalc, auto.alg.conf.slvr.inters,
                                   p.adj="bonf", exact=TRUE, method="holm",
                                   paired=FALSE) %>%
   tidy %>%
