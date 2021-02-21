@@ -7,14 +7,14 @@ library(broom)
 library(scales)
 library(ggpubr)
 
-finResultsFile <- "../data/fin_comp_data.csv"
-autoResultsFile <- "../data/auto_comp_data.csv"
+finResultsFile <- "../munged_data/financial_comp.csv"
+autoResultsFile <- "../munged_data/auto_comp.csv"
 
 finData <- read.csv(file=finResultsFile) %>%
-  mutate(Algorithm = as.factor(Algorithm), Config = as.factor(Config))
+  mutate(Algorithm = as.factor(Algorithm), Config = as.factor(Config), Mean = Time)
 
 autoData <- read.csv(file=autoResultsFile) %>%
-  mutate(Algorithm = as.factor(Algorithm), Config = as.factor(Config))
+  mutate(Algorithm = as.factor(Algorithm), Config = as.factor(Config), Mean = Time)
 
 finDF <- finData %>% mutate(data = "Fin") %>%
   select(Mean, Algorithm, CompressionRatio, data, ChcCount, PlainCount, Config)
@@ -69,13 +69,13 @@ rq2 <- ggplot(df, mapping = aes(x=PlainRatio, y=MeanRatio, colour = Algorithm, s
   xlab(TeX("Plain Ratio:  $\\frac{|Plain Terms|}{|Total Terms|}}")) +
   scale_shape_manual(values = c(1,6,17)) +
   geom_smooth(method=lm, formula = y ~ x, se=TRUE, alpha=0.15) +
-  ggtitle("RQ2: Performance as a function of plain ratio") +
+  ## ggtitle("RQ3: Performance as a function of plain ratio") +
   theme_classic() +
   stat_cor(aes(color=Algorithm),
            label.x=0.74, label.y.npc=c(0.91, 0.89, 0.88)) +
   theme(legend.position = c(0.07, 0.83))
 
-ggsave("../plots/RQ2.png", plot = rq2, device = "png", height = 4, width = 7)
+ggsave("../plots/RQ3.png", plot = rq2, device = "png", height = 4, width = 7)
 
 
 ### Perform the anova

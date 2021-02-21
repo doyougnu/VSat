@@ -158,6 +158,7 @@ benchmarks:
     - -with-rtsopts=-N
     dependencies:
     - time
+    - random
     - gauge
     - vsat
 

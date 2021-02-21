@@ -128,4 +128,4 @@ main = do
     -- , bgroup "Boolector" (benches boolectorDefConf)
     ]
 
-  (satWithConf (toDimProp singleVersionConf) z3DefConf) bProp >>= encodeFile "../../data/auto_vmodel_dead_core.json"
+  -- (satWithConf (toDimProp singleVersionConf) z3DefConf) bProp >>= encodeFile "../../raw_data/auto_vmodel_dead_core.json"
