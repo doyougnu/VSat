@@ -48,7 +48,6 @@ rq4 <- function(df,title) {
     ##            , geom="pointrange"
     ##            , color="black"
     ##            , size=0.65) +
-    ggtitle(title) +
     ylab("Time [s] to solve single version variant") +
     xlab("Feature Model Version") +
     theme(legend.position = c(0.42,0.80),
@@ -57,16 +56,19 @@ rq4 <- function(df,title) {
     coord_flip()
 }
 
-rq4_auto <- rq4(rq4DF %>% filter(data == "Auto"), "(Auto) RQ4: Overhead of Variational Solving on Plain Formulas")
-rq4_fin  <- rq4(rq4DF %>% filter(data == "Fin"), "(Financial) RQ4: Overhead of Variational Solving on Plain Formulas")
+rq4_auto <- rq4(rq4DF %>% filter(data == "Auto"))
+rq4_fin  <- rq4(rq4DF %>% filter(data == "Fin"))
 
-ggsave("../plots/RQ4_Auto.png", plot = rq4_auto, height = 5, width = 7, device = "png")
-ggsave("../plots/RQ4_Fin.png", plot = rq4_fin, height = 5, width = 7, device = "png")
+## ggsave("../plots/RQ4_Auto.png", plot = rq4_auto, height = 5, width = 7, device = "png")
+## ggsave("../plots/RQ4_Fin.png", plot = rq4_fin, height = 5, width = 7, device = "png")
 
 
-## slow_down <- rq4DF %>% group_by(data,DataSet,Algorithm) %>%  summarise(AvgMean = mean(Mean))
+## Slow down by data and dataset
 slow_down <- rq4DF %>%
   group_by(data,DataSet,Algorithm) %>%
   summarise(AvgMean = mean(Mean)) %>% ## calculate the average
   mutate(SlowDown = AvgMean / lag(AvgMean)) %>% ## find the slowdown, ie 1.14 indicates 14% slowdown
   filter(Algorithm == "v\U27f6v") ## get only the v->V rows
+
+## Slow down by data
+slow_down_by_data <- slow_down %>% group_by(data) %>% summarise(average = mean(SlowDown))
