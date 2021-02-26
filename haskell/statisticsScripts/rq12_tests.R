@@ -128,7 +128,11 @@ finData <- read.csv(file=finResultsFile) %>%
 
 autoData <- read.csv(file=autoResultsFile) %>%
   mutate(Algorithm = as.factor(Algorithm), Config = as.factor(Config)) %>%
-  mutate(Algorithm = gsub("-->", "\U27f6", Algorithm), Mean = Time) %>% dplyr::select(-Time)
+  mutate(Algorithm = gsub("-->", "\U27f6", Algorithm), Mean = Time) %>%
+  dplyr::select(-Time) %>%
+  filter(ChcCount != 0) ## our initial run confused version variant for 2
+                        ## variant cases for auto so we re-added the 2 variant
+                        ## case and filter the version variant here
 
 finDF <- finData %>% mutate(data = "Fin")
 autoDF <- autoData %>% mutate(data = "Auto")
@@ -136,37 +140,39 @@ autoDF <- autoData %>% mutate(data = "Auto")
 ### average by solver speedup
 speedupByVariantSolver <- function(df) {
   df %>%
-    dplyr::select(DataSet, Algorithm, Variants, Mean) %>%
-    group_by(DataSet,Algorithm,Variants) %>%
-    summarise(Mean = mean(Mean)) %>%
-    mutate(Speedup = lag(Mean, default = first(Mean)) / Mean)
+    dplyr::select(DataSet, Algorithm, Config, Mean) %>%
+    spread(Algorithm, Mean) %>%
+    mutate(Speedup = `v⟶p` / `v⟶v`)
 }
 
 speedupBySolver <- function(df) {
   df %>%
     dplyr::select(DataSet, Algorithm, Variants, Mean) %>%
     group_by(DataSet,Algorithm) %>%
-    summarise(Mean = mean(Mean)) %>%
-    mutate(Speedup = lag(Mean, default = first(Mean)) / Mean)
+    summarise(Mean = mean(Mean)) %>% ## notice we don't group by Config meaning
+                                     ## we are averaging the Mean from each
+                                     ## Config
+    spread(Algorithm, Mean) %>%
+    mutate(Speedup = `v⟶p` / `v⟶v`)
 }
 
 rq1AutoSpeedupBySolver <- speedupBySolver(autoDF)
 rq1FinSpeedupBySolver  <- speedupBySolver(finDF)
 
 ### average speedup
-avgSpeedupFin <- rq1AutoSpeedupBySolver %>%
-  group_by(Algorithm) %>%
-  summarise(Speedup = mean(Speedup))
+fin.avg.speedup  <- speedupBySolver(finDF)
+auto.avg.speedup <- speedupBySolver(autoDF)
 
-avgSpeedupAuto <- rq1FinSpeedupBySolver %>%
-  group_by(Algorithm) %>%
-  summarise(Speedup = mean(Speedup))
+### Table that shows results by dataset, algorithm and variant
+fin.results  <- speedupByVariantSolver(finDF)
+auto.results <- speedupByVariantSolver(autoDF)
 
-######################### Speedup Significance test ###########################
+######################### Speedup Regression ###########################
 ## we know that v-->v is significantly different that the other algorithms but
-## how much of the performance can we attribute to base solver? we fit a
-## genearlized linear model, glm, to the data to assess the contribution of the
-## base solver
+## how much of the performance can we attribute to base solver? we fit a linear
+## model, lm, to the data to assess the contribution of the base solver. This
+## didn't make it into the paper but may be useful for other researchers who are
+## interested
 
 ### Perform the anova
 lmDFAuto <- autoRawDF %>% dplyr::select(TimeCalc,DataSet,Algorithm,Config)
