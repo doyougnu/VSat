@@ -6,7 +6,7 @@ using Plots      # for plotting
 ### get the data in a data frame
 inputDirectory  = "../raw_data"
 outputDirectory = "../munged_data"
-fileName        = "auto_deadcore.csv"
+fileName        = "fin_variate_timings_raw.csv"
 sep             = "/"
 dataFile = inputDirectory * sep * fileName
 df = CSV.File(dataFile) |> DataFrame
@@ -17,7 +17,7 @@ id = x -> x
 function mungeName(nameString) arr = split(nameString, "/") end
 
 function genCol(df, colName, index, f)
-    df[!,colName] = map(name -> mungeName(name) |> x -> getindex(x,index) |> f, df[!,:Name])
+    df[!,colName] = map(name -> mungeName(name) |> x -> getindex(x,index) |> f, df[!,:name])
     df
 end
 
