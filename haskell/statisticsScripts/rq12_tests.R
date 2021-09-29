@@ -25,7 +25,9 @@ finRawDF <- read.csv(file=finRawFile) %>%
          Config = as.factor(Config),
          DataSet = as.factor(DataSet)) %>%
   group_by(Algorithm, DataSet, Config) %>%
-  mutate(TimeCalc = Time - lag(Time, default = 0))
+  mutate(TimeCalc = case_when(iters == 1 ~ Time,
+                              iters == 2 ~ Time - lag(Time,1),
+                              iters == 3 ~ Time - lag(Time,2)))
 
 autoRawDF <- read.csv(file=autoRawFile) %>%
   mutate(Algorithm = gsub("-->", "\U27f6", Algorithm), data = "Auto") %>%
@@ -33,7 +35,9 @@ autoRawDF <- read.csv(file=autoRawFile) %>%
          Config = as.factor(Config),
          DataSet = as.factor(DataSet)) %>%
   group_by(Algorithm, DataSet, Config) %>%
-  mutate(TimeCalc = Time - lag(Time, default = 0))
+  mutate(TimeCalc = case_when(iters == 1 ~ Time,
+                              iters == 2 ~ Time - lag(Time,1),
+                              iters == 3 ~ Time - lag(Time,2)))
 
 ##################### Financial #############################
 ## Algorithms are significant
@@ -101,7 +105,8 @@ auto.pairs <- pairs(autoRawDF$TimeCalc, autoRawDF$Algorithm)
 ## know exactly what is different so we perform a pairwise wilcox test to
 ## observe exactly which pairs are different. We notice here that the p-values
 ## are all 1 after the bonferroni adjustment. Solver is not statistically
-## significant for both datasets
+## significant for both datasets due to the variance introduced by variants so
+## we must split it wout which we do below
 auto.algs.conf.pairs <- pairs(autoRawDF$TimeCalc, auto.alg.conf.inters) %>%
   separate(group1, sep="\\.", into = c("AlgLeft", "ConfigLeft")) %>%
   separate(group2, sep="\\.", into = c("AlgRight", "ConfigRight")) %>%
@@ -150,6 +155,8 @@ speedupBySolver <- function(df) {
     mutate(Speedup = lag(Mean, default = first(Mean)) / Mean)
 }
 
+
+
 rq1AutoSpeedupBySolver <- speedupBySolver(autoDF)
 rq1FinSpeedupBySolver  <- speedupBySolver(finDF)
 
@@ -170,7 +177,6 @@ avgSpeedupAuto <- rq1FinSpeedupBySolver %>%
 
 ### Perform the anova
 lmDFAuto <- autoRawDF %>% dplyr::select(TimeCalc,DataSet,Algorithm,Config)
-## lmDFAuto$DataSet <- factor(lmDFAuto$DataSet, levels = c("Z3", "Boolector", "CVC4","Yices"))
 lmDFAuto <- within(lmDFAuto, DataSet <- relevel(DataSet, ref="Z3"))
 lmDFAuto <- within(lmDFAuto, Algorithm <- relevel(Algorithm, ref="v\U27f6v"))
 model.auto <- lm(TimeCalc ~ DataSet + Algorithm + Config + Algorithm * Config, lmDFAuto)
@@ -220,10 +226,32 @@ model.auto <- lm(TimeCalc ~ DataSet + Algorithm + Config + Algorithm * Config, l
 
 ## For auto we find that only CVC4, relative to Z3 does not correlate to a
 ## runtime increase, however Boolector and Yices do correlate to a speedup
-## relative to Z3
+## relative to Z3 estimated to be -113 seconds and -155 seconds respectively.
 
 lmDFFin <- finRawDF %>% dplyr::select(TimeCalc,DataSet,Algorithm,Config)
-## lmDFFin$DataSet <- factor(lmDFFin$DataSet, levels = c("Z3", "Boolector", "CVC4","Yices"))
 lmDFFin <- within(lmDFFin, DataSet <- relevel(DataSet, ref="Z3"))
 lmDFFin <- within(lmDFFin, Algorithm <- relevel(Algorithm, ref="v\U27f6v"))
 model.fin <- lm(TimeCalc ~ DataSet + Algorithm + Config + Algorithm * Config, lmDFFin)
+
+############################## Impact of base solver #########################
+## from above we saw that base solvers were not signifnicant in and of
+## themselves, this is due to the impact from variants as a factor, so we need
+## to split the variants to control for that signal
+
+### Even separating out variants and vTov we see that base solver is significant
+### only for the 2 variant case of the auto dataset!
+auto.2.slvrs <- kruskal.test(TimeCalc ~ DataSet, autoRawDF %>% filter(Variants == 2, Algorithm != "v\U27f6v"))
+auto.4.slvrs <- kruskal.test(TimeCalc ~ DataSet, autoRawDF %>% filter(Variants == 4, Algorithm != "v\U27f6v"))
+auto.8.slvrs <- kruskal.test(TimeCalc ~ DataSet, autoRawDF %>% filter(Variants == 8, Algorithm != "v\U27f6v"))
+auto.16.slvrs <- kruskal.test(TimeCalc ~ DataSet, autoRawDF %>% filter(Variants == 16, Algorithm != "v\U27f6v"))
+
+fin.2.slvrs <- kruskal.test(TimeCalc ~ DataSet, finRawDF %>% filter(Variants == 2, Algorithm != "v\U27f6v"))
+fin.4.slvrs <- kruskal.test(TimeCalc ~ DataSet, finRawDF %>% filter(Variants == 4, Algorithm != "v\U27f6v"))
+fin.8.slvrs <- kruskal.test(TimeCalc ~ DataSet, finRawDF %>% filter(Variants == 8, Algorithm != "v\U27f6v"))
+fin.16.slvrs <- kruskal.test(TimeCalc ~ DataSet, finRawDF %>% filter(Variants == 16, Algorithm != "v\U27f6v"))
+fin.32.slvrs <- kruskal.test(TimeCalc ~ DataSet, finRawDF %>% filter(Variants == 32, Algorithm != "v\U27f6v"))
+fin.64.slvrs <- kruskal.test(TimeCalc ~ DataSet, finRawDF %>% filter(Variants == 64, Algorithm != "v\U27f6v"))
+fin.128.slvrs <- kruskal.test(TimeCalc ~ DataSet, finRawDF %>% filter(Variants == 128, Algorithm != "v\U27f6v"))
+fin.256.slvrs <- kruskal.test(TimeCalc ~ DataSet, finRawDF %>% filter(Variants == 256, Algorithm != "v\U27f6v"))
+fin.512.slvrs <- kruskal.test(TimeCalc ~ DataSet, finRawDF %>% filter(Variants == 512, Algorithm != "v\U27f6v"))
+fin.1024.slvrs <- kruskal.test(TimeCalc ~ DataSet, finRawDF %>% filter(Variants == 1024, Algorithm != "v\U27f6v"))

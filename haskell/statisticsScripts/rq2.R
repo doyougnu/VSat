@@ -13,13 +13,17 @@ finRawDF <- read.csv(file=finRawFile) %>%
   mutate(Algorithm = as.factor(Algorithm), Config = as.factor(Config)) %>%
   mutate(Algorithm = gsub("-->", "\U27f6", Algorithm), data = "Financial") %>%
   group_by(Algorithm, DataSet, Config) %>%
-  mutate(TimeCalc = Time - lag(Time, default = 0))
+  mutate(TimeCalc = case_when(iters == 1 ~ Time,
+                              iters == 2 ~ Time - lag(Time,1),
+                              iters == 3 ~ Time - lag(Time,2)))
 
 autoRawDF <- read.csv(file=autoRawFile) %>%
   mutate(Algorithm = as.factor(Algorithm), Config = as.factor(Config)) %>%
   mutate(Algorithm = gsub("-->", "\U27f6", Algorithm), data = "Auto") %>%
   group_by(Algorithm, DataSet, Config) %>%
-  mutate(TimeCalc = Time - lag(Time, default = 0))
+  mutate(TimeCalc = case_when(iters == 1 ~ Time,
+                              iters == 2 ~ Time - lag(Time,1),
+                              iters == 3 ~ Time - lag(Time,2)))
 
 ### Do a two-way anova looking at both algorithm and config and their interaction
 res.fin.aov <- aov(TimeCalc ~ Algorithm * DataSet * Config, data = finRawDF)
@@ -32,10 +36,10 @@ res.fin.sig <- summary(res.fin.aov)
 fin.tuk_res <- TukeyHSD(res.fin.aov, which = "Algorithm:DataSet:Config") %>%
   tidy %>%
   ### cleanup
-  separate(contrast,
+  separate(comparison,
            sep="-|:"
          , into = c("AlgLeft", "SolverLeft", "ConfigLeft", "AlgRight", "SolverRight", "ConfigRight"), remove = FALSE) %>%
-  select(-contrast) %>%
+  select(-comparison) %>%
   mutate(data = "Financial",
          pVal = scientific(adj.p.value, 3)) %>%
   ## remove out-group comparisons between different variants, e.g., V1 - V10
@@ -108,3 +112,6 @@ res.fin.shaps <- shapiro.test(x = aov.fin.resids)
 
 ## ## also fails, we'll do a one-way kruskall walis test
 ## ## Please see sigTest.R
+
+rq2 <- ggplot(autoRawDF %>% filter(Variants > 1)) +
+  geom_boxplot(aes(x=as.factor(Variants), y=TimeCalc/60, color=DataSet))

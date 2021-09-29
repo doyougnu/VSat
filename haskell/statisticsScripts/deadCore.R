@@ -4,8 +4,8 @@ library(cowplot)
 library(tidyr)
 library(latex2exp)
 
-finResultsFile <- "../data/fin_dead_core.csv"
-autoResultsFile <- "../data/auto_dead_core.csv"
+finResultsFile <- "../munged_data/financial_deadcore.csv"
+autoResultsFile <- "../munged_data/auto_deadcore.csv"
 
 finData <- read.csv(file=finResultsFile) %>% mutate(Algorithm = as.factor(Algorithm), Config = as.factor(Config)) %>% mutate(Algorithm = gsub("-->", "\U27f6", Algorithm))
 
@@ -39,7 +39,7 @@ dc <- ggplot(deadCoreDF
   theme(legend.position = "none") +
   coord_flip()
 
-ggsave("../plots/DeadCore.png", plot = dc, height = 4, width = 7, device = "png")
+## ggsave("../plots/DeadCore.png", plot = dc, height = 4, width = 7, device = "png")
 
-deadCoreDF %>% select(data,Algorithm, Mean) %>% group_by(data) %>%
+table <- deadCoreDF %>% select(data,Algorithm, Mean) %>% group_by(data) %>%
   spread(Algorithm, Mean) %>% mutate(speedup = `v⟶p` / `v⟶v`)

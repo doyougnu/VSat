@@ -76,8 +76,10 @@ auto.slvr.res <- kruskal.test(TimeCalc ~ DataSet, autoRawDF)
 
 ## Interaction bewtween algorithm and version significant as expected
 auto.alg.conf.inters  <- interaction(autoRawDF$Algorithm, autoRawDF$Config)
+
 ## solvers with conf is significant, not surprising as they should be convolved
 auto.slvr.conf.inters <- interaction(autoRawDF$DataSet, autoRawDF$Config)
+
 ## unfortunately when checking the correct interaction solvers are not found significant
 auto.alg.slvr.inters  <- interaction(autoRawDF$DataSet, autoRawDF$Algorithm, autoRawDF$Config)
 
