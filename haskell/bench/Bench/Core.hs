@@ -41,7 +41,7 @@ singletonsConfig :: Gauge.Config
 singletonsConfig = defaultConfig{minSamples = Just 15, quickMode = True}
 
 variateConfig :: Gauge.Config
-variateConfig = defaultConfig{quickMode = True, minSamples= Just 56}
+variateConfig = defaultConfig{quickMode = False, minSamples= Just 56}
 
 -- | make a description for the benchmark, we input pass through variables alg,
 -- and confDesc that are hand written names for the algorithm being used and the
