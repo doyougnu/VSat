@@ -1,10 +1,10 @@
 cabal-version: 1.12
 
--- This file has been generated from package.yaml by hpack version 0.34.2.
+-- This file has been generated from package.yaml by hpack version 0.34.4.
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 6f3d0bc7782e25f163d1b4a0cfcb4922b6b7b0189d72435c56f8e6178c118391
+-- hash: f3b9374bb6d9ace4e4057ec8aed1b0908c0f5122dece50c18fbc5f0a8b68fdba
 
 name:           vsat
 version:        0.1.0.0
@@ -49,7 +49,21 @@ library
       Paths_vsat
   hs-source-dirs:
       src
-  default-extensions: NamedFieldPuns OverloadedStrings FlexibleContexts DeriveFunctor DeriveGeneric BangPatterns GeneralizedNewtypeDeriving DeriveTraversable FlexibleInstances DeriveDataTypeable MultiParamTypeClasses RecordWildCards TemplateHaskell ViewPatterns
+  default-extensions:
+      NamedFieldPuns
+      OverloadedStrings
+      FlexibleContexts
+      DeriveFunctor
+      DeriveGeneric
+      BangPatterns
+      GeneralizedNewtypeDeriving
+      DeriveTraversable
+      FlexibleInstances
+      DeriveDataTypeable
+      MultiParamTypeClasses
+      RecordWildCards
+      TemplateHaskell
+      ViewPatterns
   build-depends:
       aeson
     , base >=4.7 && <5
@@ -73,7 +87,21 @@ executable vsat
       Paths_vsat
   hs-source-dirs:
       app
-  default-extensions: NamedFieldPuns OverloadedStrings FlexibleContexts DeriveFunctor DeriveGeneric BangPatterns GeneralizedNewtypeDeriving DeriveTraversable FlexibleInstances DeriveDataTypeable MultiParamTypeClasses RecordWildCards TemplateHaskell ViewPatterns
+  default-extensions:
+      NamedFieldPuns
+      OverloadedStrings
+      FlexibleContexts
+      DeriveFunctor
+      DeriveGeneric
+      BangPatterns
+      GeneralizedNewtypeDeriving
+      DeriveTraversable
+      FlexibleInstances
+      DeriveDataTypeable
+      MultiParamTypeClasses
+      RecordWildCards
+      TemplateHaskell
+      ViewPatterns
   ghc-options: -threaded -rtsopts -with-rtsopts=-N -Wall -fno-warn-orphans
   build-depends:
       aeson
@@ -107,7 +135,21 @@ test-suite vsat-test
       Paths_vsat
   hs-source-dirs:
       test
-  default-extensions: NamedFieldPuns OverloadedStrings FlexibleContexts DeriveFunctor DeriveGeneric BangPatterns GeneralizedNewtypeDeriving DeriveTraversable FlexibleInstances DeriveDataTypeable MultiParamTypeClasses RecordWildCards TemplateHaskell ViewPatterns
+  default-extensions:
+      NamedFieldPuns
+      OverloadedStrings
+      FlexibleContexts
+      DeriveFunctor
+      DeriveGeneric
+      BangPatterns
+      GeneralizedNewtypeDeriving
+      DeriveTraversable
+      FlexibleInstances
+      DeriveDataTypeable
+      MultiParamTypeClasses
+      RecordWildCards
+      TemplateHaskell
+      ViewPatterns
   ghc-options: -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       QuickCheck
@@ -163,7 +205,21 @@ benchmark auto
       bench/Bench
       bench/AutoBench
       src
-  default-extensions: NamedFieldPuns OverloadedStrings FlexibleContexts DeriveFunctor DeriveGeneric BangPatterns GeneralizedNewtypeDeriving DeriveTraversable FlexibleInstances DeriveDataTypeable MultiParamTypeClasses RecordWildCards TemplateHaskell ViewPatterns
+  default-extensions:
+      NamedFieldPuns
+      OverloadedStrings
+      FlexibleContexts
+      DeriveFunctor
+      DeriveGeneric
+      BangPatterns
+      GeneralizedNewtypeDeriving
+      DeriveTraversable
+      FlexibleInstances
+      DeriveDataTypeable
+      MultiParamTypeClasses
+      RecordWildCards
+      TemplateHaskell
+      ViewPatterns
   ghc-options: -O2 -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       aeson
@@ -217,7 +273,21 @@ benchmark auto-dead-core
       bench/Bench
       bench/AutoDeadCore
       src
-  default-extensions: NamedFieldPuns OverloadedStrings FlexibleContexts DeriveFunctor DeriveGeneric BangPatterns GeneralizedNewtypeDeriving DeriveTraversable FlexibleInstances DeriveDataTypeable MultiParamTypeClasses RecordWildCards TemplateHaskell ViewPatterns
+  default-extensions:
+      NamedFieldPuns
+      OverloadedStrings
+      FlexibleContexts
+      DeriveFunctor
+      DeriveGeneric
+      BangPatterns
+      GeneralizedNewtypeDeriving
+      DeriveTraversable
+      FlexibleInstances
+      DeriveDataTypeable
+      MultiParamTypeClasses
+      RecordWildCards
+      TemplateHaskell
+      ViewPatterns
   ghc-options: -O2 -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       aeson
@@ -270,7 +340,21 @@ benchmark auto-diag
       bench/Bench
       bench/AutoDiag
       src
-  default-extensions: NamedFieldPuns OverloadedStrings FlexibleContexts DeriveFunctor DeriveGeneric BangPatterns GeneralizedNewtypeDeriving DeriveTraversable FlexibleInstances DeriveDataTypeable MultiParamTypeClasses RecordWildCards TemplateHaskell ViewPatterns
+  default-extensions:
+      NamedFieldPuns
+      OverloadedStrings
+      FlexibleContexts
+      DeriveFunctor
+      DeriveGeneric
+      BangPatterns
+      GeneralizedNewtypeDeriving
+      DeriveTraversable
+      FlexibleInstances
+      DeriveDataTypeable
+      MultiParamTypeClasses
+      RecordWildCards
+      TemplateHaskell
+      ViewPatterns
   ghc-options: -O2 -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       aeson
@@ -326,7 +410,21 @@ benchmark busybox
       bench/Bench
       bench/BusyBox
       src
-  default-extensions: NamedFieldPuns OverloadedStrings FlexibleContexts DeriveFunctor DeriveGeneric BangPatterns GeneralizedNewtypeDeriving DeriveTraversable FlexibleInstances DeriveDataTypeable MultiParamTypeClasses RecordWildCards TemplateHaskell ViewPatterns
+  default-extensions:
+      NamedFieldPuns
+      OverloadedStrings
+      FlexibleContexts
+      DeriveFunctor
+      DeriveGeneric
+      BangPatterns
+      GeneralizedNewtypeDeriving
+      DeriveTraversable
+      FlexibleInstances
+      DeriveDataTypeable
+      MultiParamTypeClasses
+      RecordWildCards
+      TemplateHaskell
+      ViewPatterns
   ghc-options: -O2 -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       aeson
@@ -380,7 +478,21 @@ benchmark fin
       bench/Bench
       bench/Financial
       src
-  default-extensions: NamedFieldPuns OverloadedStrings FlexibleContexts DeriveFunctor DeriveGeneric BangPatterns GeneralizedNewtypeDeriving DeriveTraversable FlexibleInstances DeriveDataTypeable MultiParamTypeClasses RecordWildCards TemplateHaskell ViewPatterns
+  default-extensions:
+      NamedFieldPuns
+      OverloadedStrings
+      FlexibleContexts
+      DeriveFunctor
+      DeriveGeneric
+      BangPatterns
+      GeneralizedNewtypeDeriving
+      DeriveTraversable
+      FlexibleInstances
+      DeriveDataTypeable
+      MultiParamTypeClasses
+      RecordWildCards
+      TemplateHaskell
+      ViewPatterns
   ghc-options: -O2 -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       aeson
@@ -433,7 +545,21 @@ benchmark fin-dead-core
       bench/Bench
       bench/FinDeadCore
       src
-  default-extensions: NamedFieldPuns OverloadedStrings FlexibleContexts DeriveFunctor DeriveGeneric BangPatterns GeneralizedNewtypeDeriving DeriveTraversable FlexibleInstances DeriveDataTypeable MultiParamTypeClasses RecordWildCards TemplateHaskell ViewPatterns
+  default-extensions:
+      NamedFieldPuns
+      OverloadedStrings
+      FlexibleContexts
+      DeriveFunctor
+      DeriveGeneric
+      BangPatterns
+      GeneralizedNewtypeDeriving
+      DeriveTraversable
+      FlexibleInstances
+      DeriveDataTypeable
+      MultiParamTypeClasses
+      RecordWildCards
+      TemplateHaskell
+      ViewPatterns
   ghc-options: -O2 -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       aeson
@@ -487,7 +613,21 @@ benchmark fin-diag
       bench/Bench
       bench/FinDiag
       src
-  default-extensions: NamedFieldPuns OverloadedStrings FlexibleContexts DeriveFunctor DeriveGeneric BangPatterns GeneralizedNewtypeDeriving DeriveTraversable FlexibleInstances DeriveDataTypeable MultiParamTypeClasses RecordWildCards TemplateHaskell ViewPatterns
+  default-extensions:
+      NamedFieldPuns
+      OverloadedStrings
+      FlexibleContexts
+      DeriveFunctor
+      DeriveGeneric
+      BangPatterns
+      GeneralizedNewtypeDeriving
+      DeriveTraversable
+      FlexibleInstances
+      DeriveDataTypeable
+      MultiParamTypeClasses
+      RecordWildCards
+      TemplateHaskell
+      ViewPatterns
   ghc-options: -O2 -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       aeson
@@ -540,7 +680,21 @@ benchmark linux
       bench/Bench
       bench/Linux
       src
-  default-extensions: NamedFieldPuns OverloadedStrings FlexibleContexts DeriveFunctor DeriveGeneric BangPatterns GeneralizedNewtypeDeriving DeriveTraversable FlexibleInstances DeriveDataTypeable MultiParamTypeClasses RecordWildCards TemplateHaskell ViewPatterns
+  default-extensions:
+      NamedFieldPuns
+      OverloadedStrings
+      FlexibleContexts
+      DeriveFunctor
+      DeriveGeneric
+      BangPatterns
+      GeneralizedNewtypeDeriving
+      DeriveTraversable
+      FlexibleInstances
+      DeriveDataTypeable
+      MultiParamTypeClasses
+      RecordWildCards
+      TemplateHaskell
+      ViewPatterns
   ghc-options: -O2 -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       aeson
@@ -556,6 +710,140 @@ benchmark linux
     , sbv >=8.6
     , tasty-quickcheck
     , text
+    , unicode-show
+    , unordered-containers
+    , vsat
+  default-language: Haskell2010
+
+benchmark auto-variate
+  type: exitcode-stdio-1.0
+  main-is: Main.hs
+  other-modules:
+      Core
+      Api
+      CaseStudy.Auto.Auto
+      CaseStudy.Auto.CompactEncode
+      CaseStudy.Auto.Lang
+      CaseStudy.Auto.Parser
+      CaseStudy.Auto.Run
+      CaseStudy.BusyBox.Parser
+      Config
+      Json
+      Opts
+      Parser
+      Result
+      Run
+      SAT
+      Server
+      Utils
+      VProp.Boolean
+      VProp.Core
+      VProp.Gen
+      VProp.SBV
+      VProp.Types
+      Paths_vsat
+  hs-source-dirs:
+      bench/Bench
+      bench/AutoVariate
+      src
+  default-extensions:
+      NamedFieldPuns
+      OverloadedStrings
+      FlexibleContexts
+      DeriveFunctor
+      DeriveGeneric
+      BangPatterns
+      GeneralizedNewtypeDeriving
+      DeriveTraversable
+      FlexibleInstances
+      DeriveDataTypeable
+      MultiParamTypeClasses
+      RecordWildCards
+      TemplateHaskell
+      ViewPatterns
+  ghc-options: -O2 -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      aeson
+    , base >=4.7 && <5
+    , bytestring
+    , containers
+    , deepseq
+    , gauge
+    , genifunctors >=0.4
+    , megaparsec >=8.0.0
+    , mtl
+    , parser-combinators >=1.2.1
+    , sbv >=8.6
+    , tasty-quickcheck
+    , text
+    , time
+    , unicode-show
+    , unordered-containers
+    , vsat
+  default-language: Haskell2010
+
+benchmark fin-variate
+  type: exitcode-stdio-1.0
+  main-is: Main.hs
+  other-modules:
+      Core
+      Api
+      CaseStudy.Auto.Auto
+      CaseStudy.Auto.CompactEncode
+      CaseStudy.Auto.Lang
+      CaseStudy.Auto.Parser
+      CaseStudy.Auto.Run
+      CaseStudy.BusyBox.Parser
+      Config
+      Json
+      Opts
+      Parser
+      Result
+      Run
+      SAT
+      Server
+      Utils
+      VProp.Boolean
+      VProp.Core
+      VProp.Gen
+      VProp.SBV
+      VProp.Types
+      Paths_vsat
+  hs-source-dirs:
+      bench/Bench
+      bench/FinancialVariate
+      src
+  default-extensions:
+      NamedFieldPuns
+      OverloadedStrings
+      FlexibleContexts
+      DeriveFunctor
+      DeriveGeneric
+      BangPatterns
+      GeneralizedNewtypeDeriving
+      DeriveTraversable
+      FlexibleInstances
+      DeriveDataTypeable
+      MultiParamTypeClasses
+      RecordWildCards
+      TemplateHaskell
+      ViewPatterns
+  ghc-options: -O2 -threaded -rtsopts -with-rtsopts=-N
+  build-depends:
+      aeson
+    , base >=4.7 && <5
+    , bytestring
+    , containers
+    , deepseq
+    , gauge
+    , genifunctors >=0.4
+    , megaparsec >=8.0.0
+    , mtl
+    , parser-combinators >=1.2.1
+    , sbv >=8.6
+    , tasty-quickcheck
+    , text
+    , time
     , unicode-show
     , unordered-containers
     , vsat
