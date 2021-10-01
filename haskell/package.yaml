@@ -22,7 +22,7 @@ dependencies:
 - mtl
 - deepseq
 - genifunctors >= 0.4
-- sbv >= 8.6
+- sbv
 - bytestring
 - text
 - tasty-quickcheck
