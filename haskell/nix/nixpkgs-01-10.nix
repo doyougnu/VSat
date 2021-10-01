@@ -1,6 +1,6 @@
 let
-  hostNix = import <nixpkgs> {};
-  nixpkgsPin = hostNix.pkgs.lib.importJSON ./nixos-20-03.json;
+  hostNix = import <nixpkgs> { };
+  nixpkgsPin = hostNix.pkgs.lib.importJSON ./nixpkgs-01-10.json;
 
    pinnedPkgs = hostNix.pkgs.fetchFromGitHub {
     owner = "NixOS";

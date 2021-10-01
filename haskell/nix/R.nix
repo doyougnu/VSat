@@ -1,4 +1,4 @@
-{ nixpkgs ? import ./nixos-20-03.nix }:
+{ nixpkgs ? import ./nixpkgs-01-10.nix }:
 let
   pkgs   = import nixpkgs {};
   stdenv = pkgs.stdenv;
