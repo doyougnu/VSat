@@ -1,9 +1,17 @@
+[![DOI](https://zenodo.org/badge/105307042.svg)](https://zenodo.org/badge/latestdoi/105307042)
+
+
+
 # DISCLAIMER
 This project is deprecated, and this repository serves only as an archive. See
 [this repo](https://github.com/lambda-land/VSat-Papers/tree/master/SPLC2020) for
 instructions on running this version of the solver. See [this
 repo](https://github.com/doyougnu/VSmt) for next iteration of variational
-satisfiability solving.
+satisfiability solving. The server was taken down, we keep this version of the
+README for historical reasons because some of the haskell code (like the
+optimizations) may be useful to someone. Please reach out to me (Jeffrey Young:
+youngjef@oregonstate.edu or jeff@doyougnu.xyz or "doyougnu" on the Haskell IRC,
+if you have any questions).
 
 # What
 This project provides variational sat solving using the [Choice
