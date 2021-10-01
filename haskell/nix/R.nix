@@ -11,7 +11,6 @@ in with pkgs; {
     buildInputs = with rPackages; [
       pandoc
       R
-      julia-stable
       ggplot2
       knitr
       rmarkdown
