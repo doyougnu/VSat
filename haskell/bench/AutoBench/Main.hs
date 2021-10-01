@@ -230,7 +230,7 @@ main = do
         , mkCompBench "p-->p" "V3*V4"  (bfWithConf (toDimProp pD23Conf) solverConf) justbPropV34
         ]
 
-  defaultMainWith singletonsConfig $
+  defaultMainWith benchConfig $
     [
     --   bgroup "Yices" (compRatioBenches yicesDefConf)
     -- , bgroup "CVC4" (compRatioBenches cvc4DefConf)

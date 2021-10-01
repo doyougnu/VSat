@@ -1,3 +1,16 @@
+################################################################################
+# small script to parse the output of the gauge benchmarking library the script
+# simply parses the "Name" or "name" column of the csv to new columns feel free
+# to use awk or whatever you want to if this script doesn't work for you you can
+# retrieve our exact version of julia used for the script using nix please see
+# the nix directory
+
+# Intended to be run in the "statisticsScripts" sub-directory.
+# Intended use: please manually alter the "fileName" variable to whatever you need.
+# If you are parsing any file with the suffix "raw" then you'll need to convert
+# :Name -> :name because gauge changes the column name for some reason
+################################################################################
+
 using CSV        # read in a csv
 using DataFrames # for rename!
 using Query      # Tidyverse
@@ -6,7 +19,7 @@ using Plots      # for plotting
 ### get the data in a data frame
 inputDirectory  = "../raw_data"
 outputDirectory = "../munged_data"
-fileName        = "fin_variate_timings_raw.csv"
+fileName        = "fin_variate_timings.csv"
 sep             = "/"
 dataFile = inputDirectory * sep * fileName
 df = CSV.File(dataFile) |> DataFrame
@@ -17,7 +30,7 @@ id = x -> x
 function mungeName(nameString) arr = split(nameString, "/") end
 
 function genCol(df, colName, index, f)
-    df[!,colName] = map(name -> mungeName(name) |> x -> getindex(x,index) |> f, df[!,:name])
+    df[!,colName] = map(name -> mungeName(name) |> x -> getindex(x,index) |> f, df[!,:Name])
     df
 end
 

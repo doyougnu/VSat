@@ -350,7 +350,7 @@ main = do
       , mkCompBench "v-->p" "V9*V10" (vOnPWithConf (toDimProp pD89Conf) solverConf) justbPropV910
       ]
 
-  defaultMainWith singletonsConfig $
+  defaultMainWith benchConfig $
     [
     --   bgroup "Yices"     (compRatioBenches yicesDefConf)
     -- , bgroup "CVC4"      (compRatioBenches cvc4DefConf)
